@@ -2,25 +2,17 @@ import { Menu, Settings, ChevronRight, LogOut } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-
 const Profile = () => {
   const interests = ["Hiking", "Photography", "Foodie", "Culture", "Adventure"];
-
   const handleLogout = () => {
     window.location.href = "/auth";
   };
-
-  return (
-    <div className="min-h-screen pb-20 bg-background">
+  return <div className="min-h-screen pb-20 bg-background">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b">
-        <Button variant="ghost" size="icon">
-          <Menu className="h-6 w-6" />
-        </Button>
+        
         <h1 className="text-xl font-semibold">Profile</h1>
-        <Button variant="ghost" size="icon">
-          <Settings className="h-6 w-6" />
-        </Button>
+        
       </div>
 
       {/* Profile Section */}
@@ -32,27 +24,12 @@ const Profile = () => {
         <div>
           <h2 className="text-2xl font-bold">Sophia Carter</h2>
           <p className="text-muted-foreground">@sophia_carter</p>
-          <p className="text-sm text-primary mt-2">
-            Travel enthusiast | Exploring the world one adventure at a time
-          </p>
+          
         </div>
       </div>
 
       {/* Interests */}
-      <div className="px-6 pb-6">
-        <h3 className="text-lg font-semibold mb-3">Interests</h3>
-        <div className="flex flex-wrap gap-2">
-          {interests.map((interest) => (
-            <Badge 
-              key={interest} 
-              variant="secondary" 
-              className="px-4 py-2 text-sm rounded-full"
-            >
-              {interest}
-            </Badge>
-          ))}
-        </div>
-      </div>
+      
 
       {/* Menu Options */}
       <div className="px-6 space-y-1">
@@ -111,16 +88,10 @@ const Profile = () => {
 
       {/* Logout */}
       <div className="px-6 mt-6 mb-6">
-        <Button 
-          variant="outline" 
-          className="w-full py-6 text-base rounded-full"
-          onClick={handleLogout}
-        >
+        <Button variant="outline" className="w-full py-6 text-base rounded-full" onClick={handleLogout}>
           Logout
         </Button>
       </div>
-    </div>
-  );
+    </div>;
 };
-
 export default Profile;
