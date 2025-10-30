@@ -1,11 +1,24 @@
+import { useNavigate } from "react-router-dom";
 import { Menu, Settings, ChevronRight, LogOut } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/contexts/AuthContext";
+import { useEffect } from "react";
+
 const Profile = () => {
+  const navigate = useNavigate();
+  const { user, profile, signOut } = useAuth();
   const interests = ["Hiking", "Photography", "Foodie", "Culture", "Adventure"];
-  const handleLogout = () => {
-    window.location.href = "/auth";
+
+  useEffect(() => {
+    if (!user) {
+      navigate('/auth');
+    }
+  }, [user, navigate]);
+
+  const handleLogout = async () => {
+    await signOut();
   };
   return <div className="min-h-screen pb-20 bg-background">
       {/* Header */}
@@ -18,13 +31,15 @@ const Profile = () => {
       {/* Profile Section */}
       <div className="p-6 text-center space-y-3">
         <Avatar className="w-32 h-32 mx-auto">
-          <AvatarImage src="" />
-          <AvatarFallback className="bg-accent text-4xl">SC</AvatarFallback>
+          <AvatarImage src={profile?.avatar_url || ""} />
+          <AvatarFallback className="bg-accent text-4xl">
+            {profile?.full_name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
+          </AvatarFallback>
         </Avatar>
         <div>
-          <h2 className="text-2xl font-bold">Sophia Carter</h2>
-          <p className="text-muted-foreground">@sophia_carter</p>
-          
+          <h2 className="text-2xl font-bold">{profile?.full_name || 'User'}</h2>
+          <p className="text-muted-foreground">{user?.email || ''}</p>
+          {profile?.bio && <p className="text-sm mt-2">{profile.bio}</p>}
         </div>
       </div>
 
@@ -40,31 +55,46 @@ const Profile = () => {
         </button>
 
         {/* Update Profile Details */}
-        <button className="w-full flex items-center justify-between py-4 border-b">
+        <button 
+          className="w-full flex items-center justify-between py-4 border-b"
+          onClick={() => navigate('/update-profile')}
+        >
           <span className="text-base font-medium">Update Profile Details</span>
           <ChevronRight className="h-5 w-5 text-muted-foreground" />
         </button>
 
         {/* Privacy Policy */}
-        <button className="w-full flex items-center justify-between py-4 border-b">
+        <button 
+          className="w-full flex items-center justify-between py-4 border-b"
+          onClick={() => window.open('/privacy-policy', '_blank')}
+        >
           <span className="text-base font-medium">Privacy Policy</span>
           <ChevronRight className="h-5 w-5 text-muted-foreground" />
         </button>
 
         {/* Terms and Conditions */}
-        <button className="w-full flex items-center justify-between py-4 border-b">
+        <button 
+          className="w-full flex items-center justify-between py-4 border-b"
+          onClick={() => window.open('/terms', '_blank')}
+        >
           <span className="text-base font-medium">Terms and Conditions</span>
           <ChevronRight className="h-5 w-5 text-muted-foreground" />
         </button>
 
         {/* Suggest a New Feature */}
-        <button className="w-full flex items-center justify-between py-4 border-b">
+        <button 
+          className="w-full flex items-center justify-between py-4 border-b"
+          onClick={() => window.open('mailto:support@tripzi.com?subject=Feature Suggestion', '_blank')}
+        >
           <span className="text-base font-medium">Suggest a New Feature</span>
           <ChevronRight className="h-5 w-5 text-muted-foreground" />
         </button>
 
         {/* Settings */}
-        <button className="w-full flex items-center justify-between py-4 border-b">
+        <button 
+          className="w-full flex items-center justify-between py-4 border-b"
+          onClick={() => navigate('/settings')}
+        >
           <span className="text-base font-medium">Settings</span>
           <ChevronRight className="h-5 w-5 text-muted-foreground" />
         </button>
