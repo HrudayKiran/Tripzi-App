@@ -10,7 +10,7 @@ import Feed from "./pages/Feed";
 import Trips from "./pages/Trips";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
-import BottomNav from "./components/BottomNav";
+import Layout from "./components/Layout";
 
 const queryClient = new QueryClient();
 
@@ -23,10 +23,10 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/auth" element={<Auth />} />
-            <Route path="/" element={<><Home /><BottomNav /></>} />
-            <Route path="/feed" element={<><Feed /><BottomNav /></>} />
-            <Route path="/trips" element={<><Trips /><BottomNav /></>} />
-            <Route path="/profile" element={<><Profile /><BottomNav /></>} />
+            <Route path="/" element={<Layout><Home /></Layout>} />
+            <Route path="/feed" element={<Layout><Feed /></Layout>} />
+            <Route path="/trips" element={<Layout><Trips /></Layout>} />
+            <Route path="/profile" element={<Layout><Profile /></Layout>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
