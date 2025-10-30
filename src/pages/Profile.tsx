@@ -1,149 +1,121 @@
-import { useState } from "react";
-import { Mail, Phone, User, LogOut, Moon, Sun, Bell, Shield, HelpCircle } from "lucide-react";
+import { Menu, Settings, ChevronRight, LogOut } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
-import { useTheme } from "next-themes";
+import { Badge } from "@/components/ui/badge";
 
 const Profile = () => {
-  const { theme, setTheme } = useTheme();
-  const [isEditing, setIsEditing] = useState(false);
+  const interests = ["Hiking", "Photography", "Foodie", "Culture", "Adventure"];
 
   const handleLogout = () => {
     window.location.href = "/auth";
   };
 
   return (
-    <div className="min-h-screen pb-20 bg-muted/30">
+    <div className="min-h-screen pb-20 bg-background">
       {/* Header */}
-      <div className="bg-gradient-to-r from-primary to-accent p-6 text-center">
-        <Avatar className="w-24 h-24 mx-auto mb-4 border-4 border-primary-foreground animate-scale-in">
-          <AvatarImage src="" />
-          <AvatarFallback className="bg-secondary text-2xl">JD</AvatarFallback>
-        </Avatar>
-        <h1 className="text-2xl font-bold text-primary-foreground">John Doe</h1>
-        <p className="text-sm text-primary-foreground/90">@johndoe</p>
+      <div className="flex items-center justify-between p-4 border-b">
+        <Button variant="ghost" size="icon">
+          <Menu className="h-6 w-6" />
+        </Button>
+        <h1 className="text-xl font-semibold">Profile</h1>
+        <Button variant="ghost" size="icon">
+          <Settings className="h-6 w-6" />
+        </Button>
       </div>
 
-      {/* Content */}
-      <div className="p-4 space-y-4">
-        {/* Profile Info */}
-        <Card className="animate-fade-up">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Profile Information</CardTitle>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => setIsEditing(!isEditing)}
-              >
-                {isEditing ? "Cancel" : "Edit"}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  id="name" 
-                  defaultValue="John Doe" 
-                  disabled={!isEditing}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  id="email" 
-                  type="email"
-                  defaultValue="john@example.com" 
-                  disabled={!isEditing}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone Number</Label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  id="phone" 
-                  defaultValue="+1 234 567 8900" 
-                  disabled={!isEditing}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            {isEditing && (
-              <Button className="w-full">Save Changes</Button>
-            )}
-          </CardContent>
-        </Card>
+      {/* Profile Section */}
+      <div className="p-6 text-center space-y-3">
+        <Avatar className="w-32 h-32 mx-auto">
+          <AvatarImage src="" />
+          <AvatarFallback className="bg-accent text-4xl">SC</AvatarFallback>
+        </Avatar>
+        <div>
+          <h2 className="text-2xl font-bold">Sophia Carter</h2>
+          <p className="text-muted-foreground">@sophia_carter</p>
+          <p className="text-sm text-primary mt-2">
+            Travel enthusiast | Exploring the world one adventure at a time
+          </p>
+        </div>
+      </div>
+
+      {/* Interests */}
+      <div className="px-6 pb-6">
+        <h3 className="text-lg font-semibold mb-3">Interests</h3>
+        <div className="flex flex-wrap gap-2">
+          {interests.map((interest) => (
+            <Badge 
+              key={interest} 
+              variant="secondary" 
+              className="px-4 py-2 text-sm rounded-full"
+            >
+              {interest}
+            </Badge>
+          ))}
+        </div>
+      </div>
+
+      {/* Menu Options */}
+      <div className="px-6 space-y-1">
+        {/* KYC Status */}
+        <button className="w-full flex items-center justify-between py-4 border-b">
+          <span className="text-base font-medium">KYC Status</span>
+          <div className="w-3 h-3 rounded-full bg-green-500"></div>
+        </button>
+
+        {/* Update Profile Details */}
+        <button className="w-full flex items-center justify-between py-4 border-b">
+          <span className="text-base font-medium">Update Profile Details</span>
+          <ChevronRight className="h-5 w-5 text-muted-foreground" />
+        </button>
+
+        {/* Privacy Policy */}
+        <button className="w-full flex items-center justify-between py-4 border-b">
+          <span className="text-base font-medium">Privacy Policy</span>
+          <ChevronRight className="h-5 w-5 text-muted-foreground" />
+        </button>
+
+        {/* Terms and Conditions */}
+        <button className="w-full flex items-center justify-between py-4 border-b">
+          <span className="text-base font-medium">Terms and Conditions</span>
+          <ChevronRight className="h-5 w-5 text-muted-foreground" />
+        </button>
+
+        {/* Suggest a New Feature */}
+        <button className="w-full flex items-center justify-between py-4 border-b">
+          <span className="text-base font-medium">Suggest a New Feature</span>
+          <ChevronRight className="h-5 w-5 text-muted-foreground" />
+        </button>
 
         {/* Settings */}
-        <Card className="animate-fade-up" style={{ animationDelay: "100ms" }}>
-          <CardHeader>
-            <CardTitle>Settings</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {theme === "dark" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
-                <div>
-                  <p className="font-medium">Dark Mode</p>
-                  <p className="text-sm text-muted-foreground">Toggle theme</p>
-                </div>
-              </div>
-              <Switch 
-                checked={theme === "dark"}
-                onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
-              />
-            </div>
-            
-            <Separator />
-            
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Bell className="h-5 w-5" />
-                <div>
-                  <p className="font-medium">Notifications</p>
-                  <p className="text-sm text-muted-foreground">Push notifications</p>
-                </div>
-              </div>
-              <Switch defaultChecked />
-            </div>
-            
-            <Separator />
-            
-            <Button variant="ghost" className="w-full justify-start gap-3">
-              <Shield className="h-5 w-5" />
-              <span>Privacy & Security</span>
-            </Button>
-            
-            <Button variant="ghost" className="w-full justify-start gap-3">
-              <HelpCircle className="h-5 w-5" />
-              <span>Help & Support</span>
-            </Button>
-          </CardContent>
-        </Card>
+        <button className="w-full flex items-center justify-between py-4 border-b">
+          <span className="text-base font-medium">Settings</span>
+          <ChevronRight className="h-5 w-5 text-muted-foreground" />
+        </button>
+      </div>
 
-        {/* Logout */}
+      {/* Go Ad-Free */}
+      <div className="px-6 mt-6">
+        <h3 className="text-lg font-bold mb-3">Go Ad-Free</h3>
+        <div className="flex items-center justify-between py-3">
+          <span className="text-base">Ad-Free Subscription</span>
+          <Button variant="secondary" size="sm" className="rounded-full px-6">
+            Subscribe
+          </Button>
+        </div>
+      </div>
+
+      {/* App Version */}
+      <div className="px-6 mt-4 text-center">
+        <p className="text-sm text-primary">Current App Version: 1.2.3</p>
+      </div>
+
+      {/* Logout */}
+      <div className="px-6 mt-6 mb-6">
         <Button 
-          variant="destructive" 
-          className="w-full gap-2 animate-fade-up" 
-          style={{ animationDelay: "200ms" }}
+          variant="outline" 
+          className="w-full py-6 text-base rounded-full"
           onClick={handleLogout}
         >
-          <LogOut className="h-4 w-4" />
           Logout
         </Button>
       </div>
