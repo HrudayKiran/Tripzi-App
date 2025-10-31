@@ -14,6 +14,9 @@ import Profile from "./pages/Profile";
 import UpdateProfile from "./pages/UpdateProfile";
 import Settings from "./pages/Settings";
 import ForgotPassword from "./pages/ForgotPassword";
+import CreateTrip from "./pages/CreateTrip";
+import TripDetails from "./pages/TripDetails";
+import Chat from "./pages/Chat";
 import NotFound from "./pages/NotFound";
 import Layout from "./components/Layout";
 
@@ -36,6 +39,9 @@ const App = () => (
               <Route path="/profile" element={<ProtectedRoute><Layout><Profile /></Layout></ProtectedRoute>} />
               <Route path="/update-profile" element={<ProtectedRoute><Layout><UpdateProfile /></Layout></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
+              <Route path="/create-trip" element={<ProtectedRoute><CreateTrip /></ProtectedRoute>} />
+              <Route path="/trip/:id" element={<ProtectedRoute><TripDetails /></ProtectedRoute>} />
+              <Route path="/chat/:userId" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>
