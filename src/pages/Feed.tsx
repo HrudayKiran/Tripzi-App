@@ -9,7 +9,6 @@ import heroImage from "@/assets/hero-travel.jpg";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-
 interface Trip {
   id: string;
   title: string;
@@ -23,72 +22,65 @@ interface Trip {
   created_at: string;
   user_id: string;
 }
-
 interface Profile {
   full_name: string | null;
   avatar_url: string | null;
 }
-
 const Feed = () => {
-  const { user } = useAuth();
+  const {
+    user
+  } = useAuth();
   const navigate = useNavigate();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     if (user) {
       fetchUserTrips();
     }
   }, [user]);
-
   const fetchUserTrips = async () => {
     if (!user) return;
-
     try {
-      const { data: tripsData, error } = await supabase
-        .from("trips")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-
+      const {
+        data: tripsData,
+        error
+      } = await supabase.from("trips").select("*").eq("user_id", user.id).order("created_at", {
+        ascending: false
+      });
       if (error) throw error;
-
       if (tripsData) {
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("id, full_name, avatar_url")
-          .eq("id", user.id)
-          .single();
-
+        const {
+          data: profileData
+        } = await supabase.from("profiles").select("id, full_name, avatar_url").eq("id", user.id).single();
         if (profileData) {
-          setProfiles({ [user.id]: { full_name: profileData.full_name, avatar_url: profileData.avatar_url } });
+          setProfiles({
+            [user.id]: {
+              full_name: profileData.full_name,
+              avatar_url: profileData.avatar_url
+            }
+          });
         }
-
         setTrips(tripsData);
       }
     } catch (error: any) {
       toast({
         title: "Error",
         description: "Failed to load your trips",
-        variant: "destructive",
+        variant: "destructive"
       });
     } finally {
       setLoading(false);
     }
   };
-
   const getTimeAgo = (date: string) => {
     const seconds = Math.floor((new Date().getTime() - new Date(date).getTime()) / 1000);
-    
     if (seconds < 60) return 'just now';
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
     return `${Math.floor(seconds / 86400)}d ago`;
   };
-
-  return (
-    <div className="min-h-screen pb-24 bg-muted/30">
+  return <div className="min-h-screen pb-24 bg-muted/30">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-gradient-to-r from-primary to-accent p-4 shadow-lg">
         <h1 className="text-2xl font-bold text-primary-foreground">My Trips</h1>
@@ -96,24 +88,15 @@ const Feed = () => {
 
       {/* Posts */}
       <div className="p-4 space-y-4">
-        {loading ? (
-          <div className="text-center py-8 text-muted-foreground">Loading your trips...</div>
-        ) : trips.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
+        {loading ? <div className="text-center py-8 text-muted-foreground">Loading your trips...</div> : trips.length === 0 ? <div className="text-center py-8 text-muted-foreground">
             <p className="mb-4">You haven't posted any trips yet</p>
             <Button onClick={() => navigate("/create-trip")} className="gap-2">
               <Plus className="h-4 w-4" />
               Create Your First Trip
             </Button>
-          </div>
-        ) : (
-          trips.map((trip, index) => (
-            <Card 
-              key={trip.id} 
-              className="overflow-hidden shadow-lg animate-fade-up cursor-pointer hover:shadow-xl transition-all"
-              style={{ animationDelay: `${index * 100}ms` }}
-              onClick={() => navigate(`/trip/${trip.id}`)}
-            >
+          </div> : trips.map((trip, index) => <Card key={trip.id} className="overflow-hidden shadow-lg animate-fade-up cursor-pointer hover:shadow-xl transition-all" style={{
+        animationDelay: `${index * 100}ms`
+      }} onClick={() => navigate(`/trip/${trip.id}`)}>
               <CardHeader className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -138,11 +121,7 @@ const Feed = () => {
 
               <CardContent className="space-y-3 p-0">
                 <div className="relative h-64 overflow-hidden">
-                  <img 
-                    src={heroImage} 
-                    alt={trip.title} 
-                    className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
-                  />
+                  <img src={heroImage} alt={trip.title} className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" />
                 </div>
                 <div className="px-4 space-y-2">
                   <h3 className="font-bold text-lg">{trip.title}</h3>
@@ -174,21 +153,11 @@ const Feed = () => {
                   <span>0</span>
                 </Button>
               </CardFooter>
-            </Card>
-          ))
-        )}
+            </Card>)}
       </div>
 
       {/* Floating Action Button */}
-      <Button 
-        size="lg"
-        onClick={() => navigate("/create-trip")}
-        className="fixed bottom-24 right-6 h-14 w-14 rounded-full shadow-xl animate-scale-in bg-gradient-to-r from-secondary to-accent hover:shadow-2xl transition-all duration-300"
-      >
-        <Plus className="h-6 w-6" />
-      </Button>
-    </div>
-  );
+      
+    </div>;
 };
-
 export default Feed;
