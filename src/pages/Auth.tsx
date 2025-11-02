@@ -36,6 +36,11 @@ const Auth = () => {
     }
   }, [user, navigate]);
 
+  // Reset loading state when component mounts or user changes
+  useEffect(() => {
+    setIsLoading(false);
+  }, [user]);
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
