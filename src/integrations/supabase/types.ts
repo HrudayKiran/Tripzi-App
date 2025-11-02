@@ -148,8 +148,10 @@ export type Database = {
           created_at: string | null
           full_name: string | null
           id: string
+          kyc_status: string
           phone_number: string | null
           push_notifications_enabled: boolean | null
+          role: string
           updated_at: string | null
         }
         Insert: {
@@ -158,8 +160,10 @@ export type Database = {
           created_at?: string | null
           full_name?: string | null
           id: string
+          kyc_status?: string
           phone_number?: string | null
           push_notifications_enabled?: boolean | null
+          role?: string
           updated_at?: string | null
         }
         Update: {
@@ -168,8 +172,10 @@ export type Database = {
           created_at?: string | null
           full_name?: string | null
           id?: string
+          kyc_status?: string
           phone_number?: string | null
           push_notifications_enabled?: boolean | null
+          role?: string
           updated_at?: string | null
         }
         Relationships: []
@@ -212,12 +218,14 @@ export type Database = {
           destination: string
           end_date: string
           essentials: string[] | null
+          gender_preference: string
           id: string
           location_url: string | null
           max_travelers: number
           start_date: string
           status: string
           title: string
+          transport_type: string
           updated_at: string | null
           user_id: string
         }
@@ -229,12 +237,14 @@ export type Database = {
           destination: string
           end_date: string
           essentials?: string[] | null
+          gender_preference?: string
           id?: string
           location_url?: string | null
           max_travelers?: number
           start_date: string
           status?: string
           title: string
+          transport_type?: string
           updated_at?: string | null
           user_id: string
         }
@@ -246,12 +256,14 @@ export type Database = {
           destination?: string
           end_date?: string
           essentials?: string[] | null
+          gender_preference?: string
           id?: string
           location_url?: string | null
           max_travelers?: number
           start_date?: string
           status?: string
           title?: string
+          transport_type?: string
           updated_at?: string | null
           user_id?: string
         }

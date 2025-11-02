@@ -128,6 +128,36 @@ const AdminDashboard = () => {
     };
   }, [profile, fetchKYCRequests]);
 
+  const handleViewDocument = async (request: KYCRequest) => {
+    try {
+      // Generate a signed URL for the document
+      const { data, error } = await supabase.storage
+        .from("kyc-documents")
+        .createSignedUrl(request.document_url.split('/').pop() || '', 3600); // 1 hour expiry
+
+      if (error) {
+        console.error("Error creating signed URL:", error);
+        toast({
+          title: "Error",
+          description: "Failed to generate document URL",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, "_blank");
+      }
+    } catch (error) {
+      console.error("Error viewing document:", error);
+      toast({
+        title: "Error",
+        description: "Failed to view document",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleReview = (request: KYCRequest, action: "approve" | "reject") => {
     setSelectedRequest(request);
     setReviewAction(action);

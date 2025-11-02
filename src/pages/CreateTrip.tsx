@@ -20,7 +20,9 @@ const tripSchema = z.object({
   end_date: z.string().min(1, "End date is required"),
   max_travelers: z.number().int().min(1, "Must have at least 1 traveler").max(50, "Cannot exceed 50 travelers"),
   location_url: z.string().url("Invalid URL").optional().or(z.literal("")),
-  essentials: z.string().trim().max(500, "Essentials must be less than 500 characters").optional()
+  essentials: z.string().trim().max(500, "Essentials must be less than 500 characters").optional(),
+  gender_preference: z.enum(["Male", "Female", "Male and Female"], "Please select a gender preference"),
+  transport_type: z.string().min(1, "Transport type is required")
 }).refine(data => new Date(data.end_date) > new Date(data.start_date), {
   message: "End date must be after start date",
   path: ["end_date"]
@@ -43,6 +45,9 @@ const CreateTrip = () => {
     end_date: "",
     max_travelers: "1",
     essentials: "",
+    gender_preference: "",
+    transport_type: "",
+    transport_type_other: "",
   });
 
   useEffect(() => {
@@ -76,6 +81,9 @@ const CreateTrip = () => {
           end_date: trip.end_date,
           max_travelers: trip.max_travelers.toString(),
           essentials: Array.isArray(trip.essentials) ? trip.essentials.join(", ") : "",
+          gender_preference: trip.gender_preference || "Male and Female",
+          transport_type: trip.transport_type || "Other",
+          transport_type_other: "",
         });
 
         // Load existing images
@@ -158,7 +166,9 @@ const CreateTrip = () => {
         end_date: formData.end_date,
         max_travelers: parseInt(formData.max_travelers),
         location_url: formData.location_url,
-        essentials: formData.essentials
+        essentials: formData.essentials,
+        gender_preference: formData.gender_preference,
+        transport_type: formData.transport_type || formData.transport_type_other
       });
 
       if (!validationResult.success) {
@@ -208,6 +218,8 @@ const CreateTrip = () => {
             end_date: validationResult.data.end_date,
             max_travelers: validationResult.data.max_travelers,
             essentials: validationResult.data.essentials ? validationResult.data.essentials.split(",").map(e => e.trim()).filter(Boolean) : [],
+            gender_preference: validationResult.data.gender_preference,
+            transport_type: validationResult.data.transport_type,
           })
           .eq("id", tripId)
           .eq("user_id", user.id);
@@ -247,6 +259,8 @@ const CreateTrip = () => {
             end_date: validationResult.data.end_date,
             max_travelers: validationResult.data.max_travelers,
             essentials: validationResult.data.essentials ? validationResult.data.essentials.split(",").map(e => e.trim()).filter(Boolean) : [],
+            gender_preference: validationResult.data.gender_preference,
+            transport_type: validationResult.data.transport_type,
           })
           .select()
           .single();
@@ -386,13 +400,13 @@ const CreateTrip = () => {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="cost">Estimated Cost ($)</Label>
+                <Label htmlFor="cost">Estimated Cost (₹)</Label>
                 <div className="relative">
-                  <DollarSign className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <span className="absolute left-3 top-3 h-4 w-4 text-muted-foreground">₹</span>
                   <Input
                     id="cost"
                     type="number"
-                    placeholder="1000"
+                    placeholder="50000"
                     className="pl-10"
                     value={formData.cost}
                     onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
@@ -426,6 +440,60 @@ const CreateTrip = () => {
                 value={formData.essentials}
                 onChange={(e) => setFormData({ ...formData, essentials: e.target.value })}
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="gender_preference">Gender Preference</Label>
+                <select
+                  id="gender_preference"
+                  value={formData.gender_preference}
+                  onChange={(e) => setFormData({ ...formData, gender_preference: e.target.value })}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  required
+                >
+                  <option value="" disabled hidden>Select Gender Preference</option>
+                  <option value="Male and Female">Male and Female</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                </select>
+              </div>
+
+              <div>
+                <Label htmlFor="transport_type">Transport Type</Label>
+                <select
+                  id="transport_type"
+                  value={formData.transport_type}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === "Other") {
+                      setFormData({ ...formData, transport_type: "", transport_type_other: formData.transport_type_other });
+                    } else {
+                      setFormData({ ...formData, transport_type: value, transport_type_other: "" });
+                    }
+                  }}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  required
+                >
+                  <option value="">Select Transport Type</option>
+                  <option value="Train">Train</option>
+                  <option value="Bus">Bus</option>
+                  <option value="Bike">Bike</option>
+                  <option value="Car">Car</option>
+                  <option value="Flight">Flight</option>
+                  <option value="Other">Other</option>
+                </select>
+                {formData.transport_type === "" && (
+                  <Input
+                    id="transport_type_other"
+                    placeholder="Specify other transport type"
+                    value={formData.transport_type_other}
+                    onChange={(e) => setFormData({ ...formData, transport_type_other: e.target.value })}
+                    className="mt-2"
+                    required
+                  />
+                )}
+              </div>
             </div>
 
             <div>

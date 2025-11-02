@@ -122,7 +122,7 @@ const Feed = () => {
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
-                    <Badge variant="secondary">${trip.cost}</Badge>
+                    <Badge variant="secondary">₹{trip.cost}</Badge>
                   </div>
                 </div>
                 <div className="flex items-center gap-1 text-primary">
