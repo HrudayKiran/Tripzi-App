@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, MapPin, Calendar, DollarSign, Users, Image as ImageIcon, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,9 +28,11 @@ const tripSchema = z.object({
 
 const CreateTrip = () => {
   const navigate = useNavigate();
+  const { tripId } = useParams();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [images, setImages] = useState<{ file: File; preview: string }[]>([]);
+  const [existingImages, setExistingImages] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -42,6 +44,61 @@ const CreateTrip = () => {
     max_travelers: "1",
     essentials: "",
   });
+
+  useEffect(() => {
+    if (tripId && user) {
+      loadTripData();
+    }
+  }, [tripId, user]);
+
+  const loadTripData = async () => {
+    if (!tripId) return;
+    
+    setLoading(true);
+    try {
+      const { data: trip, error: tripError } = await supabase
+        .from("trips")
+        .select("*")
+        .eq("id", tripId)
+        .eq("user_id", user?.id)
+        .single();
+
+      if (tripError) throw tripError;
+
+      if (trip) {
+        setFormData({
+          title: trip.title,
+          description: trip.description,
+          destination: trip.destination,
+          location_url: trip.location_url || "",
+          cost: trip.cost.toString(),
+          start_date: trip.start_date,
+          end_date: trip.end_date,
+          max_travelers: trip.max_travelers.toString(),
+          essentials: Array.isArray(trip.essentials) ? trip.essentials.join(", ") : "",
+        });
+
+        // Load existing images
+        const { data: tripImages } = await supabase
+          .from("trip_images")
+          .select("image_url")
+          .eq("trip_id", tripId);
+
+        if (tripImages) {
+          setExistingImages(tripImages.map(img => img.image_url));
+        }
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to load trip data",
+        variant: "destructive",
+      });
+      navigate("/feed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -114,7 +171,7 @@ const CreateTrip = () => {
         return;
       }
 
-      // Upload images to storage first
+      // Upload new images to storage
       const uploadedImageUrls: string[] = [];
       
       for (const image of images) {
@@ -137,45 +194,87 @@ const CreateTrip = () => {
         uploadedImageUrls.push(publicUrl);
       }
 
-      const { data: trip, error: tripError } = await supabase
-        .from("trips")
-        .insert({
-          user_id: user.id,
-          title: validationResult.data.title,
-          description: validationResult.data.description,
-          destination: validationResult.data.destination,
-          location_url: validationResult.data.location_url || null,
-          cost: validationResult.data.cost,
-          start_date: validationResult.data.start_date,
-          end_date: validationResult.data.end_date,
-          max_travelers: validationResult.data.max_travelers,
-          essentials: validationResult.data.essentials ? validationResult.data.essentials.split(",").map(e => e.trim()).filter(Boolean) : [],
-        })
-        .select()
-        .single();
+      if (tripId) {
+        // Update existing trip
+        const { error: tripError } = await supabase
+          .from("trips")
+          .update({
+            title: validationResult.data.title,
+            description: validationResult.data.description,
+            destination: validationResult.data.destination,
+            location_url: validationResult.data.location_url || null,
+            cost: validationResult.data.cost,
+            start_date: validationResult.data.start_date,
+            end_date: validationResult.data.end_date,
+            max_travelers: validationResult.data.max_travelers,
+            essentials: validationResult.data.essentials ? validationResult.data.essentials.split(",").map(e => e.trim()).filter(Boolean) : [],
+          })
+          .eq("id", tripId)
+          .eq("user_id", user.id);
 
-      if (tripError) throw tripError;
+        if (tripError) throw tripError;
 
-      if (uploadedImageUrls.length > 0 && trip) {
-        const imageInserts = uploadedImageUrls.map(imageUrl => ({
-          trip_id: trip.id,
-          image_url: imageUrl,
-        }));
-        
-        const { error: imagesError } = await supabase
-          .from("trip_images")
-          .insert(imageInserts);
+        // Add new images if any
+        if (uploadedImageUrls.length > 0) {
+          const imageInserts = uploadedImageUrls.map(imageUrl => ({
+            trip_id: tripId,
+            image_url: imageUrl,
+          }));
+          
+          const { error: imagesError } = await supabase
+            .from("trip_images")
+            .insert(imageInserts);
 
-        if (imagesError) throw imagesError;
+          if (imagesError) throw imagesError;
+        }
+
+        toast({
+          title: "Success!",
+          description: "Your trip has been updated successfully.",
+        });
+      } else {
+        // Create new trip
+        const { data: trip, error: tripError } = await supabase
+          .from("trips")
+          .insert({
+            user_id: user.id,
+            title: validationResult.data.title,
+            description: validationResult.data.description,
+            destination: validationResult.data.destination,
+            location_url: validationResult.data.location_url || null,
+            cost: validationResult.data.cost,
+            start_date: validationResult.data.start_date,
+            end_date: validationResult.data.end_date,
+            max_travelers: validationResult.data.max_travelers,
+            essentials: validationResult.data.essentials ? validationResult.data.essentials.split(",").map(e => e.trim()).filter(Boolean) : [],
+          })
+          .select()
+          .single();
+
+        if (tripError) throw tripError;
+
+        if (uploadedImageUrls.length > 0 && trip) {
+          const imageInserts = uploadedImageUrls.map(imageUrl => ({
+            trip_id: trip.id,
+            image_url: imageUrl,
+          }));
+          
+          const { error: imagesError } = await supabase
+            .from("trip_images")
+            .insert(imageInserts);
+
+          if (imagesError) throw imagesError;
+        }
+
+        toast({
+          title: "Success!",
+          description: "Your trip has been posted successfully.",
+        });
       }
 
       // Clean up blob URLs
       images.forEach(img => URL.revokeObjectURL(img.preview));
 
-      toast({
-        title: "Success!",
-        description: "Your trip has been posted successfully.",
-      });
       navigate("/feed");
     } catch (error: any) {
       toast({
@@ -195,7 +294,7 @@ const CreateTrip = () => {
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="text-primary-foreground">
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h1 className="text-2xl font-bold text-primary-foreground">Create Trip</h1>
+          <h1 className="text-2xl font-bold text-primary-foreground">{tripId ? "Edit Trip" : "Create Trip"}</h1>
         </div>
       </div>
 
@@ -371,7 +470,7 @@ const CreateTrip = () => {
         </Card>
 
         <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? "Posting..." : "Post Trip"}
+          {loading ? (tripId ? "Updating..." : "Posting...") : (tripId ? "Update Trip" : "Post Trip")}
         </Button>
       </form>
     </div>

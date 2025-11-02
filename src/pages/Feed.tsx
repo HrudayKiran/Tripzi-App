@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Heart, MessageCircle, Share2, MapPin, Plus, Calendar, Users } from "lucide-react";
+import { Heart, MessageCircle, Share2, MapPin, Plus, Calendar, Users, Edit } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -94,9 +94,9 @@ const Feed = () => {
               <Plus className="h-4 w-4" />
               Create Your First Trip
             </Button>
-          </div> : trips.map((trip, index) => <Card key={trip.id} className="overflow-hidden shadow-lg animate-fade-up cursor-pointer hover:shadow-xl transition-all" style={{
+          </div> : trips.map((trip, index) => <Card key={trip.id} className="overflow-hidden shadow-lg animate-fade-up hover:shadow-xl transition-all" style={{
         animationDelay: `${index * 100}ms`
-      }} onClick={() => navigate(`/trip/${trip.id}`)}>
+      }}>
               <CardHeader className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -111,7 +111,19 @@ const Feed = () => {
                       <p className="text-sm text-muted-foreground">{getTimeAgo(trip.created_at)}</p>
                     </div>
                   </div>
-                  <Badge variant="secondary">${trip.cost}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/create-trip/${trip.id}`);
+                      }}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Badge variant="secondary">${trip.cost}</Badge>
+                  </div>
                 </div>
                 <div className="flex items-center gap-1 text-primary">
                   <MapPin className="h-4 w-4" />
@@ -120,10 +132,10 @@ const Feed = () => {
               </CardHeader>
 
               <CardContent className="space-y-3 p-0">
-                <div className="relative h-64 overflow-hidden">
+                <div className="relative h-64 overflow-hidden cursor-pointer" onClick={() => navigate(`/trip/${trip.id}`)}>
                   <img src={heroImage} alt={trip.title} className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" />
                 </div>
-                <div className="px-4 space-y-2">
+                <div className="px-4 space-y-2 cursor-pointer" onClick={() => navigate(`/trip/${trip.id}`)}>
                   <h3 className="font-bold text-lg">{trip.title}</h3>
                   <p className="text-sm line-clamp-2">{trip.description}</p>
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
