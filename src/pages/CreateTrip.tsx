@@ -9,12 +9,28 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { z } from "zod";
+
+const tripSchema = z.object({
+  title: z.string().trim().min(3, "Title must be at least 3 characters").max(100, "Title must be less than 100 characters"),
+  description: z.string().trim().min(10, "Description must be at least 10 characters").max(2000, "Description must be less than 2000 characters"),
+  destination: z.string().trim().min(2, "Destination must be at least 2 characters").max(100, "Destination must be less than 100 characters"),
+  cost: z.number().positive("Cost must be positive").max(1000000, "Cost must be less than 1,000,000"),
+  start_date: z.string().min(1, "Start date is required"),
+  end_date: z.string().min(1, "End date is required"),
+  max_travelers: z.number().int().min(1, "Must have at least 1 traveler").max(50, "Cannot exceed 50 travelers"),
+  location_url: z.string().url("Invalid URL").optional().or(z.literal("")),
+  essentials: z.string().trim().max(500, "Essentials must be less than 500 characters").optional()
+}).refine(data => new Date(data.end_date) > new Date(data.start_date), {
+  message: "End date must be after start date",
+  path: ["end_date"]
+});
 
 const CreateTrip = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [images, setImages] = useState<string[]>([]);
+  const [images, setImages] = useState<{ file: File; preview: string }[]>([]);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -30,12 +46,42 @@ const CreateTrip = () => {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files) {
-      const newImages = Array.from(files).map(file => URL.createObjectURL(file));
-      setImages([...images, ...newImages]);
+      // Validate files
+      const validFiles = Array.from(files).filter(file => {
+        // Check file type
+        if (!file.type.startsWith('image/')) {
+          toast({
+            title: "Invalid file",
+            description: `${file.name} is not an image file`,
+            variant: "destructive",
+          });
+          return false;
+        }
+        // Check file size (5MB limit)
+        if (file.size > 5 * 1024 * 1024) {
+          toast({
+            title: "File too large",
+            description: `${file.name} is too large (max 5MB)`,
+            variant: "destructive",
+          });
+          return false;
+        }
+        return true;
+      });
+
+      if (validFiles.length > 0) {
+        const newImages = validFiles.map(file => ({
+          file,
+          preview: URL.createObjectURL(file)
+        }));
+        setImages([...images, ...newImages]);
+      }
     }
   };
 
   const removeImage = (index: number) => {
+    const removed = images[index];
+    URL.revokeObjectURL(removed.preview);
     setImages(images.filter((_, i) => i !== index));
   };
 
@@ -45,29 +91,75 @@ const CreateTrip = () => {
 
     setLoading(true);
     try {
+      // Validate form data
+      const validationResult = tripSchema.safeParse({
+        title: formData.title,
+        description: formData.description,
+        destination: formData.destination,
+        cost: parseFloat(formData.cost),
+        start_date: formData.start_date,
+        end_date: formData.end_date,
+        max_travelers: parseInt(formData.max_travelers),
+        location_url: formData.location_url,
+        essentials: formData.essentials
+      });
+
+      if (!validationResult.success) {
+        const firstError = validationResult.error.errors[0];
+        toast({
+          title: "Validation Error",
+          description: firstError.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Upload images to storage first
+      const uploadedImageUrls: string[] = [];
+      
+      for (const image of images) {
+        const fileExt = image.file.name.split('.').pop();
+        const fileName = `${user.id}/${Date.now()}-${Math.random()}.${fileExt}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('trip-images')
+          .upload(fileName, image.file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('trip-images')
+          .getPublicUrl(uploadData.path);
+
+        uploadedImageUrls.push(publicUrl);
+      }
+
       const { data: trip, error: tripError } = await supabase
         .from("trips")
         .insert({
           user_id: user.id,
-          title: formData.title,
-          description: formData.description,
-          destination: formData.destination,
-          location_url: formData.location_url || null,
-          cost: parseFloat(formData.cost),
-          start_date: formData.start_date,
-          end_date: formData.end_date,
-          max_travelers: parseInt(formData.max_travelers),
-          essentials: formData.essentials.split(",").map(e => e.trim()).filter(Boolean),
+          title: validationResult.data.title,
+          description: validationResult.data.description,
+          destination: validationResult.data.destination,
+          location_url: validationResult.data.location_url || null,
+          cost: validationResult.data.cost,
+          start_date: validationResult.data.start_date,
+          end_date: validationResult.data.end_date,
+          max_travelers: validationResult.data.max_travelers,
+          essentials: validationResult.data.essentials ? validationResult.data.essentials.split(",").map(e => e.trim()).filter(Boolean) : [],
         })
         .select()
         .single();
 
       if (tripError) throw tripError;
 
-      if (images.length > 0 && trip) {
-        const imageInserts = images.map(image => ({
+      if (uploadedImageUrls.length > 0 && trip) {
+        const imageInserts = uploadedImageUrls.map(imageUrl => ({
           trip_id: trip.id,
-          image_url: image,
+          image_url: imageUrl,
         }));
         
         const { error: imagesError } = await supabase
@@ -76,6 +168,9 @@ const CreateTrip = () => {
 
         if (imagesError) throw imagesError;
       }
+
+      // Clean up blob URLs
+      images.forEach(img => URL.revokeObjectURL(img.preview));
 
       toast({
         title: "Success!",
@@ -240,7 +335,7 @@ const CreateTrip = () => {
                 <label htmlFor="images" className="flex items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
                   <div className="flex flex-col items-center">
                     <ImageIcon className="h-8 w-8 text-muted-foreground" />
-                    <p className="mt-2 text-sm text-muted-foreground">Click to upload images</p>
+                    <p className="mt-2 text-sm text-muted-foreground">Click to upload images (max 5MB each)</p>
                   </div>
                   <input
                     id="images"
@@ -257,7 +352,7 @@ const CreateTrip = () => {
                 <div className="grid grid-cols-3 gap-2 mt-4">
                   {images.map((image, index) => (
                     <div key={index} className="relative">
-                      <img src={image} alt={`Upload ${index + 1}`} className="w-full h-24 object-cover rounded-lg" />
+                      <img src={image.preview} alt={`Upload ${index + 1}`} className="w-full h-24 object-cover rounded-lg" />
                       <Button
                         type="button"
                         variant="destructive"
