@@ -36,10 +36,15 @@ const Auth = () => {
     }
   }, [user, navigate]);
 
-  // Reset loading state when component mounts or user changes
+  // Reset loading state when window regains focus (user returns from Google auth)
   useEffect(() => {
-    setIsLoading(false);
-  }, [user]);
+    const handleFocus = () => {
+      setIsLoading(false);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
