@@ -157,7 +157,15 @@ const Feed = () => {
       </div>
 
       {/* Floating Action Button */}
-      
+      {trips.length > 0 && (
+        <Button
+          size="lg"
+          className="fixed bottom-20 right-4 rounded-full h-14 w-14 shadow-lg z-20"
+          onClick={() => navigate("/create-trip")}
+        >
+          <Plus className="h-6 w-6" />
+        </Button>
+      )}
     </div>;
 };
 export default Feed;
