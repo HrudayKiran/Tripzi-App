@@ -49,9 +49,26 @@ const Profile = () => {
       {/* Menu Options */}
       <div className="px-6 space-y-1">
         {/* KYC Status */}
-        <button className="w-full flex items-center justify-between py-4 border-b">
-          <span className="text-base font-medium">KYC Status</span>
-          <div className="w-3 h-3 rounded-full bg-green-500"></div>
+        <button 
+          className="w-full flex items-center justify-between py-4 border-b"
+          onClick={() => navigate('/kyc-request')}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-base font-medium">KYC Status</span>
+            {profile?.kyc_status === 'verified' && (
+              <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs font-medium">Verified</span>
+            )}
+            {profile?.kyc_status === 'pending' && (
+              <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium">Pending</span>
+            )}
+            {profile?.kyc_status === 'rejected' && (
+              <span className="px-2 py-0.5 bg-red-100 text-red-800 rounded-full text-xs font-medium">Rejected</span>
+            )}
+            {(!profile?.kyc_status || profile?.kyc_status === 'not_submitted') && (
+              <span className="px-2 py-0.5 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">Not Verified</span>
+            )}
+          </div>
+          <ChevronRight className="h-5 w-5 text-muted-foreground" />
         </button>
 
         {/* Update Profile Details */}
@@ -98,6 +115,17 @@ const Profile = () => {
           <span className="text-base font-medium">Settings</span>
           <ChevronRight className="h-5 w-5 text-muted-foreground" />
         </button>
+
+        {/* Admin Dashboard */}
+        {profile?.role === 'admin' && (
+          <button 
+            className="w-full flex items-center justify-between py-4 border-b border-primary"
+            onClick={() => navigate('/admin/dashboard')}
+          >
+            <span className="text-base font-medium text-primary">Admin Dashboard</span>
+            <ChevronRight className="h-5 w-5 text-primary" />
+          </button>
+        )}
       </div>
 
       {/* Go Ad-Free */}

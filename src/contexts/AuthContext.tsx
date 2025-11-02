@@ -23,6 +23,8 @@ interface Profile {
   avatar_url: string | null;
   bio: string | null;
   push_notifications_enabled: boolean;
+  role: string | null;
+  kyc_status: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,7 +43,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       .single();
     
     if (!error && data) {
-      setProfile(data);
+      // Ensure role and kyc_status have default values if null
+      // Type assertion needed as database types may not include new fields yet
+      const profileData = data as any;
+      setProfile({
+        ...data,
+        role: profileData.role || 'user',
+        kyc_status: profileData.kyc_status || 'not_submitted',
+      } as Profile);
     }
   };
 
@@ -139,9 +148,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const updateProfile = async (data: Partial<Profile>) => {
     if (!user) return { error: { message: 'Not authenticated' } };
     
+    // Security: Prevent users from changing their own role
+    // Role can only be changed by database admins directly
+    const { role, ...safeData } = data;
+    if (role && role !== profile?.role) {
+      return { 
+        error: { 
+          message: 'You cannot change your own role. Contact an administrator.' 
+        } 
+      };
+    }
+    
     const { error } = await supabase
       .from('profiles')
-      .update(data)
+      .update(safeData)
       .eq('id', user.id);
     
     if (!error) {

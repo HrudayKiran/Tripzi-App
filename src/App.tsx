@@ -17,8 +17,11 @@ import ForgotPassword from "./pages/ForgotPassword";
 import CreateTrip from "./pages/CreateTrip";
 import TripDetails from "./pages/TripDetails";
 import Chat from "./pages/Chat";
+import KYCRequest from "./pages/KYCRequest";
+import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
 import Layout from "./components/Layout";
+import { ProtectedAdminRoute } from "./components/ProtectedAdminRoute";
 
 const queryClient = new QueryClient();
 
@@ -43,6 +46,8 @@ const App = () => (
               <Route path="/create-trip/:tripId" element={<ProtectedRoute><CreateTrip /></ProtectedRoute>} />
               <Route path="/trip/:id" element={<ProtectedRoute><TripDetails /></ProtectedRoute>} />
               <Route path="/chat/:userId" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+              <Route path="/kyc-request" element={<ProtectedRoute><Layout><KYCRequest /></Layout></ProtectedRoute>} />
+              <Route path="/admin/dashboard" element={<ProtectedAdminRoute><Layout><AdminDashboard /></Layout></ProtectedAdminRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>
