@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,8 @@ const Chat = () => {
   const [newMessage, setNewMessage] = useState("");
   const [otherUser, setOtherUser] = useState<Profile | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const lastMessageTime = useRef<number>(0);
+  const MESSAGE_COOLDOWN_MS = 1000; // 1 second between messages
 
   useEffect(() => {
     if (user && userId) {
@@ -123,17 +125,39 @@ const Chat = () => {
     e.preventDefault();
     if (!user || !userId || !newMessage.trim()) return;
 
+    // Rate limiting check
+    const now = Date.now();
+    if (now - lastMessageTime.current < MESSAGE_COOLDOWN_MS) {
+      toast({
+        title: "Slow down",
+        description: "Please wait a moment before sending another message",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Message length validation
+    if (newMessage.length > 2000) {
+      toast({
+        title: "Message too long",
+        description: "Messages must be less than 2000 characters",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from("messages")
         .insert({
           sender_id: user.id,
           receiver_id: userId,
-          message: newMessage,
+          message: newMessage.trim(),
         });
 
       if (error) throw error;
 
+      lastMessageTime.current = now;
       setNewMessage("");
     } catch (error: any) {
       toast({
@@ -204,6 +228,7 @@ const Chat = () => {
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             className="flex-1"
+            maxLength={2000}
           />
           <Button type="submit" size="icon" disabled={!newMessage.trim()}>
             <Send className="h-5 w-5" />

@@ -101,20 +101,19 @@ const TripDetails = () => {
 
     setBooking(true);
     try {
-      const { error } = await supabase
-        .from("bookings")
-        .insert({
-          trip_id: trip.id,
-          user_id: user.id,
-          status: "confirmed",
-        });
+      // Use atomic RPC function to prevent race conditions
+      const { data, error } = await supabase.rpc('book_trip', {
+        p_trip_id: trip.id,
+        p_user_id: user.id
+      });
 
       if (error) throw error;
 
-      await supabase
-        .from("trips")
-        .update({ current_travelers: trip.current_travelers + 1 })
-        .eq("id", trip.id);
+      // Check if the RPC returned an error (data is a JSONB object)
+      const result = data as { error?: string; success?: boolean };
+      if (result?.error) {
+        throw new Error(result.error);
+      }
 
       toast({
         title: "Success!",
@@ -125,7 +124,7 @@ const TripDetails = () => {
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || "Failed to book trip",
         variant: "destructive",
       });
     } finally {
