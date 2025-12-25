@@ -25,6 +25,8 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import Terms from "./pages/Terms";
 import HelpSupport from "./pages/HelpSupport";
 import SuggestFeature from "./pages/SuggestFeature";
+import Admin from "./pages/Admin";
+import GroupChat from "./pages/GroupChat";
 import NotFound from "./pages/NotFound";
 import Layout from "./components/Layout";
 
@@ -47,6 +49,7 @@ const App = () => (
               <Route path="/terms" element={<Terms />} />
               <Route path="/help-support" element={<ProtectedRoute><HelpSupport /></ProtectedRoute>} />
               <Route path="/suggest-feature" element={<ProtectedRoute><SuggestFeature /></ProtectedRoute>} />
+              <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
               <Route path="/home" element={<ProtectedRoute><Layout><Home /></Layout></ProtectedRoute>} />
               <Route path="/feed" element={<ProtectedRoute><Layout><Feed /></Layout></ProtectedRoute>} />
               <Route path="/trips" element={<ProtectedRoute><Layout><Trips /></Layout></ProtectedRoute>} />
@@ -59,6 +62,7 @@ const App = () => (
               <Route path="/create-trip/:tripId" element={<ProtectedRoute><CreateTrip /></ProtectedRoute>} />
               <Route path="/trip/:id" element={<ProtectedRoute><TripDetails /></ProtectedRoute>} />
               <Route path="/chat/:userId" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+              <Route path="/group-chat/:groupId" element={<ProtectedRoute><GroupChat /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>

@@ -464,7 +464,7 @@ const Chat = () => {
 
   const isUserOnline = userId ? isOnline(userId) : false;
 
-  // Render message status ticks
+  // Render message status ticks - improved visibility
   const renderMessageStatus = (message: Message) => {
     const isOwn = message.sender_id === user?.id;
     if (!isOwn) return null;
@@ -472,11 +472,11 @@ const Chat = () => {
     const status = message.status || (message.is_read ? 'read' : 'sent');
 
     if (status === 'read') {
-      return <CheckCheck className="h-3.5 w-3.5 text-blue-500" />;
+      return <CheckCheck className="h-4 w-4 text-sky-400 drop-shadow-sm" />;
     } else if (isUserOnline || status === 'delivered') {
-      return <CheckCheck className="h-3.5 w-3.5 text-muted-foreground/70" />;
+      return <CheckCheck className="h-4 w-4 text-white/80" />;
     } else {
-      return <Check className="h-3.5 w-3.5 text-muted-foreground/70" />;
+      return <Check className="h-4 w-4 text-white/80" />;
     }
   };
 
