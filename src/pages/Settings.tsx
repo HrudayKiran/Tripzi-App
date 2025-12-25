@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Moon, Sun, Bell, BellOff, Smartphone } from 'lucide-react';
+import { ArrowLeft, Moon, Sun, Bell, BellOff, Smartphone, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -8,19 +8,40 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from 'next-themes';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 const Settings = () => {
   const navigate = useNavigate();
-  const { profile, updateProfile } = useAuth();
+  const { profile, updateProfile, user } = useAuth();
   const { theme, setTheme } = useTheme();
   const { isSupported, isRegistered, permissionStatus, register, unregister } = usePushNotifications();
   const [pushNotifications, setPushNotifications] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      checkAdminRole();
+    }
+  }, [user]);
 
   useEffect(() => {
     if (profile) {
       setPushNotifications(profile.push_notifications_enabled);
     }
   }, [profile]);
+
+  const checkAdminRole = async () => {
+    if (!user) return;
+    
+    const { data } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('role', 'admin')
+      .maybeSingle();
+    
+    setIsAdmin(!!data);
+  };
 
   const handlePushNotificationsToggle = async (checked: boolean) => {
     setPushNotifications(checked);
@@ -138,6 +159,26 @@ const Settings = () => {
             onCheckedChange={handleThemeToggle}
           />
         </div>
+
+        {/* Admin Dashboard Link */}
+        {isAdmin && (
+          <div 
+            className="flex items-center justify-between py-4 border-b border-border/50 cursor-pointer hover:bg-muted/50 rounded-lg px-2 -mx-2 transition-colors"
+            onClick={() => navigate('/admin')}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shrink-0">
+                <Shield className="h-5 w-5 text-primary-foreground" />
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-base font-medium">Admin Dashboard</p>
+                <p className="text-sm text-muted-foreground">
+                  Manage users, KYC requests, and feedback
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
 import { formatINR } from "@/lib/currency";
+import TripReviews from "@/components/TripReviews";
 
 interface Trip {
   id: string;
@@ -335,6 +336,14 @@ const TripDetails = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Trip Reviews Section */}
+        <TripReviews 
+          tripId={trip.id} 
+          tripStatus={trip.status}
+          tripEndDate={trip.end_date}
+          hasJoined={hasBooked}
+        />
 
         {!isOwnTrip && (
           <div className="flex gap-2">

@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, MapPin, CalendarIcon, Users, Image as ImageIcon, X, IndianRupee } from "lucide-react";
+import { ArrowLeft, MapPin, CalendarIcon, Users, Image as ImageIcon, X, IndianRupee, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/contexts/AuthContext";
@@ -48,6 +49,7 @@ const CreateTrip = () => {
     max_travelers: "1",
     essentials: "",
     transport_type: "Other",
+    enable_group_chat: true,
   });
 
   useEffect(() => {
@@ -82,6 +84,7 @@ const CreateTrip = () => {
           max_travelers: trip.max_travelers.toString(),
           essentials: Array.isArray(trip.essentials) ? trip.essentials.join(", ") : "",
           transport_type: trip.transport_type || "Other",
+          enable_group_chat: trip.enable_group_chat ?? true,
         });
 
         // Load existing images
@@ -223,6 +226,7 @@ const CreateTrip = () => {
             max_travelers: validationResult.data.max_travelers,
             essentials: validationResult.data.essentials ? validationResult.data.essentials.split(",").map(e => e.trim()).filter(Boolean) : [],
             transport_type: formData.transport_type,
+            enable_group_chat: formData.enable_group_chat,
           })
           .eq("id", tripId)
           .eq("user_id", user.id);
@@ -263,6 +267,7 @@ const CreateTrip = () => {
             max_travelers: validationResult.data.max_travelers,
             essentials: validationResult.data.essentials ? validationResult.data.essentials.split(",").map(e => e.trim()).filter(Boolean) : [],
             transport_type: formData.transport_type,
+            enable_group_chat: formData.enable_group_chat,
           })
           .select()
           .single();
@@ -493,6 +498,24 @@ const CreateTrip = () => {
               />
             </div>
 
+            <div className="flex items-center justify-between py-3 px-4 bg-muted/50 rounded-lg">
+              <div className="flex items-start gap-3">
+                <MessageSquare className="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div>
+                  <Label htmlFor="enable_group_chat" className="text-sm font-medium cursor-pointer">
+                    Enable Group Chat
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Allow travelers to chat together after booking
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="enable_group_chat"
+                checked={formData.enable_group_chat}
+                onCheckedChange={(checked) => setFormData({ ...formData, enable_group_chat: checked })}
+              />
+            </div>
             <div>
               <Label>Trip Images</Label>
               <div className="mt-2">
