@@ -70,6 +70,48 @@ export type Database = {
         }
         Relationships: []
       }
+      kyc_requests: {
+        Row: {
+          admin_notes: string | null
+          created_at: string | null
+          document_number: string
+          document_url: string
+          id: string
+          kyc_type: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          created_at?: string | null
+          document_number: string
+          document_url: string
+          id?: string
+          kyc_type: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          admin_notes?: string | null
+          created_at?: string | null
+          document_number?: string
+          document_url?: string
+          id?: string
+          kyc_type?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       messages: {
         Row: {
           created_at: string | null
@@ -148,8 +190,10 @@ export type Database = {
           created_at: string | null
           full_name: string | null
           id: string
+          kyc_status: string | null
           phone_number: string | null
           push_notifications_enabled: boolean | null
+          role: string | null
           updated_at: string | null
         }
         Insert: {
@@ -158,8 +202,10 @@ export type Database = {
           created_at?: string | null
           full_name?: string | null
           id: string
+          kyc_status?: string | null
           phone_number?: string | null
           push_notifications_enabled?: boolean | null
+          role?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -168,8 +214,10 @@ export type Database = {
           created_at?: string | null
           full_name?: string | null
           id?: string
+          kyc_status?: string | null
           phone_number?: string | null
           push_notifications_enabled?: boolean | null
+          role?: string | null
           updated_at?: string | null
         }
         Relationships: []
@@ -212,12 +260,14 @@ export type Database = {
           destination: string
           end_date: string
           essentials: string[] | null
+          gender_preference: string | null
           id: string
           location_url: string | null
           max_travelers: number
           start_date: string
           status: string
           title: string
+          transport_type: string | null
           updated_at: string | null
           user_id: string
         }
@@ -229,12 +279,14 @@ export type Database = {
           destination: string
           end_date: string
           essentials?: string[] | null
+          gender_preference?: string | null
           id?: string
           location_url?: string | null
           max_travelers?: number
           start_date: string
           status?: string
           title: string
+          transport_type?: string | null
           updated_at?: string | null
           user_id: string
         }
@@ -246,12 +298,14 @@ export type Database = {
           destination?: string
           end_date?: string
           essentials?: string[] | null
+          gender_preference?: string | null
           id?: string
           location_url?: string | null
           max_travelers?: number
           start_date?: string
           status?: string
           title?: string
+          transport_type?: string | null
           updated_at?: string | null
           user_id?: string
         }
