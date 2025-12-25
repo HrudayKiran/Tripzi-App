@@ -95,11 +95,40 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch push tokens
+    // Check which users have push notifications enabled
+    const { data: profiles, error: profilesError } = await supabase
+      .from("profiles")
+      .select("id, push_notifications_enabled")
+      .in("id", targetUserIds);
+
+    if (profilesError) {
+      console.error("Error fetching profiles:", profilesError);
+    }
+
+    // Filter to only users who have notifications enabled
+    const enabledUserIds = profiles
+      ?.filter((p) => p.push_notifications_enabled !== false)
+      .map((p) => p.id) || targetUserIds;
+
+    console.log(`Notifications enabled for ${enabledUserIds.length} of ${targetUserIds.length} users`);
+
+    if (enabledUserIds.length === 0) {
+      return new Response(
+        JSON.stringify({ 
+          message: "All target users have notifications disabled",
+          inApp: 0,
+          fcm: { sent: 0, failed: 0 },
+          totalTokens: 0
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Fetch push tokens only for users with notifications enabled
     const { data: tokens, error: tokenError } = await supabase
       .from("push_tokens")
       .select("token, platform, user_id")
-      .in("user_id", targetUserIds);
+      .in("user_id", enabledUserIds);
 
     if (tokenError) {
       console.error("Error fetching tokens:", tokenError);
@@ -130,8 +159,8 @@ Deno.serve(async (req) => {
       console.log(`FCM results: ${fcmSent} sent, ${fcmFailed} failed`);
     }
 
-    // Create in-app notifications as fallback/supplement
-    const notifications = targetUserIds.map(uid => ({
+    // Create in-app notifications only for users with notifications enabled
+    const notifications = enabledUserIds.map(uid => ({
       user_id: uid,
       title,
       message: body,

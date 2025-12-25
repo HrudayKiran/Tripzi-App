@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Send, MapPin, Phone, Video, Trash2, MoreVertical, Plus, X, Edit2, Check } from "lucide-react";
+import { ArrowLeft, Send, MapPin, Phone, Video, Trash2, MoreVertical, Plus, X, Edit2, Check, CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -9,10 +9,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import EmojiPicker, { EmojiClickData, Theme } from 'emoji-picker-react';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { VideoCall } from "@/components/VideoCall";
+import { LocationPreview } from "@/components/LocationPreview";
 
 interface Message {
   id: string;
@@ -21,6 +24,7 @@ interface Message {
   receiver_id: string;
   created_at: string;
   is_read: boolean;
+  status?: string;
 }
 
 interface Profile {
@@ -34,6 +38,7 @@ const Chat = () => {
   const navigate = useNavigate();
   const { user, profile: userProfile } = useAuth();
   const { isOnline } = useOnlineStatus();
+  const { isOtherUserTyping, handleTyping, setTyping } = useTypingIndicator(userId);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [otherUser, setOtherUser] = useState<Profile | null>(null);
@@ -43,6 +48,8 @@ const Chat = () => {
   const [uploading, setUploading] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; messageId: string | null }>({ open: false, messageId: null });
   const [editingMessage, setEditingMessage] = useState<{ id: string; text: string } | null>(null);
+  const [showLocationPreview, setShowLocationPreview] = useState(false);
+  const [activeCall, setActiveCall] = useState<{ type: "audio" | "video" } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastMessageTime = useRef<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -110,6 +117,13 @@ const Chat = () => {
     scrollToBottom();
   }, [messages]);
 
+  // Cleanup typing indicator on unmount
+  useEffect(() => {
+    return () => {
+      setTyping(false);
+    };
+  }, [setTyping]);
+
   const fetchOtherUser = async () => {
     if (!userId) return;
 
@@ -147,7 +161,7 @@ const Chat = () => {
 
     await supabase
       .from("messages")
-      .update({ is_read: true })
+      .update({ is_read: true, status: 'read' })
       .eq("sender_id", userId)
       .eq("receiver_id", user.id)
       .eq("is_read", false);
@@ -176,12 +190,12 @@ const Chat = () => {
         .from("messages")
         .delete()
         .eq("id", deleteDialog.messageId)
-        .eq("sender_id", user?.id); // Only delete own messages
+        .eq("sender_id", user?.id);
       
       if (error) throw error;
       
       setMessages((prev) => prev.filter((m) => m.id !== deleteDialog.messageId));
-      toast({ title: "Message deleted" });
+      // No toast for delete - silent operation
     } catch (error) {
       toast({ title: "Error", description: "Failed to delete message", variant: "destructive" });
     } finally {
@@ -205,7 +219,7 @@ const Chat = () => {
         m.id === editingMessage.id ? { ...m, message: editingMessage.text.trim() } : m
       ));
       setEditingMessage(null);
-      toast({ title: "Message updated" });
+      // No toast for edit - silent operation
     } catch (error) {
       toast({ title: "Error", description: "Failed to edit message", variant: "destructive" });
     }
@@ -251,14 +265,10 @@ const Chat = () => {
           sender_id: user.id,
           receiver_id: userId,
           message: messageText,
+          status: 'sent',
         });
 
       if (error) throw error;
-
-      toast({
-        title: "Sent",
-        description: `${type === 'image' ? 'Image' : 'Document'} sent successfully`,
-      });
     } catch (error: any) {
       console.error("Upload error:", error);
       toast({
@@ -295,6 +305,7 @@ const Chat = () => {
     }
 
     setSending(true);
+    setTyping(false);
     const messageText = newMessage.trim();
     setNewMessage("");
 
@@ -305,6 +316,7 @@ const Chat = () => {
           sender_id: user.id,
           receiver_id: userId,
           message: messageText,
+          status: 'sent',
         })
         .select()
         .single();
@@ -339,6 +351,11 @@ const Chat = () => {
     } finally {
       setSending(false);
     }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewMessage(e.target.value);
+    handleTyping();
   };
 
   const formatTime = (date: string) => {
@@ -385,11 +402,8 @@ const Chat = () => {
     if (message.startsWith('📍 [Location]')) {
       const url = message.replace('📍 [Location] ', '');
       const coords = url.match(/q=([^,]+),([^&]+)/);
-      
-      // Create a static map preview URL
       const lat = coords ? coords[1] : '';
       const lng = coords ? coords[2] : '';
-      const staticMapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=200x120&markers=color:red%7C${lat},${lng}&key=`;
       
       return (
         <a 
@@ -398,16 +412,14 @@ const Chat = () => {
           rel="noopener noreferrer"
           className="block rounded-lg overflow-hidden"
         >
-          <div className="w-[200px] h-[120px] bg-gradient-to-br from-green-100 to-blue-100 dark:from-green-900/30 dark:to-blue-900/30 flex flex-col items-center justify-center gap-2 relative">
-            <MapPin className="h-8 w-8 text-red-500" />
-            <span className="text-xs text-foreground font-medium">📍 Live Location</span>
-            {coords && (
-              <span className="text-[10px] text-muted-foreground">
-                {parseFloat(lat).toFixed(4)}, {parseFloat(lng).toFixed(4)}
-              </span>
-            )}
-            <div className="absolute bottom-2 right-2 bg-primary text-primary-foreground text-[10px] px-2 py-1 rounded-full">
-              View in Maps
+          <div className="w-[200px] h-[120px] relative overflow-hidden rounded-lg">
+            <iframe
+              src={`https://www.openstreetmap.org/export/embed.html?bbox=${parseFloat(lng) - 0.005},${parseFloat(lat) - 0.005},${parseFloat(lng) + 0.005},${parseFloat(lat) + 0.005}&layer=mapnik&marker=${lat},${lng}`}
+              className="w-full h-full border-0 pointer-events-none"
+              title="Location"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent flex items-end justify-between p-2">
+              <span className="text-xs text-white font-medium">📍 View in Maps</span>
             </div>
           </div>
         </a>
@@ -416,63 +428,69 @@ const Chat = () => {
     return <p className="text-sm whitespace-pre-wrap">{message}</p>;
   };
 
-  const handleShareLocation = async () => {
+  const handleShareLocation = async (lat: number, lng: number) => {
     if (!user || !userId) return;
 
-    setShowAttachMenu(false);
-    
-    if (!navigator.geolocation) {
+    const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+    const messageText = `📍 [Location] ${mapsUrl}`;
+
+    try {
+      const { error } = await supabase
+        .from("messages")
+        .insert({
+          sender_id: user.id,
+          receiver_id: userId,
+          message: messageText,
+          status: 'sent',
+        });
+
+      if (error) throw error;
+    } catch (error) {
       toast({
-        title: "Not supported",
-        description: "Geolocation is not supported by your browser",
+        title: "Error",
+        description: "Failed to share location",
         variant: "destructive",
       });
-      return;
     }
+  };
 
-    toast({ title: "Getting location...", description: "Please wait" });
+  const startCall = (type: "audio" | "video") => {
+    setActiveCall({ type });
+  };
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
-        const messageText = `📍 [Location] ${mapsUrl}`;
-
-        try {
-          const { error } = await supabase
-            .from("messages")
-            .insert({
-              sender_id: user.id,
-              receiver_id: userId,
-              message: messageText,
-            });
-
-          if (error) throw error;
-
-          toast({
-            title: "Sent",
-            description: "Location shared successfully",
-          });
-        } catch (error) {
-          toast({
-            title: "Error",
-            description: "Failed to share location",
-            variant: "destructive",
-          });
-        }
-      },
-      (error) => {
-        toast({
-          title: "Error",
-          description: "Failed to get your location. Please enable location services.",
-          variant: "destructive",
-        });
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+  const endCall = () => {
+    setActiveCall(null);
   };
 
   const isUserOnline = userId ? isOnline(userId) : false;
+
+  // Render message status ticks
+  const renderMessageStatus = (message: Message) => {
+    const isOwn = message.sender_id === user?.id;
+    if (!isOwn) return null;
+
+    const status = message.status || (message.is_read ? 'read' : 'sent');
+
+    if (status === 'read') {
+      return <CheckCheck className="h-3.5 w-3.5 text-blue-500" />;
+    } else if (isUserOnline || status === 'delivered') {
+      return <CheckCheck className="h-3.5 w-3.5 text-muted-foreground/70" />;
+    } else {
+      return <Check className="h-3.5 w-3.5 text-muted-foreground/70" />;
+    }
+  };
+
+  if (activeCall) {
+    return (
+      <VideoCall
+        otherUserId={userId!}
+        otherUserName={otherUser?.full_name || "User"}
+        otherUserAvatar={otherUser?.avatar_url}
+        callType={activeCall.type}
+        onEnd={endCall}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-muted/30">
@@ -500,8 +518,15 @@ const Chat = () => {
         }}
       />
 
+      {/* Location Preview Dialog */}
+      <LocationPreview
+        open={showLocationPreview}
+        onClose={() => setShowLocationPreview(false)}
+        onSend={handleShareLocation}
+      />
+
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-gradient-to-r from-primary to-accent p-4 shadow-lg">
+      <div className="sticky top-0 z-10 bg-gradient-to-r from-primary to-accent p-4 shadow-lg safe-top">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="text-primary-foreground">
@@ -521,15 +546,15 @@ const Chat = () => {
             <div>
               <h1 className="text-lg font-bold text-primary-foreground">{otherUser?.full_name || "User"}</h1>
               <p className="text-xs text-primary-foreground/70">
-                {isUserOnline ? "Online" : "Offline"}
+                {isOtherUserTyping ? "typing..." : isUserOnline ? "Online" : "Offline"}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="text-primary-foreground">
+            <Button variant="ghost" size="icon" className="text-primary-foreground" onClick={() => startCall("audio")}>
               <Phone className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" className="text-primary-foreground">
+            <Button variant="ghost" size="icon" className="text-primary-foreground" onClick={() => startCall("video")}>
               <Video className="h-5 w-5" />
             </Button>
           </div>
@@ -578,9 +603,12 @@ const Chat = () => {
                       ) : (
                         renderMessageContent(message.message)
                       )}
-                      <p className={`text-xs mt-1 ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                        {formatTime(message.created_at)}
-                      </p>
+                      <div className={`flex items-center gap-1 mt-1 ${isOwn ? 'justify-end' : ''}`}>
+                        <span className={`text-xs ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                          {formatTime(message.created_at)}
+                        </span>
+                        {renderMessageStatus(message)}
+                      </div>
                     </div>
                     {isOwn && !editingMessage && (
                       <DropdownMenu>
@@ -609,11 +637,24 @@ const Chat = () => {
               );
             })
           )}
+          
+          {/* Typing indicator */}
+          {isOtherUserTyping && (
+            <div className="flex justify-start">
+              <div className="bg-card rounded-2xl rounded-bl-sm px-4 py-2">
+                <div className="flex gap-1">
+                  <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </ScrollArea>
 
       {/* Input */}
-      <form onSubmit={handleSendMessage} className="p-4 border-t bg-background">
+      <form onSubmit={handleSendMessage} className="p-4 border-t bg-background safe-bottom">
         <div className="flex items-center gap-2">
           {/* Attachment Menu - WhatsApp style */}
           <Popover open={showAttachMenu} onOpenChange={setShowAttachMenu}>
@@ -656,7 +697,10 @@ const Chat = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={handleShareLocation}
+                  onClick={() => {
+                    setShowAttachMenu(false);
+                    setShowLocationPreview(true);
+                  }}
                   className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-muted transition-colors"
                 >
                   <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center">
@@ -688,7 +732,7 @@ const Chat = () => {
           <Input
             placeholder="Type a message..."
             value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
+            onChange={handleInputChange}
             className="flex-1 rounded-full"
             maxLength={2000}
           />

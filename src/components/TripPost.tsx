@@ -237,6 +237,7 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
       }
 
       setHasJoined(true);
+      fetchBookings();
       
       // Send push notification to trip owner
       await supabase.functions.invoke("send-push-notification", {
@@ -251,6 +252,39 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
       toast({ title: "Trip Joined!", description: `You've joined the trip to ${trip.destination}` });
     } catch (error: any) {
       toast({ title: "Error", description: "Failed to join trip", variant: "destructive" });
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  const handleDropTrip = async () => {
+    if (!user || !hasJoined) return;
+
+    setJoining(true);
+    try {
+      // Delete the booking
+      const { error } = await supabase
+        .from("bookings")
+        .delete()
+        .eq("trip_id", trip.id)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+
+      // Decrement current_travelers
+      const { error: updateError } = await supabase
+        .from("trips")
+        .update({ current_travelers: Math.max(1, trip.current_travelers - 1) })
+        .eq("id", trip.id);
+
+      if (updateError) throw updateError;
+
+      setHasJoined(false);
+      fetchBookings();
+      
+      toast({ title: "Left Trip", description: `You've left the trip to ${trip.destination}` });
+    } catch (error: any) {
+      toast({ title: "Error", description: "Failed to leave trip", variant: "destructive" });
     } finally {
       setJoining(false);
     }
@@ -608,17 +642,29 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
             </button>
           </div>
 
-          {/* Join button */}
+          {/* Join/Drop button */}
           {!isOwner && (
             hasJoined ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                className="rounded-full px-5 gap-2"
-                disabled
-              >
-                <Check className="h-4 w-4" /> Joined
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="rounded-full px-5 gap-2"
+                  >
+                    <Check className="h-4 w-4" /> Joined
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem 
+                    onClick={handleDropTrip}
+                    className="text-destructive focus:text-destructive"
+                    disabled={joining}
+                  >
+                    {joining ? "Leaving..." : "Leave Trip"}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : !isVerified ? (
               <Button
                 size="sm"
