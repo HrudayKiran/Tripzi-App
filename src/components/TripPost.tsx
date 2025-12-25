@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Heart, MessageCircle, Share2, MapPin, Calendar, Edit, Trash2, Send, MoreHorizontal, Check, ShieldAlert } from "lucide-react";
+import { Heart, MessageCircle, Share2, MapPin, Calendar, Edit, Trash2, Send, MoreHorizontal, Check, ShieldAlert, Users, UserPlus, UserCheck } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,10 @@ interface TripPostProps {
     current_travelers: number;
     created_at: string;
     user_id: string;
+    gender_preference?: string | null;
+    transport_type?: string | null;
+    essentials?: string[] | null;
+    location_url?: string | null;
   };
   profile: {
     full_name: string | null;
@@ -34,6 +38,7 @@ interface TripPostProps {
   onDelete?: (tripId: string) => void;
   index?: number;
   isFollowing?: boolean;
+  onFollowToggle?: () => void;
 }
 
 interface Comment {
@@ -47,7 +52,16 @@ interface Comment {
   };
 }
 
-export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollowing = false }: TripPostProps) => {
+interface Booking {
+  id: string;
+  user_id: string;
+  profile?: {
+    full_name: string | null;
+    avatar_url: string | null;
+  };
+}
+
+export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollowing = false, onFollowToggle }: TripPostProps) => {
   const navigate = useNavigate();
   const { user, profile: userProfile } = useAuth();
   const [isLiked, setIsLiked] = useState(false);
@@ -58,6 +72,9 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
   const [loadingLike, setLoadingLike] = useState(false);
   const [hasJoined, setHasJoined] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [showBookings, setShowBookings] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const isOwner = user?.id === trip.user_id;
   const isVerified = userProfile?.kyc_status === 'verified';
@@ -66,7 +83,25 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
     fetchLikes();
     fetchComments();
     checkIfJoined();
+    fetchBookings();
   }, [trip.id, user]);
+
+  // Set up real-time subscriptions for this trip
+  useEffect(() => {
+    const channel = supabase
+      .channel(`trip-${trip.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "trip_likes", filter: `trip_id=eq.${trip.id}` }, () => fetchLikes())
+      .on("postgres_changes", { event: "*", schema: "public", table: "trip_comments", filter: `trip_id=eq.${trip.id}` }, () => fetchComments())
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings", filter: `trip_id=eq.${trip.id}` }, () => {
+        fetchBookings();
+        checkIfJoined();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [trip.id]);
 
   const fetchLikes = async () => {
     const { count } = await supabase
@@ -97,6 +132,38 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
 
     if (data) {
       const userIds = [...new Set(data.map((c) => c.user_id))];
+      if (userIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from("profiles")
+          .select("id, full_name, avatar_url")
+          .in("id", userIds);
+
+        const profilesMap: Record<string, { full_name: string | null; avatar_url: string | null }> = {};
+        profilesData?.forEach((p) => {
+          profilesMap[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url };
+        });
+
+        setComments(
+          data.map((c) => ({
+            ...c,
+            profile: profilesMap[c.user_id],
+          }))
+        );
+      } else {
+        setComments(data);
+      }
+    }
+  };
+
+  const fetchBookings = async () => {
+    const { data } = await supabase
+      .from("bookings")
+      .select("id, user_id")
+      .eq("trip_id", trip.id)
+      .eq("status", "confirmed");
+
+    if (data && data.length > 0) {
+      const userIds = data.map((b) => b.user_id);
       const { data: profilesData } = await supabase
         .from("profiles")
         .select("id, full_name, avatar_url")
@@ -107,12 +174,14 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
         profilesMap[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url };
       });
 
-      setComments(
-        data.map((c) => ({
-          ...c,
-          profile: profilesMap[c.user_id],
+      setBookings(
+        data.map((b) => ({
+          ...b,
+          profile: profilesMap[b.user_id],
         }))
       );
+    } else {
+      setBookings([]);
     }
   };
 
@@ -168,6 +237,17 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
       }
 
       setHasJoined(true);
+      
+      // Send push notification to trip owner
+      await supabase.functions.invoke("send-push-notification", {
+        body: {
+          userId: trip.user_id,
+          title: "New Trip Booking!",
+          body: `${userProfile?.full_name || "Someone"} joined your trip to ${trip.destination}`,
+          data: { type: "booking", tripId: trip.id },
+        },
+      });
+      
       toast({ title: "Trip Joined!", description: `You've joined the trip to ${trip.destination}` });
     } catch (error: any) {
       toast({ title: "Error", description: "Failed to join trip", variant: "destructive" });
@@ -242,6 +322,13 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
     return `${Math.floor(seconds / 86400)}d ago`;
   };
 
+  const getDuration = () => {
+    const startDate = new Date(trip.start_date);
+    const endDate = new Date(trip.end_date);
+    const days = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    return `${days} day${days > 1 ? 's' : ''}`;
+  };
+
   return (
     <article
       className="bg-card rounded-3xl overflow-hidden shadow-card animate-fade-up"
@@ -273,40 +360,62 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
               >
                 {profile?.full_name || "Traveler"}
               </p>
-              {isFollowing && (
-                <Badge variant="secondary" className="rounded-full text-xs h-5 px-2">
-                  Following
-                </Badge>
-              )}
             </div>
             <p className="text-xs text-muted-foreground">{getTimeAgo(trip.created_at)}</p>
           </div>
         </div>
 
-        {isOwner && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="rounded-xl">
-              <DropdownMenuItem onClick={() => navigate(`/create-trip/${trip.id}`)} className="gap-2">
-                <Edit className="h-4 w-4" /> Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => onDelete?.(trip.id)}
-                className="gap-2 text-destructive focus:text-destructive"
-              >
-                <Trash2 className="h-4 w-4" /> Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Follow button - only show if not owner */}
+          {!isOwner && user && (
+            <Button
+              variant={isFollowing ? "secondary" : "outline"}
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onFollowToggle?.();
+              }}
+              className="rounded-full h-8 px-3 gap-1"
+            >
+              {isFollowing ? (
+                <>
+                  <UserCheck className="h-3.5 w-3.5" />
+                  <span className="text-xs">Following</span>
+                </>
+              ) : (
+                <>
+                  <UserPlus className="h-3.5 w-3.5" />
+                  <span className="text-xs">Follow</span>
+                </>
+              )}
+            </Button>
+          )}
+          
+          {isOwner && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="rounded-xl">
+                <DropdownMenuItem onClick={() => navigate(`/create-trip/${trip.id}`)} className="gap-2">
+                  <Edit className="h-4 w-4" /> Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => onDelete?.(trip.id)}
+                  className="gap-2 text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" /> Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </div>
 
       {/* Trip image */}
-      <div className="relative cursor-pointer" onClick={() => navigate(`/trip/${trip.id}`)}>
+      <div className="relative">
         <div className="aspect-[4/3] bg-muted">
           {imageUrl ? (
             <img src={imageUrl} alt={trip.title} className="w-full h-full object-cover" />
@@ -319,22 +428,112 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
         <Badge className="absolute top-3 right-3 bg-card/90 backdrop-blur-sm text-foreground font-bold shadow-lg">
           {formatINR(trip.cost)}
         </Badge>
+        <Badge className="absolute top-3 left-3 bg-primary/90 backdrop-blur-sm text-primary-foreground shadow-lg">
+          {getDuration()}
+        </Badge>
       </div>
 
       {/* Trip details */}
       <div className="p-4 space-y-3">
         <div>
-          <h3 className="font-bold text-lg">{trip.destination}</h3>
+          <h3 className="font-bold text-lg">{trip.title || trip.destination}</h3>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <MapPin className="h-3.5 w-3.5" />
+            <span>{trip.destination}</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
             <Calendar className="h-3.5 w-3.5" />
             <span>
               {new Date(trip.start_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })} -{" "}
-              {new Date(trip.end_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+              {new Date(trip.end_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
             </span>
           </div>
         </div>
 
-        <p className="text-sm text-muted-foreground">{trip.description}</p>
+        <p className={`text-sm text-muted-foreground ${!expanded && trip.description.length > 150 ? "line-clamp-2" : ""}`}>
+          {trip.description}
+        </p>
+        {trip.description.length > 150 && (
+          <button onClick={() => setExpanded(!expanded)} className="text-xs text-primary font-medium">
+            {expanded ? "Show less" : "Read more"}
+          </button>
+        )}
+
+        {/* Additional trip details */}
+        <div className="flex flex-wrap gap-2">
+          {trip.gender_preference && trip.gender_preference !== 'both' && (
+            <Badge variant="secondary" className="text-xs">{trip.gender_preference} only</Badge>
+          )}
+          {trip.transport_type && (
+            <Badge variant="outline" className="text-xs capitalize">{trip.transport_type}</Badge>
+          )}
+          <Badge variant="outline" className="text-xs">
+            <Users className="h-3 w-3 mr-1" />
+            {trip.current_travelers}/{trip.max_travelers} travelers
+          </Badge>
+        </div>
+
+        {/* Essentials */}
+        {trip.essentials && trip.essentials.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {trip.essentials.slice(0, 5).map((item, idx) => (
+              <Badge key={idx} variant="secondary" className="text-xs bg-muted">
+                {item}
+              </Badge>
+            ))}
+            {trip.essentials.length > 5 && (
+              <Badge variant="secondary" className="text-xs bg-muted">
+                +{trip.essentials.length - 5} more
+              </Badge>
+            )}
+          </div>
+        )}
+
+        {/* Joiners */}
+        {bookings.length > 0 && (
+          <Sheet open={showBookings} onOpenChange={setShowBookings}>
+            <SheetTrigger asChild>
+              <button className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
+                <div className="flex -space-x-2">
+                  {bookings.slice(0, 3).map((booking) => (
+                    <Avatar key={booking.id} className="w-6 h-6 border-2 border-card">
+                      <AvatarImage src={booking.profile?.avatar_url || ""} />
+                      <AvatarFallback className="text-[10px]">
+                        {booking.profile?.full_name?.charAt(0) || "U"}
+                      </AvatarFallback>
+                    </Avatar>
+                  ))}
+                </div>
+                <span className="text-muted-foreground">
+                  {bookings.length} joined
+                </span>
+              </button>
+            </SheetTrigger>
+            <SheetContent side="bottom" className="h-[50vh] rounded-t-3xl">
+              <SheetHeader>
+                <SheetTitle>People who joined</SheetTitle>
+              </SheetHeader>
+              <div className="py-4 space-y-3 overflow-y-auto">
+                {bookings.map((booking) => (
+                  <div
+                    key={booking.id}
+                    className="flex items-center gap-3 p-3 bg-muted/50 rounded-xl cursor-pointer hover:bg-muted transition-colors"
+                    onClick={() => {
+                      setShowBookings(false);
+                      navigate(`/profile/${booking.user_id}`);
+                    }}
+                  >
+                    <Avatar className="w-10 h-10">
+                      <AvatarImage src={booking.profile?.avatar_url || ""} />
+                      <AvatarFallback>{booking.profile?.full_name?.charAt(0) || "U"}</AvatarFallback>
+                    </Avatar>
+                    <p className="font-medium">{booking.profile?.full_name || "User"}</p>
+                  </div>
+                ))}
+              </div>
+            </SheetContent>
+          </Sheet>
+        )}
 
         {/* Actions */}
         <div className="flex items-center justify-between pt-2 border-t border-border/50">
@@ -409,33 +608,36 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
             </button>
           </div>
 
-          {hasJoined ? (
-            <Button
-              size="sm"
-              variant="secondary"
-              className="rounded-full px-5 gap-2"
-              disabled
-            >
-              <Check className="h-4 w-4" /> Joined
-            </Button>
-          ) : !isVerified ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleJoinTrip}
-              className="rounded-full px-4 gap-2 border-amber-500 text-amber-600"
-            >
-              <ShieldAlert className="h-4 w-4" /> Verify to Join
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              onClick={handleJoinTrip}
-              className="rounded-full px-5 shadow-lg hover:shadow-primary/25"
-              disabled={trip.current_travelers >= trip.max_travelers || joining}
-            >
-              {trip.current_travelers >= trip.max_travelers ? "Full" : joining ? "Joining..." : "Join Trip"}
-            </Button>
+          {/* Join button */}
+          {!isOwner && (
+            hasJoined ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="rounded-full px-5 gap-2"
+                disabled
+              >
+                <Check className="h-4 w-4" /> Joined
+              </Button>
+            ) : !isVerified ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleJoinTrip}
+                className="rounded-full px-4 gap-2 border-amber-500 text-amber-600"
+              >
+                <ShieldAlert className="h-4 w-4" /> Verify to Join
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={handleJoinTrip}
+                className="rounded-full px-5 shadow-lg hover:shadow-primary/25"
+                disabled={trip.current_travelers >= trip.max_travelers || joining}
+              >
+                {trip.current_travelers >= trip.max_travelers ? "Full" : joining ? "Joining..." : "Join Trip"}
+              </Button>
+            )
           )}
         </div>
       </div>

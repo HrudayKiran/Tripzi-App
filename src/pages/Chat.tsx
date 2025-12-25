@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Send, MapPin, Phone, Video, Trash2, MoreVertical, Plus, X } from "lucide-react";
+import { ArrowLeft, Send, MapPin, Phone, Video, Trash2, MoreVertical, Plus, X, Edit2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -32,7 +32,7 @@ interface Profile {
 const Chat = () => {
   const { userId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile: userProfile } = useAuth();
   const { isOnline } = useOnlineStatus();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -42,6 +42,7 @@ const Chat = () => {
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; messageId: string | null }>({ open: false, messageId: null });
+  const [editingMessage, setEditingMessage] = useState<{ id: string; text: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastMessageTime = useRef<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -71,6 +72,12 @@ const Chat = () => {
         (payload) => {
           if (payload.eventType === 'DELETE') {
             setMessages((prev) => prev.filter((m) => m.id !== payload.old.id));
+            return;
+          }
+          
+          if (payload.eventType === 'UPDATE') {
+            const updatedMsg = payload.new as Message;
+            setMessages((prev) => prev.map((m) => m.id === updatedMsg.id ? updatedMsg : m));
             return;
           }
           
@@ -153,7 +160,11 @@ const Chat = () => {
   };
 
   const handleEmojiClick = (emojiData: EmojiClickData) => {
-    setNewMessage((prev) => prev + emojiData.emoji);
+    if (editingMessage) {
+      setEditingMessage({ ...editingMessage, text: editingMessage.text + emojiData.emoji });
+    } else {
+      setNewMessage((prev) => prev + emojiData.emoji);
+    }
     setShowEmojiPicker(false);
   };
 
@@ -175,6 +186,28 @@ const Chat = () => {
       toast({ title: "Error", description: "Failed to delete message", variant: "destructive" });
     } finally {
       setDeleteDialog({ open: false, messageId: null });
+    }
+  };
+
+  const handleEditMessage = async () => {
+    if (!editingMessage || !editingMessage.text.trim()) return;
+    
+    try {
+      const { error } = await supabase
+        .from("messages")
+        .update({ message: editingMessage.text.trim() })
+        .eq("id", editingMessage.id)
+        .eq("sender_id", user?.id);
+      
+      if (error) throw error;
+      
+      setMessages((prev) => prev.map((m) => 
+        m.id === editingMessage.id ? { ...m, message: editingMessage.text.trim() } : m
+      ));
+      setEditingMessage(null);
+      toast({ title: "Message updated" });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to edit message", variant: "destructive" });
     }
   };
 
@@ -286,6 +319,16 @@ const Chat = () => {
       }
 
       lastMessageTime.current = now;
+      
+      // Send push notification to receiver
+      await supabase.functions.invoke("send-push-notification", {
+        body: {
+          userId: userId,
+          title: `New message from ${userProfile?.full_name || "Someone"}`,
+          body: messageText.length > 50 ? messageText.substring(0, 50) + "..." : messageText,
+          data: { type: "new_message", userId: user.id },
+        },
+      });
     } catch (error: any) {
       setNewMessage(messageText);
       toast({
@@ -342,6 +385,12 @@ const Chat = () => {
     if (message.startsWith('📍 [Location]')) {
       const url = message.replace('📍 [Location] ', '');
       const coords = url.match(/q=([^,]+),([^&]+)/);
+      
+      // Create a static map preview URL
+      const lat = coords ? coords[1] : '';
+      const lng = coords ? coords[2] : '';
+      const staticMapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=200x120&markers=color:red%7C${lat},${lng}&key=`;
+      
       return (
         <a 
           href={url} 
@@ -349,14 +398,17 @@ const Chat = () => {
           rel="noopener noreferrer"
           className="block rounded-lg overflow-hidden"
         >
-          <div className="w-[200px] h-[120px] bg-gradient-to-br from-green-100 to-blue-100 flex flex-col items-center justify-center gap-2">
+          <div className="w-[200px] h-[120px] bg-gradient-to-br from-green-100 to-blue-100 dark:from-green-900/30 dark:to-blue-900/30 flex flex-col items-center justify-center gap-2 relative">
             <MapPin className="h-8 w-8 text-red-500" />
-            <span className="text-xs text-muted-foreground">View on Google Maps</span>
+            <span className="text-xs text-foreground font-medium">📍 Live Location</span>
             {coords && (
-              <span className="text-[10px] text-muted-foreground/70">
-                {parseFloat(coords[1]).toFixed(4)}, {parseFloat(coords[2]).toFixed(4)}
+              <span className="text-[10px] text-muted-foreground">
+                {parseFloat(lat).toFixed(4)}, {parseFloat(lng).toFixed(4)}
               </span>
             )}
+            <div className="absolute bottom-2 right-2 bg-primary text-primary-foreground text-[10px] px-2 py-1 rounded-full">
+              View in Maps
+            </div>
           </div>
         </a>
       );
@@ -500,26 +552,57 @@ const Chat = () => {
                   key={message.id}
                   className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div className="relative group">
+                  <div className="relative group max-w-[75%]">
                     <div
-                      className={`max-w-[70%] rounded-2xl p-3 ${
+                      className={`rounded-2xl p-3 ${
                         isOwn
                           ? 'bg-primary text-primary-foreground rounded-br-sm'
                           : 'bg-card rounded-bl-sm'
                       }`}
                     >
-                      {renderMessageContent(message.message)}
+                      {editingMessage?.id === message.id ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={editingMessage.text}
+                            onChange={(e) => setEditingMessage({ ...editingMessage, text: e.target.value })}
+                            className="flex-1 h-8 text-sm bg-background/20 border-none"
+                            autoFocus
+                          />
+                          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleEditMessage}>
+                            <Check className="h-4 w-4" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditingMessage(null)}>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        renderMessageContent(message.message)
+                      )}
                       <p className={`text-xs mt-1 ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
                         {formatTime(message.created_at)}
                       </p>
                     </div>
-                    {isOwn && (
-                      <button
-                        onClick={() => setDeleteDialog({ open: true, messageId: message.id })}
-                        className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full bg-destructive/10 hover:bg-destructive/20"
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </button>
+                    {isOwn && !editingMessage && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full bg-muted hover:bg-muted/80"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                          <DropdownMenuItem onClick={() => setEditingMessage({ id: message.id, text: message.message })}>
+                            <Edit2 className="h-4 w-4 mr-2" /> Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => setDeleteDialog({ open: true, messageId: message.id })}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     )}
                   </div>
                 </div>

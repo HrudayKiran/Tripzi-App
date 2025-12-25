@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, SlidersHorizontal, ArrowUpDown } from "lucide-react";
+import { Search, SlidersHorizontal, ArrowUpDown, UserPlus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -44,10 +44,11 @@ const Home = () => {
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ maxCost: 100000, destination: "", minDays: 0, maxPersons: 20 });
+  const [filters, setFilters] = useState({ maxCost: 500000, destination: "", minDays: 0, maxPersons: 50 });
   const [sortBy, setSortBy] = useState<string>("newest");
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; tripId: string | null }>({ open: false, tripId: null });
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
 
   const filterCategories = ["All", "Recent", "Budget", "Popular"];
   const [activeFilter, setActiveFilter] = useState("All");
@@ -56,9 +57,14 @@ const Home = () => {
     fetchTrips();
     fetchFollowing();
     
+    // Real-time subscriptions for trips, likes, comments, bookings
     const channel = supabase
-      .channel("home-trips")
+      .channel("home-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "trips" }, () => fetchTrips())
+      .on("postgres_changes", { event: "*", schema: "public", table: "trip_likes" }, () => fetchTrips())
+      .on("postgres_changes", { event: "*", schema: "public", table: "trip_comments" }, () => fetchTrips())
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => fetchTrips())
+      .on("postgres_changes", { event: "*", schema: "public", table: "follows" }, () => fetchFollowing())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -89,14 +95,7 @@ const Home = () => {
         query = query.neq("user_id", user.id);
       }
       
-      // Apply sorting based on filter
-      if (activeFilter === "Recent" || sortBy === "newest") {
-        query = query.order("created_at", { ascending: false });
-      } else if (activeFilter === "Popular") {
-        query = query.order("current_travelers", { ascending: false });
-      } else {
-        query = query.order("created_at", { ascending: false });
-      }
+      query = query.order("created_at", { ascending: false });
 
       const { data: tripsData } = await query;
 
@@ -137,29 +136,82 @@ const Home = () => {
     }
   };
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) { fetchTrips(); return; }
-    
-    // Sanitize search input: escape LIKE wildcards and limit length
-    const sanitizedQuery = searchQuery
-      .trim()
-      .substring(0, 100) // Limit length
-      .replace(/[%_\\]/g, '\\$&'); // Escape LIKE wildcards
-    
-    // Validate input contains only safe characters
-    if (!/^[\w\s,.\-']+$/i.test(sanitizedQuery)) {
-      setTrips([]);
-      return;
+  // Apply filters and sorting in useMemo
+  const filteredAndSortedTrips = useMemo(() => {
+    let result = [...trips];
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(
+        (trip) =>
+          trip.title.toLowerCase().includes(query) ||
+          trip.destination.toLowerCase().includes(query) ||
+          trip.description.toLowerCase().includes(query)
+      );
     }
-    
-    const { data } = await supabase
-      .from("trips")
-      .select("*")
-      .eq("status", "open")
-      .or(`title.ilike.%${sanitizedQuery}%,destination.ilike.%${sanitizedQuery}%`)
-      .order("created_at", { ascending: false });
-    setTrips(data || []);
-  };
+
+    // Cost filter
+    result = result.filter((trip) => trip.cost <= filters.maxCost);
+
+    // Max travelers filter
+    result = result.filter((trip) => trip.max_travelers <= filters.maxPersons);
+
+    // Min days filter
+    if (filters.minDays > 0) {
+      result = result.filter((trip) => {
+        const startDate = new Date(trip.start_date);
+        const endDate = new Date(trip.end_date);
+        const days = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        return days >= filters.minDays;
+      });
+    }
+
+    // Destination filter
+    if (filters.destination.trim()) {
+      const dest = filters.destination.toLowerCase();
+      result = result.filter((trip) => trip.destination.toLowerCase().includes(dest));
+    }
+
+    // Quick filter categories
+    if (activeFilter === "Budget") {
+      result = result.filter((trip) => trip.cost <= 10000);
+    } else if (activeFilter === "Popular") {
+      result = [...result].sort((a, b) => b.current_travelers - a.current_travelers);
+    }
+
+    // Apply sorting
+    switch (sortBy) {
+      case "newest":
+        result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        break;
+      case "price_low":
+        result.sort((a, b) => a.cost - b.cost);
+        break;
+      case "price_high":
+        result.sort((a, b) => b.cost - a.cost);
+        break;
+      case "days_short":
+        result.sort((a, b) => {
+          const daysA = Math.ceil((new Date(a.end_date).getTime() - new Date(a.start_date).getTime()) / (1000 * 60 * 60 * 24));
+          const daysB = Math.ceil((new Date(b.end_date).getTime() - new Date(b.start_date).getTime()) / (1000 * 60 * 60 * 24));
+          return daysA - daysB;
+        });
+        break;
+      case "days_long":
+        result.sort((a, b) => {
+          const daysA = Math.ceil((new Date(a.end_date).getTime() - new Date(a.start_date).getTime()) / (1000 * 60 * 60 * 24));
+          const daysB = Math.ceil((new Date(b.end_date).getTime() - new Date(b.start_date).getTime()) / (1000 * 60 * 60 * 24));
+          return daysB - daysA;
+        });
+        break;
+      case "travelers":
+        result.sort((a, b) => b.current_travelers - a.current_travelers);
+        break;
+    }
+
+    return result;
+  }, [trips, searchQuery, filters, sortBy, activeFilter]);
 
   const handleDeleteTrip = async () => {
     if (!deleteDialog.tripId) return;
@@ -176,6 +228,43 @@ const Home = () => {
 
   const openDeleteDialog = (tripId: string) => {
     setDeleteDialog({ open: true, tripId });
+  };
+
+  const handleFollowUser = async (userId: string) => {
+    if (!user) return;
+    
+    try {
+      if (followingIds.has(userId)) {
+        await supabase
+          .from("follows")
+          .delete()
+          .eq("follower_id", user.id)
+          .eq("following_id", userId);
+        setFollowingIds((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(userId);
+          return newSet;
+        });
+      } else {
+        await supabase
+          .from("follows")
+          .insert({ follower_id: user.id, following_id: userId });
+        setFollowingIds((prev) => new Set(prev).add(userId));
+      }
+    } catch (error) {
+      console.error("Error toggling follow:", error);
+    }
+  };
+
+  const applyFilters = () => {
+    setFilterSheetOpen(false);
+  };
+
+  const resetFilters = () => {
+    setFilters({ maxCost: 500000, destination: "", minDays: 0, maxPersons: 50 });
+    setSortBy("newest");
+    setActiveFilter("All");
+    setSearchQuery("");
   };
 
   return (
@@ -195,11 +284,10 @@ const Home = () => {
               placeholder="Search trips, people, or places"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               className="pl-10 h-12 rounded-xl bg-muted/50"
             />
           </div>
-          <Sheet>
+          <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
             <SheetTrigger asChild>
               <Button variant="outline" size="icon" className="h-12 w-12 rounded-xl shrink-0">
                 <SlidersHorizontal className="h-5 w-5" />
@@ -245,7 +333,11 @@ const Home = () => {
                   <Label>Destination</Label>
                   <Input placeholder="e.g., Paris" value={filters.destination} onChange={(e) => setFilters({ ...filters, destination: e.target.value })} />
                 </div>
-                <Button onClick={fetchTrips} className="w-full">Apply Filters</Button>
+                
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={resetFilters} className="flex-1">Reset</Button>
+                  <Button onClick={applyFilters} className="flex-1">Apply Filters</Button>
+                </div>
               </div>
             </SheetContent>
           </Sheet>
@@ -274,13 +366,19 @@ const Home = () => {
       <div className="px-4 space-y-4 mt-4">
         {loading ? (
           <div className="text-muted-foreground py-12 text-center">Loading trips...</div>
-        ) : trips.length === 0 ? (
+        ) : filteredAndSortedTrips.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-muted-foreground mb-4">No trips available yet</p>
-            <Button onClick={() => navigate("/create-trip")}>Create First Trip</Button>
+            <p className="text-muted-foreground mb-4">
+              {searchQuery || filters.destination || filters.minDays > 0 || filters.maxCost < 500000 
+                ? "No trips match your filters" 
+                : "No trips available yet"}
+            </p>
+            {(searchQuery || filters.destination || filters.minDays > 0 || filters.maxCost < 500000) && (
+              <Button variant="outline" onClick={resetFilters}>Clear Filters</Button>
+            )}
           </div>
         ) : (
-          trips.map((trip, index) => (
+          filteredAndSortedTrips.map((trip, index) => (
             <TripPost
               key={trip.id}
               trip={trip}
@@ -289,6 +387,7 @@ const Home = () => {
               onDelete={openDeleteDialog}
               index={index}
               isFollowing={followingIds.has(trip.user_id)}
+              onFollowToggle={() => handleFollowUser(trip.user_id)}
             />
           ))
         )}
