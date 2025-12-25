@@ -10,6 +10,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { formatINR } from "@/lib/currency";
+import { FollowersModal } from "@/components/FollowersModal";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 
 interface UserProfileData {
   id: string;
@@ -51,6 +53,9 @@ const UserProfile = () => {
   const [loading, setLoading] = useState(true);
   const [viewingStory, setViewingStory] = useState<Story | null>(null);
   const [storyProgress, setStoryProgress] = useState(0);
+  const [showFollowersModal, setShowFollowersModal] = useState(false);
+  const [showFollowingModal, setShowFollowingModal] = useState(false);
+  const { isOnline } = useOnlineStatus();
 
   const isOwnProfile = user?.id === userId;
   const hasStories = stories.length > 0;
@@ -260,11 +265,17 @@ const UserProfile = () => {
                 <p className="font-bold">{trips.length}</p>
                 <p className="text-muted-foreground">Trips</p>
               </div>
-              <div className="text-center">
+              <div 
+                className="text-center cursor-pointer hover:opacity-80"
+                onClick={() => setShowFollowersModal(true)}
+              >
                 <p className="font-bold">{followersCount}</p>
                 <p className="text-muted-foreground">Followers</p>
               </div>
-              <div className="text-center">
+              <div 
+                className="text-center cursor-pointer hover:opacity-80"
+                onClick={() => setShowFollowingModal(true)}
+              >
                 <p className="font-bold">{followingCount}</p>
                 <p className="text-muted-foreground">Following</p>
               </div>
@@ -420,6 +431,20 @@ const UserProfile = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Followers/Following Modals */}
+      <FollowersModal 
+        open={showFollowersModal} 
+        onOpenChange={setShowFollowersModal} 
+        userId={userId || ""} 
+        type="followers" 
+      />
+      <FollowersModal 
+        open={showFollowingModal} 
+        onOpenChange={setShowFollowingModal} 
+        userId={userId || ""} 
+        type="following" 
+      />
     </div>
   );
 };
