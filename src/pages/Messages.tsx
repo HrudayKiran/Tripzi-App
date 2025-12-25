@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
+import { StoriesBar } from "@/components/StoriesBar";
 
 interface Conversation {
   user_id: string;
@@ -110,7 +111,11 @@ const Messages = () => {
       <div className="sticky top-0 z-10 bg-background border-b">
         <div className="p-4">
           <h1 className="text-2xl font-bold mb-4">Messages</h1>
-          <div className="relative">
+          
+          {/* Stories Bar */}
+          <StoriesBar />
+          
+          <div className="relative mt-3">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search conversations..."

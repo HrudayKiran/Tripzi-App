@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, X, Camera } from "lucide-react";
+import { Plus, X, Eye } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
@@ -26,6 +27,14 @@ interface StoryGroup {
   hasUnviewed: boolean;
 }
 
+interface StoryView {
+  id: string;
+  viewer_id: string;
+  viewed_at: string;
+  viewer_name: string | null;
+  viewer_avatar: string | null;
+}
+
 export const StoriesBar = () => {
   const { user, profile } = useAuth();
   const [storyGroups, setStoryGroups] = useState<StoryGroup[]>([]);
@@ -37,11 +46,13 @@ export const StoriesBar = () => {
   const [caption, setCaption] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [storyViews, setStoryViews] = useState<StoryView[]>([]);
+  const [showViewsSheet, setShowViewsSheet] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchStories();
-    const interval = setInterval(fetchStories, 30000); // Refresh every 30s
+    const interval = setInterval(fetchStories, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -136,16 +147,69 @@ export const StoriesBar = () => {
     }
   };
 
-  const openStoryViewer = (group: StoryGroup) => {
+  const recordStoryView = async (storyId: string, storyOwnerId: string) => {
+    if (!user || user.id === storyOwnerId) return;
+
+    try {
+      await supabase.from("story_views").upsert({
+        story_id: storyId,
+        viewer_id: user.id,
+      }, { onConflict: "story_id,viewer_id" });
+    } catch (error) {
+      console.error("Error recording story view:", error);
+    }
+  };
+
+  const fetchStoryViews = async (storyId: string) => {
+    try {
+      const { data: viewsData } = await supabase
+        .from("story_views")
+        .select("*")
+        .eq("story_id", storyId)
+        .order("viewed_at", { ascending: false });
+
+      if (viewsData && viewsData.length > 0) {
+        const viewerIds = viewsData.map((v) => v.viewer_id);
+        const { data: profilesData } = await supabase
+          .from("profiles")
+          .select("id, full_name, avatar_url")
+          .in("id", viewerIds);
+
+        const profilesMap: Record<string, { full_name: string | null; avatar_url: string | null }> = {};
+        profilesData?.forEach((p) => {
+          profilesMap[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url };
+        });
+
+        setStoryViews(viewsData.map((v) => ({
+          ...v,
+          viewer_name: profilesMap[v.viewer_id]?.full_name || "User",
+          viewer_avatar: profilesMap[v.viewer_id]?.avatar_url || null,
+        })));
+      } else {
+        setStoryViews([]);
+      }
+    } catch (error) {
+      console.error("Error fetching story views:", error);
+    }
+  };
+
+  const openStoryViewer = async (group: StoryGroup) => {
     setCurrentStoryGroup(group);
     setCurrentStoryIndex(0);
     setShowStoryViewer(true);
+    
+    // Record view for first story
+    if (group.stories[0]) {
+      await recordStoryView(group.stories[0].id, group.userId);
+    }
   };
 
-  const nextStory = () => {
+  const nextStory = async () => {
     if (!currentStoryGroup) return;
     if (currentStoryIndex < currentStoryGroup.stories.length - 1) {
-      setCurrentStoryIndex((prev) => prev + 1);
+      const nextIndex = currentStoryIndex + 1;
+      setCurrentStoryIndex(nextIndex);
+      await recordStoryView(currentStoryGroup.stories[nextIndex].id, currentStoryGroup.userId);
     } else {
       setShowStoryViewer(false);
     }
@@ -157,12 +221,21 @@ export const StoriesBar = () => {
     }
   };
 
+  const handleShowViews = async () => {
+    if (!currentStoryGroup) return;
+    const currentStory = currentStoryGroup.stories[currentStoryIndex];
+    await fetchStoryViews(currentStory.id);
+    setShowViewsSheet(true);
+  };
+
   const getTimeAgo = (date: string) => {
     const seconds = Math.floor((new Date().getTime() - new Date(date).getTime()) / 1000);
     if (seconds < 60) return "now";
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
     return `${Math.floor(seconds / 3600)}h`;
   };
+
+  const isOwnStory = currentStoryGroup?.userId === user?.id;
 
   return (
     <>
@@ -314,10 +387,24 @@ export const StoriesBar = () => {
 
               {/* Caption */}
               {currentStoryGroup.stories[currentStoryIndex].caption && (
-                <div className="absolute bottom-4 left-4 right-4 z-20">
+                <div className="absolute bottom-16 left-4 right-4 z-20">
                   <p className="text-white text-center text-sm bg-black/50 rounded-lg px-4 py-2">
                     {currentStoryGroup.stories[currentStoryIndex].caption}
                   </p>
+                </div>
+              )}
+
+              {/* Views button for own stories */}
+              {isOwnStory && (
+                <div className="absolute bottom-4 left-4 right-4 z-20">
+                  <Button
+                    variant="ghost"
+                    onClick={handleShowViews}
+                    className="w-full text-white bg-white/10 hover:bg-white/20"
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    View Analytics
+                  </Button>
                 </div>
               )}
 
@@ -330,6 +417,41 @@ export const StoriesBar = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Story Views Sheet */}
+      <Sheet open={showViewsSheet} onOpenChange={setShowViewsSheet}>
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[60vh]">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <Eye className="h-5 w-5" />
+              Story Views ({storyViews.length})
+            </SheetTitle>
+          </SheetHeader>
+          <ScrollArea className="h-full mt-4">
+            {storyViews.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Eye className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                <p>No views yet</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {storyViews.map((view) => (
+                  <div key={view.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-muted/50">
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={view.viewer_avatar || ""} />
+                      <AvatarFallback>{view.viewer_name?.charAt(0) || "U"}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <p className="font-medium text-sm">{view.viewer_name}</p>
+                      <p className="text-xs text-muted-foreground">{getTimeAgo(view.viewed_at)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        </SheetContent>
+      </Sheet>
     </>
   );
 };

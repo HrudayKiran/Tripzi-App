@@ -532,7 +532,10 @@ const Chat = () => {
             <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="text-primary-foreground">
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <div className="relative">
+            <div 
+              className="relative cursor-pointer"
+              onClick={() => navigate(`/user/${userId}`)}
+            >
               <Avatar className="h-10 w-10">
                 <AvatarImage src={otherUser?.avatar_url || ""} />
                 <AvatarFallback className="bg-primary-foreground text-primary">
@@ -543,7 +546,10 @@ const Chat = () => {
                 <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-primary" />
               )}
             </div>
-            <div>
+            <div 
+              className="cursor-pointer"
+              onClick={() => navigate(`/user/${userId}`)}
+            >
               <h1 className="text-lg font-bold text-primary-foreground">{otherUser?.full_name || "User"}</h1>
               <p className="text-xs text-primary-foreground/70">
                 {isOtherUserTyping ? "typing..." : isUserOnline ? "Online" : "Offline"}
