@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
+import { formatINR } from "@/lib/currency";
 
 interface Trip {
   id: string;
@@ -254,7 +255,7 @@ const TripDetails = () => {
                   <span className="font-medium">{trip.destination}</span>
                 </div>
               </div>
-              <Badge className="bg-primary">${trip.cost}</Badge>
+              <Badge className="bg-primary">{formatINR(trip.cost)}</Badge>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
