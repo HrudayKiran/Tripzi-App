@@ -12,8 +12,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatINR } from "@/lib/currency";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { TripPost } from "@/components/TripPost";
-import { StoriesBar } from "@/components/StoriesBar";
+import { useAuth } from "@/contexts/AuthContext";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+
 interface Trip {
   id: string;
   title: string;
@@ -37,6 +38,7 @@ interface Profile {
 
 const Home = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [tripImages, setTripImages] = useState<Record<string, string>>({});
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
@@ -46,7 +48,7 @@ const Home = () => {
   const [sortBy, setSortBy] = useState<string>("newest");
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; tripId: string | null }>({ open: false, tripId: null });
 
-  const filterCategories = ["All", "Dates", "Budget", "Activities"];
+  const filterCategories = ["All", "Recent", "Budget", "Popular"];
   const [activeFilter, setActiveFilter] = useState("All");
 
   useEffect(() => {
@@ -62,23 +64,40 @@ const Home = () => {
 
   const fetchTrips = async () => {
     try {
-      const { data: tripsData } = await supabase
+      let query = supabase
         .from("trips")
         .select("*")
-        .eq("status", "open")
-        .order("created_at", { ascending: false });
+        .eq("status", "open");
+      
+      // Exclude current user's trips - only show other users' trips
+      if (user) {
+        query = query.neq("user_id", user.id);
+      }
+      
+      // Apply sorting based on filter
+      if (activeFilter === "Recent" || sortBy === "newest") {
+        query = query.order("created_at", { ascending: false });
+      } else if (activeFilter === "Popular") {
+        query = query.order("current_travelers", { ascending: false });
+      } else {
+        query = query.order("created_at", { ascending: false });
+      }
+
+      const { data: tripsData } = await query;
 
       if (tripsData) {
         const userIds = [...new Set(tripsData.map((t) => t.user_id))];
-        const { data: profilesData } = await supabase
-          .from("profiles")
-          .select("id, full_name, avatar_url")
-          .in("id", userIds);
+        if (userIds.length > 0) {
+          const { data: profilesData } = await supabase
+            .from("profiles")
+            .select("id, full_name, avatar_url")
+            .in("id", userIds);
 
-        if (profilesData) {
-          const map: Record<string, Profile> = {};
-          profilesData.forEach((p) => { map[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url }; });
-          setProfiles(map);
+          if (profilesData) {
+            const map: Record<string, Profile> = {};
+            profilesData.forEach((p) => { map[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url }; });
+            setProfiles(map);
+          }
         }
 
         const tripIds = tripsData.map((t) => t.id);
@@ -234,11 +253,6 @@ const Home = () => {
           </div>
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
-      </div>
-
-      {/* Stories Bar */}
-      <div className="px-4 mt-4">
-        <StoriesBar />
       </div>
 
       {/* Trip Posts Feed */}
