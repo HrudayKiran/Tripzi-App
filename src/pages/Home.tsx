@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, SlidersHorizontal, MapPin, TrendingUp, Users } from "lucide-react";
+import { Search, SlidersHorizontal, MapPin, TrendingUp, Users, Car, Plane, Bus, Train } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +23,8 @@ interface Trip {
   max_travelers: number;
   current_travelers: number;
   user_id: string;
+  gender_preference: string | null;
+  transport_type: string | null;
 }
 
 interface Profile {
@@ -32,6 +34,7 @@ interface Profile {
 const Home = () => {
   const navigate = useNavigate();
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [tripImages, setTripImages] = useState<Record<string, string>>({});
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState({
@@ -43,6 +46,28 @@ const Home = () => {
 
   useEffect(() => {
     fetchTrips();
+  }, []);
+
+  // Real-time subscription for new trips
+  useEffect(() => {
+    const channel = supabase
+      .channel('home-trips')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'trips'
+        },
+        () => {
+          fetchTrips();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchTrips = async () => {
@@ -70,6 +95,25 @@ const Home = () => {
           setProfiles(profilesMap);
         }
 
+        // Fetch trip images
+        const tripIds = tripsData.map(t => t.id);
+        if (tripIds.length > 0) {
+          const { data: imagesData } = await supabase
+            .from("trip_images")
+            .select("trip_id, image_url")
+            .in("trip_id", tripIds);
+
+          if (imagesData) {
+            const imagesMap: Record<string, string> = {};
+            imagesData.forEach(img => {
+              if (!imagesMap[img.trip_id]) {
+                imagesMap[img.trip_id] = img.image_url;
+              }
+            });
+            setTripImages(imagesMap);
+          }
+        }
+
         setTrips(tripsData);
       }
     } catch (error) {
@@ -91,7 +135,7 @@ const Home = () => {
         .select("*")
         .eq("status", "open")
         .or(`title.ilike.%${searchQuery}%,destination.ilike.%${searchQuery}%`)
-        .order("created_at", { ascending: false});
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
       setTrips(data || []);
@@ -116,7 +160,7 @@ const Home = () => {
       }
 
       const { data } = await query.order("created_at", { ascending: false });
-      
+
       let filtered = data || [];
 
       if (filters.minDays > 0) {
@@ -141,6 +185,24 @@ const Home = () => {
     return days;
   };
 
+  const getTransportIcon = (type: string | null) => {
+    switch (type) {
+      case 'car': return <Car className="h-3 w-3" />;
+      case 'plane': return <Plane className="h-3 w-3" />;
+      case 'bus': return <Bus className="h-3 w-3" />;
+      case 'train': return <Train className="h-3 w-3" />;
+      default: return null;
+    }
+  };
+
+  const getGenderLabel = (pref: string | null) => {
+    switch (pref) {
+      case 'male': return 'Men only';
+      case 'female': return 'Women only';
+      default: return null;
+    }
+  };
+
   return (
     <div className="min-h-screen pb-20">
       {/* Header */}
@@ -149,13 +211,13 @@ const Home = () => {
           <img src={tripziLogo} alt="Tripzi" className="w-10 h-10" />
           <NotificationsPanel />
         </div>
-        
+
         {/* Search Bar */}
         <div className="flex gap-2 animate-fade-in">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Search destinations, trips..." 
+            <Input
+              placeholder="Search destinations, trips..."
               className="pl-10 bg-background/95"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -234,14 +296,20 @@ const Home = () => {
           ) : (
             <div className="space-y-4">
               {trips.map((trip, index) => (
-                <Card 
-                  key={trip.id} 
+                <Card
+                  key={trip.id}
                   className="overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer animate-fade-up"
                   style={{ animationDelay: `${index * 100}ms` }}
                   onClick={() => navigate(`/trip/${trip.id}`)}
                 >
-                  <div className="relative h-40">
-                    <img src={heroImage} alt={trip.title} className="w-full h-full object-cover" />
+                  <div className="relative h-40 bg-muted">
+                    {tripImages[trip.id] ? (
+                      <img src={tripImages[trip.id]} alt={trip.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                        <MapPin className="h-10 w-10" />
+                      </div>
+                    )}
                     <Badge className="absolute top-2 right-2 bg-secondary">
                       ${trip.cost}
                     </Badge>
@@ -257,9 +325,22 @@ const Home = () => {
                         <Users className="h-3 w-3" />
                         <span className="text-xs">{trip.current_travelers} / {trip.max_travelers} travelers</span>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {getDaysCount(trip.start_date, trip.end_date)} days • by {profiles[trip.user_id]?.full_name || "Anonymous"}
-                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-xs text-muted-foreground">
+                          {getDaysCount(trip.start_date, trip.end_date)} days • by {profiles[trip.user_id]?.full_name || "Anonymous"}
+                        </p>
+                        {trip.transport_type && trip.transport_type !== 'other' && (
+                          <Badge variant="outline" className="text-xs gap-1 py-0">
+                            {getTransportIcon(trip.transport_type)}
+                            {trip.transport_type}
+                          </Badge>
+                        )}
+                        {getGenderLabel(trip.gender_preference) && (
+                          <Badge variant="outline" className="text-xs py-0">
+                            {getGenderLabel(trip.gender_preference)}
+                          </Badge>
+                        )}
+                      </div>
                     </CardDescription>
                   </CardHeader>
                 </Card>
