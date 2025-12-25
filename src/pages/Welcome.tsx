@@ -85,17 +85,7 @@ const Welcome = () => {
         </div>
 
         {/* Slide indicators */}
-        <div className="flex items-center justify-center gap-2">
-          {slides.map((_, index) => (
-            <div
-              key={index}
-              className={cn(
-                "w-2 h-2 rounded-full transition-all duration-300",
-                index === currentSlide ? "bg-primary w-6" : "bg-muted-foreground/30"
-              )}
-            />
-          ))}
-        </div>
+        
 
         {/* Community indicator */}
         <div className="flex items-center justify-center gap-[5px]">
