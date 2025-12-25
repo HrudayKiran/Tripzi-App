@@ -49,7 +49,7 @@ const Welcome = () => {
   }, []);
   return <div className="min-h-screen bg-gradient-hero flex flex-col safe-top safe-bottom">
       {/* Hero Image Section */}
-      <div className="relative flex-1 flex flex-col items-center justify-center px-6 pt-12">
+      <div className="relative flex-1 flex flex-col items-center justify-center pt-12 px-[22px] py-[30px]">
         {/* Main card with scrolling Ladakh images */}
         <div className="relative w-full max-w-sm aspect-[3/4] rounded-3xl overflow-hidden shadow-xl animate-fade-up">
           {ladakhImages.map((image, index) => <img key={index} src={image.url} alt={image.location} className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${index === currentSlide ? "opacity-100" : "opacity-0"}`} />)}
@@ -89,15 +89,8 @@ const Welcome = () => {
         </div>
 
         {/* Community indicator */}
-        <div className="flex items-center justify-center gap-3">
-          <div className="flex -space-x-2">
-            {[1, 2, 3].map(i => <div key={i} className="w-8 h-8 rounded-full bg-muted border-2 border-card overflow-hidden">
-                <img src={`https://i.pravatar.cc/32?img=${i + 10}`} alt="User" className="w-full h-full object-cover" />
-              </div>)}
-            <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center border-2 border-card">
-              <span className="text-xs font-semibold text-accent-foreground">1k+</span>
-            </div>
-          </div>
+        <div className="flex items-center justify-center gap-[5px]">
+          
           <span className="text-sm text-muted-foreground font-medium">JOIN THE JOURNEY</span>
         </div>
 
