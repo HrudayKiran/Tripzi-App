@@ -1,19 +1,19 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, SlidersHorizontal, MapPin, TrendingUp, Users, Calendar, MessageSquare, ChevronRight, Car, Plane, Bus, Train, ArrowUpDown } from "lucide-react";
+import { Search, SlidersHorizontal, ArrowUpDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
 import { formatINR } from "@/lib/currency";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
+import { TripPost } from "@/components/TripPost";
+import { StoriesBar } from "@/components/StoriesBar";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 interface Trip {
   id: string;
   title: string;
@@ -25,6 +25,7 @@ interface Trip {
   max_travelers: number;
   current_travelers: number;
   user_id: string;
+  created_at: string;
   gender_preference: string | null;
   transport_type: string | null;
 }
@@ -36,7 +37,6 @@ interface Profile {
 
 const Home = () => {
   const navigate = useNavigate();
-  const { profile } = useAuth();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [tripImages, setTripImages] = useState<Record<string, string>>({});
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
@@ -44,6 +44,7 @@ const Home = () => {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ maxCost: 100000, destination: "", minDays: 0, maxPersons: 20 });
   const [sortBy, setSortBy] = useState<string>("newest");
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; tripId: string | null }>({ open: false, tripId: null });
 
   const filterCategories = ["All", "Dates", "Budget", "Activities"];
   const [activeFilter, setActiveFilter] = useState("All");
@@ -126,21 +127,22 @@ const Home = () => {
     setTrips(data || []);
   };
 
-  const getDaysCount = (start: string, end: string) =>
-    Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / (1000 * 3600 * 24));
-
-  const getTransportIcon = (type: string | null) => {
-    const icons: Record<string, JSX.Element> = {
-      car: <Car className="h-3 w-3" />,
-      plane: <Plane className="h-3 w-3" />,
-      bus: <Bus className="h-3 w-3" />,
-      train: <Train className="h-3 w-3" />,
-    };
-    return icons[type || ""] || null;
+  const handleDeleteTrip = async () => {
+    if (!deleteDialog.tripId) return;
+    
+    try {
+      await supabase.from("trips").delete().eq("id", deleteDialog.tripId);
+      setTrips((prev) => prev.filter((t) => t.id !== deleteDialog.tripId));
+    } catch (error) {
+      console.error("Error deleting trip:", error);
+    } finally {
+      setDeleteDialog({ open: false, tripId: null });
+    }
   };
 
-  const trendingTrips = trips.slice(0, 5);
-  const quickMatches = trips.slice(0, 3);
+  const openDeleteDialog = (tripId: string) => {
+    setDeleteDialog({ open: true, tripId });
+  };
 
   return (
     <div className="min-h-screen pb-24 bg-background">
@@ -234,144 +236,51 @@ const Home = () => {
         </ScrollArea>
       </div>
 
-      <div className="px-4 space-y-6 mt-4">
-        {/* Map preview section */}
-        <section className="animate-fade-up">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold">Travelers near Bali</h2>
-            <button className="text-sm text-primary font-medium">View Map</button>
-          </div>
-          <div className="relative h-40 rounded-2xl overflow-hidden bg-muted">
-            <img
-              src="https://api.mapbox.com/styles/v1/mapbox/light-v11/static/-115.4,36.2,3,0/400x200?access_token=pk.eyJ1IjoibG92YWJsZSIsImEiOiJjbHNxYnBkcXkwMGZrMmpxdDk5ejVpZWVkIn0.gkH9WxlM35ufDqCxfXLauw"
-              alt="Map"
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute bottom-3 left-3 bg-card/90 backdrop-blur-sm rounded-full px-3 py-1.5 flex items-center gap-2 shadow-sm">
-              <div className="w-5 h-5 bg-primary rounded-full flex items-center justify-center">
-                <MapPin className="h-3 w-3 text-primary-foreground" />
-              </div>
-              <span className="text-sm font-medium">12 Travelers nearby</span>
-            </div>
-          </div>
-        </section>
-
-        {/* Trending Trips */}
-        <section className="animate-fade-up" style={{ animationDelay: "100ms" }}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-primary" />
-              <h2 className="text-lg font-semibold">Trending Trips</h2>
-            </div>
-            <button onClick={() => navigate("/trips")} className="text-sm text-primary font-medium flex items-center">
-              See All <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-          
-          <ScrollArea className="-mx-4 px-4">
-            <div className="flex gap-4 pb-2">
-              {loading ? (
-                <div className="text-muted-foreground py-8 text-center w-full">Loading...</div>
-              ) : trendingTrips.length === 0 ? (
-                <div className="text-muted-foreground py-8 text-center w-full">No trips available</div>
-              ) : (
-                trendingTrips.map((trip) => (
-                  <div
-                    key={trip.id}
-                    onClick={() => navigate(`/trip/${trip.id}`)}
-                    className="w-64 shrink-0 bg-card rounded-2xl overflow-hidden shadow-card cursor-pointer hover:shadow-lg transition-shadow"
-                  >
-                    <div className="relative h-36">
-                      {tripImages[trip.id] ? (
-                        <img src={tripImages[trip.id]} alt={trip.title} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full bg-muted flex items-center justify-center">
-                          <MapPin className="h-8 w-8 text-muted-foreground" />
-                        </div>
-                      )}
-                      <Badge className="absolute top-2 left-2 bg-card/90 text-foreground backdrop-blur-sm">
-                        <Calendar className="h-3 w-3 mr-1" />
-                        {getDaysCount(trip.start_date, trip.end_date)} Days
-                      </Badge>
-                    </div>
-                    <div className="p-3">
-                      <div className="flex items-start justify-between mb-1">
-                        <h3 className="font-semibold line-clamp-1">{trip.title}</h3>
-                        <span className="text-primary font-bold">{formatINR(trip.cost)}</span>
-                      </div>
-                      <p className="text-sm text-muted-foreground line-clamp-2 mb-2">{trip.description}</p>
-                      <div className="flex items-center justify-between">
-                        <div className="flex -space-x-2">
-                          {[1, 2].map((i) => (
-                            <Avatar key={i} className="w-6 h-6 border-2 border-card">
-                              <AvatarImage src={profiles[trip.user_id]?.avatar_url || ""} />
-                              <AvatarFallback className="text-xs bg-primary text-primary-foreground">
-                                {profiles[trip.user_id]?.full_name?.charAt(0) || "U"}
-                              </AvatarFallback>
-                            </Avatar>
-                          ))}
-                          <div className="w-6 h-6 rounded-full bg-muted border-2 border-card flex items-center justify-center">
-                            <span className="text-[10px] font-medium">+{trip.current_travelers}</span>
-                          </div>
-                        </div>
-                        <Button size="sm" variant="outline" className="h-7 text-xs rounded-full">
-                          Join
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-            <ScrollBar orientation="horizontal" />
-          </ScrollArea>
-        </section>
-
-        {/* Quick Matches */}
-        <section className="animate-fade-up" style={{ animationDelay: "200ms" }}>
-          <h2 className="text-lg font-semibold mb-3">Quick Matches</h2>
-          <div className="space-y-3">
-            {quickMatches.map((trip) => (
-              <div
-                key={trip.id}
-                onClick={() => navigate(`/trip/${trip.id}`)}
-                className="flex items-center gap-3 p-3 bg-card rounded-2xl shadow-sm cursor-pointer hover:shadow-md transition-shadow"
-              >
-                <Avatar className="w-14 h-14">
-                  <AvatarImage src={profiles[trip.user_id]?.avatar_url || ""} />
-                  <AvatarFallback className="bg-primary text-primary-foreground text-lg">
-                    {profiles[trip.user_id]?.full_name?.charAt(0) || "U"}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold truncate">{profiles[trip.user_id]?.full_name || "Traveler"}</h3>
-                    <Badge variant="secondary" className="text-xs bg-success/10 text-success shrink-0">
-                      {Math.floor(Math.random() * 20 + 80)}% Match
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground truncate">
-                    Heading to {trip.destination} in {new Date(trip.start_date).toLocaleDateString("en-US", { month: "short" })}
-                  </p>
-                  <div className="flex gap-1 mt-1">
-                    {trip.transport_type && (
-                      <Badge variant="outline" className="text-[10px] py-0 px-1.5">
-                        {getTransportIcon(trip.transport_type)} {trip.transport_type}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-success rounded-full" />
-                  <Button variant="ghost" size="icon" className="shrink-0">
-                    <MessageSquare className="h-5 w-5" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+      {/* Stories Bar */}
+      <div className="px-4 mt-4">
+        <StoriesBar />
       </div>
+
+      {/* Trip Posts Feed */}
+      <div className="px-4 space-y-4 mt-4">
+        {loading ? (
+          <div className="text-muted-foreground py-12 text-center">Loading trips...</div>
+        ) : trips.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground mb-4">No trips available yet</p>
+            <Button onClick={() => navigate("/create-trip")}>Create First Trip</Button>
+          </div>
+        ) : (
+          trips.map((trip, index) => (
+            <TripPost
+              key={trip.id}
+              trip={trip}
+              profile={profiles[trip.user_id] || null}
+              imageUrl={tripImages[trip.id] || null}
+              onDelete={openDeleteDialog}
+              index={index}
+            />
+          ))
+        )}
+      </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog({ open, tripId: null })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Trip</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this trip? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteTrip} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
