@@ -11,8 +11,6 @@ import {
   FileText, 
   Lightbulb,
   CreditCard,
-  Bell,
-  Palette,
   HelpCircle
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -79,13 +77,6 @@ const Profile = () => {
       onClick: () => navigate('/update-profile'),
     },
     {
-      icon: Bell,
-      label: "Notifications",
-      color: "text-orange-500",
-      bgColor: "bg-orange-500/10",
-      onClick: () => navigate('/settings'),
-    },
-    {
       icon: FileText,
       label: "Privacy Policy",
       color: "text-purple-500",
@@ -104,14 +95,24 @@ const Profile = () => {
       label: "Suggest a New Feature",
       color: "text-yellow-500",
       bgColor: "bg-yellow-500/10",
-      onClick: () => window.open('mailto:support@tripzi.com?subject=Feature Suggestion', '_blank'),
+      onClick: () => {
+        const email = 'support@tripzi.com';
+        const subject = encodeURIComponent('Feature Suggestion for Tripzi');
+        const body = encodeURIComponent('Hi Tripzi Team,\n\nI would like to suggest the following feature:\n\n');
+        window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+      },
     },
     {
       icon: HelpCircle,
       label: "Help & Support",
       color: "text-cyan-500",
       bgColor: "bg-cyan-500/10",
-      onClick: () => window.open('mailto:support@tripzi.com', '_blank'),
+      onClick: () => {
+        const email = 'support@tripzi.com';
+        const subject = encodeURIComponent('Help & Support Request');
+        const body = encodeURIComponent('Hi Tripzi Team,\n\nI need help with:\n\n');
+        window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+      },
     },
     {
       icon: Settings,
@@ -133,8 +134,11 @@ const Profile = () => {
       <div className="flex-1 overflow-y-auto pb-24">
         {/* Profile Section */}
         <div className="p-6 text-center space-y-4 animate-fade-in">
-          <div className="relative inline-block">
-            <Avatar className="w-28 h-28 mx-auto ring-4 ring-primary/20 shadow-lg">
+          <div 
+            className="relative inline-block cursor-pointer" 
+            onClick={() => user && navigate(`/profile/${user.id}`)}
+          >
+            <Avatar className="w-28 h-28 mx-auto ring-4 ring-primary/20 shadow-lg hover:ring-primary/40 transition-all">
               <AvatarImage src={profile?.avatar_url || ""} />
               <AvatarFallback className="bg-gradient-to-br from-primary to-primary-glow text-primary-foreground text-3xl">
                 {profile?.full_name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}

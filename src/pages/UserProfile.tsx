@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Calendar, Users, MessageCircle, UserPlus, UserMinus, Grid3X3, Bookmark } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, Users, MessageCircle, UserPlus, UserMinus, Grid3X3, Bookmark, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
@@ -29,6 +30,13 @@ interface Trip {
   current_travelers: number;
 }
 
+interface Story {
+  id: string;
+  image_url: string;
+  caption: string | null;
+  created_at: string;
+}
+
 const UserProfile = () => {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
@@ -36,12 +44,16 @@ const UserProfile = () => {
   const [profile, setProfile] = useState<UserProfileData | null>(null);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [tripImages, setTripImages] = useState<Record<string, string>>({});
+  const [stories, setStories] = useState<Story[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [viewingStory, setViewingStory] = useState<Story | null>(null);
+  const [storyProgress, setStoryProgress] = useState(0);
 
   const isOwnProfile = user?.id === userId;
+  const hasStories = stories.length > 0;
 
   useEffect(() => {
     if (userId) {
@@ -49,8 +61,26 @@ const UserProfile = () => {
       fetchUserTrips();
       fetchFollowStatus();
       fetchFollowCounts();
+      fetchUserStories();
     }
   }, [userId, user]);
+
+  // Story auto-progress effect
+  useEffect(() => {
+    if (viewingStory) {
+      setStoryProgress(0);
+      const interval = setInterval(() => {
+        setStoryProgress((prev) => {
+          if (prev >= 100) {
+            setViewingStory(null);
+            return 0;
+          }
+          return prev + 2;
+        });
+      }, 100);
+      return () => clearInterval(interval);
+    }
+  }, [viewingStory]);
 
   const fetchUserProfile = async () => {
     try {
@@ -118,6 +148,23 @@ const UserProfile = () => {
     setFollowingCount(followingRes.count || 0);
   };
 
+  const fetchUserStories = async () => {
+    const { data } = await supabase
+      .from("stories")
+      .select("id, image_url, caption, created_at")
+      .eq("user_id", userId)
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false });
+    
+    if (data) setStories(data);
+  };
+
+  const handleStoryClick = () => {
+    if (hasStories) {
+      setViewingStory(stories[0]);
+    }
+  };
+
   const handleFollow = async () => {
     if (!user) {
       toast({ title: "Please log in", description: "You need to be logged in to follow users" });
@@ -183,12 +230,17 @@ const UserProfile = () => {
       {/* Profile Header */}
       <div className="p-6 animate-fade-in">
         <div className="flex items-start gap-6">
-          <Avatar className="w-24 h-24 ring-4 ring-primary/20">
-            <AvatarImage src={profile.avatar_url || ""} />
-            <AvatarFallback className="text-3xl bg-gradient-to-br from-primary to-primary-glow text-primary-foreground">
-              {profile.full_name?.charAt(0) || "U"}
-            </AvatarFallback>
-          </Avatar>
+          <div 
+            className={`relative cursor-pointer ${hasStories ? 'p-0.5 rounded-full bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-500' : ''}`}
+            onClick={handleStoryClick}
+          >
+            <Avatar className={`w-24 h-24 ${hasStories ? 'ring-2 ring-background' : 'ring-4 ring-primary/20'}`}>
+              <AvatarImage src={profile.avatar_url || ""} />
+              <AvatarFallback className="text-3xl bg-gradient-to-br from-primary to-primary-glow text-primary-foreground">
+                {profile.full_name?.charAt(0) || "U"}
+              </AvatarFallback>
+            </Avatar>
+          </div>
 
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
@@ -304,6 +356,60 @@ const UserProfile = () => {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Story Viewer Dialog */}
+      <Dialog open={!!viewingStory} onOpenChange={() => setViewingStory(null)}>
+        <DialogContent className="max-w-md p-0 bg-black border-none overflow-hidden">
+          {viewingStory && (
+            <div className="relative w-full aspect-[9/16]">
+              {/* Progress bar */}
+              <div className="absolute top-2 left-2 right-2 z-20">
+                <div className="h-1 bg-white/30 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-white transition-all duration-100"
+                    style={{ width: `${storyProgress}%` }}
+                  />
+                </div>
+              </div>
+              
+              {/* Close button */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute top-4 right-2 z-20 text-white hover:bg-white/20"
+                onClick={() => setViewingStory(null)}
+              >
+                <X className="h-6 w-6" />
+              </Button>
+
+              {/* User info */}
+              <div className="absolute top-8 left-2 z-20 flex items-center gap-2">
+                <Avatar className="w-8 h-8 ring-2 ring-white">
+                  <AvatarImage src={profile?.avatar_url || ""} />
+                  <AvatarFallback className="text-xs">{profile?.full_name?.charAt(0) || "U"}</AvatarFallback>
+                </Avatar>
+                <span className="text-white text-sm font-medium">{profile?.full_name || "User"}</span>
+              </div>
+
+              {/* Story image */}
+              <img
+                src={viewingStory.image_url}
+                alt="Story"
+                className="w-full h-full object-cover"
+              />
+
+              {/* Caption */}
+              {viewingStory.caption && (
+                <div className="absolute bottom-4 left-4 right-4 z-20">
+                  <p className="text-white text-center bg-black/50 px-4 py-2 rounded-lg">
+                    {viewingStory.caption}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
