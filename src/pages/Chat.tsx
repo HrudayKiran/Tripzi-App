@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Send, Image, MapPin, Smile, Phone, Video } from "lucide-react";
+import { ArrowLeft, Send, Image, MapPin, Smile, Phone, Video, FileText, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -9,6 +9,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import EmojiPicker, { EmojiClickData, Theme } from 'emoji-picker-react';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface Message {
   id: string;
@@ -34,8 +36,12 @@ const Chat = () => {
   const [newMessage, setNewMessage] = useState("");
   const [otherUser, setOtherUser] = useState<Profile | null>(null);
   const [sending, setSending] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastMessageTime = useRef<number>(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
   const MESSAGE_COOLDOWN_MS = 1000;
 
   useEffect(() => {
@@ -137,6 +143,71 @@ const Chat = () => {
     }
   };
 
+  const handleEmojiClick = (emojiData: EmojiClickData) => {
+    setNewMessage((prev) => prev + emojiData.emoji);
+    setShowEmojiPicker(false);
+  };
+
+  const handleFileUpload = async (file: File, type: 'image' | 'document') => {
+    if (!user || !userId) return;
+
+    const maxSize = type === 'image' ? 5 * 1024 * 1024 : 10 * 1024 * 1024; // 5MB for images, 10MB for docs
+    if (file.size > maxSize) {
+      toast({
+        title: "File too large",
+        description: `Maximum file size is ${type === 'image' ? '5MB' : '10MB'}`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+      const bucket = type === 'image' ? 'trip-images' : 'kyc-documents';
+
+      const { error: uploadError } = await supabase.storage
+        .from(bucket)
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(fileName);
+
+      // Send message with file
+      const messageText = type === 'image' 
+        ? `📷 [Image] ${urlData.publicUrl}`
+        : `📎 [Document: ${file.name}] ${urlData.publicUrl}`;
+
+      const { error } = await supabase
+        .from("messages")
+        .insert({
+          sender_id: user.id,
+          receiver_id: userId,
+          message: messageText,
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Sent",
+        description: `${type === 'image' ? 'Image' : 'Document'} sent successfully`,
+      });
+    } catch (error: any) {
+      console.error("Upload error:", error);
+      toast({
+        title: "Error",
+        description: `Failed to send ${type}`,
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !userId || !newMessage.trim() || sending) return;
@@ -204,10 +275,134 @@ const Chat = () => {
     return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const renderMessageContent = (message: string) => {
+    // Check if it's an image message
+    if (message.startsWith('📷 [Image]')) {
+      const url = message.replace('📷 [Image] ', '');
+      return (
+        <img 
+          src={url} 
+          alt="Shared image" 
+          className="max-w-[200px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+          onClick={() => window.open(url, '_blank')}
+        />
+      );
+    }
+    // Check if it's a document message
+    if (message.startsWith('📎 [Document:')) {
+      const match = message.match(/📎 \[Document: (.+?)\] (.+)/);
+      if (match) {
+        const [, fileName, url] = match;
+        return (
+          <a 
+            href={url} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 bg-background/10 rounded-lg hover:bg-background/20 transition-colors"
+          >
+            <FileText className="h-5 w-5" />
+            <span className="text-sm underline">{fileName}</span>
+          </a>
+        );
+      }
+    }
+    // Check if it's a location message
+    if (message.startsWith('📍 [Location]')) {
+      const url = message.replace('📍 [Location] ', '');
+      return (
+        <a 
+          href={url} 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 p-2 bg-background/10 rounded-lg hover:bg-background/20 transition-colors"
+        >
+          <MapPin className="h-5 w-5" />
+          <span className="text-sm underline">View Location</span>
+        </a>
+      );
+    }
+    return <p className="text-sm whitespace-pre-wrap">{message}</p>;
+  };
+
+  const handleShareLocation = async () => {
+    if (!user || !userId) return;
+
+    if (!navigator.geolocation) {
+      toast({
+        title: "Not supported",
+        description: "Geolocation is not supported by your browser",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+        const messageText = `📍 [Location] ${mapsUrl}`;
+
+        try {
+          const { error } = await supabase
+            .from("messages")
+            .insert({
+              sender_id: user.id,
+              receiver_id: userId,
+              message: messageText,
+            });
+
+          if (error) throw error;
+
+          toast({
+            title: "Sent",
+            description: "Location shared successfully",
+          });
+        } catch (error) {
+          toast({
+            title: "Error",
+            description: "Failed to share location",
+            variant: "destructive",
+          });
+        }
+      },
+      (error) => {
+        toast({
+          title: "Error",
+          description: "Failed to get your location",
+          variant: "destructive",
+        });
+      }
+    );
+  };
+
   const isUserOnline = userId ? isOnline(userId) : false;
 
   return (
     <div className="flex flex-col h-screen bg-muted/30">
+      {/* Hidden file inputs */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        className="hidden"
+        accept="image/*"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFileUpload(file, 'image');
+          e.target.value = '';
+        }}
+      />
+      <input
+        type="file"
+        ref={docInputRef}
+        className="hidden"
+        accept=".pdf,.doc,.docx,.txt,.xls,.xlsx"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFileUpload(file, 'document');
+          e.target.value = '';
+        }}
+      />
+
       {/* Header */}
       <div className="sticky top-0 z-10 bg-gradient-to-r from-primary to-accent p-4 shadow-lg">
         <div className="flex items-center justify-between">
@@ -267,7 +462,7 @@ const Chat = () => {
                         : 'bg-card rounded-bl-sm'
                     }`}
                   >
-                    <p className="text-sm whitespace-pre-wrap">{message.message}</p>
+                    {renderMessageContent(message.message)}
                     <p className={`text-xs mt-1 ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
                       {formatTime(message.created_at)}
                     </p>
@@ -279,16 +474,59 @@ const Chat = () => {
         </div>
       </ScrollArea>
 
+      {/* Uploading indicator */}
+      {uploading && (
+        <div className="px-4 py-2 bg-muted/50 flex items-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span className="text-sm text-muted-foreground">Uploading...</span>
+        </div>
+      )}
+
       {/* Input */}
       <form onSubmit={handleSendMessage} className="p-4 border-t bg-background">
         <div className="flex items-center gap-2">
-          <Button type="button" variant="ghost" size="icon" className="shrink-0">
-            <Smile className="h-5 w-5 text-muted-foreground" />
-          </Button>
-          <Button type="button" variant="ghost" size="icon" className="shrink-0">
+          <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
+            <PopoverTrigger asChild>
+              <Button type="button" variant="ghost" size="icon" className="shrink-0">
+                <Smile className="h-5 w-5 text-muted-foreground" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-full p-0 border-none" side="top" align="start">
+              <EmojiPicker 
+                onEmojiClick={handleEmojiClick} 
+                theme={Theme.AUTO}
+                width="100%"
+                height={350}
+              />
+            </PopoverContent>
+          </Popover>
+          <Button 
+            type="button" 
+            variant="ghost" 
+            size="icon" 
+            className="shrink-0"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
             <Image className="h-5 w-5 text-muted-foreground" />
           </Button>
-          <Button type="button" variant="ghost" size="icon" className="shrink-0">
+          <Button 
+            type="button" 
+            variant="ghost" 
+            size="icon" 
+            className="shrink-0"
+            onClick={() => docInputRef.current?.click()}
+            disabled={uploading}
+          >
+            <FileText className="h-5 w-5 text-muted-foreground" />
+          </Button>
+          <Button 
+            type="button" 
+            variant="ghost" 
+            size="icon" 
+            className="shrink-0"
+            onClick={handleShareLocation}
+          >
             <MapPin className="h-5 w-5 text-muted-foreground" />
           </Button>
           <Input
