@@ -7,7 +7,6 @@ import {
   ShieldCheck, 
   ShieldX, 
   Clock, 
-  User, 
   FileText, 
   Lightbulb,
   CreditCard,
@@ -68,13 +67,6 @@ const Profile = () => {
       bgColor: profile?.kyc_status === 'verified' ? "bg-green-500/10" : profile?.kyc_status === 'rejected' ? "bg-destructive/10" : "bg-amber-500/10",
       badge: profile?.kyc_status === 'verified' ? 'Verified' : profile?.kyc_status === 'rejected' ? 'Rejected' : 'Pending',
       badgeVariant: profile?.kyc_status === 'verified' ? 'default' : profile?.kyc_status === 'rejected' ? 'destructive' : 'secondary',
-    },
-    {
-      icon: User,
-      label: "Update Profile Details",
-      color: "text-blue-500",
-      bgColor: "bg-blue-500/10",
-      onClick: () => navigate('/update-profile'),
     },
     {
       icon: FileText,

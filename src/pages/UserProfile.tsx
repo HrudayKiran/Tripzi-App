@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Calendar, Users, MessageCircle, UserPlus, UserMinus, Grid3X3, Bookmark, X } from "lucide-react";
+import { ArrowLeft, MapPin, MessageCircle, UserPlus, UserMinus, Grid3X3, Bookmark, X, Edit } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -273,7 +273,17 @@ const UserProfile = () => {
         </div>
 
         {/* Action Buttons */}
-        {!isOwnProfile && (
+        {isOwnProfile ? (
+          <div className="mt-6">
+            <Button
+              onClick={() => navigate("/update-profile")}
+              variant="outline"
+              className="w-full rounded-xl"
+            >
+              <Edit className="h-4 w-4 mr-2" /> Edit Profile
+            </Button>
+          </div>
+        ) : (
           <div className="flex gap-3 mt-6">
             <Button
               onClick={handleFollow}
