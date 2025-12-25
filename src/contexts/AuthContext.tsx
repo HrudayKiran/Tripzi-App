@@ -23,6 +23,7 @@ interface Profile {
   avatar_url: string | null;
   bio: string | null;
   push_notifications_enabled: boolean;
+  kyc_status: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

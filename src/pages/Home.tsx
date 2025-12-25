@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, SlidersHorizontal, MapPin, TrendingUp, Users, Calendar, MessageSquare, Plus, ChevronRight, Car, Plane, Bus, Train, Bell } from "lucide-react";
+import { Search, SlidersHorizontal, MapPin, TrendingUp, Users, Calendar, MessageSquare, ChevronRight, Car, Plane, Bus, Train, ArrowUpDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,9 +9,11 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatINR } from "@/lib/currency";
+import { NotificationsPanel } from "@/components/NotificationsPanel";
 interface Trip {
   id: string;
   title: string;
@@ -40,7 +42,8 @@ const Home = () => {
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ maxCost: 100000, destination: "", minDays: 0 });
+  const [filters, setFilters] = useState({ maxCost: 100000, destination: "", minDays: 0, maxPersons: 20 });
+  const [sortBy, setSortBy] = useState<string>("newest");
 
   const filterCategories = ["All", "Dates", "Budget", "Activities"];
   const [activeFilter, setActiveFilter] = useState("All");
@@ -145,10 +148,7 @@ const Home = () => {
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-4 pt-4 pb-3 safe-top">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-display font-bold">Tripzi</h1>
-          <Button variant="ghost" size="icon" className="relative">
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full" />
-          </Button>
+          <NotificationsPanel />
         </div>
 
         {/* Search */}
@@ -170,12 +170,41 @@ const Home = () => {
               </Button>
             </SheetTrigger>
             <SheetContent>
-              <SheetHeader><SheetTitle>Filter Trips</SheetTitle></SheetHeader>
+              <SheetHeader><SheetTitle>Filter & Sort Trips</SheetTitle></SheetHeader>
               <div className="space-y-6 mt-6">
-              <div className="space-y-3">
+                {/* Sort Options */}
+                <div className="space-y-3">
+                  <Label className="flex items-center gap-2"><ArrowUpDown className="h-4 w-4" /> Sort By</Label>
+                  <Select value={sortBy} onValueChange={setSortBy}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="newest">Newest First</SelectItem>
+                      <SelectItem value="price_low">Price: Low to High</SelectItem>
+                      <SelectItem value="price_high">Price: High to Low</SelectItem>
+                      <SelectItem value="days_short">Duration: Shortest First</SelectItem>
+                      <SelectItem value="days_long">Duration: Longest First</SelectItem>
+                      <SelectItem value="travelers">Most Travelers</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-3">
                   <Label>Max Cost: {formatINR(filters.maxCost)}</Label>
                   <Slider value={[filters.maxCost]} onValueChange={(v) => setFilters({ ...filters, maxCost: v[0] })} max={500000} step={1000} />
                 </div>
+
+                <div className="space-y-3">
+                  <Label>Max Travelers: {filters.maxPersons}</Label>
+                  <Slider value={[filters.maxPersons]} onValueChange={(v) => setFilters({ ...filters, maxPersons: v[0] })} min={1} max={50} step={1} />
+                </div>
+
+                <div className="space-y-3">
+                  <Label>Minimum Days: {filters.minDays}</Label>
+                  <Slider value={[filters.minDays]} onValueChange={(v) => setFilters({ ...filters, minDays: v[0] })} max={30} step={1} />
+                </div>
+
                 <div className="space-y-3">
                   <Label>Destination</Label>
                   <Input placeholder="e.g., Paris" value={filters.destination} onChange={(e) => setFilters({ ...filters, destination: e.target.value })} />
@@ -343,15 +372,6 @@ const Home = () => {
           </div>
         </section>
       </div>
-
-      {/* FAB */}
-      <Button
-        size="lg"
-        onClick={() => navigate("/create-trip")}
-        className="fixed bottom-24 right-4 h-14 w-14 rounded-full shadow-glow z-20"
-      >
-        <Plus className="h-6 w-6" />
-      </Button>
     </div>
   );
 };

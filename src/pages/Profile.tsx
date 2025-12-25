@@ -1,7 +1,8 @@
 import { useNavigate } from "react-router-dom";
-import { Settings, ChevronRight, LogOut, MapIcon } from "lucide-react";
+import { Settings, ChevronRight, LogOut, MapIcon, ShieldCheck, ShieldX, Clock } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect } from "react";
 
@@ -58,10 +59,24 @@ const Profile = () => {
           </button>
 
           {/* KYC Status */}
-          <button className="w-full flex items-center justify-between py-4 border-b">
-            <span className="text-base font-medium">KYC Status</span>
-            <div className="w-3 h-3 rounded-full bg-green-500"></div>
-          </button>
+          <div className="w-full flex items-center justify-between py-4 border-b">
+            <div className="flex items-center gap-3">
+              {profile?.kyc_status === 'verified' ? (
+                <ShieldCheck className="h-5 w-5 text-green-500" />
+              ) : profile?.kyc_status === 'rejected' ? (
+                <ShieldX className="h-5 w-5 text-destructive" />
+              ) : (
+                <Clock className="h-5 w-5 text-muted-foreground" />
+              )}
+              <span className="text-base font-medium">KYC Status</span>
+            </div>
+            <Badge 
+              variant={profile?.kyc_status === 'verified' ? 'default' : profile?.kyc_status === 'rejected' ? 'destructive' : 'secondary'}
+              className={profile?.kyc_status === 'verified' ? 'bg-green-500' : ''}
+            >
+              {profile?.kyc_status === 'verified' ? 'Verified' : profile?.kyc_status === 'rejected' ? 'Rejected' : 'Pending'}
+            </Badge>
+          </div>
 
           {/* Update Profile Details */}
           <button 

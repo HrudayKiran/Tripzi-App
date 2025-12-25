@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Calendar, MapPin, Users } from "lucide-react";
+import { Calendar, MapPin, Users, ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import heroImage from "@/assets/hero-travel.jpg";
 import { useAuth } from "@/contexts/AuthContext";
@@ -138,7 +139,12 @@ const Trips = () => {
     <div className="min-h-screen pb-20">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-gradient-to-r from-primary to-accent p-4 shadow-lg">
-        <h1 className="text-2xl font-bold text-primary-foreground">My Trips</h1>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="text-primary-foreground">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <h1 className="text-2xl font-bold text-primary-foreground">My Trips</h1>
+        </div>
       </div>
 
       {/* Content */}

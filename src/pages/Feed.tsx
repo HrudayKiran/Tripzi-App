@@ -182,14 +182,28 @@ const Feed = () => {
               {/* Author header */}
               <div className="flex items-center justify-between p-4">
                 <div className="flex items-center gap-3">
-                  <Avatar className="w-10 h-10 ring-2 ring-primary/20">
+                  <Avatar 
+                    className="w-10 h-10 ring-2 ring-primary/20 cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/profile/${trip.user_id}`);
+                    }}
+                  >
                     <AvatarImage src={profiles[trip.user_id]?.avatar_url || ""} />
                     <AvatarFallback className="bg-primary text-primary-foreground">
                       {profiles[trip.user_id]?.full_name?.charAt(0) || "U"}
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="font-semibold text-sm">{profiles[trip.user_id]?.full_name || "Traveler"}</p>
+                    <p 
+                      className="font-semibold text-sm cursor-pointer hover:text-primary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/profile/${trip.user_id}`);
+                      }}
+                    >
+                      {profiles[trip.user_id]?.full_name || "Traveler"}
+                    </p>
                     <p className="text-xs text-muted-foreground">{getTimeAgo(trip.created_at)}</p>
                   </div>
                 </div>
@@ -288,15 +302,6 @@ const Feed = () => {
           ))
         )}
       </div>
-
-      {/* FAB */}
-      <Button
-        size="lg"
-        onClick={() => navigate("/create-trip")}
-        className="fixed bottom-24 right-4 h-14 w-14 rounded-full shadow-glow z-20"
-      >
-        <Plus className="h-6 w-6" />
-      </Button>
     </div>
   );
 };
