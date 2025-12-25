@@ -20,6 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { StoriesBar } from "@/components/StoriesBar";
 
 interface Trip {
   id: string;
@@ -249,6 +250,11 @@ const Feed = () => {
             + Create Trip
           </Button>
         </div>
+      </div>
+
+      {/* Stories Bar */}
+      <div className="px-4 pt-3">
+        <StoriesBar />
       </div>
 
       {/* Feed - Only My Trips */}
