@@ -13,6 +13,7 @@ import Feed from "./pages/Feed";
 import Trips from "./pages/Trips";
 import Messages from "./pages/Messages";
 import Profile from "./pages/Profile";
+import UserProfile from "./pages/UserProfile";
 import UpdateProfile from "./pages/UpdateProfile";
 import Settings from "./pages/Settings";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -45,6 +46,7 @@ const App = () => (
               <Route path="/trips" element={<ProtectedRoute><Layout><Trips /></Layout></ProtectedRoute>} />
               <Route path="/messages" element={<ProtectedRoute><Layout><Messages /></Layout></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute><Layout><Profile /></Layout></ProtectedRoute>} />
+              <Route path="/profile/:userId" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
               <Route path="/update-profile" element={<ProtectedRoute><Layout><UpdateProfile /></Layout></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
               <Route path="/create-trip" element={<ProtectedRoute><CreateTrip /></ProtectedRoute>} />
