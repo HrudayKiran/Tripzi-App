@@ -59,10 +59,11 @@ const Trips = () => {
           )
         `)
         .eq("user_id", user.id)
+        .in("status", ["confirmed", "pending"])
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setBookings(data || []);
+      setBookings((data || []).filter(b => b.trips !== null));
     } catch (error) {
       console.error("Error fetching bookings:", error);
     } finally {

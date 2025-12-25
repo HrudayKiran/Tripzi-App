@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatINR } from "@/lib/currency";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { TripPost } from "@/components/TripPost";
+import { StoriesBar } from "@/components/StoriesBar";
 import { useAuth } from "@/contexts/AuthContext";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
@@ -275,6 +276,9 @@ const Home = () => {
           <h1 className="text-2xl font-display font-bold">Tripzi</h1>
           <NotificationsPanel />
         </div>
+
+        {/* Stories Bar */}
+        <StoriesBar />
 
         {/* Search */}
         <div className="flex gap-2">

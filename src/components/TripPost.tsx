@@ -338,12 +338,30 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
 
   const handleShare = async () => {
     const url = `${window.location.origin}/trip/${trip.id}`;
+    const text = `Check out this trip to ${trip.destination}!`;
+    
+    // Try native share first (works on mobile)
     if (navigator.share) {
       try {
-        await navigator.share({ title: trip.title, text: `Check out this trip to ${trip.destination}!`, url });
-      } catch {}
-    } else {
-      await navigator.clipboard.writeText(url);
+        await navigator.share({ title: trip.title, text, url });
+        return;
+      } catch (err) {
+        // User cancelled or share failed, fall through to copy
+      }
+    }
+    
+    // Fallback to clipboard
+    try {
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      toast({ title: "Link copied!", description: "Trip link copied to clipboard. Paste it in WhatsApp, Instagram, or any app!" });
+    } catch {
+      // Final fallback for older browsers
+      const textArea = document.createElement("textarea");
+      textArea.value = `${text}\n${url}`;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
       toast({ title: "Link copied!", description: "Trip link copied to clipboard" });
     }
   };
