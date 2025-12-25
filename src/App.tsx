@@ -22,6 +22,8 @@ import TripDetails from "./pages/TripDetails";
 import Chat from "./pages/Chat";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import Terms from "./pages/Terms";
+import HelpSupport from "./pages/HelpSupport";
+import SuggestFeature from "./pages/SuggestFeature";
 import NotFound from "./pages/NotFound";
 import Layout from "./components/Layout";
 
@@ -41,6 +43,8 @@ const App = () => (
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/privacy-policy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<Terms />} />
+              <Route path="/help-support" element={<ProtectedRoute><HelpSupport /></ProtectedRoute>} />
+              <Route path="/suggest-feature" element={<ProtectedRoute><SuggestFeature /></ProtectedRoute>} />
               <Route path="/home" element={<ProtectedRoute><Layout><Home /></Layout></ProtectedRoute>} />
               <Route path="/feed" element={<ProtectedRoute><Layout><Feed /></Layout></ProtectedRoute>} />
               <Route path="/trips" element={<ProtectedRoute><Layout><Trips /></Layout></ProtectedRoute>} />

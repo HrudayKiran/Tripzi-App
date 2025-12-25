@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Heart, MessageCircle, Share2, MapPin, Calendar, Edit, Trash2, Send, MoreHorizontal, Check, Users } from "lucide-react";
+import { Heart, MessageCircle, Share2, MapPin, Calendar, Edit, Trash2, Send, MoreHorizontal, Check, ShieldAlert } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -49,7 +49,7 @@ interface Comment {
 
 export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollowing = false }: TripPostProps) => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile: userProfile } = useAuth();
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -60,6 +60,7 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
   const [joining, setJoining] = useState(false);
 
   const isOwner = user?.id === trip.user_id;
+  const isVerified = userProfile?.kyc_status === 'verified';
 
   useEffect(() => {
     fetchLikes();
@@ -131,6 +132,17 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
   const handleJoinTrip = async () => {
     if (!user) {
       toast({ title: "Please log in", description: "You need to be logged in to join trips" });
+      return;
+    }
+
+    // Check KYC status
+    if (!isVerified) {
+      toast({ 
+        title: "Verification Required", 
+        description: "You need to complete KYC verification to join trips. This is required for safety.", 
+        variant: "destructive" 
+      });
+      navigate('/profile');
       return;
     }
 
@@ -251,20 +263,27 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
             </AvatarFallback>
           </Avatar>
           <div>
-            <p
-              className="font-semibold text-sm cursor-pointer hover:text-primary transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate(`/profile/${trip.user_id}`);
-              }}
-            >
-              {profile?.full_name || "Traveler"}
-            </p>
+            <div className="flex items-center gap-2">
+              <p
+                className="font-semibold text-sm cursor-pointer hover:text-primary transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/profile/${trip.user_id}`);
+                }}
+              >
+                {profile?.full_name || "Traveler"}
+              </p>
+              {isFollowing && (
+                <Badge variant="secondary" className="rounded-full text-xs h-5 px-2">
+                  Following
+                </Badge>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">{getTimeAgo(trip.created_at)}</p>
           </div>
         </div>
 
-        {isOwner ? (
+        {isOwner && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -283,19 +302,6 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        ) : isFollowing ? (
-          <Badge variant="secondary" className="rounded-full h-8 px-3">
-            Following
-          </Badge>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate(`/profile/${trip.user_id}`)}
-            className="rounded-full text-primary border-primary h-8 hover:bg-primary hover:text-primary-foreground transition-colors"
-          >
-            Follow
-          </Button>
         )}
       </div>
 
@@ -328,7 +334,7 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
           </div>
         </div>
 
-        <p className="text-sm text-muted-foreground line-clamp-2">{trip.description}</p>
+        <p className="text-sm text-muted-foreground">{trip.description}</p>
 
         {/* Actions */}
         <div className="flex items-center justify-between pt-2 border-t border-border/50">
@@ -411,6 +417,15 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollo
               disabled
             >
               <Check className="h-4 w-4" /> Joined
+            </Button>
+          ) : !isVerified ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleJoinTrip}
+              className="rounded-full px-4 gap-2 border-amber-500 text-amber-600"
+            >
+              <ShieldAlert className="h-4 w-4" /> Verify to Join
             </Button>
           ) : (
             <Button
