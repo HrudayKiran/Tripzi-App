@@ -49,6 +49,39 @@ export type Database = {
           },
         ]
       }
+      call_signaling: {
+        Row: {
+          call_type: string
+          caller_id: string
+          created_at: string
+          ended_at: string | null
+          id: string
+          receiver_id: string
+          signal_data: Json | null
+          status: string
+        }
+        Insert: {
+          call_type: string
+          caller_id: string
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          receiver_id: string
+          signal_data?: Json | null
+          status?: string
+        }
+        Update: {
+          call_type?: string
+          caller_id?: string
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          receiver_id?: string
+          signal_data?: Json | null
+          status?: string
+        }
+        Relationships: []
+      }
       follows: {
         Row: {
           created_at: string | null
@@ -120,6 +153,7 @@ export type Database = {
           message: string
           receiver_id: string
           sender_id: string
+          status: string | null
           trip_id: string | null
         }
         Insert: {
@@ -129,6 +163,7 @@ export type Database = {
           message: string
           receiver_id: string
           sender_id: string
+          status?: string | null
           trip_id?: string | null
         }
         Update: {
@@ -138,6 +173,7 @@ export type Database = {
           message?: string
           receiver_id?: string
           sender_id?: string
+          status?: string | null
           trip_id?: string | null
         }
         Relationships: [
@@ -422,6 +458,30 @@ export type Database = {
           title?: string
           transport_type?: string | null
           updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      typing_indicators: {
+        Row: {
+          chat_with: string
+          id: string
+          is_typing: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          chat_with: string
+          id?: string
+          is_typing?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          chat_with?: string
+          id?: string
+          is_typing?: boolean
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
