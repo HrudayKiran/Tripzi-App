@@ -101,11 +101,24 @@ const Home = () => {
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) { fetchTrips(); return; }
+    
+    // Sanitize search input: escape LIKE wildcards and limit length
+    const sanitizedQuery = searchQuery
+      .trim()
+      .substring(0, 100) // Limit length
+      .replace(/[%_\\]/g, '\\$&'); // Escape LIKE wildcards
+    
+    // Validate input contains only safe characters
+    if (!/^[\w\s,.\-']+$/i.test(sanitizedQuery)) {
+      setTrips([]);
+      return;
+    }
+    
     const { data } = await supabase
       .from("trips")
       .select("*")
       .eq("status", "open")
-      .or(`title.ilike.%${searchQuery}%,destination.ilike.%${searchQuery}%`)
+      .or(`title.ilike.%${sanitizedQuery}%,destination.ilike.%${sanitizedQuery}%`)
       .order("created_at", { ascending: false });
     setTrips(data || []);
   };
