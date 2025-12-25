@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Heart, MessageCircle, Share2, MapPin, Calendar, Edit, Trash2, Send, MoreHorizontal } from "lucide-react";
+import { Heart, MessageCircle, Share2, MapPin, Calendar, Edit, Trash2, Send, MoreHorizontal, Check, Users } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +33,7 @@ interface TripPostProps {
   imageUrl: string | null;
   onDelete?: (tripId: string) => void;
   index?: number;
+  isFollowing?: boolean;
 }
 
 interface Comment {
@@ -46,7 +47,7 @@ interface Comment {
   };
 }
 
-export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0 }: TripPostProps) => {
+export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0, isFollowing = false }: TripPostProps) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [isLiked, setIsLiked] = useState(false);
@@ -55,13 +56,16 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0 }: TripP
   const [newComment, setNewComment] = useState("");
   const [showComments, setShowComments] = useState(false);
   const [loadingLike, setLoadingLike] = useState(false);
+  const [hasJoined, setHasJoined] = useState(false);
+  const [joining, setJoining] = useState(false);
 
   const isOwner = user?.id === trip.user_id;
 
   useEffect(() => {
     fetchLikes();
     fetchComments();
-  }, [trip.id]);
+    checkIfJoined();
+  }, [trip.id, user]);
 
   const fetchLikes = async () => {
     const { count } = await supabase
@@ -108,6 +112,55 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0 }: TripP
           profile: profilesMap[c.user_id],
         }))
       );
+    }
+  };
+
+  const checkIfJoined = async () => {
+    if (!user) return;
+    
+    const { data } = await supabase
+      .from("bookings")
+      .select("id")
+      .eq("trip_id", trip.id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    
+    setHasJoined(!!data);
+  };
+
+  const handleJoinTrip = async () => {
+    if (!user) {
+      toast({ title: "Please log in", description: "You need to be logged in to join trips" });
+      return;
+    }
+
+    if (hasJoined) {
+      toast({ title: "Already joined", description: "You have already joined this trip" });
+      return;
+    }
+
+    setJoining(true);
+    try {
+      const { data, error } = await supabase.rpc("book_trip", {
+        p_trip_id: trip.id,
+        p_user_id: user.id,
+      });
+
+      if (error) throw error;
+
+      const result = data as { success?: boolean; error?: string };
+      
+      if (result.error) {
+        toast({ title: "Cannot join", description: result.error, variant: "destructive" });
+        return;
+      }
+
+      setHasJoined(true);
+      toast({ title: "Trip Joined!", description: `You've joined the trip to ${trip.destination}` });
+    } catch (error: any) {
+      toast({ title: "Error", description: "Failed to join trip", variant: "destructive" });
+    } finally {
+      setJoining(false);
     }
   };
 
@@ -230,6 +283,10 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0 }: TripP
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+        ) : isFollowing ? (
+          <Badge variant="secondary" className="rounded-full h-8 px-3">
+            Following
+          </Badge>
         ) : (
           <Button
             variant="outline"
@@ -346,14 +403,25 @@ export const TripPost = ({ trip, profile, imageUrl, onDelete, index = 0 }: TripP
             </button>
           </div>
 
-          <Button
-            size="sm"
-            onClick={() => navigate(`/trip/${trip.id}`)}
-            className="rounded-full px-5 shadow-lg hover:shadow-primary/25"
-            disabled={trip.current_travelers >= trip.max_travelers}
-          >
-            {trip.current_travelers >= trip.max_travelers ? "Full" : "Join Trip"}
-          </Button>
+          {hasJoined ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="rounded-full px-5 gap-2"
+              disabled
+            >
+              <Check className="h-4 w-4" /> Joined
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={handleJoinTrip}
+              className="rounded-full px-5 shadow-lg hover:shadow-primary/25"
+              disabled={trip.current_travelers >= trip.max_travelers || joining}
+            >
+              {trip.current_travelers >= trip.max_travelers ? "Full" : joining ? "Joining..." : "Join Trip"}
+            </Button>
+          )}
         </div>
       </div>
     </article>

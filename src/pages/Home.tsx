@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, SlidersHorizontal, ArrowUpDown } from "lucide-react";
+import { Search, SlidersHorizontal, ArrowUpDown, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -14,6 +14,7 @@ import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { TripPost } from "@/components/TripPost";
 import { useAuth } from "@/contexts/AuthContext";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { UserSearchModal } from "@/components/UserSearchModal";
 
 interface Trip {
   id: string;
@@ -47,12 +48,15 @@ const Home = () => {
   const [filters, setFilters] = useState({ maxCost: 100000, destination: "", minDays: 0, maxPersons: 20 });
   const [sortBy, setSortBy] = useState<string>("newest");
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; tripId: string | null }>({ open: false, tripId: null });
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
+  const [showUserSearch, setShowUserSearch] = useState(false);
 
   const filterCategories = ["All", "Recent", "Budget", "Popular"];
   const [activeFilter, setActiveFilter] = useState("All");
 
   useEffect(() => {
     fetchTrips();
+    fetchFollowing();
     
     const channel = supabase
       .channel("home-trips")
@@ -60,7 +64,20 @@ const Home = () => {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [user]);
+
+  const fetchFollowing = async () => {
+    if (!user) return;
+    
+    const { data } = await supabase
+      .from("follows")
+      .select("following_id")
+      .eq("follower_id", user.id);
+    
+    if (data) {
+      setFollowingIds(new Set(data.map((f) => f.following_id)));
+    }
+  };
 
   const fetchTrips = async () => {
     try {
@@ -169,7 +186,17 @@ const Home = () => {
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-4 pt-4 pb-3 safe-top">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-display font-bold">Tripzi</h1>
-          <NotificationsPanel />
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setShowUserSearch(true)}
+              className="h-10 w-10"
+            >
+              <Users className="h-5 w-5" />
+            </Button>
+            <NotificationsPanel />
+          </div>
         </div>
 
         {/* Search */}
@@ -273,6 +300,7 @@ const Home = () => {
               imageUrl={tripImages[trip.id] || null}
               onDelete={openDeleteDialog}
               index={index}
+              isFollowing={followingIds.has(trip.user_id)}
             />
           ))
         )}
@@ -295,6 +323,9 @@ const Home = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* User Search Modal */}
+      <UserSearchModal open={showUserSearch} onOpenChange={setShowUserSearch} />
     </div>
   );
 };
