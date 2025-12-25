@@ -71,7 +71,7 @@ const Welcome = () => {
       </div>
 
       {/* Bottom Section */}
-      <div className="px-6 pb-8 space-y-6 animate-slide-up">
+      <div className="px-4 pb-8 space-y-6 animate-slide-up">
         {/* Logo and branding */}
         <div className="flex flex-col items-center gap-3 mx-[2px] py-[10px]">
           <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center shadow-glow">
