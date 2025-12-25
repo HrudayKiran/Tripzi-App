@@ -13,8 +13,58 @@ interface NotificationPayload {
   data?: Record<string, string>;
 }
 
+interface FCMMessage {
+  to: string;
+  notification: {
+    title: string;
+    body: string;
+  };
+  data?: Record<string, string>;
+}
+
+async function sendFCMNotification(token: string, title: string, body: string, data?: Record<string, string>): Promise<boolean> {
+  const fcmServerKey = Deno.env.get("FCM_SERVER_KEY");
+  
+  if (!fcmServerKey) {
+    console.log("FCM_SERVER_KEY not configured, skipping FCM push");
+    return false;
+  }
+
+  const message: FCMMessage = {
+    to: token,
+    notification: { title, body },
+    data,
+  };
+
+  try {
+    const response = await fetch("https://fcm.googleapis.com/fcm/send", {
+      method: "POST",
+      headers: {
+        "Authorization": `key=${fcmServerKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(message),
+    });
+
+    const result = await response.json();
+    console.log("FCM response:", result);
+    
+    if (result.success === 1) {
+      return true;
+    }
+    
+    if (result.failure === 1 && result.results?.[0]?.error) {
+      console.error("FCM error:", result.results[0].error);
+    }
+    
+    return false;
+  } catch (error) {
+    console.error("FCM send error:", error);
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -22,11 +72,12 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const payload: NotificationPayload = await req.json();
     const { userId, userIds, title, body, data } = payload;
+
+    console.log("Push notification request received:", { title, body, userId, userIds });
 
     if (!title || !body) {
       return new Response(
@@ -35,7 +86,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get target user IDs
     const targetUserIds = userIds || (userId ? [userId] : []);
     
     if (targetUserIds.length === 0) {
@@ -45,7 +95,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch push tokens for target users
+    // Fetch push tokens
     const { data: tokens, error: tokenError } = await supabase
       .from("push_tokens")
       .select("token, platform, user_id")
@@ -59,23 +109,28 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!tokens || tokens.length === 0) {
-      console.log("No push tokens found, creating in-app notifications only");
+    console.log(`Found ${tokens?.length || 0} push tokens`);
+
+    let fcmSent = 0;
+    let fcmFailed = 0;
+
+    // Send FCM notifications for Android tokens
+    if (tokens && tokens.length > 0) {
+      const androidTokens = tokens.filter(t => t.platform === "android");
+      
+      for (const token of androidTokens) {
+        const success = await sendFCMNotification(token.token, title, body, data);
+        if (success) {
+          fcmSent++;
+        } else {
+          fcmFailed++;
+        }
+      }
+      
+      console.log(`FCM results: ${fcmSent} sent, ${fcmFailed} failed`);
     }
 
-    // Group tokens by platform for future FCM/APNS integration
-    const iosTokens = tokens?.filter(t => t.platform === "ios").map(t => t.token) || [];
-    const androidTokens = tokens?.filter(t => t.platform === "android").map(t => t.token) || [];
-
-    console.log("Push notification request:", {
-      title,
-      body,
-      data,
-      iosTokens: iosTokens.length,
-      androidTokens: androidTokens.length,
-    });
-
-    // Create in-app notifications
+    // Create in-app notifications as fallback/supplement
     const notifications = targetUserIds.map(uid => ({
       user_id: uid,
       title,
@@ -91,22 +146,14 @@ Deno.serve(async (req) => {
 
     if (notifError) {
       console.error("Error creating in-app notifications:", notifError);
-      return new Response(
-        JSON.stringify({ error: "Failed to create notifications" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
     }
 
-    // TODO: For production, integrate with:
-    // - Firebase Cloud Messaging (FCM) for Android
-    // - Apple Push Notification Service (APNS) for iOS
-    // You'll need to add FCM_SERVER_KEY and APNS credentials as secrets
-    
     return new Response(
       JSON.stringify({ 
-        message: "Notifications created successfully",
-        sent: notifications.length,
-        pushTokens: tokens?.length || 0
+        message: "Notifications processed",
+        inApp: notifications.length,
+        fcm: { sent: fcmSent, failed: fcmFailed },
+        totalTokens: tokens?.length || 0
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
