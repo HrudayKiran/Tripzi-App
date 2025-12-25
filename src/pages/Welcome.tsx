@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import { cn } from "@/lib/utils";
 import tripziLogo from "@/assets/tripzi-logo.png";
 const ladakhImages = [{
   url: "https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?w=800&h=1000&fit=crop",
@@ -85,7 +86,15 @@ const Welcome = () => {
 
         {/* Slide indicators */}
         <div className="flex items-center justify-center gap-2">
-          {slides.map((_, index) => {})}
+          {slides.map((_, index) => (
+            <div
+              key={index}
+              className={cn(
+                "w-2 h-2 rounded-full transition-all duration-300",
+                index === currentSlide ? "bg-primary w-6" : "bg-muted-foreground/30"
+              )}
+            />
+          ))}
         </div>
 
         {/* Community indicator */}
