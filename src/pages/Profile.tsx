@@ -11,7 +11,6 @@ import {
   Lightbulb,
   CreditCard,
   HelpCircle,
-  Users,
   RefreshCw
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -25,52 +24,74 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+interface SavedAccount {
+  email: string;
+  full_name: string | null;
+  avatar_url: string | null;
+}
+
+const SAVED_ACCOUNTS_KEY = "tripzi_saved_accounts";
+
 const Profile = () => {
   const navigate = useNavigate();
   const { user, profile, signOut } = useAuth();
-  const [followersCount, setFollowersCount] = useState(0);
-  const [followingCount, setFollowingCount] = useState(0);
-  const [tripsCount, setTripsCount] = useState(0);
-  const [testUsers, setTestUsers] = useState<{ id: string; full_name: string | null; avatar_url: string | null; email?: string }[]>([]);
   const [showSwitchSheet, setShowSwitchSheet] = useState(false);
   const [showLoginForm, setShowLoginForm] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
 
   useEffect(() => {
     if (!user) {
       navigate('/auth');
     } else {
-      fetchCounts();
-      fetchAllUsers();
+      loadSavedAccounts();
+      // Save current account
+      saveCurrentAccount();
     }
-  }, [user, navigate]);
+  }, [user, navigate, profile]);
 
-  const fetchCounts = async () => {
-    if (!user) return;
-    
-    const [followersRes, followingRes, tripsRes] = await Promise.all([
-      supabase.from("follows").select("id", { count: "exact" }).eq("following_id", user.id),
-      supabase.from("follows").select("id", { count: "exact" }).eq("follower_id", user.id),
-      supabase.from("trips").select("id", { count: "exact" }).eq("user_id", user.id),
-    ]);
-
-    setFollowersCount(followersRes.count || 0);
-    setFollowingCount(followingRes.count || 0);
-    setTripsCount(tripsRes.count || 0);
+  const loadSavedAccounts = () => {
+    try {
+      const saved = localStorage.getItem(SAVED_ACCOUNTS_KEY);
+      if (saved) {
+        const accounts = JSON.parse(saved) as SavedAccount[];
+        // Filter out current user
+        setSavedAccounts(accounts.filter(a => a.email !== user?.email));
+      }
+    } catch {
+      setSavedAccounts([]);
+    }
   };
 
-  const fetchAllUsers = async () => {
-    // Fetch all users for switch account feature
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, full_name, avatar_url")
-      .order("full_name");
-    
-    if (data) {
-      setTestUsers(data.filter(u => u.id !== user?.id));
-    }
+  const saveCurrentAccount = () => {
+    if (!user?.email) return;
+    try {
+      const saved = localStorage.getItem(SAVED_ACCOUNTS_KEY);
+      let accounts: SavedAccount[] = saved ? JSON.parse(saved) : [];
+      
+      // Update or add current account
+      const existingIndex = accounts.findIndex(a => a.email === user.email);
+      const currentAccount: SavedAccount = {
+        email: user.email,
+        full_name: profile?.full_name || null,
+        avatar_url: profile?.avatar_url || null,
+      };
+      
+      if (existingIndex >= 0) {
+        accounts[existingIndex] = currentAccount;
+      } else {
+        accounts.push(currentAccount);
+      }
+      
+      localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(accounts));
+    } catch {}
+  };
+
+  const handleSwitchToSavedAccount = async (account: SavedAccount) => {
+    setLoginEmail(account.email);
+    setShowLoginForm(true);
   };
 
   const handleSwitchToAccount = async () => {
@@ -136,6 +157,7 @@ const Profile = () => {
       onClick: () => {
         setShowSwitchSheet(true);
         setShowLoginForm(false);
+        loadSavedAccounts();
       },
     },
     {
@@ -165,24 +187,14 @@ const Profile = () => {
       label: "Suggest a New Feature",
       color: "text-yellow-500",
       bgColor: "bg-yellow-500/10",
-      onClick: () => {
-        const email = 'support@tripzi.com';
-        const subject = encodeURIComponent('Feature Suggestion for Tripzi');
-        const body = encodeURIComponent('Hi Tripzi Team,\n\nI would like to suggest the following feature:\n\n');
-        window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
-      },
+      onClick: () => navigate('/suggest-feature'),
     },
     {
       icon: HelpCircle,
       label: "Help & Support",
       color: "text-cyan-500",
       bgColor: "bg-cyan-500/10",
-      onClick: () => {
-        const email = 'support@tripzi.com';
-        const subject = encodeURIComponent('Help & Support Request');
-        const body = encodeURIComponent('Hi Tripzi Team,\n\nI need help with:\n\n');
-        window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
-      },
+      onClick: () => navigate('/help-support'),
     },
     {
       icon: Settings,
@@ -221,24 +233,7 @@ const Profile = () => {
           
           <div>
             <h2 className="text-2xl font-bold">{profile?.full_name || 'User'}</h2>
-            <p className="text-muted-foreground">{user?.email || ''}</p>
-            {profile?.bio && <p className="text-sm mt-2 max-w-xs mx-auto">{profile.bio}</p>}
-          </div>
-
-          {/* Stats */}
-          <div className="flex justify-center gap-8 py-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold">{tripsCount}</p>
-              <p className="text-xs text-muted-foreground">Trips</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold">{followersCount}</p>
-              <p className="text-xs text-muted-foreground">Followers</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold">{followingCount}</p>
-              <p className="text-xs text-muted-foreground">Following</p>
-            </div>
+            {profile?.bio && <p className="text-sm mt-2 max-w-xs mx-auto text-muted-foreground">{profile.bio}</p>}
           </div>
         </div>
 
@@ -310,57 +305,48 @@ const Profile = () => {
 
       {/* Switch Account Sheet */}
       <Sheet open={showSwitchSheet} onOpenChange={setShowSwitchSheet}>
-        <SheetContent side="bottom" className="h-[70vh] rounded-t-3xl">
+        <SheetContent side="bottom" className="h-[60vh] rounded-t-3xl">
           <SheetHeader>
             <SheetTitle>Switch Account</SheetTitle>
           </SheetHeader>
           
           {!showLoginForm ? (
             <div className="py-4 space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Sign in with another account to switch.
-              </p>
-              
+              {savedAccounts.length > 0 && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-3">Previously signed in:</p>
+                  <div className="space-y-2">
+                    {savedAccounts.map((account) => (
+                      <div
+                        key={account.email}
+                        className="flex items-center justify-between p-3 bg-muted/50 rounded-xl cursor-pointer hover:bg-muted transition-colors"
+                        onClick={() => handleSwitchToSavedAccount(account)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Avatar className="w-10 h-10">
+                            <AvatarImage src={account.avatar_url || ""} />
+                            <AvatarFallback>{account.full_name?.charAt(0) || account.email.charAt(0).toUpperCase()}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium">{account.full_name || "User"}</p>
+                            <p className="text-xs text-muted-foreground">{account.email}</p>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <Button 
                 onClick={() => setShowLoginForm(true)} 
+                variant={savedAccounts.length > 0 ? "outline" : "default"}
                 className="w-full"
               >
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Sign in with different account
               </Button>
-
-              <div className="pt-4">
-                <p className="text-sm text-muted-foreground mb-3">Or view other users' profiles:</p>
-                <div className="space-y-2 max-h-[30vh] overflow-y-auto">
-                  {testUsers.length === 0 ? (
-                    <p className="text-center text-muted-foreground py-4">No other users found</p>
-                  ) : (
-                    testUsers.map((testUser) => (
-                      <div
-                        key={testUser.id}
-                        className="flex items-center justify-between p-3 bg-muted/50 rounded-xl cursor-pointer hover:bg-muted transition-colors"
-                        onClick={() => {
-                          setShowSwitchSheet(false);
-                          navigate(`/profile/${testUser.id}`);
-                        }}
-                      >
-                        <div className="flex items-center gap-3">
-                          <Avatar className="w-10 h-10">
-                            <AvatarImage src={testUser.avatar_url || ""} />
-                            <AvatarFallback>{testUser.full_name?.charAt(0) || "U"}</AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium">{testUser.full_name || "User"}</p>
-                          </div>
-                        </div>
-                        <Button variant="outline" size="sm" className="rounded-full">
-                          View Profile
-                        </Button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
             </div>
           ) : (
             <div className="py-4 space-y-4">
@@ -394,14 +380,6 @@ const Profile = () => {
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                   />
-                </div>
-
-                <div className="bg-muted/50 p-3 rounded-lg">
-                  <p className="text-xs text-muted-foreground">
-                    <strong>Test User Credentials:</strong><br />
-                    Email: Look for emails ending with @tripzi.com<br />
-                    Password: TestUser123!
-                  </p>
                 </div>
 
                 <Button 

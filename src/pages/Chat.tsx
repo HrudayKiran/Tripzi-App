@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Send, Image, MapPin, Smile, Phone, Video, FileText, X, Loader2 } from "lucide-react";
+import { ArrowLeft, Send, MapPin, Phone, Video, Trash2, MoreVertical, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -11,6 +11,8 @@ import { toast } from "@/hooks/use-toast";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import EmojiPicker, { EmojiClickData, Theme } from 'emoji-picker-react';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 interface Message {
   id: string;
@@ -37,7 +39,9 @@ const Chat = () => {
   const [otherUser, setOtherUser] = useState<Profile | null>(null);
   const [sending, setSending] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; messageId: string | null }>({ open: false, messageId: null });
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastMessageTime = useRef<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -60,11 +64,16 @@ const Chat = () => {
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'messages',
         },
         (payload) => {
+          if (payload.eventType === 'DELETE') {
+            setMessages((prev) => prev.filter((m) => m.id !== payload.old.id));
+            return;
+          }
+          
           const newMsg = payload.new as Message;
           // Only add if it's a message in this conversation
           if (
@@ -148,10 +157,31 @@ const Chat = () => {
     setShowEmojiPicker(false);
   };
 
+  const handleDeleteMessage = async () => {
+    if (!deleteDialog.messageId) return;
+    
+    try {
+      const { error } = await supabase
+        .from("messages")
+        .delete()
+        .eq("id", deleteDialog.messageId)
+        .eq("sender_id", user?.id); // Only delete own messages
+      
+      if (error) throw error;
+      
+      setMessages((prev) => prev.filter((m) => m.id !== deleteDialog.messageId));
+      toast({ title: "Message deleted" });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to delete message", variant: "destructive" });
+    } finally {
+      setDeleteDialog({ open: false, messageId: null });
+    }
+  };
+
   const handleFileUpload = async (file: File, type: 'image' | 'document') => {
     if (!user || !userId) return;
 
-    const maxSize = type === 'image' ? 5 * 1024 * 1024 : 10 * 1024 * 1024; // 5MB for images, 10MB for docs
+    const maxSize = type === 'image' ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
     if (file.size > maxSize) {
       toast({
         title: "File too large",
@@ -162,6 +192,7 @@ const Chat = () => {
     }
 
     setUploading(true);
+    setShowAttachMenu(false);
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}/${Date.now()}.${fileExt}`;
@@ -177,7 +208,6 @@ const Chat = () => {
         .from(bucket)
         .getPublicUrl(fileName);
 
-      // Send message with file
       const messageText = type === 'image' 
         ? `📷 [Image] ${urlData.publicUrl}`
         : `📎 [Document: ${file.name}] ${urlData.publicUrl}`;
@@ -212,7 +242,6 @@ const Chat = () => {
     e.preventDefault();
     if (!user || !userId || !newMessage.trim() || sending) return;
 
-    // Rate limiting check
     const now = Date.now();
     if (now - lastMessageTime.current < MESSAGE_COOLDOWN_MS) {
       toast({
@@ -223,7 +252,6 @@ const Chat = () => {
       return;
     }
 
-    // Message length validation
     if (newMessage.length > 2000) {
       toast({
         title: "Message too long",
@@ -250,7 +278,6 @@ const Chat = () => {
 
       if (error) throw error;
 
-      // Add message to local state immediately
       if (data) {
         setMessages((prev) => {
           if (prev.some((m) => m.id === data.id)) return prev;
@@ -260,7 +287,7 @@ const Chat = () => {
 
       lastMessageTime.current = now;
     } catch (error: any) {
-      setNewMessage(messageText); // Restore message on error
+      setNewMessage(messageText);
       toast({
         title: "Error",
         description: "Failed to send message",
@@ -298,10 +325,15 @@ const Chat = () => {
             href={url} 
             target="_blank" 
             rel="noopener noreferrer"
-            className="flex items-center gap-2 p-2 bg-background/10 rounded-lg hover:bg-background/20 transition-colors"
+            className="flex items-center gap-2 p-3 bg-background/20 rounded-lg hover:bg-background/30 transition-colors"
           >
-            <FileText className="h-5 w-5" />
-            <span className="text-sm underline">{fileName}</span>
+            <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center">
+              📄
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{fileName}</p>
+              <p className="text-xs opacity-70">Tap to open</p>
+            </div>
           </a>
         );
       }
@@ -309,15 +341,23 @@ const Chat = () => {
     // Check if it's a location message
     if (message.startsWith('📍 [Location]')) {
       const url = message.replace('📍 [Location] ', '');
+      const coords = url.match(/q=([^,]+),([^&]+)/);
       return (
         <a 
           href={url} 
           target="_blank" 
           rel="noopener noreferrer"
-          className="flex items-center gap-2 p-2 bg-background/10 rounded-lg hover:bg-background/20 transition-colors"
+          className="block rounded-lg overflow-hidden"
         >
-          <MapPin className="h-5 w-5" />
-          <span className="text-sm underline">View Location</span>
+          <div className="w-[200px] h-[120px] bg-gradient-to-br from-green-100 to-blue-100 flex flex-col items-center justify-center gap-2">
+            <MapPin className="h-8 w-8 text-red-500" />
+            <span className="text-xs text-muted-foreground">View on Google Maps</span>
+            {coords && (
+              <span className="text-[10px] text-muted-foreground/70">
+                {parseFloat(coords[1]).toFixed(4)}, {parseFloat(coords[2]).toFixed(4)}
+              </span>
+            )}
+          </div>
         </a>
       );
     }
@@ -327,6 +367,8 @@ const Chat = () => {
   const handleShareLocation = async () => {
     if (!user || !userId) return;
 
+    setShowAttachMenu(false);
+    
     if (!navigator.geolocation) {
       toast({
         title: "Not supported",
@@ -335,6 +377,8 @@ const Chat = () => {
       });
       return;
     }
+
+    toast({ title: "Getting location...", description: "Please wait" });
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
@@ -368,10 +412,11 @@ const Chat = () => {
       (error) => {
         toast({
           title: "Error",
-          description: "Failed to get your location",
+          description: "Failed to get your location. Please enable location services.",
           variant: "destructive",
         });
-      }
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
     );
   };
 
@@ -455,17 +500,27 @@ const Chat = () => {
                   key={message.id}
                   className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div
-                    className={`max-w-[70%] rounded-2xl p-3 ${
-                      isOwn
-                        ? 'bg-primary text-primary-foreground rounded-br-sm'
-                        : 'bg-card rounded-bl-sm'
-                    }`}
-                  >
-                    {renderMessageContent(message.message)}
-                    <p className={`text-xs mt-1 ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                      {formatTime(message.created_at)}
-                    </p>
+                  <div className="relative group">
+                    <div
+                      className={`max-w-[70%] rounded-2xl p-3 ${
+                        isOwn
+                          ? 'bg-primary text-primary-foreground rounded-br-sm'
+                          : 'bg-card rounded-bl-sm'
+                      }`}
+                    >
+                      {renderMessageContent(message.message)}
+                      <p className={`text-xs mt-1 ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                        {formatTime(message.created_at)}
+                      </p>
+                    </div>
+                    {isOwn && (
+                      <button
+                        onClick={() => setDeleteDialog({ open: true, messageId: message.id })}
+                        className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full bg-destructive/10 hover:bg-destructive/20"
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -474,21 +529,67 @@ const Chat = () => {
         </div>
       </ScrollArea>
 
-      {/* Uploading indicator */}
-      {uploading && (
-        <div className="px-4 py-2 bg-muted/50 flex items-center gap-2">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span className="text-sm text-muted-foreground">Uploading...</span>
-        </div>
-      )}
-
       {/* Input */}
       <form onSubmit={handleSendMessage} className="p-4 border-t bg-background">
         <div className="flex items-center gap-2">
+          {/* Attachment Menu - WhatsApp style */}
+          <Popover open={showAttachMenu} onOpenChange={setShowAttachMenu}>
+            <PopoverTrigger asChild>
+              <Button 
+                type="button" 
+                variant="ghost" 
+                size="icon" 
+                className="shrink-0"
+                disabled={uploading}
+              >
+                {showAttachMenu ? (
+                  <X className="h-5 w-5 text-muted-foreground" />
+                ) : (
+                  <Plus className="h-5 w-5 text-muted-foreground" />
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-3" side="top" align="start">
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-muted transition-colors"
+                >
+                  <div className="w-12 h-12 bg-purple-500/20 rounded-full flex items-center justify-center">
+                    <span className="text-xl">📷</span>
+                  </div>
+                  <span className="text-xs">Image</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => docInputRef.current?.click()}
+                  className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-muted transition-colors"
+                >
+                  <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center">
+                    <span className="text-xl">📄</span>
+                  </div>
+                  <span className="text-xs">Document</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleShareLocation}
+                  className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-muted transition-colors"
+                >
+                  <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center">
+                    <MapPin className="h-6 w-6 text-green-600" />
+                  </div>
+                  <span className="text-xs">Location</span>
+                </button>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Emoji Picker */}
           <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
             <PopoverTrigger asChild>
               <Button type="button" variant="ghost" size="icon" className="shrink-0">
-                <Smile className="h-5 w-5 text-muted-foreground" />
+                <span className="text-xl">😊</span>
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-full p-0 border-none" side="top" align="start">
@@ -500,35 +601,7 @@ const Chat = () => {
               />
             </PopoverContent>
           </Popover>
-          <Button 
-            type="button" 
-            variant="ghost" 
-            size="icon" 
-            className="shrink-0"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-          >
-            <Image className="h-5 w-5 text-muted-foreground" />
-          </Button>
-          <Button 
-            type="button" 
-            variant="ghost" 
-            size="icon" 
-            className="shrink-0"
-            onClick={() => docInputRef.current?.click()}
-            disabled={uploading}
-          >
-            <FileText className="h-5 w-5 text-muted-foreground" />
-          </Button>
-          <Button 
-            type="button" 
-            variant="ghost" 
-            size="icon" 
-            className="shrink-0"
-            onClick={handleShareLocation}
-          >
-            <MapPin className="h-5 w-5 text-muted-foreground" />
-          </Button>
+
           <Input
             placeholder="Type a message..."
             value={newMessage}
@@ -540,7 +613,28 @@ const Chat = () => {
             <Send className="h-5 w-5" />
           </Button>
         </div>
+        {uploading && (
+          <p className="text-xs text-muted-foreground mt-2 text-center">Uploading...</p>
+        )}
       </form>
+
+      {/* Delete Message Dialog */}
+      <AlertDialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog({ open, messageId: null })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Message</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this message? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteMessage} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
