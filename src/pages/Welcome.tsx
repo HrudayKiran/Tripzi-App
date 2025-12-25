@@ -61,9 +61,7 @@ const Welcome = () => {
           </div>
           
           {/* Overlay travelers */}
-          <div className="absolute bottom-4 right-4 w-20 h-20 rounded-2xl overflow-hidden shadow-lg border-4 border-card z-10">
-            
-          </div>
+          
 
           {/* Image indicators */}
           <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
