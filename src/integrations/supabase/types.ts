@@ -468,6 +468,35 @@ export type Database = {
         }
         Relationships: []
       }
+      story_views: {
+        Row: {
+          id: string
+          story_id: string
+          viewed_at: string
+          viewer_id: string
+        }
+        Insert: {
+          id?: string
+          story_id: string
+          viewed_at?: string
+          viewer_id: string
+        }
+        Update: {
+          id?: string
+          story_id?: string
+          viewed_at?: string
+          viewer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_views_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_comments: {
         Row: {
           comment: string
