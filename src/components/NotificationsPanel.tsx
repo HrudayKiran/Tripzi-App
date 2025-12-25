@@ -100,12 +100,14 @@ export const NotificationsPanel = () => {
   const handleNotificationClick = async (notification: Notification) => {
     await markAsRead(notification.id);
     
-    if (notification.type === 'trip_post' && notification.related_id) {
+    if ((notification.type === 'trip_post' || notification.type === 'like' || notification.type === 'comment') && notification.related_id) {
       navigate(`/trip/${notification.related_id}`);
     } else if (notification.type === 'booking' && notification.related_id) {
       navigate(`/trips`);
-    } else if (notification.type === 'follow') {
-      navigate('/profile');
+    } else if (notification.type === 'follow' && notification.related_id) {
+      navigate(`/profile/${notification.related_id}`);
+    } else if (notification.type === 'message' && notification.related_id) {
+      navigate(`/chat/${notification.related_id}`);
     }
   };
 
