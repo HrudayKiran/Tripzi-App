@@ -47,6 +47,7 @@ const CreateTrip = () => {
     end_date: "",
     max_travelers: "1",
     essentials: "",
+    transport_type: "Other",
   });
 
   useEffect(() => {
@@ -80,6 +81,7 @@ const CreateTrip = () => {
           end_date: trip.end_date,
           max_travelers: trip.max_travelers.toString(),
           essentials: Array.isArray(trip.essentials) ? trip.essentials.join(", ") : "",
+          transport_type: trip.transport_type || "Other",
         });
 
         // Load existing images
@@ -220,6 +222,7 @@ const CreateTrip = () => {
             end_date: validationResult.data.end_date,
             max_travelers: validationResult.data.max_travelers,
             essentials: validationResult.data.essentials ? validationResult.data.essentials.split(",").map(e => e.trim()).filter(Boolean) : [],
+            transport_type: formData.transport_type,
           })
           .eq("id", tripId)
           .eq("user_id", user.id);
@@ -259,6 +262,7 @@ const CreateTrip = () => {
             end_date: validationResult.data.end_date,
             max_travelers: validationResult.data.max_travelers,
             essentials: validationResult.data.essentials ? validationResult.data.essentials.split(",").map(e => e.trim()).filter(Boolean) : [],
+            transport_type: formData.transport_type,
           })
           .select()
           .single();
@@ -458,6 +462,25 @@ const CreateTrip = () => {
                   />
                 </div>
               </div>
+            </div>
+
+            <div>
+              <Label htmlFor="transport_type">Transport Type</Label>
+              <select
+                id="transport_type"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                value={formData.transport_type}
+                onChange={(e) => setFormData({ ...formData, transport_type: e.target.value })}
+                required
+              >
+                <option value="Other">Select transport</option>
+                <option value="Train">Train</option>
+                <option value="Bus">Bus</option>
+                <option value="Bike">Bike</option>
+                <option value="Car">Car</option>
+                <option value="Flight">Flight</option>
+                <option value="Other">Other</option>
+              </select>
             </div>
 
             <div>

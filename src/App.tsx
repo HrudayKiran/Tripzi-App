@@ -11,6 +11,7 @@ import Auth from "./pages/Auth";
 import Home from "./pages/Home";
 import Feed from "./pages/Feed";
 import Trips from "./pages/Trips";
+import Messages from "./pages/Messages";
 import Profile from "./pages/Profile";
 import UpdateProfile from "./pages/UpdateProfile";
 import Settings from "./pages/Settings";
@@ -18,6 +19,8 @@ import ForgotPassword from "./pages/ForgotPassword";
 import CreateTrip from "./pages/CreateTrip";
 import TripDetails from "./pages/TripDetails";
 import Chat from "./pages/Chat";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
 import Layout from "./components/Layout";
 
@@ -35,9 +38,12 @@ const App = () => (
               <Route path="/" element={<Welcome />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+              <Route path="/terms" element={<Terms />} />
               <Route path="/home" element={<ProtectedRoute><Layout><Home /></Layout></ProtectedRoute>} />
               <Route path="/feed" element={<ProtectedRoute><Layout><Feed /></Layout></ProtectedRoute>} />
               <Route path="/trips" element={<ProtectedRoute><Layout><Trips /></Layout></ProtectedRoute>} />
+              <Route path="/messages" element={<ProtectedRoute><Layout><Messages /></Layout></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute><Layout><Profile /></Layout></ProtectedRoute>} />
               <Route path="/update-profile" element={<ProtectedRoute><Layout><UpdateProfile /></Layout></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
