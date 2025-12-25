@@ -11,7 +11,8 @@ import {
   Lightbulb,
   CreditCard,
   HelpCircle,
-  Users
+  Users,
+  RefreshCw
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -28,8 +31,12 @@ const Profile = () => {
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [tripsCount, setTripsCount] = useState(0);
-  const [testUsers, setTestUsers] = useState<{ id: string; full_name: string | null; avatar_url: string | null }[]>([]);
+  const [testUsers, setTestUsers] = useState<{ id: string; full_name: string | null; avatar_url: string | null; email?: string }[]>([]);
   const [showSwitchSheet, setShowSwitchSheet] = useState(false);
+  const [showLoginForm, setShowLoginForm] = useState(false);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -66,14 +73,47 @@ const Profile = () => {
     }
   };
 
-  const handleSwitchAccount = async (userId: string) => {
-    // For demo purposes, we need to sign in as the test user
-    // This requires the test user credentials
-    toast({
-      title: "Switch Account",
-      description: "To switch accounts, you need to sign out and sign in with the other account's credentials.",
-    });
-    setShowSwitchSheet(false);
+  const handleSwitchToAccount = async () => {
+    if (!loginEmail || !loginPassword) {
+      toast({
+        title: "Error",
+        description: "Please enter both email and password",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoggingIn(true);
+    try {
+      // First sign out
+      await signOut();
+      
+      // Then sign in with new credentials
+      const { error } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
+        password: loginPassword,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Switched account successfully",
+      });
+      setShowSwitchSheet(false);
+      setShowLoginForm(false);
+      setLoginEmail("");
+      setLoginPassword("");
+      navigate('/');
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to switch account",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -89,11 +129,14 @@ const Profile = () => {
       onClick: () => navigate('/trips'),
     },
     {
-      icon: Users,
+      icon: RefreshCw,
       label: "Switch Account",
       color: "text-blue-500",
       bgColor: "bg-blue-500/10",
-      onClick: () => setShowSwitchSheet(true),
+      onClick: () => {
+        setShowSwitchSheet(true);
+        setShowLoginForm(false);
+      },
     },
     {
       icon: profile?.kyc_status === 'verified' ? ShieldCheck : profile?.kyc_status === 'rejected' ? ShieldX : Clock,
@@ -267,39 +310,110 @@ const Profile = () => {
 
       {/* Switch Account Sheet */}
       <Sheet open={showSwitchSheet} onOpenChange={setShowSwitchSheet}>
-        <SheetContent side="bottom" className="h-[60vh] rounded-t-3xl">
+        <SheetContent side="bottom" className="h-[70vh] rounded-t-3xl">
           <SheetHeader>
             <SheetTitle>Switch Account</SheetTitle>
           </SheetHeader>
-          <div className="py-4 space-y-3 overflow-y-auto">
-            <p className="text-sm text-muted-foreground mb-4">
-              Other users in the app. To switch, you'll need to sign out and sign in with their credentials.
-            </p>
-            {testUsers.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">No other users found</p>
-            ) : (
-              testUsers.map((testUser) => (
-                <div
-                  key={testUser.id}
-                  className="flex items-center justify-between p-3 bg-muted/50 rounded-xl cursor-pointer hover:bg-muted transition-colors"
-                  onClick={() => navigate(`/profile/${testUser.id}`)}
-                >
-                  <div className="flex items-center gap-3">
-                    <Avatar className="w-10 h-10">
-                      <AvatarImage src={testUser.avatar_url || ""} />
-                      <AvatarFallback>{testUser.full_name?.charAt(0) || "U"}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium">{testUser.full_name || "User"}</p>
-                    </div>
-                  </div>
-                  <Button variant="outline" size="sm" className="rounded-full">
-                    View Profile
-                  </Button>
+          
+          {!showLoginForm ? (
+            <div className="py-4 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Sign in with another account to switch.
+              </p>
+              
+              <Button 
+                onClick={() => setShowLoginForm(true)} 
+                className="w-full"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Sign in with different account
+              </Button>
+
+              <div className="pt-4">
+                <p className="text-sm text-muted-foreground mb-3">Or view other users' profiles:</p>
+                <div className="space-y-2 max-h-[30vh] overflow-y-auto">
+                  {testUsers.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-4">No other users found</p>
+                  ) : (
+                    testUsers.map((testUser) => (
+                      <div
+                        key={testUser.id}
+                        className="flex items-center justify-between p-3 bg-muted/50 rounded-xl cursor-pointer hover:bg-muted transition-colors"
+                        onClick={() => {
+                          setShowSwitchSheet(false);
+                          navigate(`/profile/${testUser.id}`);
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Avatar className="w-10 h-10">
+                            <AvatarImage src={testUser.avatar_url || ""} />
+                            <AvatarFallback>{testUser.full_name?.charAt(0) || "U"}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium">{testUser.full_name || "User"}</p>
+                          </div>
+                        </div>
+                        <Button variant="outline" size="sm" className="rounded-full">
+                          View Profile
+                        </Button>
+                      </div>
+                    ))
+                  )}
                 </div>
-              ))
-            )}
-          </div>
+              </div>
+            </div>
+          ) : (
+            <div className="py-4 space-y-4">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setShowLoginForm(false)}
+                className="mb-2"
+              >
+                ← Back
+              </Button>
+              
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="Enter email"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Enter password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                  />
+                </div>
+
+                <div className="bg-muted/50 p-3 rounded-lg">
+                  <p className="text-xs text-muted-foreground">
+                    <strong>Test User Credentials:</strong><br />
+                    Email: Look for emails ending with @tripzi.com<br />
+                    Password: TestUser123!
+                  </p>
+                </div>
+
+                <Button 
+                  onClick={handleSwitchToAccount} 
+                  className="w-full"
+                  disabled={isLoggingIn}
+                >
+                  {isLoggingIn ? "Signing in..." : "Sign In & Switch"}
+                </Button>
+              </div>
+            </div>
+          )}
         </SheetContent>
       </Sheet>
     </div>
