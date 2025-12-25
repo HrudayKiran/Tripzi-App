@@ -201,12 +201,25 @@ const Feed = () => {
 
   const handleShare = async (trip: Trip) => {
     const url = `${window.location.origin}/trip/${trip.id}`;
+    const text = `Check out this trip to ${trip.destination}!`;
+    
     if (navigator.share) {
       try {
-        await navigator.share({ title: trip.title, text: `Check out this trip to ${trip.destination}!`, url });
+        await navigator.share({ title: trip.title, text, url });
+        return;
       } catch {}
-    } else {
-      await navigator.clipboard.writeText(url);
+    }
+    
+    try {
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      toast({ title: "Link copied!", description: "Trip link copied to clipboard. Paste it in WhatsApp, Instagram, or any app!" });
+    } catch {
+      const textArea = document.createElement("textarea");
+      textArea.value = `${text}\n${url}`;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
       toast({ title: "Link copied!", description: "Trip link copied to clipboard" });
     }
   };
