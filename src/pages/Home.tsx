@@ -11,7 +11,7 @@ import { Slider } from "@/components/ui/slider";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-
+import { formatINR } from "@/lib/currency";
 interface Trip {
   id: string;
   title: string;
@@ -40,7 +40,7 @@ const Home = () => {
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ maxCost: 10000, destination: "", minDays: 0 });
+  const [filters, setFilters] = useState({ maxCost: 100000, destination: "", minDays: 0 });
 
   const filterCategories = ["All", "Dates", "Budget", "Activities"];
   const [activeFilter, setActiveFilter] = useState("All");
@@ -172,9 +172,9 @@ const Home = () => {
             <SheetContent>
               <SheetHeader><SheetTitle>Filter Trips</SheetTitle></SheetHeader>
               <div className="space-y-6 mt-6">
-                <div className="space-y-3">
-                  <Label>Max Cost: ${filters.maxCost}</Label>
-                  <Slider value={[filters.maxCost]} onValueChange={(v) => setFilters({ ...filters, maxCost: v[0] })} max={10000} step={100} />
+              <div className="space-y-3">
+                  <Label>Max Cost: {formatINR(filters.maxCost)}</Label>
+                  <Slider value={[filters.maxCost]} onValueChange={(v) => setFilters({ ...filters, maxCost: v[0] })} max={500000} step={1000} />
                 </div>
                 <div className="space-y-3">
                   <Label>Destination</Label>
@@ -268,7 +268,7 @@ const Home = () => {
                     <div className="p-3">
                       <div className="flex items-start justify-between mb-1">
                         <h3 className="font-semibold line-clamp-1">{trip.title}</h3>
-                        <span className="text-primary font-bold">${trip.cost}</span>
+                        <span className="text-primary font-bold">{formatINR(trip.cost)}</span>
                       </div>
                       <p className="text-sm text-muted-foreground line-clamp-2 mb-2">{trip.description}</p>
                       <div className="flex items-center justify-between">

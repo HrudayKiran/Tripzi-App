@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapPin, Plane, Users, ArrowRight } from "lucide-react";
+import { MapPin, Plane } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import tripziLogo from "@/assets/tripzi-logo.png";
@@ -17,21 +17,9 @@ const Welcome = () => {
   }, [user, navigate]);
 
   const slides = [
-    {
-      icon: <Plane className="h-8 w-8" />,
-      title: "Discover Adventures",
-      description: "Find amazing trips curated by fellow travelers",
-    },
-    {
-      icon: <Users className="h-8 w-8" />,
-      title: "Connect & Travel",
-      description: "Join groups and make lifelong travel buddies",
-    },
-    {
-      icon: <MapPin className="h-8 w-8" />,
-      title: "Explore Together",
-      description: "Share experiences and create memories",
-    },
+    { title: "Discover Adventures", description: "Find amazing trips curated by fellow travelers" },
+    { title: "Connect & Travel", description: "Join groups and make lifelong travel buddies" },
+    { title: "Explore Together", description: "Share experiences and create memories" },
   ];
 
   useEffect(() => {
@@ -123,13 +111,12 @@ const Welcome = () => {
           <span className="text-sm text-muted-foreground font-medium">JOIN THE JOURNEY</span>
         </div>
 
-        {/* CTA Button */}
+        {/* Next Button */}
         <Button
           onClick={() => navigate("/auth")}
-          className="w-full h-14 text-lg font-semibold rounded-2xl shadow-glow group"
+          className="w-full h-14 text-lg font-semibold rounded-2xl shadow-glow"
         >
-          Get Started
-          <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+          Next
         </Button>
       </div>
     </div>

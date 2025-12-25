@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, MapPin, Calendar, DollarSign, Users, Image as ImageIcon, X } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, Users, Image as ImageIcon, X, IndianRupee } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -386,13 +386,13 @@ const CreateTrip = () => {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="cost">Estimated Cost ($)</Label>
+                <Label htmlFor="cost">Estimated Cost (₹)</Label>
                 <div className="relative">
-                  <DollarSign className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <IndianRupee className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="cost"
                     type="number"
-                    placeholder="1000"
+                    placeholder="5000"
                     className="pl-10"
                     value={formData.cost}
                     onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
