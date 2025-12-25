@@ -86,8 +86,12 @@ const Auth = () => {
   };
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!signUpData.email || !signUpData.password || !signUpData.fullName) {
+    if (!signUpData.email || !signUpData.password || !signUpData.fullName || !signUpData.phoneNumber) {
       toast.error("Please fill in all required fields");
+      return;
+    }
+    if (signUpData.phoneNumber.length !== 10) {
+      toast.error("Please enter a valid 10-digit phone number");
       return;
     }
     if (signUpData.password !== signUpData.confirmPassword) {
@@ -324,7 +328,7 @@ const Auth = () => {
         </div>
 
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Phone Number (Optional)</Label>
+          <Label className="text-sm font-medium">Phone Number <span className="text-destructive">*</span></Label>
           <div className="flex gap-2">
             <Select value={countryCode} onValueChange={setCountryCode}>
               <SelectTrigger className="w-28 h-14 rounded-2xl">
@@ -341,7 +345,7 @@ const Auth = () => {
               <Input type="tel" placeholder="9876543210" value={signUpData.phoneNumber} onChange={e => setSignUpData({
               ...signUpData,
               phoneNumber: e.target.value.replace(/\D/g, '').slice(0, 10)
-            })} className="h-14 rounded-2xl pl-12 text-base" />
+            })} className="h-14 rounded-2xl pl-12 text-base" required />
             </div>
           </div>
         </div>
@@ -360,7 +364,9 @@ const Auth = () => {
           </div>
           {/* Password strength indicator */}
           <div className="flex gap-1">
-            {[1, 2, 3, 4, 5].map(i => {})}
+            {[1, 2, 3, 4, 5].map(i => (
+              <div key={i} className={`h-1 flex-1 rounded-full ${signUpData.password.length >= i * 2 ? 'bg-primary' : 'bg-muted'}`} />
+            ))}
           </div>
         </div>
 
