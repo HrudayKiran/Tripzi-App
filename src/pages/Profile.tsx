@@ -10,7 +10,8 @@ import {
   FileText, 
   Lightbulb,
   CreditCard,
-  HelpCircle
+  HelpCircle,
+  Users
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,8 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -25,12 +28,15 @@ const Profile = () => {
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [tripsCount, setTripsCount] = useState(0);
+  const [testUsers, setTestUsers] = useState<{ id: string; full_name: string | null; avatar_url: string | null }[]>([]);
+  const [showSwitchSheet, setShowSwitchSheet] = useState(false);
 
   useEffect(() => {
     if (!user) {
       navigate('/auth');
     } else {
       fetchCounts();
+      fetchAllUsers();
     }
   }, [user, navigate]);
 
@@ -48,6 +54,28 @@ const Profile = () => {
     setTripsCount(tripsRes.count || 0);
   };
 
+  const fetchAllUsers = async () => {
+    // Fetch all users for switch account feature
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, full_name, avatar_url")
+      .order("full_name");
+    
+    if (data) {
+      setTestUsers(data.filter(u => u.id !== user?.id));
+    }
+  };
+
+  const handleSwitchAccount = async (userId: string) => {
+    // For demo purposes, we need to sign in as the test user
+    // This requires the test user credentials
+    toast({
+      title: "Switch Account",
+      description: "To switch accounts, you need to sign out and sign in with the other account's credentials.",
+    });
+    setShowSwitchSheet(false);
+  };
+
   const handleLogout = async () => {
     await signOut();
   };
@@ -59,6 +87,13 @@ const Profile = () => {
       color: "text-emerald-500",
       bgColor: "bg-emerald-500/10",
       onClick: () => navigate('/trips'),
+    },
+    {
+      icon: Users,
+      label: "Switch Account",
+      color: "text-blue-500",
+      bgColor: "bg-blue-500/10",
+      onClick: () => setShowSwitchSheet(true),
     },
     {
       icon: profile?.kyc_status === 'verified' ? ShieldCheck : profile?.kyc_status === 'rejected' ? ShieldX : Clock,
@@ -229,6 +264,44 @@ const Profile = () => {
           </Button>
         </div>
       </div>
+
+      {/* Switch Account Sheet */}
+      <Sheet open={showSwitchSheet} onOpenChange={setShowSwitchSheet}>
+        <SheetContent side="bottom" className="h-[60vh] rounded-t-3xl">
+          <SheetHeader>
+            <SheetTitle>Switch Account</SheetTitle>
+          </SheetHeader>
+          <div className="py-4 space-y-3 overflow-y-auto">
+            <p className="text-sm text-muted-foreground mb-4">
+              Other users in the app. To switch, you'll need to sign out and sign in with their credentials.
+            </p>
+            {testUsers.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">No other users found</p>
+            ) : (
+              testUsers.map((testUser) => (
+                <div
+                  key={testUser.id}
+                  className="flex items-center justify-between p-3 bg-muted/50 rounded-xl cursor-pointer hover:bg-muted transition-colors"
+                  onClick={() => navigate(`/profile/${testUser.id}`)}
+                >
+                  <div className="flex items-center gap-3">
+                    <Avatar className="w-10 h-10">
+                      <AvatarImage src={testUser.avatar_url || ""} />
+                      <AvatarFallback>{testUser.full_name?.charAt(0) || "U"}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-medium">{testUser.full_name || "User"}</p>
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm" className="rounded-full">
+                    View Profile
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };
