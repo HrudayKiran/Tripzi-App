@@ -227,3 +227,5 @@ export const TripReviews = ({ tripId, tripStatus, tripEndDate, hasJoined }: Trip
     </div>
   );
 };
+
+export default TripReviews;
