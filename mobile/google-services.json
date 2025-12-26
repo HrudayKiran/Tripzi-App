@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "881054128450",
+    "project_id": "tripzi-52736816-98c83",
+    "storage_bucket": "tripzi-52736816-98c83.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:881054128450:android:602f1b3b9c50acac2110db",
+        "android_client_info": {
+          "package_name": "com.tripzi.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAEU1lvIuQztqDB9-E4xthxrBh14XHEyAc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
