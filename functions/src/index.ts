@@ -1,45 +1,40 @@
-import {setGlobalOptions} from "firebase-functions";
-import {onRequest} from "firebase-functions/v2/https";
-import * as logger from "firebase-functions/logger";
-import {db} from "./database";
 
-setGlobalOptions({maxInstances: 10});
+import * as functions from "firebase-functions";
+import * as admin from "firebase-admin";
 
-interface Trip {
-  id: string;
-  [key: string]: any;
-}
+admin.initializeApp();
 
-export const getTrips = onRequest(async (request, response) => {
-  logger.info("Starting getTrips function.", {structuredData: true});
+const db = admin.firestore();
 
-  try {
-    const tripsSnapshot = await db.collection("trips").get();
-    const trips: Trip[] = [];
-    tripsSnapshot.forEach((doc) => {
-      trips.push({id: doc.id, ...doc.data()});
+export const createGroupChatOnTripFull = functions.firestore
+    .document("trips/{tripId}")
+    .onUpdate(async (change, context) => {
+      const tripData = change.after.data();
+      const tripId = context.params.tripId;
+
+      if (
+        tripData.participants &&
+        tripData.maxTravelers &&
+        tripData.participants.length === tripData.maxTravelers
+      ) {
+        // The trip is full, create a group chat
+        const chatRoomId = `trip_${tripId}`;
+
+        // Check if the chat room already exists
+        const chatRoomRef = db.collection("chats").doc(chatRoomId);
+        const chatRoomSnap = await chatRoomRef.get();
+
+        if (!chatRoomSnap.exists) {
+          await chatRoomRef.set({
+            participants: tripData.participants,
+            tripId: tripId,
+            isGroupChat: true,
+            groupName: tripData.title,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          console.log(`Group chat created for trip ${tripId}`);
+        } else {
+          console.log(`Group chat already exists for trip ${tripId}`);
+        }
+      }
     });
-
-    response.json({trips});
-  } catch (error) {
-    logger.error("Error getting trips:", error);
-    response.status(500).send("Internal Server Error");
-  }
-});
-
-export const createTrip = onRequest(async (request, response) => {
-  logger.info("Starting createTrip function.", {structuredData: true});
-  if (request.method !== "POST") {
-    response.status(405).send("Method Not Allowed");
-    return;
-  }
-
-  try {
-    const tripData = request.body;
-    const docRef = await db.collection("trips").add(tripData);
-    response.status(201).json({id: docRef.id, ...tripData});
-  } catch (error) {
-    logger.error("Error creating trip:", error);
-    response.status(500).send("Internal Server Error");
-  }
-});
