@@ -11,12 +11,16 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "extra": {
+      "eas": {
+        "projectId": "3070be5b-0bdf-464b-b994-81505f567054"
+      }
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.tripzi.mobile",
       "config": {
-        "googleMapsApiKey": "wBjKsOC3Gz3u9Xx4UrbtSSeB5tc=",
-        "googleMobileAdsAppId": "ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy"
+        "googleMapsApiKey": "AIzaSyAEU1lvIuQztqDB9-E4xthxrBh14XHEyAc"
       }
     },
     "android": {
@@ -28,9 +32,8 @@
       "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
-          "apiKey": "wBjKsOC3Gz3u9Xx4UrbtSSeB5tc="
-        },
-        "googleMobileAdsAppId": "ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy"
+          "apiKey": "AIzaSyAEU1lvIuQztqDB9-E4xthxrBh14XHEyAc"
+        }
       }
     },
     "web": {

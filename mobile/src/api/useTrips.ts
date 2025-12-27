@@ -1,41 +1,35 @@
+
 import { useState, useEffect } from 'react';
-import { Booking, Trip } from '../types';
-import { GET_TRIPS_URL } from '../constants';
+import firestore from '@react-native-firebase/firestore';
 
 const useTrips = () => {
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
+    const [trips, setTrips] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchTrips = async () => {
-      setLoading(true);
-      try {
-        const response = await fetch(GET_TRIPS_URL);
-        if (!response.ok) {
-          throw new Error('Failed to fetch trips');
-        }
-        const data = await response.json();
-        const trips: Trip[] = data.trips;
+    useEffect(() => {
+        const unsubscribe = firestore()
+            .collection('trips')
+            .onSnapshot(async (querySnapshot) => {
+                const tripsData = await Promise.all(
+                    querySnapshot.docs.map(async (doc) => {
+                        const trip = { id: doc.id, ...doc.data() };
+                        if (trip.userId) {
+                            const userDoc = await firestore().collection('users').doc(trip.userId).get();
+                            if (userDoc.exists) {
+                                trip.user = userDoc.data();
+                            }
+                        }
+                        return trip;
+                    })
+                );
+                setTrips(tripsData);
+                setLoading(false);
+            });
 
-        const mappedBookings = trips.map((trip: Trip) => ({
-          id: trip.id,
-          status: 'confirmed',
-          trip_id: trip.id,
-          trip: trip,
-        }));
+        return () => unsubscribe();
+    }, []);
 
-        setBookings(mappedBookings);
-      } catch (error) {
-        // We can handle the error in the UI if needed
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTrips();
-  }, []);
-
-  return { bookings, loading };
+    return { trips, loading };
 };
 
 export default useTrips;
