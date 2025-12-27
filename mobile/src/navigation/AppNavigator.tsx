@@ -1,12 +1,12 @@
 
-import React, { useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import React from 'react';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { usePushNotifications } from '../hooks/usePushNotifications';
+import usePushNotifications from '../hooks/usePushNotifications';
 
 import SplashScreen from '../screens/SplashScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
@@ -33,67 +33,64 @@ import SuggestFeatureScreen from '../screens/SuggestFeatureScreen';
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
-const AppTabs = () => (
-    <Tab.Navigator
-        screenOptions={{
-            headerShown: false,
-            tabBarShowLabel: false,
-            tabBarStyle: styles.tabBar,
-        }}
-    >
-        <Tab.Screen 
-            name="Home" 
-            component={FeedScreen} 
-            options={{
-                tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" size={size} color={color} />,
+const AppTabs = () => {
+    const navigation = useNavigation();
+    usePushNotifications();
+    return (
+        <Tab.Navigator
+            screenOptions={{
+                headerShown: false,
+                tabBarShowLabel: false,
+                tabBarStyle: styles.tabBar,
             }}
-        />
-        <Tab.Screen 
-            name="My Trips" 
-            component={MyTripsScreen} 
-            options={{
-                tabBarIcon: ({ color, size }) => <Ionicons name="map-outline" size={size} color={color} />,
-            }}
-        />
-        <Tab.Screen
-            name="Create Trip"
-            component={CreateTripScreen}
-            options={({ navigation }) => ({
-                tabBarButton: () => (
-                    <TouchableOpacity
-                        style={styles.plusButton}
-                        onPress={() => navigation.navigate('Create Trip')}
-                    >
-                        <Ionicons name="add" size={32} color="#fff" />
-                    </TouchableOpacity>
-                ),
-            })}
-        />
-        <Tab.Screen 
-            name="Messages" 
-            component={MessagesScreen} 
-            options={{
-                tabBarIcon: ({ color, size }) => <Ionicons name="chatbubble-ellipses-outline" size={size} color={color} />,
-            }}
-        />
-        <Tab.Screen 
-            name="Profile" 
-            component={ProfileScreen} 
-            options={{
-                tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
-            }}
-        />
-    </Tab.Navigator>
-);
+        >
+            <Tab.Screen 
+                name="Home" 
+                component={FeedScreen} 
+                options={{
+                    tabBarIcon: ({ color, size }: { color: string; size: number }) => <Ionicons name="home-outline" size={size} color={color} />,
+                }}
+            />
+            <Tab.Screen 
+                name="My Trips" 
+                component={MyTripsScreen} 
+                options={{
+                    tabBarIcon: ({ color, size }: { color: string; size: number }) => <Ionicons name="map-outline" size={size} color={color} />,
+                }}
+            />
+            <Tab.Screen
+                name="CreateTripTab"
+                component={() => null}
+                options={{
+                    tabBarButton: () => (
+                        <TouchableOpacity
+                            style={styles.plusButton}
+                            onPress={() => navigation.navigate('CreateTrip')}
+                        >
+                            <Ionicons name="add" size={32} color="#fff" />
+                        </TouchableOpacity>
+                    ),
+                }}
+            />
+            <Tab.Screen 
+                name="Messages" 
+                component={MessagesScreen} 
+                options={{
+                    tabBarIcon: ({ color, size }: { color: string; size: number }) => <Ionicons name="chatbubble-ellipses-outline" size={size} color={color} />,
+                }}
+            />
+            <Tab.Screen 
+                name="Profile" 
+                component={ProfileScreen} 
+                options={{
+                    tabBarIcon: ({ color, size }: { color: string; size: number }) => <Ionicons name="person-outline" size={size} color={color} />,
+                }}
+            />
+        </Tab.Navigator>
+    )
+};
 
 const AppNavigator = () => {
-  const { expoPushToken, notification } = usePushNotifications();
-  
-  useEffect(() => {
-    console.log('Expo Push Token:', expoPushToken);
-    console.log('Notification:', notification);
-  }, [expoPushToken, notification]);
-
   return (
     <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -104,6 +101,7 @@ const AppNavigator = () => {
             <Stack.Screen name="SignUp" component={SignUpScreen} />
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
             <Stack.Screen name="App" component={AppTabs} />
+            <Stack.Screen name="CreateTrip" component={CreateTripScreen} />
             <Stack.Screen name="Message" component={MessageScreen} />
             <Stack.Screen name="Comments" component={CommentsScreen} />
             <Stack.Screen name="Map" component={MapScreen} />
@@ -125,7 +123,7 @@ const styles = StyleSheet.create({
         bottom: 25,
         left: 20,
         right: 20,
-        elevation: 0,
+        
         backgroundColor: '#ffffff',
         borderRadius: 15,
         height: 70,

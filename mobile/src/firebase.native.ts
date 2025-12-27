@@ -2,7 +2,7 @@
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-import { getAuth, initializeAuth, Auth, getReactNativePersistence } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Your web app's Firebase configuration
@@ -17,18 +17,18 @@ const firebaseConfig = {
 
 // Initialize Firebase
 let app;
-let auth: Auth;
 
 if (!getApps().length) {
   app = initializeApp(firebaseConfig);
-  auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage),
-  });
 } else {
   app = getApp();
-  auth = getAuth();
 }
 
+// Use modular getAuth for React Native. Persistence via AsyncStorage
+// requires the React Native specific helper which isn't always
+// available in the installed Firebase package; omit explicit
+// react-native persistence to avoid bundler resolution issues.
+const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 

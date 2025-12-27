@@ -13,11 +13,11 @@ const usePushNotifications = () => {
       if (user) {
         // User is signed in, see docs for a list of available properties
         // https://firebase.google.com/docs/reference/js/firebase.User
-        console.log("User is signed in, setting up push notifications.");
+
         setupMessaging(user);
       } else {
         // User is signed out
-        console.log("User is signed out, skipping push notification setup.");
+
       }
     });
 
@@ -29,31 +29,30 @@ const usePushNotifications = () => {
         authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
       if (enabled) {
-        console.log('Authorization status:', authStatus);
+
         // 2. Get Token and Save to Firestore
         getAndSaveToken(user);
 
         // 3. Listen for Token Refreshes
-        messaging().onTokenRefresh((token) => getAndSaveToken(user, token));
+        messaging().onTokenRefresh((token: string) => getAndSaveToken(user, token));
 
         // 4. Listen for Foreground Messages
-        messaging().onMessage(async remoteMessage => {
-          console.log('A new FCM message arrived!', JSON.stringify(remoteMessage));
+        messaging().onMessage(async (remoteMessage: unknown) => {
           // Here you could show a local notification
         });
 
       } else {
-        console.log('Push notification permission denied');
+
       }
     };
 
     const getAndSaveToken = async (user: User, freshToken?: string) => {
         try {
-            const token = freshToken || await messaging().getToken();
-            console.log('FCM Token:', token);
+        const token = freshToken || await messaging().getToken();
+
             await saveTokenToFirestore(user, token);
         } catch (error) {
-            console.error('Error getting or saving FCM token:', error);
+
         }
     };
 
@@ -65,9 +64,9 @@ const usePushNotifications = () => {
                 platform: Platform.OS,
                 updated_at: new Date().toISOString(),
             }, { merge: true }); // Using merge to upsert
-            console.log('Push token saved to Firestore');
+
         } catch (error) {
-            console.error('Error saving push token to Firestore:', error);
+
         }
     };
 

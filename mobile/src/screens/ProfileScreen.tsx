@@ -77,12 +77,22 @@ const ProfileScreen = ({ navigation }) => {
   );
 };
 
-const MenuItem = ({ icon, text, onPress, color = '#333', isSwitch = false, value, onValueChange }) => (
-    <TouchableOpacity style={styles.menuItem} onPress={onPress}>
-        <Ionicons name={icon} size={24} color={color} style={styles.menuIcon} />
-        <Text style={[styles.menuText, {color}]}>{text}</Text>
-        {isSwitch && <Switch value={value} onValueChange={onValueChange} thumbColor={'#8A2BE2'} trackColor={{false: '#ccc', true: '#e0b0ff'}} />}
-    </TouchableOpacity>
+type MenuItemProps = {
+  icon: any;
+  text: any;
+  onPress?: () => any;
+  color?: string;
+  isSwitch?: boolean;
+  value?: boolean;
+  onValueChange?: (v: boolean) => void;
+};
+
+const MenuItem = ({ icon, text, onPress, color = '#333', isSwitch = false, value, onValueChange }: MenuItemProps) => (
+  <TouchableOpacity style={styles.menuItem} onPress={onPress}>
+    <Ionicons name={icon} size={24} color={color} style={styles.menuIcon} />
+    <Text style={[styles.menuText, {color}]}>{text}</Text>
+    {isSwitch && <Switch value={value} onValueChange={onValueChange} thumbColor={'#8A2BE2'} trackColor={{false: '#ccc', true: '#e0b0ff'}} />}
+  </TouchableOpacity>
 );
 
 const styles = StyleSheet.create({

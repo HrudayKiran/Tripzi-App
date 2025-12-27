@@ -17,7 +17,7 @@ const StartScreen = ({ navigation }) => {
       // Check if your device supports Google Play
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
       // Get the users ID token
-      const { idToken } = await GoogleSignin.signIn();
+      const { idToken } = (await GoogleSignin.signIn()) as any;
 
       // Create a Google credential with the token
       const googleCredential = auth.GoogleAuthProvider.credential(idToken);

@@ -1,6 +1,12 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TextInput, TouchableOpacity, ScrollView, Animated } from 'react-native';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TextInput, TouchableOpacity, ScrollView, Animated, LayoutAnimation, UIManager, Platform } from 'react-native';
+
+if (Platform.OS === 'android') {
+  if (UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+}
 import TripCard from '../components/TripCard';
 import useTrips from '../api/useTrips';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,31 +27,33 @@ const FeedScreen = ({ navigation }) => {
     return categoryMatch && searchMatch;
   });
 
-  const trendingTrips = [...trips].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  const trendingTrips = useMemo(() => {
+    return [...trips].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  }, [trips]);
 
   if (loading) {
     return <ActivityIndicator size="large" color="#8A2BE2" style={styles.loader} />;
   }
 
-  const headerHeight = scrollY.interpolate({
+  const headerTranslateY = scrollY.interpolate({
       inputRange: [0, 100],
-      outputRange: [120, 70],
+      outputRange: [0, -120],
       extrapolate: 'clamp'
   });
 
-  const searchBarTop = scrollY.interpolate({
+  const searchBarTranslateY = scrollY.interpolate({
       inputRange: [0, 100],
-      outputRange: [70, 20],
+      outputRange: [0, -120],
       extrapolate: 'clamp'
   })
 
   return (
     <View style={styles.container}>
-        <Animated.View style={[styles.header, { height: headerHeight }]}>
+        <Animated.View style={[styles.header, { transform: [{ translateY: headerTranslateY }] }]}>
             <Text style={styles.headerTitle}>Explore</Text>
         </Animated.View>
         
-        <Animated.View style={[styles.searchContainer, {top: searchBarTop}]}>
+        <Animated.View style={[styles.searchContainer, { transform: [{ translateY: searchBarTranslateY }] }]}>
             <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
             <TextInput
                 style={styles.searchBar}
@@ -55,37 +63,41 @@ const FeedScreen = ({ navigation }) => {
             />
         </Animated.View>
 
-        <ScrollView 
+        <FlatList
+            data={filteredTrips}
             onScroll={Animated.event(
                 [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-                { useNativeDriver: false }
+                { useNativeDriver: true }
             )}
             scrollEventThrottle={16}
-        >
-            <View style={styles.contentContainer}>
-                <Text style={styles.sectionTitle}>Trending Destinations</Text>
-                <FlatList 
-                    data={trendingTrips}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    renderItem={({item}) => <TripCard trip={item} navigation={navigation} cardStyle={styles.trendingCard} />}
-                    keyExtractor={item => item.id}
-                />
+            keyExtractor={item => item.id}
+            renderItem={({ item }) => <TripCard trip={item} navigation={navigation} />}
+            ListHeaderComponent={
+                <View style={styles.contentContainer}>
+                    <Text style={styles.sectionTitle}>Trending Destinations</Text>
+                    <FlatList
+                        data={trendingTrips}
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        renderItem={({ item }) => <TripCard trip={item} navigation={navigation} cardStyle={styles.trendingCard} />}
+                        keyExtractor={item => item.id}
+                    />
 
-                <View style={styles.categoriesContainer}>
-                    {categories.map(cat => (
-                        <TouchableOpacity key={cat} onPress={() => setActiveCategory(cat)} style={[styles.categoryChip, activeCategory === cat && styles.activeCategoryChip]}>
-                            <Text style={[styles.categoryText, activeCategory === cat && styles.activeCategoryText]}>{cat}</Text>
-                        </TouchableOpacity>
-                    ))}
+                    <View style={styles.categoriesContainer}>
+                        {categories.map(cat => (
+                            <TouchableOpacity key={cat} onPress={() => {
+                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                            setActiveCategory(cat)
+                        }} style={[styles.categoryChip, activeCategory === cat && styles.activeCategoryChip]}>
+                                <Text style={[styles.categoryText, activeCategory === cat && styles.activeCategoryText]}>{cat}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+
+                    <Text style={styles.sectionTitle}>All Trips</Text>
                 </View>
-
-                <Text style={styles.sectionTitle}>All Trips</Text>
-                {filteredTrips.map(trip => (
-                    <TripCard key={trip.id} trip={trip} navigation={navigation} />
-                ))}
-            </View>
-        </ScrollView>
+            }
+        />
     </View>
   );
 };
@@ -100,19 +112,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1,
+    height: 120,
     backgroundColor: '#8A2BE2',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
     padding: 20,
   },
   headerTitle: {
       color: '#fff',
       fontSize: 28,
       fontWeight: 'bold',
+      marginTop: 30,
   },
   searchContainer: {
       position: 'absolute',
+      top: 100,
       left: 20,
       right: 20,
+      zIndex: 2,
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: '#fff',
@@ -128,7 +149,7 @@ const styles = StyleSheet.create({
     height: 50,
   },
   contentContainer: {
-      paddingTop: 80, // Space for search bar
+      paddingTop: 150, 
       paddingHorizontal: 15,
   },
   sectionTitle: {

@@ -1,48 +1,19 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { memo } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, Share } from 'react-native';
-import { formatDistanceToNowStrict } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
 import * as Animatable from 'react-native-animatable';
+import useTripLike from '../hooks/useTripLike';
 
-const TripCard = ({ trip, navigation, cardStyle }) => {
-  const [isLiked, setIsLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(trip.likes?.length || 0);
-  const currentUser = auth().currentUser;
+interface TripCardProps {
+    trip: any;
+    navigation: any;
+    cardStyle?: any;
+}
 
-  useEffect(() => {
-    if (currentUser && trip.likes?.includes(currentUser.uid)) {
-      setIsLiked(true);
-    }
-  }, [currentUser, trip.likes]);
-
-  const handleLike = async () => {
-    if (!currentUser) return;
-
-    const tripRef = firestore().collection('trips').doc(trip.id);
-    setIsLiked(!isLiked);
-    setLikeCount(prev => isLiked ? prev - 1 : prev + 1);
-
-    try {
-      await firestore().runTransaction(async (transaction) => {
-        const tripDoc = await transaction.get(tripRef);
-        if (!tripDoc.exists) throw 'Trip does not exist!';
-
-        const currentLikes = tripDoc.data().likes || [];
-        const updatedLikes = isLiked 
-            ? currentLikes.filter(uid => uid !== currentUser.uid)
-            : [...currentLikes, currentUser.uid];
-        
-        transaction.update(tripRef, { likes: updatedLikes });
-      });
-    } catch (error) {
-      console.error('Error updating likes: ', error);
-      setIsLiked(!isLiked);
-      setLikeCount(prev => isLiked ? prev + 1 : prev - 1);
-    }
-  };
+const TripCard = memo((props: TripCardProps) => {
+    const { trip, navigation, cardStyle } = props;
+    const { isLiked, likeCount, handleLike } = useTripLike(trip);
 
   const handleShare = async () => {
     try {
@@ -95,7 +66,9 @@ const TripCard = ({ trip, navigation, cardStyle }) => {
         </View>
     </Animatable.View>
   );
-};
+}, (prevProps, nextProps) => {
+    return prevProps.trip.id === nextProps.trip.id && prevProps.trip.likes?.length === nextProps.trip.likes?.length;
+});
 
 const styles = StyleSheet.create({
     card: {
