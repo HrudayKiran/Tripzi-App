@@ -12,7 +12,12 @@
           "package_name": "com.tripzi.mobile"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "881054128450-dho8i7lsv2a5enu2u3s0sac75ttmp0fg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAEU1lvIuQztqDB9-E4xthxrBh14XHEyAc"

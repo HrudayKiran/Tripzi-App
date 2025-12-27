@@ -1,53 +1,48 @@
-
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Dimensions } from 'react-native';
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, ActivityIndicator } from 'react-native';
+import useTrips from '../api/useTrips';
 import TripCard from '../components/TripCard';
+import { useTheme } from '../contexts/ThemeContext';
 import * as Animatable from 'react-native-animatable';
-
-const { width } = Dimensions.get('window');
+import { Ionicons } from '@expo/vector-icons';
 
 const MyTripsScreen = ({ navigation }) => {
+  const { colors } = useTheme();
+  const { trips, loading } = useTrips();
   const [upcomingTrips, setUpcomingTrips] = useState([]);
   const [ongoingTrips, setOngoingTrips] = useState([]);
   const [completedTrips, setCompletedTrips] = useState([]);
   const [activeTab, setActiveTab] = useState('Upcoming');
 
   useEffect(() => {
-    const currentUser = auth().currentUser;
-    if (!currentUser) return;
+    if (trips.length > 0) {
+      const upcoming = [];
+      const ongoing = [];
+      const completed = [];
+      const now = new Date();
 
-    const unsubscribe = firestore()
-      .collection('trips')
-      .where('participants', 'array-contains', currentUser.uid)
-      .onSnapshot((querySnapshot) => {
-        const upcoming = [];
-        const ongoing = [];
-        const completed = [];
-        const now = new Date();
+      trips.forEach(trip => {
+        const fromDate = new Date(trip.fromDate);
+        const toDate = new Date(trip.toDate);
 
-        querySnapshot.forEach(doc => {
-            const trip = { id: doc.id, ...doc.data() };
-            const fromDate = new Date(trip.fromDate);
-            const toDate = new Date(trip.toDate);
-
-            if (toDate < now) {
-                completed.push(trip);
-            } else if (fromDate <= now && toDate >= now) {
-                ongoing.push(trip);
-            } else {
-                upcoming.push(trip);
-            }
-        });
-
-        setUpcomingTrips(upcoming);
-        setOngoingTrips(ongoing);
-        setCompletedTrips(completed);
+        if (toDate < now) {
+          completed.push(trip);
+        } else if (fromDate <= now && toDate >= now) {
+          ongoing.push(trip);
+        } else {
+          upcoming.push(trip);
+        }
       });
 
-    return () => unsubscribe();
-  }, []);
+      setUpcomingTrips(upcoming);
+      setOngoingTrips(ongoing);
+      setCompletedTrips(completed);
+    } else {
+      setUpcomingTrips([]);
+      setOngoingTrips([]);
+      setCompletedTrips([]);
+    }
+  }, [trips]);
 
   const renderTrip = ({ item }) => (
     <Animatable.View animation="fadeInUp" duration={500}>
@@ -56,6 +51,14 @@ const MyTripsScreen = ({ navigation }) => {
   );
 
   const renderContent = () => {
+    if (loading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      );
+    }
+
     switch (activeTab) {
       case 'Upcoming':
         return <FlatList data={upcomingTrips} renderItem={renderTrip} keyExtractor={item => item.id} />;
@@ -69,65 +72,87 @@ const MyTripsScreen = ({ navigation }) => {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>My Trips</Text>
-      
-      <View style={styles.tabContainer}>
-        <TouchableOpacity onPress={() => setActiveTab('Upcoming')} style={[styles.tab, activeTab === 'Upcoming' && styles.activeTab]}>
-          <Text style={styles.tabText}>Upcoming</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setActiveTab('Ongoing')} style={[styles.tab, activeTab === 'Ongoing' && styles.activeTab]}>
-          <Text style={styles.tabText}>Ongoing</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setActiveTab('Completed')} style={[styles.tab, activeTab === 'Completed' && styles.activeTab]}>
-          <Text style={styles.tabText}>Completed</Text>
-        </TouchableOpacity>
-      </View>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        {/* Header with Create Trip Button */}
+        <View style={[styles.header, { backgroundColor: colors.headerBackground }]}>
+          <Text style={[styles.title, { color: colors.text }]}>My Trips</Text>
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={() => navigation.navigate('CreateTrip')}
+          >
+            <Ionicons name="add" size={28} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
 
-      <View style={styles.contentContainer}>
-        {renderContent()}
+        <View style={[styles.tabContainer, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={() => setActiveTab('Upcoming')} style={[styles.tab, activeTab === 'Upcoming' && styles.activeTab]}>
+            <Text style={[styles.tabText, { color: activeTab === 'Upcoming' ? colors.primary : colors.textSecondary }]}>Upcoming</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setActiveTab('Ongoing')} style={[styles.tab, activeTab === 'Ongoing' && styles.activeTab]}>
+            <Text style={[styles.tabText, { color: activeTab === 'Ongoing' ? colors.primary : colors.textSecondary }]}>Ongoing</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setActiveTab('Completed')} style={[styles.tab, activeTab === 'Completed' && styles.activeTab]}>
+            <Text style={[styles.tabText, { color: activeTab === 'Completed' ? colors.primary : colors.textSecondary }]}>Completed</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.contentContainer}>
+          {renderContent()}
+        </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    padding: 15,
-    backgroundColor: '#f0f2f5',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 20,
-    marginTop: 40,
-    textAlign: 'center',
-    color: '#333'
+  },
+  createButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   tabContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#fff',
-    borderRadius: 30,
-    paddingVertical: 10,
-    marginBottom: 20,
-    elevation: 2,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
   },
   tab: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
+    paddingVertical: 12,
+    marginRight: 30,
   },
   activeTab: {
-    backgroundColor: '#8A2BE2',
+    borderBottomWidth: 2,
+    borderBottomColor: '#8A2BE2',
   },
   tabText: {
-    fontWeight: 'bold',
-    color: '#333'
+    fontSize: 16,
+    fontWeight: '600',
   },
   contentContainer: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

@@ -3,14 +3,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TextInput, FlatList, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { IconButton } from 'react-native-paper';
 import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { auth } from '../firebase';
 
 const CommentsScreen = ({ route, navigation }) => {
   const { tripId } = route.params;
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
   const [loading, setLoading] = useState(true);
-  const currentUser = auth().currentUser;
+  const currentUser = auth.currentUser;
 
   useEffect(() => {
     const unsubscribe = firestore()

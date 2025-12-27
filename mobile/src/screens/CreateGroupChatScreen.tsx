@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, FlatList, TouchableOpacity, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { auth } from '../firebase';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 
@@ -18,7 +18,7 @@ const CreateGroupChatScreen = ({ navigation }) => {
       .onSnapshot((querySnapshot) => {
         const users = querySnapshot.docs
             .map((doc) => ({ id: doc.id, ...doc.data() }))
-            .filter(u => u.id !== auth().currentUser.uid);
+            .filter(u => u.id !== auth.currentUser.uid);
         setUsers(users);
       });
 
@@ -34,7 +34,7 @@ const CreateGroupChatScreen = ({ navigation }) => {
   };
 
   const handleCreateGroupChat = async () => {
-    const currentUser = auth().currentUser;
+    const currentUser = auth.currentUser;
     if (!groupName || selectedUsers.length === 0) return;
 
     const participants = [currentUser.uid, ...selectedUsers.map((u) => u.id)];

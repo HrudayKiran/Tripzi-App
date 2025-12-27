@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { auth } from '../firebase';
 import * as Animatable from 'react-native-animatable';
 import * as Progress from 'react-native-progress';
 
@@ -25,7 +25,7 @@ const CreateTripScreen = ({ navigation }) => {
   const handleBack = () => setStep(step - 1);
 
   const handlePostTrip = async () => {
-    const currentUser = auth().currentUser;
+    const currentUser = auth.currentUser;
     if (currentUser) {
       try {
         await firestore().collection('trips').add({

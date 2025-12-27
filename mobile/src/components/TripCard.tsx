@@ -15,57 +15,57 @@ const TripCard = memo((props: TripCardProps) => {
     const { trip, navigation, cardStyle } = props;
     const { isLiked, likeCount, handleLike } = useTripLike(trip);
 
-  const handleShare = async () => {
-    try {
-      await Share.share({
-        message: `Check out this trip to ${trip.location}! It looks amazing.`,
-      });
-    } catch (error) {
-      alert(error.message);
-    }
-  };
+    const handleShare = async () => {
+        try {
+            await Share.share({
+                message: `Check out this trip to ${trip.location}! It looks amazing.`,
+            });
+        } catch (error: any) {
+            alert(error.message);
+        }
+    };
 
-  const individualCost = trip.totalCost && trip.maxTravelers ? (trip.totalCost / trip.maxTravelers).toFixed(2) : 'N/A';
+    const individualCost = trip.totalCost && trip.maxTravelers ? (trip.totalCost / trip.maxTravelers).toFixed(2) : 'N/A';
 
-  return (
-    <Animatable.View animation="fadeInUp" style={[styles.card, cardStyle]}>
-        <TouchableOpacity onPress={() => navigation.navigate('TripDetails', { tripId: trip.id })}>
-            <Image style={styles.cardImage} source={{ uri: trip.coverImage || 'https://picsum.photos/seed/trip/400/300'}} />
-            <View style={styles.tripTypeBadge}>
-                <Text style={styles.tripTypeText}>{trip.tripType}</Text>
-            </View>
-            
-            <View style={styles.cardContent}>
-                <Text style={styles.title}>{trip.title}</Text>
-                <View style={styles.locationContainer}>
-                    <Ionicons name="location-sharp" size={16} color="#8A2BE2" />
-                    <Text style={styles.location}>{trip.location}</Text>
+    return (
+        <Animatable.View animation="fadeInUp" style={[styles.card, cardStyle]}>
+            <TouchableOpacity onPress={() => navigation.navigate('TripDetails', { tripId: trip.id })}>
+                <Image style={styles.cardImage} source={{ uri: trip.coverImage || 'https://picsum.photos/seed/trip/400/300' }} />
+                <View style={styles.tripTypeBadge}>
+                    <Text style={styles.tripTypeText}>{trip.tripType}</Text>
                 </View>
-                <View style={styles.detailsContainer}>
-                    <Text style={styles.detailText}>{trip.duration}</Text>
-                    <Text style={styles.detailText}>${individualCost}/person</Text>
+
+                <View style={styles.cardContent}>
+                    <Text style={styles.title}>{trip.title}</Text>
+                    <View style={styles.locationContainer}>
+                        <Ionicons name="location-sharp" size={16} color="#8A2BE2" />
+                        <Text style={styles.location}>{trip.location}</Text>
+                    </View>
+                    <View style={styles.detailsContainer}>
+                        <Text style={styles.detailText}>{trip.duration}</Text>
+                        <Text style={styles.detailText}>₹{individualCost}/person</Text>
+                    </View>
                 </View>
-            </View>
-        </TouchableOpacity>
-        
-        <View style={styles.cardFooter}>
-            <TouchableOpacity style={styles.userContainer} onPress={() => navigation.navigate('Profile', { userId: trip.userId })}>
-                <Image style={styles.userImage} source={{ uri: trip.user?.image }} />
-                <Text style={styles.userName}>{trip.user?.name}</Text>
             </TouchableOpacity>
 
-            <View style={styles.actions}>
-                <TouchableOpacity onPress={handleLike} style={styles.actionButton}>
-                    <Ionicons name={isLiked ? "heart" : "heart-outline"} size={24} color={isLiked ? '#ff6b6b' : '#333'} />
-                    <Text style={styles.actionText}>{likeCount}</Text>
+            <View style={styles.cardFooter}>
+                <TouchableOpacity style={styles.userContainer} onPress={() => navigation.navigate('Profile', { userId: trip.userId })}>
+                    <Image style={styles.userImage} source={{ uri: trip.user?.image }} />
+                    <Text style={styles.userName}>{trip.user?.name}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={handleShare} style={styles.actionButton}>
-                    <Ionicons name="share-social-outline" size={24} color="#333" />
-                </TouchableOpacity>
+
+                <View style={styles.actions}>
+                    <TouchableOpacity onPress={handleLike} style={styles.actionButton}>
+                        <Ionicons name={isLiked ? "heart" : "heart-outline"} size={24} color={isLiked ? '#ff6b6b' : '#333'} />
+                        <Text style={styles.actionText}>{likeCount}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleShare} style={styles.actionButton}>
+                        <Ionicons name="share-social-outline" size={24} color="#333" />
+                    </TouchableOpacity>
+                </View>
             </View>
-        </View>
-    </Animatable.View>
-  );
+        </Animatable.View>
+    );
 }, (prevProps, nextProps) => {
     return prevProps.trip.id === nextProps.trip.id && prevProps.trip.likes?.length === nextProps.trip.likes?.length;
 });

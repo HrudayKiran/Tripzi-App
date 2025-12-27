@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Animated } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { auth } from '../firebase';
 import MapView, { Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
@@ -13,7 +13,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
   const [isJoined, setIsJoined] = useState(false);
   const [activeTab, setActiveTab] = useState('Details');
   const { tripId } = route.params;
-  const user = auth().currentUser;
+    const user = auth.currentUser;
 
   const scrollY = useRef(new Animated.Value(0)).current;
 

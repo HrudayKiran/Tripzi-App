@@ -1,18 +1,18 @@
-
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Switch, ScrollView, Animated } from 'react-native';
-import auth from '@react-native-firebase/auth';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
+import { auth } from '../firebase';
+import { signOut } from 'firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
+import { useTheme } from '../contexts/ThemeContext';
 
 const ProfileScreen = ({ navigation }) => {
+  const { colors } = useTheme();
   const [user, setUser] = useState(null);
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const scrollY = new Animated.Value(0);
 
   useEffect(() => {
-    const currentUser = auth().currentUser;
+    const currentUser = auth.currentUser;
     const unsubscribe = firestore()
       .collection('users')
       .doc(currentUser.uid)
@@ -24,143 +24,319 @@ const ProfileScreen = ({ navigation }) => {
   }, []);
 
   const handleLogout = async () => {
-    await auth().signOut();
+    await signOut(auth);
     navigation.navigate('Start');
   };
 
-  const toggleDarkMode = () => setIsDarkMode(previousState => !previousState);
-
-  const headerHeight = scrollY.interpolate({
-      inputRange: [0, 200],
-      outputRange: [250, 80],
-      extrapolate: 'clamp'
-  });
-
-  const profileImageSize = scrollY.interpolate({
-      inputRange: [0, 150],
-      outputRange: [120, 50],
-      extrapolate: 'clamp'
-  });
-
   return (
-    <View style={styles.container}>
-        <Animated.View style={[styles.header, { height: headerHeight }]}>
-            <Image style={styles.headerBg} source={{uri: 'https://picsum.photos/400/300'}} />
-        </Animated.View>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
+        </View>
 
-        <ScrollView 
-            style={styles.scrollContainer}
-            onScroll={Animated.event(
-                [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-                { useNativeDriver: false }
-            )}
-            scrollEventThrottle={16}
-        >
-            <Animatable.View style={styles.profileContainer} animation="fadeInUp" delay={200}>
-                <Animated.Image style={[styles.profileImage, {width: profileImageSize, height: profileImageSize}]} source={{ uri: user?.photoURL }} />
-                <Text style={styles.profileName}>{user?.displayName}</Text>
-                <Text style={styles.profileEmail}>{user?.email}</Text>
-                <Text style={styles.kycStatus}>KYC: {user?.kyc?.status || 'Not Verified'}</Text>
-            </Animatable.View>
-            
-            <Animatable.View style={styles.menu} animation="fadeInUp" delay={400}>
-                <MenuItem icon="shield-checkmark-outline" text="KYC Verification" onPress={() => navigation.navigate('Kyc')} />
-                <MenuItem icon="moon-outline" text="Dark Mode" onValueChange={toggleDarkMode} value={isDarkMode} isSwitch />
-                <MenuItem icon="document-text-outline" text="Terms & Conditions" onPress={() => navigation.navigate('Terms')} />
-                <MenuItem icon="lock-closed-outline" text="Privacy Policy" onPress={() => navigation.navigate('PrivacyPolicy')} />
-                <MenuItem icon="help-circle-outline" text="Help & Support" onPress={() => navigation.navigate('HelpSupport')} />
-                <MenuItem icon="bulb-outline" text="Suggest a Feature" onPress={() => navigation.navigate('SuggestFeature')} />
-                <MenuItem icon="log-out-outline" text="Logout" onPress={handleLogout} color="#ff6b6b" />
-            </Animatable.View>
-        </ScrollView>
-    </View>
+      {/* User Profile Section */}
+      <Animatable.View animation="fadeInUp" style={styles.profileSection}>
+        <View style={styles.avatarContainer}>
+          <Image
+            style={styles.avatar}
+            source={{ uri: user?.photoURL || 'https://via.placeholder.com/120' }}
+          />
+          <View style={styles.onlineIndicator} />
+        </View>
+        <Text style={[styles.userName, { color: colors.text }]}>{user?.displayName || 'User'}</Text>
+      </Animatable.View>
+
+      {/* Menu Items */}
+      <Animatable.View animation="fadeInUp" delay={200} style={[styles.menuContainer, { backgroundColor: colors.background }]}>
+        <MenuItem
+          icon="map-outline"
+          iconColor="#00BFA6"
+          iconBg="#E0F7F4"
+          text="My Trips"
+          onPress={() => navigation.navigate('My Trips')}
+          textColor={colors.text}
+        />
+        <MenuItem
+          icon="swap-horizontal-outline"
+          iconColor="#3B82F6"
+          iconBg="#E0F2FE"
+          text="Switch Account"
+          onPress={() => { }}
+          textColor={colors.text}
+        />
+        <MenuItem
+          icon="shield-checkmark-outline"
+          iconColor="#10B981"
+          iconBg="#D1FAE5"
+          text="KYC Status"
+          badge="Verified"
+          onPress={() => navigation.navigate('Kyc')}
+          textColor={colors.text}
+        />
+        <MenuItem
+          icon="document-text-outline"
+          iconColor="#8B5CF6"
+          iconBg="#EDE9FE"
+          text="Privacy Policy"
+          onPress={() => navigation.navigate('PrivacyPolicy')}
+          textColor={colors.text}
+        />
+        <MenuItem
+          icon="document-text-outline"
+          iconColor="#EC4899"
+          iconBg="#FCE7F3"
+          text="Terms and Conditions"
+          onPress={() => navigation.navigate('Terms')}
+          textColor={colors.text}
+        />
+        <MenuItem
+          icon="bulb-outline"
+          iconColor="#F59E0B"
+          iconBg="#FEF3C7"
+          text="Suggest a New Feature"
+          onPress={() => navigation.navigate('SuggestFeature')}
+          textColor={colors.text}
+        />
+        <MenuItem
+          icon="help-circle-outline"
+          iconColor="#06B6D4"
+          iconBg="#CFFAFE"
+          text="Help & Support"
+          onPress={() => navigation.navigate('HelpSupport')}
+          textColor={colors.text}
+        />
+        <MenuItem
+          icon="settings-outline"
+          iconColor="#6B7280"
+          iconBg="#F3F4F6"
+          text="Settings"
+          onPress={() => navigation.navigate('Settings')}
+          textColor={colors.text}
+        />
+      </Animatable.View>
+
+      {/* Go Ad-Free **Section */}
+      <Animatable.View animation="fadeInUp" delay={400} style={styles.adFreeContainer}>
+        <View style={styles.adFreeContent}>
+          <View style={styles.adFreeIcon}>
+            <Ionicons name="card-outline" size={24} color="#8A2BE2" />
+          </View>
+          <View style={styles.adFreeTextContainer}>
+            <Text style={styles.adFreeTitle}>Go Ad-Free</Text>
+            <Text style={styles.adFreeSubtitle}>Enjoy premium experience</Text>
+          </View>
+        </View>
+        <TouchableOpacity style={styles.upgradeButton}>
+          <Text style={styles.upgradeButtonText}>Upgrade</Text>
+        </TouchableOpacity>
+      </Animatable.View>
+
+      {/* Version */}
+      <Text style={styles.version}>Tripzi v1.2.3</Text>
+
+      {/* Logout Button */}
+      <Animatable.View animation="fadeInUp" delay={600} style={styles.logoutContainer}>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={20} color="#EF4444" />
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
+      </Animatable.View>
+
+      <View style={{ height: 100 }} />
+    </ScrollView>
+    </SafeAreaView>
   );
 };
 
 type MenuItemProps = {
-  icon: any;
-  text: any;
-  onPress?: () => any;
-  color?: string;
-  isSwitch?: boolean;
-  value?: boolean;
-  onValueChange?: (v: boolean) => void;
+  icon: string;
+  iconColor: string;
+  iconBg: string;
+  text: string;
+  badge?: string;
+  onPress?: () => void;
+  textColor?: string;
 };
 
-const MenuItem = ({ icon, text, onPress, color = '#333', isSwitch = false, value, onValueChange }: MenuItemProps) => (
+const MenuItem = ({ icon, iconColor, iconBg, text, badge, onPress, textColor = '#1a1a1a' }: MenuItemProps) => (
   <TouchableOpacity style={styles.menuItem} onPress={onPress}>
-    <Ionicons name={icon} size={24} color={color} style={styles.menuIcon} />
-    <Text style={[styles.menuText, {color}]}>{text}</Text>
-    {isSwitch && <Switch value={value} onValueChange={onValueChange} thumbColor={'#8A2BE2'} trackColor={{false: '#ccc', true: '#e0b0ff'}} />}
+    <View style={[styles.menuIconContainer, { backgroundColor: iconBg }]}>
+      <Ionicons name={icon as any} size={20} color={iconColor} />
+    </View>
+    <Text style={[styles.menuText, { color: textColor }]}>{text}</Text>
+    {badge ? (
+      <View style={styles.badge}>
+        <Text style={styles.badgeText}>{badge}</Text>
+      </View>
+    ) : (
+      <Ionicons name="chevron-forward-outline" size={20} color="#D1D5DB" />
+    )}
   </TouchableOpacity>
 );
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#f0f2f5',
+    backgroundColor: '#fff',
   },
   header: {
-    backgroundColor: '#8A2BE2',
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 20,
   },
-  headerBg: {
-      width: '100%',
-      height: '100%',
-      opacity: 0.5,
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
   },
-  scrollContainer: {
-      flex: 1,
-  },
-  profileContainer: {
+  profileSection: {
     alignItems: 'center',
-    marginTop: 100, 
-    marginBottom: 30,
+    paddingVertical: 30,
   },
-  profileImage: {
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 15,
+  },
+  avatar: {
+    width: 120,
+    height: 120,
     borderRadius: 60,
     borderWidth: 4,
+    borderColor: '#F3E8FF',
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 5,
+    right: 5,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#10B981',
+    borderWidth: 3,
     borderColor: '#fff',
   },
-  profileName: {
-    fontSize: 26,
+  userName: {
+    fontSize: 24,
     fontWeight: 'bold',
+    color: '#1a1a1a',
+  },
+  menuContainer: {
+    paddingHorizontal: 20,
     marginTop: 10,
-  },
-  profileEmail: {
-    fontSize: 16,
-    color: '#666',
-  },
-  kycStatus: {
-      marginTop: 5,
-      fontSize: 14,
-      color: '#8A2BE2',
-      fontWeight: 'bold',
-  },
-  menu: {
-    marginHorizontal: 20,
-    backgroundColor: '#fff',
-    borderRadius: 15,
-    paddingVertical: 10,
-    elevation: 3,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#F3F4F6',
   },
-  menuIcon: {
-    marginRight: 20,
+  menuIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
   },
   menuText: {
-    fontSize: 16,
     flex: 1,
+    fontSize: 16,
+    color: '#1a1a1a',
+    fontWeight: '500',
+  },
+  badge: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 10,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  adFreeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 20,
+    marginTop: 30,
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  adFreeContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  adFreeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#F3E8FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  adFreeTextContainer: {
+    flex: 1,
+  },
+  adFreeTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 2,
+  },
+  adFreeSubtitle: {
+    fontSize: 13,
+    color: '#9CA3AF',
+  },
+  upgradeButton: {
+    backgroundColor: '#8A2BE2',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  upgradeButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  version: {
+    textAlign: 'center',
+    fontSize: 13,
+    color: '#9CA3AF',
+    marginTop: 20,
+  },
+  logoutContainer: {
+    paddingHorizontal: 20,
+    marginTop: 30,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    backgroundColor: '#FEF2F2',
+    gap: 8,
+  },
+  logoutText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#EF4444',
   },
 });
 

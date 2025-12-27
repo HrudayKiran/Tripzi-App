@@ -1,10 +1,11 @@
 
 import React from 'react';
-import { NavigationContainer, useNavigation } from '@react-navigation/native';
+import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { ThemeProvider } from '../contexts/ThemeContext';
 
 import usePushNotifications from '../hooks/usePushNotifications';
 
@@ -29,61 +30,51 @@ import TermsScreen from '../screens/TermsScreen';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
 import HelpSupportScreen from '../screens/HelpSupportScreen';
 import SuggestFeatureScreen from '../screens/SuggestFeatureScreen';
+import SettingsScreen from '../screens/SettingsScreen';
+import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const AppTabs = () => {
-    const navigation = useNavigation();
     usePushNotifications();
     return (
         <Tab.Navigator
             screenOptions={{
                 headerShown: false,
-                tabBarShowLabel: false,
+                tabBarShowLabel: true,
                 tabBarStyle: styles.tabBar,
+                tabBarActiveTintColor: '#8A2BE2',
+                tabBarInactiveTintColor: '#999',
+                tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
             }}
         >
-            <Tab.Screen 
-                name="Home" 
-                component={FeedScreen} 
+            <Tab.Screen
+                name="Home"
+                component={FeedScreen}
                 options={{
-                    tabBarIcon: ({ color, size }: { color: string; size: number }) => <Ionicons name="home-outline" size={size} color={color} />,
-                }}
-            />
-            <Tab.Screen 
-                name="My Trips" 
-                component={MyTripsScreen} 
-                options={{
-                    tabBarIcon: ({ color, size }: { color: string; size: number }) => <Ionicons name="map-outline" size={size} color={color} />,
+                    tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" size={size} color={color} />,
                 }}
             />
             <Tab.Screen
-                name="CreateTripTab"
-                component={() => null}
+                name="My Trips"
+                component={MyTripsScreen}
                 options={{
-                    tabBarButton: () => (
-                        <TouchableOpacity
-                            style={styles.plusButton}
-                            onPress={() => navigation.navigate('CreateTrip')}
-                        >
-                            <Ionicons name="add" size={32} color="#fff" />
-                        </TouchableOpacity>
-                    ),
+                    tabBarIcon: ({ color, size }) => <Ionicons name="map-outline" size={size} color={color} />,
                 }}
             />
-            <Tab.Screen 
-                name="Messages" 
-                component={MessagesScreen} 
+            <Tab.Screen
+                name="Messages"
+                component={MessagesScreen}
                 options={{
-                    tabBarIcon: ({ color, size }: { color: string; size: number }) => <Ionicons name="chatbubble-ellipses-outline" size={size} color={color} />,
+                    tabBarIcon: ({ color, size }) => <Ionicons name="chatbubble-outline" size={size} color={color} />,
                 }}
             />
-            <Tab.Screen 
-                name="Profile" 
-                component={ProfileScreen} 
+            <Tab.Screen
+                name="Profile"
+                component={ProfileScreen}
                 options={{
-                    tabBarIcon: ({ color, size }: { color: string; size: number }) => <Ionicons name="person-outline" size={size} color={color} />,
+                    tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
                 }}
             />
         </Tab.Navigator>
@@ -91,56 +82,52 @@ const AppTabs = () => {
 };
 
 const AppNavigator = () => {
-  return (
-    <NavigationContainer>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="Splash" component={SplashScreen} />
-            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-            <Stack.Screen name="Start" component={StartScreen} />
-            <Stack.Screen name="SignIn" component={SignInScreen} />
-            <Stack.Screen name="SignUp" component={SignUpScreen} />
-            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-            <Stack.Screen name="App" component={AppTabs} />
-            <Stack.Screen name="CreateTrip" component={CreateTripScreen} />
-            <Stack.Screen name="Message" component={MessageScreen} />
-            <Stack.Screen name="Comments" component={CommentsScreen} />
-            <Stack.Screen name="Map" component={MapScreen} />
-            <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
-            <Stack.Screen name="CreateGroupChat" component={CreateGroupChatScreen} />
-            <Stack.Screen name="Kyc" component={KycScreen} />
-            <Stack.Screen name="Terms" component={TermsScreen} />
-            <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
-            <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
-            <Stack.Screen name="SuggestFeature" component={SuggestFeatureScreen} />
-        </Stack.Navigator>
-    </NavigationContainer>
-  );
+    return (
+        <ThemeProvider>
+            <NavigationContainer>
+                <Stack.Navigator screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="Splash" component={SplashScreen} />
+                    <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+                    <Stack.Screen name="Start" component={StartScreen} />
+                    <Stack.Screen name="SignIn" component={SignInScreen} />
+                    <Stack.Screen name="SignUp" component={SignUpScreen} />
+                    <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+                    <Stack.Screen name="App" component={AppTabs} />
+                    <Stack.Screen name="CreateTrip" component={CreateTripScreen} />
+                    <Stack.Screen name="Message" component={MessageScreen} />
+                    <Stack.Screen name="Comments" component={CommentsScreen} />
+                    <Stack.Screen name="Map" component={MapScreen} />
+                    <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
+                    <Stack.Screen name="CreateGroupChat" component={CreateGroupChatScreen} />
+                    <Stack.Screen name="Kyc" component={KycScreen} />
+                    <Stack.Screen name="Terms" component={TermsScreen} />
+                    <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+                    <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+                    <Stack.Screen name="SuggestFeature" component={SuggestFeatureScreen} />
+                    <Stack.Screen name="Settings" component={SettingsScreen} />
+                    <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+                </Stack.Navigator>
+            </NavigationContainer>
+        </ThemeProvider>
+    );
 };
 
 const styles = StyleSheet.create({
     tabBar: {
         position: 'absolute',
-        bottom: 25,
-        left: 20,
-        right: 20,
-        
+        bottom: 0,
+        left: 0,
+        right: 0,
         backgroundColor: '#ffffff',
-        borderRadius: 15,
-        height: 70,
-        shadowColor: '#7F5DF0',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.5,
-        elevation: 5
-    },
-    plusButton: {
-        top: -30,
-        justifyContent: 'center',
-        alignItems: 'center',
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: '#8A2BE2',
+        height: 65,
+        borderTopWidth: 1,
+        borderTopColor: '#F3F4F6',
+        paddingBottom: 8,
+        elevation: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
     },
 });
 

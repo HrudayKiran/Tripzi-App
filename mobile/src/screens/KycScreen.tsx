@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Image } fro
 import { launchImageLibrary } from 'react-native-image-picker';
 import storage from '@react-native-firebase/storage';
 import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { auth } from '../firebase';
 
 const KycScreen = ({ navigation }) => {
   const [aadhaarNumber, setAadhaarNumber] = useState('');
@@ -38,7 +38,7 @@ const KycScreen = ({ navigation }) => {
     }
 
     setUploading(true);
-    const currentUser = auth().currentUser;
+    const currentUser = auth.currentUser;
 
     try {
       const aadhaarImageUrl = await uploadImage(aadhaarImage, `kyc/${currentUser.uid}/aadhaar.jpg`);

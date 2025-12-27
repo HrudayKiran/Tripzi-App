@@ -4,14 +4,14 @@ import { View, StyleSheet, Text, Platform, KeyboardAvoidingView, Image, Touchabl
 import { GiftedChat, Bubble, Send, InputToolbar } from 'react-native-gifted-chat';
 import { IconButton } from 'react-native-paper';
 import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { auth } from '../firebase';
 import MapView, { Marker } from 'react-native-maps';
 
 const MessageScreen = ({ route, navigation }) => {
   const { chatId } = route.params;
   const [messages, setMessages] = useState([]);
   const [chat, setChat] = useState(null);
-  const currentUser = auth().currentUser;
+    const currentUser = auth.currentUser;
 
   useEffect(() => {
     const chatRef = firestore().collection('chats').doc(chatId);
@@ -48,7 +48,7 @@ const MessageScreen = ({ route, navigation }) => {
         unsubscribeChat();
         unsubscribeMessages();
     };
-  }, [chatId, currentUser.uid]);
+    }, [chatId, currentUser.uid]);
 
   const onSend = useCallback((messages = []) => {
     const { _id, createdAt, text, user, location } = messages[0];
