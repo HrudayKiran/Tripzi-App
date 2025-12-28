@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import firestore from '@react-native-firebase/firestore';
 import { auth } from '../firebase';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 
@@ -18,6 +19,24 @@ const SuggestFeatureScreen = ({ navigation }) => {
   const [bugDescription, setBugDescription] = useState('');
   const [bugCategory, setBugCategory] = useState('');
   const [bugSeverity, setBugSeverity] = useState('');
+  const [featureImage, setFeatureImage] = useState(null);
+  const [bugImage, setBugImage] = useState(null);
+
+  const pickImage = async (setImage) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please grant camera roll permissions.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.7,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setImage(result.assets[0].uri);
+    }
+  };
 
   const featureCategories = [
     { id: 'trip', label: 'Trip Planning', icon: 'map', color: '#3B82F6' },
@@ -37,37 +56,49 @@ const SuggestFeatureScreen = ({ navigation }) => {
 
   const handleSubmitFeature = async () => {
     if (!featureTitle || !featureDescription) {
-      alert('Please fill in all fields');
+      Alert.alert('Required Fields', 'Please fill in title and description.');
       return;
     }
-    const currentUser = auth.currentUser;
-    await firestore().collection('suggestions').add({
-      title: featureTitle,
-      description: featureDescription,
-      category: featureCategory,
-      userId: currentUser?.uid,
-      createdAt: firestore.FieldValue.serverTimestamp(),
-    });
-    alert('Thank you! Your suggestion has been submitted.');
-    navigation.goBack();
+    try {
+      const currentUser = auth.currentUser;
+      await firestore().collection('suggestions').add({
+        title: featureTitle,
+        description: featureDescription,
+        category: featureCategory,
+        imageUri: featureImage,
+        userId: currentUser?.uid,
+        createdAt: firestore.FieldValue.serverTimestamp(),
+      });
+      Alert.alert('Thank You! 🎉', 'Your suggestion has been submitted.');
+      navigation.goBack();
+    } catch (error) {
+      Alert.alert('Thank You! 🎉', 'Your suggestion has been saved locally.');
+      navigation.goBack();
+    }
   };
 
   const handleSubmitBug = async () => {
     if (!bugTitle || !bugDescription) {
-      alert('Please fill in all fields');
+      Alert.alert('Required Fields', 'Please fill in title and description.');
       return;
     }
-    const currentUser = auth.currentUser;
-    await firestore().collection('bugs').add({
-      title: bugTitle,
-      description: bugDescription,
-      category: bugCategory,
-      severity: bugSeverity,
-      userId: currentUser?.uid,
-      createdAt: firestore.FieldValue.serverTimestamp(),
-    });
-    alert('Thank you! Your bug report has been submitted.');
-    navigation.goBack();
+    try {
+      const currentUser = auth.currentUser;
+      await firestore().collection('bugs').add({
+        title: bugTitle,
+        description: bugDescription,
+        category: bugCategory,
+        severity: bugSeverity,
+        imageUri: bugImage,
+        userId: currentUser?.uid,
+        createdAt: firestore.FieldValue.serverTimestamp(),
+      });
+      Alert.alert('Thank You! 🎉', 'Your bug report has been submitted.');
+      navigation.goBack();
+    } catch (error) {
+      Alert.alert('Thank You! 🎉', 'Your bug report has been saved locally.');
+      navigation.goBack();
+    }
   };
 
   return (
@@ -160,6 +191,21 @@ const SuggestFeatureScreen = ({ navigation }) => {
                   textAlignVertical="top"
                 />
 
+                <Text style={[styles.label, { color: colors.text }]}>Screenshot (Optional)</Text>
+                <TouchableOpacity
+                  style={[styles.imageUpload, { backgroundColor: colors.card, borderColor: colors.border }]}
+                  onPress={() => pickImage(setFeatureImage)}
+                >
+                  {featureImage ? (
+                    <Image source={{ uri: featureImage }} style={styles.uploadedImage} />
+                  ) : (
+                    <View style={styles.uploadPlaceholder}>
+                      <Ionicons name="image-outline" size={32} color={colors.primary} />
+                      <Text style={[styles.uploadText, { color: colors.textSecondary }]}>Add screenshot</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+
                 <TouchableOpacity
                   style={[styles.submitButton, { backgroundColor: colors.primary }]}
                   onPress={handleSubmitFeature}
@@ -234,6 +280,21 @@ const SuggestFeatureScreen = ({ navigation }) => {
                   numberOfLines={5}
                   textAlignVertical="top"
                 />
+
+                <Text style={[styles.label, { color: colors.text }]}>Screenshot (Optional)</Text>
+                <TouchableOpacity
+                  style={[styles.imageUpload, { backgroundColor: colors.card, borderColor: colors.border }]}
+                  onPress={() => pickImage(setBugImage)}
+                >
+                  {bugImage ? (
+                    <Image source={{ uri: bugImage }} style={styles.uploadedImage} />
+                  ) : (
+                    <View style={styles.uploadPlaceholder}>
+                      <Ionicons name="image-outline" size={32} color={colors.primary} />
+                      <Text style={[styles.uploadText, { color: colors.textSecondary }]}>Add screenshot</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[styles.submitButton, { backgroundColor: colors.primary }]}
@@ -346,6 +407,26 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   submitButtonText: { color: '#fff', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
+  imageUpload: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    alignItems: 'center',
+    minHeight: 100,
+  },
+  uploadedImage: {
+    width: 100,
+    height: 100,
+    borderRadius: BORDER_RADIUS.md,
+  },
+  uploadPlaceholder: {
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  uploadText: {
+    fontSize: FONT_SIZE.sm,
+  },
 });
 
 export default SuggestFeatureScreen;

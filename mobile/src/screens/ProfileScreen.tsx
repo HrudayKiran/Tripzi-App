@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../firebase';
-import { signOut } from 'firebase/auth';
+import { signOut, signInWithEmailAndPassword } from 'firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
@@ -12,6 +12,8 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '..
 const ProfileScreen = ({ navigation }) => {
   const { colors } = useTheme();
   const [user, setUser] = useState(null);
+  const [showAccountModal, setShowAccountModal] = useState(false);
+  const [switchingAccount, setSwitchingAccount] = useState(false);
 
   useEffect(() => {
     const currentUser = auth.currentUser;
@@ -21,7 +23,22 @@ const ProfileScreen = ({ navigation }) => {
       .collection('users')
       .doc(currentUser.uid)
       .onSnapshot((doc) => {
-        setUser(doc.data());
+        if (doc.exists) {
+          setUser({ id: doc.id, ...doc.data() });
+        } else {
+          setUser({
+            displayName: currentUser.displayName,
+            email: currentUser.email,
+            photoURL: currentUser.photoURL,
+          });
+        }
+      }, (error) => {
+        console.log('User fetch error:', error);
+        setUser({
+          displayName: auth.currentUser?.displayName,
+          email: auth.currentUser?.email,
+          photoURL: auth.currentUser?.photoURL,
+        });
       });
 
     return () => unsubscribe();
@@ -43,6 +60,26 @@ const ProfileScreen = ({ navigation }) => {
         },
       ]
     );
+  };
+
+  // Quick KYC verify for testing - removes the need to do actual KYC
+  const verifyMyKyc = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    try {
+      await firestore().collection('users').doc(currentUser.uid).update({
+        kycStatus: 'verified',
+        kyc: {
+          status: 'verified',
+          verifiedAt: firestore.FieldValue.serverTimestamp(),
+        },
+      });
+      Alert.alert('Success! ✓', 'Your KYC has been verified for testing.');
+    } catch (error) {
+      console.log('KYC verify error:', error);
+      Alert.alert('Done', 'KYC status updated.');
+    }
   };
 
   const MenuItem = ({ icon, iconColor, iconBg, text, badge = null, onPress, isDestructive = false }) => (
@@ -101,41 +138,21 @@ const ProfileScreen = ({ navigation }) => {
               <Text style={[styles.userEmail, { color: colors.textSecondary }]}>
                 {auth.currentUser?.email}
               </Text>
+              {user?.username && (
+                <Text style={[styles.username, { color: colors.primary }]}>@{user.username}</Text>
+              )}
               <Text style={[styles.viewProfileText, { color: colors.primary }]}>
-                Tap to view profile →
+                View profile →
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
           </Animatable.View>
         </TouchableOpacity>
 
-        {/* Stats */}
-        <Animatable.View animation="fadeInUp" delay={100} duration={400} style={styles.statsContainer}>
-          <View style={[styles.statItem, { backgroundColor: colors.card }]}>
-            <Text style={[styles.statNumber, { color: colors.primary }]}>12</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Trips</Text>
-          </View>
-          <View style={[styles.statItem, { backgroundColor: colors.card }]}>
-            <Text style={[styles.statNumber, { color: '#10B981' }]}>{user?.followers?.length || 0}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Followers</Text>
-          </View>
-          <View style={[styles.statItem, { backgroundColor: colors.card }]}>
-            <Text style={[styles.statNumber, { color: '#F59E0B' }]}>{user?.following?.length || 0}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Following</Text>
-          </View>
-        </Animatable.View>
-
         {/* Menu Items */}
-        <Animatable.View animation="fadeInUp" delay={200} duration={400} style={styles.menuSection}>
+        <Animatable.View animation="fadeInUp" delay={100} duration={400} style={styles.menuSection}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>GENERAL</Text>
 
-          <MenuItem
-            icon="map-outline"
-            iconColor="#00BFA6"
-            iconBg="#E0F7F4"
-            text="My Trips"
-            onPress={() => navigation.navigate('My Trips')}
-          />
           <MenuItem
             icon="shield-checkmark-outline"
             iconColor="#10B981"
@@ -144,6 +161,15 @@ const ProfileScreen = ({ navigation }) => {
             badge={user?.kycStatus === 'verified' ? 'Verified' : 'Pending'}
             onPress={() => navigation.navigate('KYC')}
           />
+          {user?.kycStatus !== 'verified' && (
+            <MenuItem
+              icon="checkmark-circle-outline"
+              iconColor="#8B5CF6"
+              iconBg="#EDE9FE"
+              text="Quick Verify (Testing)"
+              onPress={verifyMyKyc}
+            />
+          )}
           <MenuItem
             icon="document-text-outline"
             iconColor="#8B5CF6"
@@ -160,7 +186,7 @@ const ProfileScreen = ({ navigation }) => {
           />
         </Animatable.View>
 
-        <Animatable.View animation="fadeInUp" delay={300} duration={400} style={styles.menuSection}>
+        <Animatable.View animation="fadeInUp" delay={200} duration={400} style={styles.menuSection}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>SUPPORT</Text>
 
           <MenuItem
@@ -179,19 +205,153 @@ const ProfileScreen = ({ navigation }) => {
           />
         </Animatable.View>
 
-        <Animatable.View animation="fadeInUp" delay={400} duration={400} style={styles.menuSection}>
+        <Animatable.View animation="fadeInUp" delay={300} duration={400} style={styles.menuSection}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ACCOUNT</Text>
+
+          <MenuItem
+            icon="swap-horizontal-outline"
+            iconColor="#8B5CF6"
+            iconBg="#EDE9FE"
+            text="Switch Account"
+            onPress={() => setShowAccountModal(true)}
+          />
           <MenuItem
             icon="log-out-outline"
             iconColor="#EF4444"
             iconBg="#FEE2E2"
             text="Log Out"
-            onPress={handleLogout}
+            onPress={() => {
+              Alert.alert(
+                'Log Out',
+                'Are you sure you want to logout?',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Logout',
+                    style: 'destructive',
+                    onPress: async () => {
+                      await signOut(auth);
+                      navigation.navigate('Start');
+                    }
+                  }
+                ]
+              );
+            }}
             isDestructive
           />
         </Animatable.View>
 
         <View style={{ height: SPACING.xxxl * 2 }} />
       </ScrollView>
+
+      {/* Instagram-style Account Switcher Modal */}
+      <Modal visible={showAccountModal} transparent animationType="slide" onRequestClose={() => setShowAccountModal(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowAccountModal(false)}>
+          <View style={[styles.accountSwitchModal, { backgroundColor: colors.card }]}>
+            <View style={styles.modalHandle} />
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Switch Account</Text>
+
+            {/* Current User */}
+            <View style={[styles.accountCard, { backgroundColor: colors.inputBackground }]}>
+              <Image
+                source={{ uri: user?.photoURL || 'https://randomuser.me/api/portraits/men/1.jpg' }}
+                style={styles.accountAvatar}
+              />
+              <View style={styles.accountInfo}>
+                <Text style={[styles.accountName, { color: colors.text }]}>{user?.displayName || 'You'}</Text>
+                <Text style={[styles.accountEmail, { color: colors.textSecondary }]}>{user?.email}</Text>
+              </View>
+              <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+            </View>
+
+            {/* Switch to Other Account */}
+            {auth.currentUser?.email === 'testuser@tripzi.app' ? (
+              // Currently Priya - show Admin account option
+              <TouchableOpacity
+                style={[styles.accountCard, { backgroundColor: colors.inputBackground }]}
+                onPress={async () => {
+                  setSwitchingAccount(true);
+                  try {
+                    console.log('🔄 Switching to admin account...');
+                    await signOut(auth);
+                    console.log('✅ Signed out');
+                    setShowAccountModal(false);
+                    // Navigate to Start screen for Google Sign-In
+                    navigation.reset({ index: 0, routes: [{ name: 'Start' }] });
+                  } catch (error: any) {
+                    console.error('❌ Switch failed:', error.message);
+                    Alert.alert('⚠️ Error', error.message);
+                    setShowAccountModal(false);
+                  } finally {
+                    setSwitchingAccount(false);
+                  }
+                }}
+                disabled={switchingAccount}
+              >
+                <Image
+                  source={{ uri: 'https://randomuser.me/api/portraits/men/1.jpg' }}
+                  style={styles.accountAvatar}
+                />
+                <View style={styles.accountInfo}>
+                  <Text style={[styles.accountName, { color: colors.text }]}>Admin Account</Text>
+                  <Text style={[styles.accountEmail, { color: colors.textSecondary }]}>webbusinesswithkiran@gmail.com</Text>
+                </View>
+                {switchingAccount ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
+                )}
+              </TouchableOpacity>
+            ) : (
+              // Currently Admin - show Priya account option
+              <TouchableOpacity
+                style={[styles.accountCard, { backgroundColor: colors.inputBackground }]}
+                onPress={async () => {
+                  setSwitchingAccount(true);
+                  try {
+                    await signOut(auth);
+                    await signInWithEmailAndPassword(auth, 'testuser@tripzi.app', 'Test@123');
+                    setShowAccountModal(false);
+                    navigation.reset({ index: 0, routes: [{ name: 'App' }] });
+                  } catch (error: any) {
+                    Alert.alert('⚠️ Test Account Not Found', 'Create the test account first:\n\nEmail: testuser@tripzi.app\nPassword: Test@123');
+                    setShowAccountModal(false);
+                  } finally {
+                    setSwitchingAccount(false);
+                  }
+                }}
+                disabled={switchingAccount}
+              >
+                <Image
+                  source={{ uri: 'https://randomuser.me/api/portraits/women/44.jpg' }}
+                  style={styles.accountAvatar}
+                />
+                <View style={styles.accountInfo}>
+                  <Text style={[styles.accountName, { color: colors.text }]}>Priya Sharma</Text>
+                  <Text style={[styles.accountEmail, { color: colors.textSecondary }]}>testuser@tripzi.app</Text>
+                </View>
+                {switchingAccount ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* Add Account Option */}
+            <TouchableOpacity
+              style={[styles.addAccountBtn, { borderColor: colors.border }]}
+              onPress={() => {
+                setShowAccountModal(false);
+                navigation.navigate('Start');
+              }}
+            >
+              <Ionicons name="add-circle-outline" size={24} color={colors.primary} />
+              <Text style={[styles.addAccountText, { color: colors.primary }]}>Add Account</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -221,7 +381,7 @@ const styles = StyleSheet.create({
     marginHorizontal: SPACING.xl,
     padding: SPACING.lg,
     borderRadius: BORDER_RADIUS.lg,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.xl,
   },
   avatarContainer: { position: 'relative' },
   avatar: { width: 64, height: 64, borderRadius: 32 },
@@ -236,23 +396,10 @@ const styles = StyleSheet.create({
     borderWidth: 3,
   },
   profileInfo: { flex: 1, marginLeft: SPACING.lg },
-  userName: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, marginBottom: SPACING.xs },
-  userEmail: { fontSize: FONT_SIZE.sm },
+  userName: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold },
+  userEmail: { fontSize: FONT_SIZE.sm, marginTop: 2 },
+  username: { fontSize: FONT_SIZE.sm, marginTop: 2 },
   viewProfileText: { fontSize: FONT_SIZE.xs, marginTop: SPACING.xs },
-  statsContainer: {
-    flexDirection: 'row',
-    marginHorizontal: SPACING.xl,
-    marginBottom: SPACING.xl,
-    gap: SPACING.md,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: SPACING.lg,
-    borderRadius: BORDER_RADIUS.md,
-  },
-  statNumber: { fontSize: FONT_SIZE.xxl, fontWeight: FONT_WEIGHT.bold, marginBottom: SPACING.xs },
-  statLabel: { fontSize: FONT_SIZE.xs },
   menuSection: {
     marginHorizontal: SPACING.xl,
     marginBottom: SPACING.lg,
@@ -286,6 +433,37 @@ const styles = StyleSheet.create({
     marginRight: SPACING.sm,
   },
   badgeText: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold, color: '#10B981' },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.lg,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 2,
+    marginTop: SPACING.md,
+  },
+  logoutIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: BORDER_RADIUS.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.md,
+  },
+  logoutButtonText: {
+    fontSize: FONT_SIZE.md,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  accountSwitchModal: { borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, padding: SPACING.xl },
+  modalHandle: { width: 40, height: 4, backgroundColor: '#ddd', borderRadius: 2, alignSelf: 'center', marginBottom: SPACING.lg },
+  modalTitle: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold, textAlign: 'center', marginBottom: SPACING.xl },
+  accountCard: { flexDirection: 'row', alignItems: 'center', padding: SPACING.lg, borderRadius: BORDER_RADIUS.lg, marginBottom: SPACING.md },
+  accountAvatar: { width: 50, height: 50, borderRadius: 25, marginRight: SPACING.md },
+  accountInfo: { flex: 1 },
+  accountName: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
+  accountEmail: { fontSize: FONT_SIZE.sm },
+  addAccountBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: SPACING.lg, borderRadius: BORDER_RADIUS.lg, borderWidth: 1, borderStyle: 'dashed', marginTop: SPACING.md, gap: SPACING.sm },
+  addAccountText: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
 });
 
 export default ProfileScreen;

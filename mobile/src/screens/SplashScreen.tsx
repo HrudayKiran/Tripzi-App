@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Image, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Image, FlatList, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import { useFocusEffect } from '@react-navigation/native';
 
 const { width, height } = Dimensions.get('window');
 
@@ -67,7 +68,7 @@ const SplashScreen = ({ navigation }) => {
   }, []);
 
   const handleNext = () => {
-    navigation.replace('Start');
+    navigation.navigate('Start');
   };
 
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
@@ -83,9 +84,14 @@ const SplashScreen = ({ navigation }) => {
   const renderItem = ({ item }) => (
     <View style={styles.slide}>
       <Image source={{ uri: item.image }} style={styles.slideImage} resizeMode="cover" />
-      <View style={styles.locationBadge}>
-        <Text style={styles.locationIcon}>📍</Text>
-        <Text style={styles.locationText}>{item.location}</Text>
+      <View style={styles.slideOverlay} />
+      <View style={styles.slideContent}>
+        <Text style={styles.slideTitle}>{item.title}</Text>
+        <Text style={styles.slideSubtitle}>{item.subtitle}</Text>
+        <View style={styles.locationBadge}>
+          <Text style={styles.locationIcon}>📍</Text>
+          <Text style={styles.locationText}>{item.location}</Text>
+        </View>
       </View>
     </View>
   );
@@ -93,55 +99,8 @@ const SplashScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={styles.container}>
-        {/* Carousel */}
-        <View style={styles.carouselContainer}>
-          <FlatList
-            ref={flatListRef}
-            data={CAROUSEL_IMAGES}
-            renderItem={renderItem}
-            keyExtractor={(item) => item.id}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onViewableItemsChanged={onViewableItemsChanged}
-            viewabilityConfig={viewabilityConfig}
-            getItemLayout={(_, index) => ({
-              length: width - SPACING.xxl * 2,
-              offset: (width - SPACING.xxl * 2) * index,
-              index,
-            })}
-            onScrollToIndexFailed={() => { }}
-          />
-
-          {/* Info */}
-          <Animatable.View animation="fadeIn" key={activeIndex} style={styles.infoContainer}>
-            <Text style={[styles.title, { color: colors.text }]}>
-              {CAROUSEL_IMAGES[activeIndex]?.title}
-            </Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              {CAROUSEL_IMAGES[activeIndex]?.subtitle}
-            </Text>
-          </Animatable.View>
-
-          {/* Dots */}
-          <View style={styles.dotsContainer}>
-            {CAROUSEL_IMAGES.map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.dot,
-                  {
-                    backgroundColor: index === activeIndex ? colors.primary : colors.border,
-                    width: index === activeIndex ? 20 : 8,
-                  },
-                ]}
-              />
-            ))}
-          </View>
-        </View>
-
-        {/* Bottom */}
-        <Animatable.View animation="fadeInUp" delay={200} style={styles.bottomSection}>
+        {/* Top Section - Logo, Name, Tagline */}
+        <Animatable.View animation="fadeInDown" style={styles.topSection}>
           <View style={[styles.logoBox, { backgroundColor: colors.primary }]}>
             <Text style={styles.logoEmoji}>🚀</Text>
           </View>
@@ -149,16 +108,42 @@ const SplashScreen = ({ navigation }) => {
           <Text style={[styles.tagline, { color: colors.textSecondary }]}>
             Explore the world, <Text style={{ color: colors.primary, fontWeight: '700' }}>not alone</Text>
           </Text>
-          <Text style={[styles.joinText, { color: colors.textSecondary }]}>JOIN THE JOURNEY</Text>
-
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: colors.primary }]}
-            onPress={handleNext}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.buttonText}>Get Started</Text>
-          </TouchableOpacity>
         </Animatable.View>
+
+        {/* Bottom Section - Carousel & Button */}
+        <View style={styles.bottomSection}>
+          {/* Carousel */}
+          <Animatable.View animation="fadeInUp" delay={200} style={styles.carouselContainer}>
+            <FlatList
+              ref={flatListRef}
+              data={CAROUSEL_IMAGES}
+              renderItem={renderItem}
+              keyExtractor={(item) => item.id}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onViewableItemsChanged={onViewableItemsChanged}
+              viewabilityConfig={viewabilityConfig}
+              getItemLayout={(_, index) => ({
+                length: width - SPACING.xl * 2,
+                offset: (width - SPACING.xl * 2) * index,
+                index,
+              })}
+              onScrollToIndexFailed={() => { }}
+            />
+          </Animatable.View>
+
+          {/* Get Started Button */}
+          <Animatable.View animation="fadeInUp" delay={400} style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: colors.primary }]}
+              onPress={handleNext}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.buttonText}>Join the Journey</Text>
+            </TouchableOpacity>
+          </Animatable.View>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -166,11 +151,33 @@ const SplashScreen = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  container: { flex: 1, paddingHorizontal: SPACING.xxl },
-  carouselContainer: { height: height * 0.5 },
+  container: { flex: 1, paddingHorizontal: SPACING.xl },
+  topSection: {
+    alignItems: 'center',
+    paddingTop: SPACING.xl,
+    paddingBottom: SPACING.lg,
+  },
+  logoBox: {
+    width: 64,
+    height: 64,
+    borderRadius: BORDER_RADIUS.xl,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  logoEmoji: { fontSize: 32 },
+  appName: { fontSize: 42, fontWeight: FONT_WEIGHT.bold, marginBottom: SPACING.xs },
+  tagline: { fontSize: FONT_SIZE.md },
+  bottomSection: { flex: 1, justifyContent: 'space-between' },
+  carouselContainer: { flex: 1 },
   slide: {
-    width: width - SPACING.xxl * 2,
-    height: height * 0.38,
+    width: width - SPACING.xl * 2,
+    height: height * 0.52,
     borderRadius: BORDER_RADIUS.xl,
     overflow: 'hidden',
   },
@@ -178,30 +185,45 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  locationBadge: {
+  slideOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  slideContent: {
     position: 'absolute',
-    bottom: SPACING.lg,
+    bottom: SPACING.xl,
     left: SPACING.lg,
+    right: SPACING.lg,
+  },
+  slideTitle: {
+    fontSize: FONT_SIZE.xxl,
+    fontWeight: FONT_WEIGHT.bold,
+    color: '#fff',
+    marginBottom: SPACING.xs,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  slideSubtitle: {
+    fontSize: FONT_SIZE.md,
+    color: 'rgba(255,255,255,0.9)',
+    marginBottom: SPACING.sm,
+  },
+  locationBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.95)',
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.xs,
     borderRadius: BORDER_RADIUS.xl,
+    alignSelf: 'flex-start',
   },
   locationIcon: { marginRight: SPACING.xs },
   locationText: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.semibold, color: '#333' },
-  infoContainer: { alignItems: 'center', marginTop: SPACING.lg },
-  title: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold, marginBottom: SPACING.xs },
-  subtitle: { fontSize: FONT_SIZE.sm },
-  dotsContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.md, gap: SPACING.sm },
+  dotsContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.lg, gap: SPACING.sm },
   dot: { height: 8, borderRadius: 4 },
-  bottomSection: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  logoBox: { width: 56, height: 56, borderRadius: BORDER_RADIUS.lg, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md },
-  logoEmoji: { fontSize: 28 },
-  appName: { fontSize: 38, fontWeight: FONT_WEIGHT.bold, marginBottom: SPACING.xs },
-  tagline: { fontSize: FONT_SIZE.md, marginBottom: SPACING.xs },
-  joinText: { fontSize: FONT_SIZE.xs, letterSpacing: 2, marginBottom: SPACING.xl },
+  buttonContainer: { alignItems: 'center', paddingBottom: SPACING.lg },
+  joinText: { fontSize: FONT_SIZE.xs, letterSpacing: 2, marginBottom: SPACING.md },
   button: { width: '100%', paddingVertical: SPACING.lg, borderRadius: BORDER_RADIUS.xl, alignItems: 'center' },
   buttonText: { color: '#fff', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
 });

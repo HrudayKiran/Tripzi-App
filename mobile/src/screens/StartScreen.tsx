@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ToastAndroid, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
@@ -12,6 +12,14 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '..
 
 const StartScreen = ({ navigation }) => {
   const { colors } = useTheme();
+
+  const showToast = (message: string) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.SHORT);
+    } else {
+      Alert.alert('Success', message);
+    }
+  };
 
   useEffect(() => {
     GoogleSignin.configure({
@@ -35,23 +43,11 @@ const StartScreen = ({ navigation }) => {
       }
 
       const googleCredential = GoogleAuthProvider.credential(idToken);
-      const userCredential = await signInWithCredential(auth, googleCredential);
+      await signInWithCredential(auth, googleCredential);
 
-      const { user } = userCredential;
-      const { uid, displayName, email } = user;
-
+      showToast('Login successful! 🎉');
+      // Navigate directly to App - username setup can be done from profile
       navigation.navigate('App');
-
-      const userRef = doc(db, 'users', uid);
-      getDoc(userRef).then((userSnapshot) => {
-        if (!userSnapshot.exists()) {
-          setDoc(userRef, {
-            displayName,
-            email,
-            createdAt: serverTimestamp(),
-          }).catch(err => console.log('Firestore error:', err));
-        }
-      }).catch(err => console.log('Firestore read error:', err));
     } catch (error: any) {
       if (error?.code !== statusCodes.SIGN_IN_CANCELLED) {
         console.log('Google Sign-In error:', error?.message || error);
@@ -73,7 +69,7 @@ const StartScreen = ({ navigation }) => {
           {/* Welcome Text */}
           <Text style={[styles.welcome, { color: colors.text }]}>Welcome to Tripzi</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Connect with solo travelers and explore the world together
+            Explore the world, not alone
           </Text>
 
           {/* Buttons */}

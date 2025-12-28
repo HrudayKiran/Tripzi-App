@@ -216,27 +216,29 @@ const FilterModal = ({ visible, onClose, onApply }: FilterModalProps) => {
                                 </View>
                             </View>
 
-                            {/* Destination */}
+                            {/* Custom Budget Input */}
                             <View style={styles.section}>
                                 <View style={styles.sectionHeader}>
-                                    <Ionicons name="location-outline" size={20} color="#EC4899" />
-                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Destination</Text>
+                                    <Ionicons name="cash-outline" size={20} color="#8B5CF6" />
+                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Custom Budget (Optional)</Text>
                                 </View>
                                 <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
-                                    <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
+                                    <Text style={{ color: colors.textSecondary, marginRight: SPACING.xs }}>₹</Text>
                                     <TextInput
                                         style={[styles.input, { color: colors.text }]}
-                                        placeholder="Search destination..."
+                                        placeholder="Enter max budget..."
                                         placeholderTextColor={colors.textSecondary}
-                                        value={destination}
-                                        onChangeText={setDestination}
+                                        keyboardType="numeric"
+                                        value={maxCost < 500000 ? maxCost.toString() : ''}
+                                        onChangeText={(text) => {
+                                            const num = parseInt(text) || 500000;
+                                            setMaxCost(num);
+                                        }}
                                     />
-                                    {destination.length > 0 && (
-                                        <TouchableOpacity onPress={() => setDestination('')}>
-                                            <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
-                                        </TouchableOpacity>
-                                    )}
                                 </View>
+                                <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+                                    Or select from quick options above
+                                </Text>
                             </View>
 
                             <View style={{ height: SPACING.xxl }} />
@@ -350,6 +352,7 @@ const styles = StyleSheet.create({
         gap: SPACING.sm,
     },
     applyButtonText: { color: '#fff', fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
+    helperText: { fontSize: FONT_SIZE.xs, marginTop: SPACING.xs },
 });
 
 export default FilterModal;

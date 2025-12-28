@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, KeyboardTypeOptions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -8,6 +8,14 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
+
+interface Errors {
+  email?: string;
+  fullName?: string;
+  password?: string;
+  confirmPassword?: string;
+  terms?: string;
+}
 
 const SignUpScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -19,26 +27,61 @@ const SignUpScreen = ({ navigation }) => {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [errors, setErrors] = useState<Errors>({});
+  const [touched, setTouched] = useState<{ [key: string]: boolean }>({});
   const { colors } = useTheme();
 
+  const validateField = (field: string, value: string) => {
+    const newErrors = { ...errors };
+
+    switch (field) {
+      case 'email':
+        if (!value) newErrors.email = 'Email is required';
+        else if (!/\S+@\S+\.\S+/.test(value)) newErrors.email = 'Invalid email format';
+        else delete newErrors.email;
+        break;
+      case 'fullName':
+        if (!value) newErrors.fullName = 'Full name is required';
+        else if (value.length < 2) newErrors.fullName = 'Name too short';
+        else delete newErrors.fullName;
+        break;
+      case 'password':
+        if (!value) newErrors.password = 'Password is required';
+        else if (value.length < 6) newErrors.password = 'Min 6 characters';
+        else delete newErrors.password;
+        break;
+      case 'confirmPassword':
+        if (!value) newErrors.confirmPassword = 'Confirm password is required';
+        else if (value !== password) newErrors.confirmPassword = 'Passwords do not match';
+        else delete newErrors.confirmPassword;
+        break;
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSignUp = async () => {
-    if (!agreedToTerms) {
-      Alert.alert('Error', 'Please agree to the Terms of Service and Privacy Policy');
-      return;
-    }
+    // Validate all fields
+    const newErrors: Errors = {};
 
-    if (!email || !fullName || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all required fields');
-      return;
-    }
+    if (!email) newErrors.email = 'Email is required';
+    else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = 'Invalid email format';
 
-    if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
-      return;
-    }
+    if (!fullName) newErrors.fullName = 'Full name is required';
 
-    if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+    if (!password) newErrors.password = 'Password is required';
+    else if (password.length < 6) newErrors.password = 'Min 6 characters';
+
+    if (!confirmPassword) newErrors.confirmPassword = 'Confirm password is required';
+    else if (confirmPassword !== password) newErrors.confirmPassword = 'Passwords do not match';
+
+    if (!agreedToTerms) newErrors.terms = 'Required';
+
+    setErrors(newErrors);
+    setTouched({ email: true, fullName: true, password: true, confirmPassword: true });
+
+    if (Object.keys(newErrors).length > 0) {
       return;
     }
 
@@ -73,23 +116,51 @@ const SignUpScreen = ({ navigation }) => {
     }
   };
 
-  const InputField = ({ icon, placeholder, value, onChangeText, secureTextEntry = false, keyboardType = 'default', showToggle = false, isSecure = false, onToggle = () => { } }) => (
-    <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground }]}>
-      <Ionicons name={icon} size={20} color={colors.textSecondary} />
-      <TextInput
-        style={[styles.input, { color: colors.text }]}
-        placeholder={placeholder}
-        placeholderTextColor={colors.textSecondary}
-        value={value}
-        onChangeText={onChangeText}
-        secureTextEntry={secureTextEntry}
-        keyboardType={keyboardType}
-        autoCapitalize={keyboardType === 'email-address' ? 'none' : 'sentences'}
-      />
-      {showToggle && (
-        <TouchableOpacity onPress={onToggle} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name={isSecure ? "eye-outline" : "eye-off-outline"} size={20} color={colors.textSecondary} />
-        </TouchableOpacity>
+  const InputField = ({
+    icon,
+    placeholder,
+    value,
+    onChangeText,
+    secureTextEntry = false,
+    keyboardType = 'default' as KeyboardTypeOptions,
+    showToggle = false,
+    isSecure = false,
+    onToggle = () => { },
+    required = false,
+    error,
+    fieldName,
+  }) => (
+    <View>
+      <View style={[
+        styles.inputContainer,
+        { backgroundColor: colors.inputBackground, borderColor: error && touched[fieldName] ? '#EF4444' : 'transparent', borderWidth: error && touched[fieldName] ? 1 : 0 }
+      ]}>
+        <Ionicons name={icon} size={20} color={error && touched[fieldName] ? '#EF4444' : colors.textSecondary} />
+        <TextInput
+          style={[styles.input, { color: colors.text }]}
+          placeholder={placeholder}
+          placeholderTextColor={colors.textSecondary}
+          value={value}
+          onChangeText={(text) => {
+            onChangeText(text);
+            if (touched[fieldName]) validateField(fieldName, text);
+          }}
+          onBlur={() => {
+            setTouched(prev => ({ ...prev, [fieldName]: true }));
+            validateField(fieldName, value);
+          }}
+          secureTextEntry={secureTextEntry}
+          keyboardType={keyboardType}
+          autoCapitalize={keyboardType === 'email-address' ? 'none' : 'sentences'}
+        />
+        {showToggle && (
+          <TouchableOpacity onPress={onToggle} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Ionicons name={isSecure ? "eye-outline" : "eye-off-outline"} size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+        )}
+      </View>
+      {error && touched[fieldName] && (
+        <Text style={styles.errorText}>{error}</Text>
       )}
     </View>
   );
@@ -112,42 +183,56 @@ const SignUpScreen = ({ navigation }) => {
         <Animatable.View animation="fadeInUp" duration={500}>
           {/* Title */}
           <Text style={[styles.title, { color: colors.text }]}>
-            Create your{'\n'}
-            <Text style={{ color: colors.primary }}>account</Text>
+            Create Your Account
           </Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Connect with thousands of solo travelers exploring the world together.
+            Connect with thousands of travellers to explore the world, not alone
           </Text>
 
           {/* Form */}
           <View style={styles.form}>
-            <Text style={[styles.label, { color: colors.text }]}>Email Address</Text>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Email Address <Text style={styles.required}>*</Text>
+            </Text>
             <InputField
               icon="mail-outline"
               placeholder="hello@example.com"
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
+              required
+              error={errors.email}
+              fieldName="email"
             />
 
-            <Text style={[styles.label, { color: colors.text }]}>Full Name</Text>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Full Name <Text style={styles.required}>*</Text>
+            </Text>
             <InputField
               icon="person-outline"
               placeholder="Your full name"
               value={fullName}
               onChangeText={setFullName}
+              required
+              error={errors.fullName}
+              fieldName="fullName"
             />
 
-            <Text style={[styles.label, { color: colors.text }]}>Phone Number (Optional)</Text>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Phone Number <Text style={[styles.optional, { color: colors.textSecondary }]}>(Optional)</Text>
+            </Text>
             <InputField
               icon="call-outline"
               placeholder="+91 XXXXX XXXXX"
               value={phoneNumber}
               onChangeText={setPhoneNumber}
               keyboardType="phone-pad"
+              fieldName="phoneNumber"
             />
 
-            <Text style={[styles.label, { color: colors.text }]}>Password</Text>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Password <Text style={styles.required}>*</Text>
+            </Text>
             <InputField
               icon="lock-closed-outline"
               placeholder="Create a password"
@@ -157,9 +242,14 @@ const SignUpScreen = ({ navigation }) => {
               showToggle
               isSecure={!showPassword}
               onToggle={() => setShowPassword(!showPassword)}
+              required
+              error={errors.password}
+              fieldName="password"
             />
 
-            <Text style={[styles.label, { color: colors.text }]}>Confirm Password</Text>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Confirm Password <Text style={styles.required}>*</Text>
+            </Text>
             <InputField
               icon="lock-closed-outline"
               placeholder="Confirm your password"
@@ -169,6 +259,9 @@ const SignUpScreen = ({ navigation }) => {
               showToggle
               isSecure={!showConfirmPassword}
               onToggle={() => setShowConfirmPassword(!showConfirmPassword)}
+              required
+              error={errors.confirmPassword}
+              fieldName="confirmPassword"
             />
 
             {/* Terms Checkbox */}
@@ -179,7 +272,7 @@ const SignUpScreen = ({ navigation }) => {
             >
               <View style={[
                 styles.checkbox,
-                { borderColor: colors.primary, backgroundColor: agreedToTerms ? colors.primary : 'transparent' }
+                { borderColor: errors.terms ? '#EF4444' : colors.primary, backgroundColor: agreedToTerms ? colors.primary : 'transparent' }
               ]}>
                 {agreedToTerms && <Ionicons name="checkmark" size={16} color="#fff" />}
               </View>
@@ -192,8 +285,10 @@ const SignUpScreen = ({ navigation }) => {
                 <Text style={{ color: colors.primary }} onPress={() => navigation.navigate('PrivacyPolicy')}>
                   Privacy Policy
                 </Text>
+                {' '}<Text style={styles.required}>*</Text>
               </Text>
             </TouchableOpacity>
+            {errors.terms && <Text style={[styles.errorText, { marginTop: -SPACING.sm }]}>Please agree to terms</Text>}
 
             {/* Sign Up Button */}
             <TouchableOpacity
@@ -229,102 +324,28 @@ const SignUpScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingBottom: SPACING.xxxl,
-  },
-  header: {
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-  },
-  backButton: {
-    width: TOUCH_TARGET.min,
-    height: TOUCH_TARGET.min,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: -SPACING.sm,
-  },
-  title: {
-    fontSize: FONT_SIZE.title,
-    fontWeight: FONT_WEIGHT.bold,
-    paddingHorizontal: SPACING.xxl,
-    marginBottom: SPACING.sm,
-  },
-  subtitle: {
-    fontSize: FONT_SIZE.sm,
-    lineHeight: 22,
-    paddingHorizontal: SPACING.xxl,
-    marginBottom: SPACING.xxl,
-  },
-  form: {
-    paddingHorizontal: SPACING.xxl,
-    gap: SPACING.md,
-  },
-  label: {
-    fontSize: FONT_SIZE.sm,
-    fontWeight: FONT_WEIGHT.semibold,
-    marginTop: SPACING.sm,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderRadius: BORDER_RADIUS.md,
-    gap: SPACING.md,
-  },
-  input: {
-    flex: 1,
-    fontSize: FONT_SIZE.md,
-    paddingVertical: SPACING.sm,
-  },
-  termsContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginTop: SPACING.lg,
-    gap: SPACING.md,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  termsText: {
-    flex: 1,
-    fontSize: FONT_SIZE.xs,
-    lineHeight: 18,
-  },
-  signUpButton: {
-    paddingVertical: SPACING.lg,
-    borderRadius: BORDER_RADIUS.md,
-    alignItems: 'center',
-    marginTop: SPACING.lg,
-  },
-  signUpButtonText: {
-    color: '#fff',
-    fontSize: FONT_SIZE.md,
-    fontWeight: FONT_WEIGHT.bold,
-  },
-  signInContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: SPACING.lg,
-  },
-  signInText: {
-    fontSize: FONT_SIZE.sm,
-  },
-  signInLink: {
-    fontSize: FONT_SIZE.sm,
-    fontWeight: FONT_WEIGHT.bold,
-  },
+  safeArea: { flex: 1 },
+  container: { flex: 1 },
+  contentContainer: { paddingBottom: SPACING.xxxl },
+  header: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
+  backButton: { width: TOUCH_TARGET.min, height: TOUCH_TARGET.min, justifyContent: 'center', alignItems: 'center', marginLeft: -SPACING.sm },
+  title: { fontSize: FONT_SIZE.xxxl, fontWeight: FONT_WEIGHT.bold, marginHorizontal: SPACING.xl, marginBottom: SPACING.sm },
+  subtitle: { fontSize: FONT_SIZE.sm, marginHorizontal: SPACING.xl, marginBottom: SPACING.xl, lineHeight: 22 },
+  form: { paddingHorizontal: SPACING.xl },
+  label: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold, marginBottom: SPACING.sm, marginTop: SPACING.md },
+  required: { color: '#EF4444', fontSize: FONT_SIZE.sm },
+  optional: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.regular },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.md, gap: SPACING.md },
+  input: { flex: 1, fontSize: FONT_SIZE.md },
+  errorText: { color: '#EF4444', fontSize: FONT_SIZE.xs, marginTop: SPACING.xs, marginLeft: SPACING.sm },
+  termsContainer: { flexDirection: 'row', alignItems: 'flex-start', marginTop: SPACING.xl, gap: SPACING.md },
+  checkbox: { width: 24, height: 24, borderRadius: BORDER_RADIUS.sm, borderWidth: 2, justifyContent: 'center', alignItems: 'center' },
+  termsText: { flex: 1, fontSize: FONT_SIZE.sm, lineHeight: 20 },
+  signUpButton: { paddingVertical: SPACING.lg, borderRadius: BORDER_RADIUS.md, alignItems: 'center', marginTop: SPACING.xl },
+  signUpButtonText: { color: '#fff', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
+  signInContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.xl },
+  signInText: { fontSize: FONT_SIZE.sm },
+  signInLink: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
 });
 
 export default SignUpScreen;

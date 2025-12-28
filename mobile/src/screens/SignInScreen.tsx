@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ToastAndroid } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase';
@@ -13,28 +13,67 @@ const SignInScreen = ({ navigation }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [touched, setTouched] = useState<{ email?: boolean; password?: boolean }>({});
   const { colors } = useTheme();
 
-  const handleSignIn = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please enter both email and password');
-      return;
+  const showToast = (message: string) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.SHORT);
+    } else {
+      Alert.alert('Success', message);
     }
+  };
+
+  const validateField = (field: string, value: string) => {
+    const newErrors = { ...errors };
+
+    if (field === 'email') {
+      if (!value) newErrors.email = 'Email is required';
+      else if (!/\S+@\S+\.\S+/.test(value)) newErrors.email = 'Invalid email format';
+      else delete newErrors.email;
+    }
+
+    if (field === 'password') {
+      if (!value) newErrors.password = 'Password is required';
+      else if (value.length < 6) newErrors.password = 'Min 6 characters';
+      else delete newErrors.password;
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSignIn = async () => {
+    // Validate all fields
+    setTouched({ email: true, password: true });
+    const newErrors: { email?: string; password?: string } = {};
+
+    if (!email) newErrors.email = 'Email is required';
+    else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = 'Invalid email format';
+
+    if (!password) newErrors.password = 'Password is required';
+
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) return;
 
     setLoading(true);
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth, email, password);
+      showToast('Login successful! 🎉');
       navigation.navigate('App');
     } catch (error: any) {
-      let errorMessage = 'Failed to sign in';
-      if (error?.code === 'auth/invalid-email') {
-        errorMessage = 'Invalid email address';
-      } else if (error?.code === 'auth/user-not-found' || error?.code === 'auth/wrong-password') {
-        errorMessage = 'Invalid email or password';
+      console.log('Sign in error:', error?.code);
+
+      if (error?.code === 'auth/invalid-email' || error?.code === 'auth/user-not-found') {
+        setErrors({ email: 'Email not found or invalid' });
+      } else if (error?.code === 'auth/wrong-password' || error?.code === 'auth/invalid-credential') {
+        setErrors({ password: 'Password is incorrect' });
       } else if (error?.code === 'auth/too-many-requests') {
-        errorMessage = 'Too many failed attempts. Please try again later.';
+        Alert.alert('Too Many Attempts', 'Please try again later.');
+      } else {
+        Alert.alert('Sign In Failed', 'Please check your credentials and try again.');
       }
-      Alert.alert('Sign In Failed', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -66,41 +105,79 @@ const SignInScreen = ({ navigation }) => {
 
           <View style={styles.form}>
             {/* Email Input */}
-            <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground }]}>
-              <Ionicons name="mail-outline" size={20} color={colors.textSecondary} />
-              <TextInput
-                style={[styles.input, { color: colors.text }]}
-                placeholder="Email"
-                placeholderTextColor={colors.textSecondary}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
+            <View>
+              <Text style={[styles.label, { color: colors.text }]}>
+                Email <Text style={styles.required}>*</Text>
+              </Text>
+              <View style={[
+                styles.inputContainer,
+                { backgroundColor: colors.inputBackground },
+                errors.email && touched.email && { borderColor: '#EF4444', borderWidth: 1 }
+              ]}>
+                <Ionicons name="mail-outline" size={20} color={errors.email && touched.email ? '#EF4444' : colors.textSecondary} />
+                <TextInput
+                  style={[styles.input, { color: colors.text }]}
+                  placeholder="Enter your email"
+                  placeholderTextColor={colors.textSecondary}
+                  value={email}
+                  onChangeText={(text) => {
+                    setEmail(text);
+                    if (touched.email) validateField('email', text);
+                  }}
+                  onBlur={() => {
+                    setTouched(prev => ({ ...prev, email: true }));
+                    validateField('email', email);
+                  }}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
+              {errors.email && touched.email && (
+                <Text style={styles.errorText}>{errors.email}</Text>
+              )}
             </View>
 
             {/* Password Input */}
-            <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground }]}>
-              <Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} />
-              <TextInput
-                style={[styles.input, { color: colors.text }]}
-                placeholder="Password"
-                placeholderTextColor={colors.textSecondary}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-              />
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons
-                  name={showPassword ? "eye-off-outline" : "eye-outline"}
-                  size={20}
-                  color={colors.textSecondary}
+            <View>
+              <Text style={[styles.label, { color: colors.text }]}>
+                Password <Text style={styles.required}>*</Text>
+              </Text>
+              <View style={[
+                styles.inputContainer,
+                { backgroundColor: colors.inputBackground },
+                errors.password && touched.password && { borderColor: '#EF4444', borderWidth: 1 }
+              ]}>
+                <Ionicons name="lock-closed-outline" size={20} color={errors.password && touched.password ? '#EF4444' : colors.textSecondary} />
+                <TextInput
+                  style={[styles.input, { color: colors.text }]}
+                  placeholder="Enter your password"
+                  placeholderTextColor={colors.textSecondary}
+                  value={password}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    if (touched.password) validateField('password', text);
+                  }}
+                  onBlur={() => {
+                    setTouched(prev => ({ ...prev, password: true }));
+                    validateField('password', password);
+                  }}
+                  secureTextEntry={!showPassword}
                 />
-              </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeButton}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons
+                    name={showPassword ? "eye-off-outline" : "eye-outline"}
+                    size={20}
+                    color={colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              </View>
+              {errors.password && touched.password && (
+                <Text style={styles.errorText}>{errors.password}</Text>
+              )}
             </View>
 
             {/* Forgot Password */}
@@ -148,87 +225,27 @@ const SignInScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-  },
-  header: {
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-  },
-  backButton: {
-    width: TOUCH_TARGET.min,
-    height: TOUCH_TARGET.min,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: -SPACING.sm,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: SPACING.xxl,
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: FONT_SIZE.title,
-    fontWeight: FONT_WEIGHT.bold,
-    marginBottom: SPACING.sm,
-  },
-  subtitle: {
-    fontSize: FONT_SIZE.md,
-    marginBottom: SPACING.xxxl,
-  },
-  form: {
-    gap: SPACING.lg,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderRadius: BORDER_RADIUS.md,
-    gap: SPACING.md,
-  },
-  input: {
-    flex: 1,
-    fontSize: FONT_SIZE.md,
-    paddingVertical: SPACING.sm,
-  },
-  eyeButton: {
-    padding: SPACING.xs,
-  },
-  forgotButton: {
-    alignSelf: 'flex-end',
-  },
-  forgotPassword: {
-    fontSize: FONT_SIZE.sm,
-    fontWeight: FONT_WEIGHT.semibold,
-  },
-  signInButton: {
-    paddingVertical: SPACING.lg,
-    borderRadius: BORDER_RADIUS.md,
-    alignItems: 'center',
-    marginTop: SPACING.sm,
-  },
-  signInButtonText: {
-    color: '#fff',
-    fontSize: FONT_SIZE.md,
-    fontWeight: FONT_WEIGHT.bold,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: SPACING.lg,
-  },
-  footerText: {
-    fontSize: FONT_SIZE.sm,
-  },
-  signUpText: {
-    fontSize: FONT_SIZE.sm,
-    fontWeight: FONT_WEIGHT.bold,
-  },
+  safeArea: { flex: 1 },
+  container: { flex: 1 },
+  header: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
+  backButton: { width: TOUCH_TARGET.min, height: TOUCH_TARGET.min, justifyContent: 'center', alignItems: 'center', marginLeft: -SPACING.sm },
+  content: { flex: 1, paddingHorizontal: SPACING.xxl, justifyContent: 'center' },
+  title: { fontSize: FONT_SIZE.title, fontWeight: FONT_WEIGHT.bold, marginBottom: SPACING.sm },
+  subtitle: { fontSize: FONT_SIZE.md, marginBottom: SPACING.xxxl },
+  form: { gap: SPACING.md },
+  label: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold, marginBottom: SPACING.sm },
+  required: { color: '#EF4444' },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.md, gap: SPACING.md },
+  input: { flex: 1, fontSize: FONT_SIZE.md, paddingVertical: SPACING.sm },
+  eyeButton: { padding: SPACING.xs },
+  errorText: { color: '#EF4444', fontSize: FONT_SIZE.xs, marginTop: SPACING.xs, marginLeft: SPACING.sm },
+  forgotButton: { alignSelf: 'flex-end' },
+  forgotPassword: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold },
+  signInButton: { paddingVertical: SPACING.lg, borderRadius: BORDER_RADIUS.md, alignItems: 'center', marginTop: SPACING.sm },
+  signInButtonText: { color: '#fff', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
+  footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: SPACING.lg },
+  footerText: { fontSize: FONT_SIZE.sm },
+  signUpText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
 });
 
 export default SignInScreen;

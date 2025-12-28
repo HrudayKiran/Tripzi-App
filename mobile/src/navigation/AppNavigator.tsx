@@ -32,6 +32,7 @@ import SuggestFeatureScreen from '../screens/SuggestFeatureScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
+import UsernameSetupScreen from '../screens/UsernameSetupScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -130,6 +131,7 @@ const AppNavigator = () => {
                     <Stack.Screen name="Settings" component={SettingsScreen} />
                     <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
                     <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+                    <Stack.Screen name="UsernameSetup" component={UsernameSetupScreen} />
                 </Stack.Navigator>
             </NavigationContainer>
         </ThemeProvider>

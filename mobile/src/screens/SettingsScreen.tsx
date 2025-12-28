@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
+import CustomToggle from '../components/CustomToggle';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 
 const SettingsScreen = ({ navigation }) => {
@@ -40,11 +41,12 @@ const SettingsScreen = ({ navigation }) => {
                                     Receive notifications about new trips and messages
                                 </Text>
                             </View>
-                            <Switch
+                            <CustomToggle
                                 value={pushEnabled}
-                                onValueChange={setPushEnabled}
-                                trackColor={{ false: colors.border, true: colors.primary }}
-                                thumbColor={'#fff'}
+                                onValueChange={() => setPushEnabled(!pushEnabled)}
+                                onLabel="On"
+                                offLabel="Off"
+                                size="medium"
                             />
                         </View>
                     </Animatable.View>
@@ -71,11 +73,12 @@ const SettingsScreen = ({ navigation }) => {
                                     Toggle between light and dark theme
                                 </Text>
                             </View>
-                            <Switch
+                            <CustomToggle
                                 value={isDarkMode}
                                 onValueChange={toggleTheme}
-                                trackColor={{ false: colors.border, true: colors.primary }}
-                                thumbColor={'#fff'}
+                                onLabel="On"
+                                offLabel="Off"
+                                size="medium"
                             />
                         </View>
                     </Animatable.View>
