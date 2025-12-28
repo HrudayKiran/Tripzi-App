@@ -1,111 +1,139 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Animatable from 'react-native-animatable';
+import { useTheme } from '../contexts/ThemeContext';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 
 const TermsScreen = ({ navigation }) => {
+  const { colors } = useTheme();
+
   return (
-    <View style={styles.container}>
-      {/* Back Button */}
-      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-        <Ionicons name="chevron-back" size={28} color="#000" />
-      </TouchableOpacity>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="chevron-back" size={28} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Terms of Service</Text>
+          <View style={styles.placeholder} />
+        </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Terms of Service</Text>
-        <Text style={styles.lastUpdated}>Last updated: December 2024</Text>
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          <Animatable.View animation="fadeInUp" duration={400}>
+            <Text style={[styles.lastUpdated, { color: colors.textSecondary }]}>
+              Last updated: December 2024
+            </Text>
 
-        <Text style={styles.sectionTitle}>1. Acceptance of Terms</Text>
-        <Text style={styles.paragraph}>
-          By accessing and using Tripzi, you accept and agree to be bound by the terms and
-          provision of this agreement. If you do not agree to these terms, please do not use our service.
-        </Text>
+            <Section title="1. Acceptance of Terms" colors={colors}>
+              By accessing and using Tripzi, you accept and agree to be bound by the terms and
+              provision of this agreement. If you do not agree to these terms, please do not use our service.
+            </Section>
 
-        <Text style={styles.sectionTitle}>2. Use of Service</Text>
-        <Text style={styles.paragraph}>
-          Tripzi provides a platform for solo travelers to connect, plan trips, and share experiences.
-          You agree to use the service only for lawful purposes and in accordance with these Terms.
-        </Text>
+            <Section title="2. Use of Service" colors={colors}>
+              Tripzi provides a platform for solo travelers to connect, plan trips, and share experiences.
+              You agree to use the service only for lawful purposes and in accordance with these Terms.
+            </Section>
 
-        <Text style={styles.sectionTitle}>3. User Accounts</Text>
-        <Text style={styles.paragraph}>
-          You are responsible for maintaining the confidentiality of your account credentials and for
-          all activities that occur under your account. You agree to notify us immediately of any
-          unauthorized use of your account.
-        </Text>
+            <Section title="3. User Accounts" colors={colors}>
+              You are responsible for maintaining the confidentiality of your account credentials and for
+              all activities that occur under your account. You agree to notify us immediately of any
+              unauthorized use of your account.
+            </Section>
 
-        <Text style={styles.sectionTitle}>4. Content Guidelines</Text>
-        <Text style={styles.paragraph}>
-          Users must not post content that is illegal, harmful, threatening, abusive, harassing,
-          defamatory, vulgar, obscene, or otherwise objectionable. Tripzi reserves the right to
-          remove any content that violates these guidelines.
-        </Text>
+            <Section title="4. Content Guidelines" colors={colors}>
+              Users must not post content that is illegal, harmful, threatening, abusive, harassing,
+              defamatory, vulgar, obscene, or otherwise objectionable. Tripzi reserves the right to
+              remove any content that violates these guidelines.
+            </Section>
 
-        <Text style={styles.sectionTitle}>5. Privacy</Text>
-        <Text style={styles.paragraph}>
-          Your use of Tripzi is also governed by our Privacy Policy. Please review our Privacy
-          Policy to understand our practices.
-        </Text>
+            <Section title="5. Privacy" colors={colors}>
+              Your use of Tripzi is also governed by our Privacy Policy. Please review our Privacy
+              Policy to understand our practices.
+            </Section>
 
-        <Text style={styles.sectionTitle}>6. Limitation of Liability</Text>
-        <Text style={styles.paragraph}>
-          Tripzi shall not be liable for any indirect, incidental, special, consequential, or
-          punitive damages resulting from your use of or inability to use the service.
-        </Text>
+            <Section title="6. Limitation of Liability" colors={colors}>
+              Tripzi shall not be liable for any indirect, incidental, special, consequential, or
+              punitive damages resulting from your use of or inability to use the service.
+            </Section>
 
-        <Text style={styles.sectionTitle}>7. Changes to Terms</Text>
-        <Text style={styles.paragraph}>
-          We reserve the right to modify these terms at any time. We will notify users of any
-          significant changes via email or through the app.
-        </Text>
+            <Section title="7. Changes to Terms" colors={colors}>
+              We reserve the right to modify these terms at any time. We will notify users of any
+              significant changes via email or through the app.
+            </Section>
 
-        <Text style={styles.sectionTitle}>8. Contact Us</Text>
-        <Text style={styles.paragraph}>
-          If you have any questions about these Terms, please contact us at support@tripzi.com
-        </Text>
-      </ScrollView>
-    </View>
+            <Section title="8. Contact Us" colors={colors}>
+              If you have any questions about these Terms, please contact us at support@tripzi.com
+            </Section>
+
+            <View style={{ height: SPACING.xxxl }} />
+          </Animatable.View>
+        </ScrollView>
+      </View>
+    </SafeAreaView>
   );
 };
 
+const Section = ({ title, children, colors }) => (
+  <View style={styles.section}>
+    <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
+    <Text style={[styles.paragraph, { color: colors.textSecondary }]}>{children}</Text>
+  </View>
+);
+
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    paddingTop: 50,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    marginLeft: 20,
-    marginBottom: 10,
+    width: TOUCH_TARGET.min,
+    height: TOUCH_TARGET.min,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: FONT_SIZE.lg,
+    fontWeight: FONT_WEIGHT.semibold,
+  },
+  placeholder: {
+    width: TOUCH_TARGET.min,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 5,
+    paddingHorizontal: SPACING.xxl,
   },
   lastUpdated: {
-    fontSize: 14,
-    color: '#999',
-    marginBottom: 30,
+    fontSize: FONT_SIZE.sm,
+    marginBottom: SPACING.xxl,
+  },
+  section: {
+    marginBottom: SPACING.xxl,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginTop: 20,
-    marginBottom: 10,
+    fontSize: FONT_SIZE.lg,
+    fontWeight: FONT_WEIGHT.bold,
+    marginBottom: SPACING.md,
   },
   paragraph: {
-    fontSize: 15,
-    color: '#666',
+    fontSize: FONT_SIZE.sm,
     lineHeight: 24,
-    marginBottom: 15,
   },
 });
 

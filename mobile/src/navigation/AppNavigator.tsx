@@ -1,11 +1,10 @@
-
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { ThemeProvider } from '../contexts/ThemeContext';
+import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 
 import usePushNotifications from '../hooks/usePushNotifications';
 
@@ -32,20 +31,26 @@ import HelpSupportScreen from '../screens/HelpSupportScreen';
 import SuggestFeatureScreen from '../screens/SuggestFeatureScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
+import UserProfileScreen from '../screens/UserProfileScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const AppTabs = () => {
+    const { colors } = useTheme();
     usePushNotifications();
     return (
         <Tab.Navigator
             screenOptions={{
                 headerShown: false,
                 tabBarShowLabel: true,
-                tabBarStyle: styles.tabBar,
-                tabBarActiveTintColor: '#8A2BE2',
-                tabBarInactiveTintColor: '#999',
+                tabBarStyle: {
+                    backgroundColor: colors.card,
+                    borderTopColor: colors.border,
+                    borderTopWidth: 1,
+                },
+                tabBarActiveTintColor: colors.primary,
+                tabBarInactiveTintColor: colors.textSecondary,
                 tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
             }}
         >
@@ -85,7 +90,25 @@ const AppNavigator = () => {
     return (
         <ThemeProvider>
             <NavigationContainer>
-                <Stack.Navigator screenOptions={{ headerShown: false }}>
+                <Stack.Navigator
+                    screenOptions={{
+                        headerShown: false,
+                        cardStyleInterpolator: ({ current, layouts }) => ({
+                            cardStyle: {
+                                transform: [
+                                    {
+                                        translateX: current.progress.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [layouts.screen.width, 0],
+                                        }),
+                                    },
+                                ],
+                            },
+                        }),
+                        gestureEnabled: true,
+                        gestureDirection: 'horizontal',
+                    }}
+                >
                     <Stack.Screen name="Splash" component={SplashScreen} />
                     <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                     <Stack.Screen name="Start" component={StartScreen} />
@@ -94,18 +117,19 @@ const AppNavigator = () => {
                     <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
                     <Stack.Screen name="App" component={AppTabs} />
                     <Stack.Screen name="CreateTrip" component={CreateTripScreen} />
+                    <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
                     <Stack.Screen name="Message" component={MessageScreen} />
                     <Stack.Screen name="Comments" component={CommentsScreen} />
                     <Stack.Screen name="Map" component={MapScreen} />
-                    <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
                     <Stack.Screen name="CreateGroupChat" component={CreateGroupChatScreen} />
-                    <Stack.Screen name="Kyc" component={KycScreen} />
+                    <Stack.Screen name="KYC" component={KycScreen} />
                     <Stack.Screen name="Terms" component={TermsScreen} />
                     <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
                     <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
                     <Stack.Screen name="SuggestFeature" component={SuggestFeatureScreen} />
                     <Stack.Screen name="Settings" component={SettingsScreen} />
                     <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+                    <Stack.Screen name="UserProfile" component={UserProfileScreen} />
                 </Stack.Navigator>
             </NavigationContainer>
         </ThemeProvider>
@@ -114,20 +138,9 @@ const AppNavigator = () => {
 
 const styles = StyleSheet.create({
     tabBar: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        backgroundColor: '#ffffff',
-        height: 65,
+        backgroundColor: '#fff',
         borderTopWidth: 1,
-        borderTopColor: '#F3F4F6',
-        paddingBottom: 8,
-        elevation: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
+        borderTopColor: '#f0f0f0',
     },
 });
 

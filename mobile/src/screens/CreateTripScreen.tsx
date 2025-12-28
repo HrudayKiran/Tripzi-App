@@ -9,113 +9,139 @@ import * as Progress from 'react-native-progress';
 const { width } = Dimensions.get('window');
 
 const CreateTripScreen = ({ navigation }) => {
-  const [step, setStep] = useState(1);
+    const [step, setStep] = useState(1);
 
-  // Form States
-  const [title, setTitle] = useState('');
-  const [location, setLocation] = useState('');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [maxTravelers, setMaxTravelers] = useState('');
-  const [totalCost, setTotalCost] = useState('');
-  const [description, setDescription] = useState('');
-  const [placesToVisit, setPlacesToVisit] = useState('');
+    // Form States
+    const [title, setTitle] = useState('');
+    const [location, setLocation] = useState('');
+    const [fromDate, setFromDate] = useState('');
+    const [toDate, setToDate] = useState('');
+    const [maxTravelers, setMaxTravelers] = useState('');
+    const [totalCost, setTotalCost] = useState('');
+    const [description, setDescription] = useState('');
+    const [placesToVisit, setPlacesToVisit] = useState('');
 
-  const handleNext = () => setStep(step + 1);
-  const handleBack = () => setStep(step - 1);
+    const handleNext = () => setStep(step + 1);
+    const handleBack = () => setStep(step - 1);
 
-  const handlePostTrip = async () => {
-    const currentUser = auth.currentUser;
-    if (currentUser) {
-      try {
-        await firestore().collection('trips').add({
-          title,
-          location,
-          fromDate,
-          toDate,
-          maxTravelers: parseInt(maxTravelers, 10),
-          totalCost: parseFloat(totalCost),
-          description,
-          placesToVisit: placesToVisit.split(',').map(place => place.trim()),
-          userId: currentUser.uid,
-          createdAt: firestore.FieldValue.serverTimestamp(),
-        });
+    const handlePostTrip = async () => {
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+            try {
+                // Check KYC status first
+                const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
+                const userData = userDoc.data();
 
-        Alert.alert('Success', 'Your trip has been posted!');
-        navigation.navigate('Feed');
+                if (userData?.kycStatus !== 'verified') {
+                    Alert.alert(
+                        'KYC Required',
+                        'You need to complete KYC verification to post trips. This ensures safety for all travelers.',
+                        [
+                            { text: 'Later', style: 'cancel' },
+                            { text: 'Verify Now', onPress: () => navigation.navigate('KYC') },
+                        ]
+                    );
+                    return;
+                }
 
-      } catch (error) {
-        Alert.alert('Error', 'Something went wrong. Please try again.');
-      }
-    } else {
-        Alert.alert('Error', 'You need to be logged in to create a trip.');
-        navigation.navigate('Start');
-    }
-  };
+                await firestore().collection('trips').add({
+                    title,
+                    location,
+                    fromDate,
+                    toDate,
+                    maxTravelers: parseInt(maxTravelers, 10),
+                    totalCost: parseFloat(totalCost),
+                    description,
+                    placesToVisit: placesToVisit.split(',').map(place => place.trim()),
+                    userId: currentUser.uid,
+                    createdAt: firestore.FieldValue.serverTimestamp(),
+                    tripType: 'Adventure',
+                    duration: `${Math.ceil((new Date(toDate).getTime() - new Date(fromDate).getTime()) / (1000 * 60 * 60 * 24))} days`,
+                    cost: parseFloat(totalCost),
+                    currentTravelers: 1,
+                    transportMode: 'mixed',
+                    places: placesToVisit,
+                    genderPreference: 'anyone',
+                    likes: [],
+                    participants: [currentUser.uid],
+                });
 
-  const progress = step / 4;
+                Alert.alert('Success', 'Your trip has been posted!');
+                navigation.navigate('Feed');
 
-  return (
-    <ScrollView style={styles.container}>
-        <Progress.Bar progress={progress} width={width - 40} style={styles.progressBar} />
+            } catch (error) {
+                console.log('Trip post error:', error);
+                Alert.alert('Error', 'Something went wrong. Please try again.');
+            }
+        } else {
+            Alert.alert('Error', 'You need to be logged in to create a trip.');
+            navigation.navigate('Start');
+        }
+    };
 
-        {step === 1 && (
-            <Animatable.View animation="fadeInRight">
-                <Text style={styles.title}>The Adventure Starts Here</Text>
-                <Text style={styles.label}>What's the title of your trip?</Text>
-                <TextInput style={styles.input} placeholder="e.g. Mystical Ladakh" value={title} onChangeText={setTitle} />
-                
-                <Text style={styles.label}>Where are you heading?</Text>
-                <TextInput style={styles.input} placeholder="e.g. Leh, Ladakh" value={location} onChangeText={setLocation} />
-            </Animatable.View>
-        )}
+    const progress = step / 4;
 
-        {step === 2 && (
-            <Animatable.View animation="fadeInRight">
-                <Text style={styles.title}>The Timeline</Text>
-                <Text style={styles.label}>When does the adventure begin and end?</Text>
-                <View style={styles.dateContainer}>
-                    <TextInput style={[styles.input, styles.dateInput]} placeholder="From (YYYY-MM-DD)" value={fromDate} onChangeText={setFromDate} />
-                    <TextInput style={[styles.input, styles.dateInput]} placeholder="To (YYYY-MM-DD)" value={toDate} onChangeText={setToDate} />
-                </View>
+    return (
+        <ScrollView style={styles.container}>
+            <Progress.Bar progress={progress} width={width - 40} style={styles.progressBar} />
 
-                <Text style={styles.label}>How many people can join?</Text>
-                <TextInput style={styles.input} placeholder="e.g. 4" value={maxTravelers} onChangeText={setMaxTravelers} keyboardType="numeric" />
-            </Animatable.View>
-        )}
+            {step === 1 && (
+                <Animatable.View animation="fadeInRight">
+                    <Text style={styles.title}>The Adventure Starts Here</Text>
+                    <Text style={styles.label}>What's the title of your trip?</Text>
+                    <TextInput style={styles.input} placeholder="e.g. Mystical Ladakh" value={title} onChangeText={setTitle} />
 
-        {step === 3 && (
-            <Animatable.View animation="fadeInRight">
-                <Text style={styles.title}>The Finer Details</Text>
-                <Text style={styles.label}>Tell us about your trip</Text>
-                <TextInput style={styles.textArea} placeholder="Describe the journey..." value={description} onChangeText={setDescription} multiline />
+                    <Text style={styles.label}>Where are you heading?</Text>
+                    <TextInput style={styles.input} placeholder="e.g. Leh, Ladakh" value={location} onChangeText={setLocation} />
+                </Animatable.View>
+            )}
 
-                <Text style={styles.label}>What are the key places to visit?</Text>
-                <TextInput style={styles.textArea} placeholder="Enter places separated by commas" value={placesToVisit} onChangeText={setPlacesToVisit} multiline />
-            </Animatable.View>
-        )}
+            {step === 2 && (
+                <Animatable.View animation="fadeInRight">
+                    <Text style={styles.title}>The Timeline</Text>
+                    <Text style={styles.label}>When does the adventure begin and end?</Text>
+                    <View style={styles.dateContainer}>
+                        <TextInput style={[styles.input, styles.dateInput]} placeholder="From (YYYY-MM-DD)" value={fromDate} onChangeText={setFromDate} />
+                        <TextInput style={[styles.input, styles.dateInput]} placeholder="To (YYYY-MM-DD)" value={toDate} onChangeText={setToDate} />
+                    </View>
 
-        {step === 4 && (
-            <Animatable.View animation="fadeInRight">
-                <Text style={styles.title}>The Budget</Text>
-                <Text style={styles.label}>What's the estimated total cost for the trip?</Text>
-                <TextInput style={styles.input} placeholder="e.g. 25000" value={totalCost} onChangeText={setTotalCost} keyboardType="numeric" />
-                
-                {/* Placeholder for image upload */}
-                <TouchableOpacity style={styles.uploadButton}>
-                    <Text style={styles.uploadButtonText}>Upload a Trip Photo</Text>
-                </TouchableOpacity>
-            </Animatable.View>
-        )}
+                    <Text style={styles.label}>How many people can join?</Text>
+                    <TextInput style={styles.input} placeholder="e.g. 4" value={maxTravelers} onChangeText={setMaxTravelers} keyboardType="numeric" />
+                </Animatable.View>
+            )}
 
-        <View style={styles.navigationButtons}>
-            {step > 1 && <TouchableOpacity style={styles.backButton} onPress={handleBack}><Text style={styles.buttonText}>Back</Text></TouchableOpacity>}
-            {step < 4 && <TouchableOpacity style={styles.nextButton} onPress={handleNext}><Text style={styles.buttonText}>Next</Text></TouchableOpacity>}
-            {step === 4 && <TouchableOpacity style={styles.postButton} onPress={handlePostTrip}><Text style={styles.buttonText}>Post Trip</Text></TouchableOpacity>}
-        </View>
+            {step === 3 && (
+                <Animatable.View animation="fadeInRight">
+                    <Text style={styles.title}>The Finer Details</Text>
+                    <Text style={styles.label}>Tell us about your trip</Text>
+                    <TextInput style={styles.textArea} placeholder="Describe the journey..." value={description} onChangeText={setDescription} multiline />
 
-    </ScrollView>
-  );
+                    <Text style={styles.label}>What are the key places to visit?</Text>
+                    <TextInput style={styles.textArea} placeholder="Enter places separated by commas" value={placesToVisit} onChangeText={setPlacesToVisit} multiline />
+                </Animatable.View>
+            )}
+
+            {step === 4 && (
+                <Animatable.View animation="fadeInRight">
+                    <Text style={styles.title}>The Budget</Text>
+                    <Text style={styles.label}>What's the estimated total cost for the trip?</Text>
+                    <TextInput style={styles.input} placeholder="e.g. 25000" value={totalCost} onChangeText={setTotalCost} keyboardType="numeric" />
+
+                    {/* Placeholder for image upload */}
+                    <TouchableOpacity style={styles.uploadButton}>
+                        <Text style={styles.uploadButtonText}>Upload a Trip Photo</Text>
+                    </TouchableOpacity>
+                </Animatable.View>
+            )}
+
+            <View style={styles.navigationButtons}>
+                {step > 1 && <TouchableOpacity style={styles.backButton} onPress={handleBack}><Text style={styles.buttonText}>Back</Text></TouchableOpacity>}
+                {step < 4 && <TouchableOpacity style={styles.nextButton} onPress={handleNext}><Text style={styles.buttonText}>Next</Text></TouchableOpacity>}
+                {step === 4 && <TouchableOpacity style={styles.postButton} onPress={handlePostTrip}><Text style={styles.buttonText}>Post Trip</Text></TouchableOpacity>}
+            </View>
+
+        </ScrollView>
+    );
 };
 
 const styles = StyleSheet.create({

@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "881054128450-ic73kemffv5579ar71t2a9va0b6b74kp.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tripzi.mobile",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
           "client_id": "881054128450-dho8i7lsv2a5enu2u3s0sac75ttmp0fg.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -25,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "881054128450-dho8i7lsv2a5enu2u3s0sac75ttmp0fg.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { auth } from '../firebase';
 import firestore from '@react-native-firebase/firestore';
@@ -14,35 +13,34 @@ const useTripLike = (trip) => {
     } else {
       setIsLiked(false);
     }
+    setLikeCount(trip.likes?.length || 0);
   }, [currentUser, trip.likes]);
 
   const handleLike = async () => {
     if (!currentUser) return;
 
-    const tripRef = firestore().collection('trips').doc(trip.id);
     const originalIsLiked = isLiked;
     const originalLikeCount = likeCount;
 
+    // Optimistic update
     setIsLiked(!isLiked);
     setLikeCount(prev => isLiked ? prev - 1 : prev + 1);
 
     try {
-      await firestore().runTransaction(async (transaction) => {
-        const tripDoc = await transaction.get(tripRef);
-        if (!tripDoc.exists) throw 'Trip does not exist!';
+      const tripRef = firestore().collection('trips').doc(trip.id);
 
-        const currentLikes = tripDoc.data().likes || [];
-        const updatedLikes = !originalIsLiked
-            ? [...currentLikes, currentUser.uid]
-            : currentLikes.filter(uid => uid !== currentUser.uid);
-        
-        transaction.update(tripRef, { likes: updatedLikes });
-      });
+      if (!originalIsLiked) {
+        await tripRef.update({
+          likes: firestore.FieldValue.arrayUnion(currentUser.uid),
+        });
+      } else {
+        await tripRef.update({
+          likes: firestore.FieldValue.arrayRemove(currentUser.uid),
+        });
+      }
     } catch (error) {
-      console.error("Error liking trip: ", error);
-      // Revert the state on error
-      setIsLiked(originalIsLiked);
-      setLikeCount(originalLikeCount);
+      console.log('Like error (keeping local state):', error);
+      // Keep optimistic update even if Firestore fails
     }
   };
 

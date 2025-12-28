@@ -1,12 +1,18 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { Ionicons } from '@expo/vector-icons';
+import * as Animatable from 'react-native-animatable';
+import { useTheme } from '../contexts/ThemeContext';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 
 const StartScreen = ({ navigation }) => {
+  const { colors } = useTheme();
+
   useEffect(() => {
     GoogleSignin.configure({
       webClientId: '881054128450-dho8i7lsv2a5enu2u3s0sac75ttmp0fg.apps.googleusercontent.com',
@@ -15,265 +21,218 @@ const StartScreen = ({ navigation }) => {
 
   const onGoogleButtonPress = async () => {
     try {
-      console.log('Starting Google Sign-In...');
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      console.log('Google Play Services available');
 
-      const signInResult = (await GoogleSignin.signIn()) as any;
-      console.log('Google Sign-In successful, got token');
+      try {
+        await GoogleSignin.signOut();
+      } catch (e) { }
 
-      const { idToken } = signInResult;
+      const signInResult = await GoogleSignin.signIn();
+      const idToken = (signInResult as any)?.data?.idToken || (signInResult as any)?.idToken;
+
+      if (!idToken) {
+        throw new Error('No idToken received from Google Sign-In');
+      }
+
       const googleCredential = GoogleAuthProvider.credential(idToken);
-      console.log('Created Google credential');
-
       const userCredential = await signInWithCredential(auth, googleCredential);
-      console.log('Firebase sign-in successful');
 
       const { user } = userCredential;
       const { uid, displayName, email } = user;
 
-      const userRef = doc(db, 'users', uid);
-      const userSnapshot = await getDoc(userRef);
-
-      if (!userSnapshot.exists()) {
-        console.log('Creating new user document');
-        await setDoc(userRef, {
-          displayName,
-          email,
-          createdAt: serverTimestamp(),
-        });
-      }
-
-      console.log('Navigating to App...');
       navigation.navigate('App');
-    } catch (error: any) {
-      console.error('Google Sign-In Error:', error);
-      console.error('Error code:', error?.code);
-      console.error('Error message:', error?.message);
 
+      const userRef = doc(db, 'users', uid);
+      getDoc(userRef).then((userSnapshot) => {
+        if (!userSnapshot.exists()) {
+          setDoc(userRef, {
+            displayName,
+            email,
+            createdAt: serverTimestamp(),
+          }).catch(err => console.log('Firestore error:', err));
+        }
+      }).catch(err => console.log('Firestore read error:', err));
+    } catch (error: any) {
       if (error?.code !== statusCodes.SIGN_IN_CANCELLED) {
-        Alert.alert('Google Sign-In Error', error?.message || error?.toString());
+        console.log('Google Sign-In error:', error?.message || error);
       }
     }
   };
 
   return (
-    <View style={styles.container}>
-      {/* Gradient Background */}
-      <View style={styles.gradientBackground}>
-        {/* Small Logo at Top */}
-        <View style={styles.topLogo}>
-          <Text style={styles.topLogoEmoji}>🚀</Text>
-        </View>
-      </View>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+      <View style={styles.container}>
+        <Animatable.View animation="fadeInUp" duration={500} style={styles.content}>
+          {/* Logo */}
+          <View style={styles.logoContainer}>
+            <View style={[styles.logoBox, { backgroundColor: colors.primary }]}>
+              <Text style={styles.rocketEmoji}>🚀</Text>
+            </View>
+          </View>
 
-      {/* White Bottom Card */}
-      <View style={styles.bottomCard}>
-        <Text style={styles.title}>Start Your Adventure</Text>
-        <Text style={styles.subtitle}>
-          Join thousands of solo travelers exploring the world.
-        </Text>
+          {/* Welcome Text */}
+          <Text style={[styles.welcome, { color: colors.text }]}>Welcome to Tripzi</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            Connect with solo travelers and explore the world together
+          </Text>
 
-        {/* Continue with Google Button */}
-        <TouchableOpacity style={styles.googleButton} onPress={onGoogleButtonPress}>
-          <Ionicons name="logo-google" size={20} color="#fff" style={{ marginRight: 10 }} />
-          <Text style={styles.googleButtonText}>Continue with Google</Text>
-        </TouchableOpacity>
+          {/* Buttons */}
+          <View style={styles.buttonsContainer}>
+            <TouchableOpacity
+              style={[styles.emailButton, { backgroundColor: colors.primary }]}
+              onPress={() => navigation.navigate('SignIn')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="mail-outline" size={20} color="#fff" />
+              <Text style={styles.emailButtonText}>Sign in with Email</Text>
+            </TouchableOpacity>
 
-        <Text style={styles.orText}>OR CONTINUE WITH</Text>
+            <TouchableOpacity
+              style={[styles.googleButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={onGoogleButtonPress}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.googleIcon}>G</Text>
+              <Text style={[styles.googleButtonText, { color: colors.text }]}>Sign in with Google</Text>
+            </TouchableOpacity>
 
-        {/* Social Icons */}
-        <View style={styles.socialIconsContainer}>
-          <TouchableOpacity style={styles.socialIcon}>
-            <Ionicons name="logo-apple" size={24} color="#000" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.socialIcon}>
-            <Ionicons name="logo-facebook" size={24} color="#1877F2" />
-          </TouchableOpacity>
-        </View>
+            <View style={styles.dividerContainer}>
+              <View style={[styles.divider, { backgroundColor: colors.border }]} />
+              <Text style={[styles.dividerText, { color: colors.textSecondary }]}>or</Text>
+              <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            </View>
 
-        {/* Sign Up with Email */}
-        <TouchableOpacity
-          style={styles.signUpButton}
-          onPress={() => navigation.navigate('SignUp')}
+            <TouchableOpacity
+              style={[styles.createButton, { borderColor: colors.primary }]}
+              onPress={() => navigation.navigate('SignUp')}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.createButtonText, { color: colors.primary }]}>Create New Account</Text>
+            </TouchableOpacity>
+          </View>
+        </Animatable.View>
+
+        {/* Terms */}
+        <Animatable.Text
+          animation="fadeIn"
+          delay={300}
+          style={[styles.terms, { color: colors.textSecondary }]}
         >
-          <Ionicons name="person-add-outline" size={20} color="#8A2BE2" />
-          <Text style={styles.signUpButtonText}>Sign Up with Email</Text>
-        </TouchableOpacity>
-
-        {/* Sign In with Email */}
-        <TouchableOpacity
-          style={styles.signInButton}
-          onPress={() => navigation.navigate('SignIn')}
-        >
-          <Ionicons name="log-in-outline" size={20} color="#1a1a1a" />
-          <Text style={styles.signInButtonText}>Sign In with Email</Text>
-        </TouchableOpacity>
-
-        {/* Terms and Privacy */}
-        <Text style={styles.termsText}>
           By continuing, you agree to our{' '}
-          <Text style={styles.termsLink} onPress={() => navigation.navigate('Terms')}>
+          <Text style={{ color: colors.primary }} onPress={() => navigation.navigate('Terms')}>
             Terms of Service
           </Text>{' '}
-          &{' '}
-          <Text style={styles.termsLink} onPress={() => navigation.navigate('PrivacyPolicy')}>
+          and{' '}
+          <Text style={{ color: colors.primary }} onPress={() => navigation.navigate('PrivacyPolicy')}>
             Privacy Policy
           </Text>
-          .
-        </Text>
+        </Animatable.Text>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F5A65A',
+    paddingHorizontal: SPACING.xxl,
+    justifyContent: 'space-between',
+    paddingBottom: SPACING.xxl,
   },
-  gradientBackground: {
-    height: '40%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#E5896B',
-  },
-  topLogo: {
-    width: 60,
-    height: 60,
-    backgroundColor: '#fff',
-    borderRadius: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  topLogoEmoji: {
-    fontSize: 30,
-  },
-  bottomCard: {
+  content: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    paddingHorizontal: 25,
-    paddingTop: 40,
-    paddingBottom: 30,
-    marginTop: -20,
+    justifyContent: 'center',
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: SPACING.xxl,
+  },
+  logoBox: {
+    width: 80,
+    height: 80,
+    borderRadius: BORDER_RADIUS.xl,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rocketEmoji: {
+    fontSize: 40,
+  },
+  welcome: {
+    fontSize: FONT_SIZE.xxxl,
+    fontWeight: FONT_WEIGHT.bold,
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: SPACING.md,
   },
   subtitle: {
-    fontSize: 15,
-    color: '#666',
+    fontSize: FONT_SIZE.md,
     textAlign: 'center',
-    marginBottom: 30,
-    lineHeight: 22,
+    marginBottom: SPACING.xxxl,
+    lineHeight: 24,
+  },
+  buttonsContainer: {
+    gap: SPACING.lg,
+  },
+  emailButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
+    gap: SPACING.md,
+  },
+  emailButtonText: {
+    color: '#fff',
+    fontSize: FONT_SIZE.md,
+    fontWeight: FONT_WEIGHT.bold,
   },
   googleButton: {
-    backgroundColor: '#8A2BE2',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 30,
-    marginBottom: 20,
-    elevation: 2,
-    shadowColor: '#8A2BE2',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    paddingVertical: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    gap: SPACING.md,
   },
   googleIcon: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginRight: 10,
-    backgroundColor: '#fff',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    textAlign: 'center',
-    lineHeight: 24,
-    overflow: 'hidden',
+    fontSize: FONT_SIZE.xl,
+    fontWeight: FONT_WEIGHT.bold,
+    color: '#4285F4',
   },
   googleButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: FONT_SIZE.md,
+    fontWeight: FONT_WEIGHT.semibold,
   },
-  orText: {
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: SPACING.sm,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    marginHorizontal: SPACING.lg,
+    fontSize: FONT_SIZE.sm,
+  },
+  createButton: {
+    paddingVertical: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 2,
+    alignItems: 'center',
+  },
+  createButtonText: {
+    fontSize: FONT_SIZE.md,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  terms: {
+    fontSize: FONT_SIZE.xs,
     textAlign: 'center',
-    color: '#999',
-    fontSize: 12,
-    letterSpacing: 1,
-    marginVertical: 15,
-  },
-  socialIconsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 20,
-    marginBottom: 25,
-  },
-  socialIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  signUpButton: {
-    backgroundColor: '#F3E8FF',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 30,
-    marginBottom: 15,
-    gap: 8,
-  },
-  signUpButtonText: {
-    color: '#8A2BE2',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  signInButton: {
-    backgroundColor: '#fff',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    marginBottom: 20,
-    gap: 8,
-  },
-  signInButtonText: {
-    color: '#1a1a1a',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  termsText: {
-    textAlign: 'center',
-    color: '#999',
-    fontSize: 12,
     lineHeight: 18,
-  },
-  termsLink: {
-    color: '#8A2BE2',
-    fontWeight: '600',
   },
 });
 

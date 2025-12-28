@@ -1,9 +1,13 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { Ionicons } from '@expo/vector-icons';
+import * as Animatable from 'react-native-animatable';
+import { useTheme } from '../contexts/ThemeContext';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 
 const SignUpScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -15,6 +19,7 @@ const SignUpScreen = ({ navigation }) => {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const { colors } = useTheme();
 
   const handleSignUp = async () => {
     if (!agreedToTerms) {
@@ -42,21 +47,19 @@ const SignUpScreen = ({ navigation }) => {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const { user } = userCredential;
 
-      await updateProfile(user, {
-        displayName: fullName,
-      });
+      await updateProfile(user, { displayName: fullName });
 
       await setDoc(doc(db, 'users', user.uid), {
         displayName: fullName,
         email,
         phoneNumber: phoneNumber || null,
         createdAt: serverTimestamp(),
+        kycStatus: 'pending',
       });
 
       navigation.navigate('App');
     } catch (error: any) {
       let errorMessage = 'Failed to create account';
-
       if (error?.code === 'auth/email-already-in-use') {
         errorMessage = 'Email is already registered';
       } else if (error?.code === 'auth/invalid-email') {
@@ -64,294 +67,263 @@ const SignUpScreen = ({ navigation }) => {
       } else if (error?.code === 'auth/weak-password') {
         errorMessage = 'Password is too weak';
       }
-
       Alert.alert('Sign Up Failed', errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
+  const InputField = ({ icon, placeholder, value, onChangeText, secureTextEntry = false, keyboardType = 'default', showToggle = false, isSecure = false, onToggle = () => { } }) => (
+    <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground }]}>
+      <Ionicons name={icon} size={20} color={colors.textSecondary} />
+      <TextInput
+        style={[styles.input, { color: colors.text }]}
+        placeholder={placeholder}
+        placeholderTextColor={colors.textSecondary}
+        value={value}
+        onChangeText={onChangeText}
+        secureTextEntry={secureTextEntry}
+        keyboardType={keyboardType}
+        autoCapitalize={keyboardType === 'email-address' ? 'none' : 'sentences'}
+      />
+      {showToggle && (
+        <TouchableOpacity onPress={onToggle} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name={isSecure ? "eye-outline" : "eye-off-outline"} size={20} color={colors.textSecondary} />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      {/* Back Button */}
-      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-        <Ionicons name="chevron-back" size={28} color="#000" />
-      </TouchableOpacity>
-
-      {/* Title */}
-      <Text style={styles.title}>
-        Create your{'\n'}
-        <Text style={styles.titleHighlight}>account</Text>
-      </Text>
-      <Text style={styles.subtitle}>
-        Connect with thousands of solo travelers exploring the world together.
-      </Text>
-
-      {/* Email Field */}
-      <Text style={styles.label}>Email Address</Text>
-      <View style={styles.inputContainer}>
-        <Ionicons name="mail-outline" size={20} color="#999" style={styles.inputIcon} />
-        <TextInput
-          style={styles.input}
-          placeholder="hello@example.com"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-      </View>
-
-      {/* Full Name Field */}
-      <Text style={styles.label}>Full Name</Text>
-      <View style={styles.inputContainer}>
-        <Ionicons name="person-outline" size={20} color="#999" style={styles.inputIcon} />
-        <TextInput
-          style={styles.input}
-          placeholder="Your full name"
-          value={fullName}
-          onChangeText={setFullName}
-        />
-      </View>
-
-      {/* Phone Number Field */}
-      <Text style={styles.label}>
-        Phone Number <Text style={styles.optional}>*</Text>
-      </Text>
-      <View style={styles.inputContainer}>
-        <Ionicons name="call-outline" size={20} color="#999" style={styles.inputIcon} />
-        <TextInput
-          style={styles.input}
-          placeholder="9876543210"
-          value={phoneNumber}
-          onChangeText={setPhoneNumber}
-          keyboardType="phone-pad"
-        />
-      </View>
-
-      {/* Password Field */}
-      <Text style={styles.label}>Password</Text>
-      <View style={styles.inputContainer}>
-        <Ionicons name="lock-closed-outline" size={20} color="#999" style={styles.inputIcon} />
-        <TextInput
-          style={styles.input}
-          placeholder="Create a password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry={!showPassword}
-        />
-        <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-          <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={20} color="#999" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Confirm Password Field */}
-      <Text style={styles.label}>Confirm Password</Text>
-      <View style={styles.inputContainer}>
-        <Ionicons name="lock-closed-outline" size={20} color="#999" style={styles.inputIcon} />
-        <TextInput
-          style={styles.input}
-          placeholder="Re-enter password"
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          secureTextEntry={!showConfirmPassword}
-        />
-        <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-          <Ionicons name={showConfirmPassword ? "eye-outline" : "eye-off-outline"} size={20} color="#999" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Terms Checkbox */}
-      <TouchableOpacity
-        style={styles.checkboxContainer}
-        onPress={() => setAgreedToTerms(!agreedToTerms)}
-      >
-        <View style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}>
-          {agreedToTerms && <Ionicons name="checkmark" size={16} color="#8A2BE2" />}
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="chevron-back" size={28} color={colors.text} />
+          </TouchableOpacity>
         </View>
-        <Text style={styles.checkboxText}>
-          I agree to the{' '}
-          <Text style={styles.link} onPress={() => navigation.navigate('Terms')}>
-            Terms of Service
-          </Text>{' '}
-          and{' '}
-          <Text style={styles.link} onPress={() => navigation.navigate('PrivacyPolicy')}>
-            Privacy Policy
+
+        <Animatable.View animation="fadeInUp" duration={500}>
+          {/* Title */}
+          <Text style={[styles.title, { color: colors.text }]}>
+            Create your{'\n'}
+            <Text style={{ color: colors.primary }}>account</Text>
           </Text>
-          .
-        </Text>
-      </TouchableOpacity>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            Connect with thousands of solo travelers exploring the world together.
+          </Text>
 
-      {/* Sign Up Button */}
-      <TouchableOpacity
-        style={styles.signUpButton}
-        onPress={handleSignUp}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <>
-            <Text style={styles.signUpButtonText}>Sign Up</Text>
-            <Ionicons name="arrow-forward" size={20} color="#fff" style={{ marginLeft: 8 }} />
-          </>
-        )}
-      </TouchableOpacity>
+          {/* Form */}
+          <View style={styles.form}>
+            <Text style={[styles.label, { color: colors.text }]}>Email Address</Text>
+            <InputField
+              icon="mail-outline"
+              placeholder="hello@example.com"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+            />
 
-      {/* Log In Link */}
-      <Text style={styles.loginText}>
-        Already a member? <Text style={styles.link} onPress={() => navigation.navigate('SignIn')}>Log In</Text>
-      </Text>
-    </ScrollView>
+            <Text style={[styles.label, { color: colors.text }]}>Full Name</Text>
+            <InputField
+              icon="person-outline"
+              placeholder="Your full name"
+              value={fullName}
+              onChangeText={setFullName}
+            />
+
+            <Text style={[styles.label, { color: colors.text }]}>Phone Number (Optional)</Text>
+            <InputField
+              icon="call-outline"
+              placeholder="+91 XXXXX XXXXX"
+              value={phoneNumber}
+              onChangeText={setPhoneNumber}
+              keyboardType="phone-pad"
+            />
+
+            <Text style={[styles.label, { color: colors.text }]}>Password</Text>
+            <InputField
+              icon="lock-closed-outline"
+              placeholder="Create a password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              showToggle
+              isSecure={!showPassword}
+              onToggle={() => setShowPassword(!showPassword)}
+            />
+
+            <Text style={[styles.label, { color: colors.text }]}>Confirm Password</Text>
+            <InputField
+              icon="lock-closed-outline"
+              placeholder="Confirm your password"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry={!showConfirmPassword}
+              showToggle
+              isSecure={!showConfirmPassword}
+              onToggle={() => setShowConfirmPassword(!showConfirmPassword)}
+            />
+
+            {/* Terms Checkbox */}
+            <TouchableOpacity
+              style={styles.termsContainer}
+              onPress={() => setAgreedToTerms(!agreedToTerms)}
+              activeOpacity={0.7}
+            >
+              <View style={[
+                styles.checkbox,
+                { borderColor: colors.primary, backgroundColor: agreedToTerms ? colors.primary : 'transparent' }
+              ]}>
+                {agreedToTerms && <Ionicons name="checkmark" size={16} color="#fff" />}
+              </View>
+              <Text style={[styles.termsText, { color: colors.textSecondary }]}>
+                I agree to the{' '}
+                <Text style={{ color: colors.primary }} onPress={() => navigation.navigate('Terms')}>
+                  Terms of Service
+                </Text>
+                {' '}and{' '}
+                <Text style={{ color: colors.primary }} onPress={() => navigation.navigate('PrivacyPolicy')}>
+                  Privacy Policy
+                </Text>
+              </Text>
+            </TouchableOpacity>
+
+            {/* Sign Up Button */}
+            <TouchableOpacity
+              style={[styles.signUpButton, { backgroundColor: colors.primary }]}
+              onPress={handleSignUp}
+              disabled={loading}
+              activeOpacity={0.8}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.signUpButtonText}>Create Account</Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Sign In Link */}
+            <View style={styles.signInContainer}>
+              <Text style={[styles.signInText, { color: colors.textSecondary }]}>
+                Already have an account?{' '}
+              </Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('SignIn')}
+                hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
+              >
+                <Text style={[styles.signInLink, { color: colors.primary }]}>Sign In</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Animatable.View>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   contentContainer: {
-    padding: 20,
-    paddingTop: 50,
+    paddingBottom: SPACING.xxxl,
+  },
+  header: {
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    marginBottom: 20,
-  },
-  communityContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  avatarGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  plusCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#8A2BE2',
+    width: TOUCH_TARGET.min,
+    height: TOUCH_TARGET.min,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  plusText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  communityText: {
-    color: '#666',
-    fontSize: 14,
+    marginLeft: -SPACING.sm,
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 10,
-  },
-  titleHighlight: {
-    color: '#8A2BE2',
+    fontSize: FONT_SIZE.title,
+    fontWeight: FONT_WEIGHT.bold,
+    paddingHorizontal: SPACING.xxl,
+    marginBottom: SPACING.sm,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 30,
-    lineHeight: 20,
+    fontSize: FONT_SIZE.sm,
+    lineHeight: 22,
+    paddingHorizontal: SPACING.xxl,
+    marginBottom: SPACING.xxl,
+  },
+  form: {
+    paddingHorizontal: SPACING.xxl,
+    gap: SPACING.md,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 8,
-    marginTop: 15,
-  },
-  optional: {
-    color: '#E74C3C',
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.semibold,
+    marginTop: SPACING.sm,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    backgroundColor: '#F9F9F9',
-  },
-  inputIcon: {
-    marginRight: 10,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    gap: SPACING.md,
   },
   input: {
     flex: 1,
-    height: 50,
-    fontSize: 15,
-    color: '#1a1a1a',
+    fontSize: FONT_SIZE.md,
+    paddingVertical: SPACING.sm,
   },
-  checkboxContainer: {
+  termsContainer: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginTop: 20,
-    marginBottom: 25,
+    marginTop: SPACING.lg,
+    gap: SPACING.md,
   },
   checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 6,
     borderWidth: 2,
-    borderColor: '#C0C0C0',
-    marginRight: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  checkboxChecked: {
-    borderColor: '#8A2BE2',
-    backgroundColor: '#F3E8FF',
-  },
-  checkboxText: {
+  termsText: {
     flex: 1,
-    fontSize: 13,
-    color: '#666',
+    fontSize: FONT_SIZE.xs,
     lineHeight: 18,
   },
-  link: {
-    color: '#8A2BE2',
-    fontWeight: '600',
-  },
   signUpButton: {
-    backgroundColor: '#8A2BE2',
-    flexDirection: 'row',
+    paddingVertical: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 30,
-    marginBottom: 20,
-    elevation: 2,
-    shadowColor: '#8A2BE2',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    marginTop: SPACING.lg,
   },
   signUpButtonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: FONT_SIZE.md,
+    fontWeight: FONT_WEIGHT.bold,
   },
-  loginText: {
-    textAlign: 'center',
-    color: '#666',
-    fontSize: 14,
-    marginBottom: 30,
+  signInContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: SPACING.lg,
+  },
+  signInText: {
+    fontSize: FONT_SIZE.sm,
+  },
+  signInLink: {
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.bold,
   },
 });
 

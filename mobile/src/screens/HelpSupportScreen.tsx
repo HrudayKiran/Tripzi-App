@@ -1,9 +1,10 @@
-
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, SHADOW } from '../styles/constants';
 
 const HelpSupportScreen = ({ navigation }) => {
   const { colors } = useTheme();
@@ -24,178 +25,188 @@ const HelpSupportScreen = ({ navigation }) => {
   };
 
   const handleSendMessage = () => {
-    // Handle submit logic
     alert('Message sent successfully!');
     setSubject('');
     setMessage('');
   };
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Help & Support</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
-      {/* Contact Options */}
-      <Animatable.View animation="fadeInUp" style={styles.contactContainer}>
-        <TouchableOpacity style={styles.contactCard}>
-          <View style={[styles.contactIcon, { backgroundColor: '#EDE9FE' }]}>
-            <Ionicons name="mail-outline" size={32} color="#8B5CF6" />
-          </View>
-          <Text style={styles.contactLabel}>Email</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.contactCard}>
-          <View style={[styles.contactIcon, { backgroundColor: '#D1FAE5' }]}>
-            <Ionicons name="chatbubble-ellipses-outline" size={32} color="#10B981" />
-          </View>
-          <Text style={styles.contactLabel}>Live Chat</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.contactCard}>
-          <View style={[styles.contactIcon, { backgroundColor: '#F3F4F6' }]}>
-            <Ionicons name="call-outline" size={32} color="#6B7280" />
-          </View>
-          <Text style={styles.contactLabel}>Call Us</Text>
-        </TouchableOpacity>
-      </Animatable.View>
-
-      {/* FAQ Section */}
-      <Animatable.View animation="fadeInUp" delay={200} style={styles.faqSection}>
-        <View style={styles.faqHeader}>
-          <Ionicons name="help-circle-outline" size={24} color="#8A2BE2" />
-          <Text style={styles.faqTitle}>Frequently Asked Questions</Text>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="chevron-back" size={28} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Help & Support</Text>
+          <View style={styles.placeholder} />
         </View>
 
-        {faqs.map((faq) => (
-          <View key={faq.id} style={styles.faqItem}>
-            <TouchableOpacity onPress={() => toggleFAQ(faq.id)} style={styles.faqQuestion}>
-              <Text style={styles.faqQuestionText}>{faq.question}</Text>
-              <Ionicons
-                name={expandedFAQ === faq.id ? "chevron-up" : "chevron-down"}
-                size={20}
-                color="#666"
-              />
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Contact Options */}
+          <Animatable.View animation="fadeInUp" duration={400} style={styles.contactContainer}>
+            <ContactCard icon="mail-outline" label="Email" iconColor="#8B5CF6" bgColor="#EDE9FE" colors={colors} />
+            <ContactCard icon="chatbubble-ellipses-outline" label="Live Chat" iconColor="#10B981" bgColor="#D1FAE5" colors={colors} />
+            <ContactCard icon="call-outline" label="Call Us" iconColor="#6B7280" bgColor="#F3F4F6" colors={colors} />
+          </Animatable.View>
+
+          {/* FAQ Section */}
+          <Animatable.View animation="fadeInUp" delay={100} duration={400} style={[styles.faqSection, { backgroundColor: colors.card }]}>
+            <View style={styles.faqHeader}>
+              <Ionicons name="help-circle-outline" size={24} color={colors.primary} />
+              <Text style={[styles.faqTitle, { color: colors.text }]}>Frequently Asked Questions</Text>
+            </View>
+
+            {faqs.map((faq) => (
+              <View key={faq.id} style={[styles.faqItem, { borderBottomColor: colors.border }]}>
+                <TouchableOpacity
+                  onPress={() => toggleFAQ(faq.id)}
+                  style={styles.faqQuestion}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.faqQuestionText, { color: colors.text }]}>{faq.question}</Text>
+                  <Ionicons
+                    name={expandedFAQ === faq.id ? "chevron-up" : "chevron-down"}
+                    size={20}
+                    color={colors.textSecondary}
+                  />
+                </TouchableOpacity>
+                {expandedFAQ === faq.id && (
+                  <Animatable.View animation="fadeIn" duration={200} style={styles.faqAnswer}>
+                    <Text style={[styles.faqAnswerText, { color: colors.textSecondary }]}>{faq.answer}</Text>
+                  </Animatable.View>
+                )}
+              </View>
+            ))}
+          </Animatable.View>
+
+          {/* Send Message Section */}
+          <Animatable.View animation="fadeInUp" delay={200} duration={400} style={[styles.messageSection, { backgroundColor: colors.card }]}>
+            <Text style={[styles.messageSectionTitle, { color: colors.text }]}>Send us a message</Text>
+
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+              placeholder="Subject"
+              placeholderTextColor={colors.textSecondary}
+              value={subject}
+              onChangeText={setSubject}
+            />
+
+            <TextInput
+              style={[styles.textArea, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+              placeholder="Your message..."
+              placeholderTextColor={colors.textSecondary}
+              value={message}
+              onChangeText={setMessage}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+
+            <TouchableOpacity
+              style={[styles.sendButton, { backgroundColor: colors.primary }]}
+              onPress={handleSendMessage}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="send" size={20} color="#fff" />
+              <Text style={styles.sendButtonText}>Send Message</Text>
             </TouchableOpacity>
-            {expandedFAQ === faq.id && (
-              <Animatable.View animation="fadeInDown" duration={300} style={styles.faqAnswer}>
-                <Text style={styles.faqAnswerText}>{faq.answer}</Text>
-              </Animatable.View>
-            )}
-          </View>
-        ))}
-      </Animatable.View>
+          </Animatable.View>
 
-      {/* Send Message Section */}
-      <Animatable.View animation="fadeInUp" delay={400} style={styles.messageSection}>
-        <Text style={styles.messageSectionTitle}>Send us a message</Text>
-
-        <TextInput
-          style={styles.input}
-          placeholder="Subject"
-          placeholderTextColor="#999"
-          value={subject}
-          onChangeText={setSubject}
-        />
-
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          placeholder="Describe your issue or question..."
-          placeholderTextColor="#999"
-          value={message}
-          onChangeText={setMessage}
-          multiline
-          numberOfLines={6}
-          textAlignVertical="top"
-        />
-
-        <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage}>
-          <Ionicons name="send" size={20} color="#fff" style={{ marginRight: 8 }} />
-          <Text style={styles.sendButtonText}>Send Message</Text>
-        </TouchableOpacity>
-      </Animatable.View>
-
-      <View style={{ height: 100 }} />
-    </ScrollView>
+          <View style={{ height: SPACING.xxxl }} />
+        </ScrollView>
+      </View>
+    </SafeAreaView>
   );
 };
 
+const ContactCard = ({ icon, label, iconColor, bgColor, colors }) => (
+  <TouchableOpacity style={[styles.contactCard, { backgroundColor: colors.card }]} activeOpacity={0.7}>
+    <View style={[styles.contactIcon, { backgroundColor: bgColor }]}>
+      <Ionicons name={icon} size={28} color={iconColor} />
+    </View>
+    <Text style={[styles.contactLabel, { color: colors.text }]}>{label}</Text>
+  </TouchableOpacity>
+);
+
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 50,
-    paddingBottom: 20,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
   },
   backButton: {
-    padding: 4,
+    width: TOUCH_TARGET.min,
+    height: TOUCH_TARGET.min,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
+    fontSize: FONT_SIZE.lg,
+    fontWeight: FONT_WEIGHT.semibold,
+  },
+  placeholder: {
+    width: TOUCH_TARGET.min,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: SPACING.xl,
   },
   contactContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 20,
-    marginBottom: 30,
+    justifyContent: 'space-between',
+    marginBottom: SPACING.xl,
+    gap: SPACING.md,
   },
   contactCard: {
+    flex: 1,
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    width: 100,
+    padding: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
   },
   contactIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: SPACING.sm,
   },
   contactLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1a1a1a',
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.semibold,
   },
   faqSection: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    marginBottom: SPACING.xl,
   },
   faqHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
+    gap: SPACING.sm,
   },
   faqTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginLeft: 8,
+    fontSize: FONT_SIZE.md,
+    fontWeight: FONT_WEIGHT.bold,
   },
   faqItem: {
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    paddingVertical: 16,
+    paddingVertical: SPACING.md,
   },
   faqQuestion: {
     flexDirection: 'row',
@@ -203,56 +214,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   faqQuestionText: {
-    fontSize: 16,
-    color: '#1a1a1a',
-    fontWeight: '500',
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.medium,
     flex: 1,
+    marginRight: SPACING.md,
   },
   faqAnswer: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: SPACING.md,
   },
   faqAnswerText: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: FONT_SIZE.sm,
     lineHeight: 22,
   },
   messageSection: {
-    paddingHorizontal: 20,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
   },
   messageSectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 16,
+    fontSize: FONT_SIZE.md,
+    fontWeight: FONT_WEIGHT.bold,
+    marginBottom: SPACING.lg,
   },
   input: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 15,
-    color: '#1a1a1a',
-    marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    fontSize: FONT_SIZE.sm,
+    marginBottom: SPACING.md,
   },
   textArea: {
-    height: 120,
-    paddingTop: 16,
+    borderWidth: 1,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    fontSize: FONT_SIZE.sm,
+    height: 100,
+    marginBottom: SPACING.lg,
   },
   sendButton: {
-    backgroundColor: '#8A2BE2',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 12,
-    marginTop: 8,
+    paddingVertical: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
+    gap: SPACING.sm,
   },
   sendButtonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.bold,
   },
 });
 

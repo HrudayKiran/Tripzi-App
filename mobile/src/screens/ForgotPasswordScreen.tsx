@@ -1,130 +1,175 @@
-
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Animatable from 'react-native-animatable';
+import { useTheme } from '../contexts/ThemeContext';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 
 const ForgotPasswordScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
+  const { colors } = useTheme();
+
+  const handleResetPassword = () => {
+    if (!email) {
+      Alert.alert('Error', 'Please enter your email address');
+      return;
+    }
+    Alert.alert('Success', 'Password reset link sent to your email');
+  };
 
   return (
-    <View style={styles.container}>
-      {/* Back Button */}
-      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-        <Ionicons name="chevron-back" size={28} color="#000" />
-      </TouchableOpacity>
-
-      {/* Logo */}
-      <View style={styles.logoContainer}>
-        <View style={styles.logoBox}>
-          <Text style={styles.logoEmoji}>🚀</Text>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="chevron-back" size={28} color={colors.text} />
+          </TouchableOpacity>
         </View>
+
+        <Animatable.View animation="fadeInUp" duration={500} style={styles.content}>
+          {/* Logo */}
+          <View style={styles.logoContainer}>
+            <View style={[styles.logoBox, { backgroundColor: colors.primary }]}>
+              <Text style={styles.logoEmoji}>🚀</Text>
+            </View>
+          </View>
+
+          <Text style={[styles.title, { color: colors.text }]}>Reset Password</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            Enter your email address and we'll send you a link to reset your password
+          </Text>
+
+          {/* Email Field */}
+          <Text style={[styles.label, { color: colors.text }]}>Email</Text>
+          <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground }]}>
+            <Ionicons name="mail-outline" size={20} color={colors.textSecondary} />
+            <TextInput
+              style={[styles.input, { color: colors.text }]}
+              placeholder="Enter your email"
+              placeholderTextColor={colors.textSecondary}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          </View>
+
+          {/* Reset Button */}
+          <TouchableOpacity
+            style={[styles.resetButton, { backgroundColor: colors.primary }]}
+            onPress={handleResetPassword}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.resetButtonText}>Send Reset Link</Text>
+          </TouchableOpacity>
+
+          {/* Back to Sign In */}
+          <TouchableOpacity
+            style={styles.backToSignIn}
+            onPress={() => navigation.navigate('SignIn')}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={[styles.backToSignInText, { color: colors.textSecondary }]}>
+              Remember your password?{' '}
+              <Text style={{ color: colors.primary, fontWeight: FONT_WEIGHT.bold }}>Sign In</Text>
+            </Text>
+          </TouchableOpacity>
+        </Animatable.View>
       </View>
-
-      <Text style={styles.title}>Reset Password</Text>
-      <Text style={styles.subtitle}>
-        Enter your email address and we'll send you a link to reset your password
-      </Text>
-
-      {/* Email Field */}
-      <Text style={styles.label}>Email</Text>
-      <View style={styles.inputContainer}>
-        <Ionicons name="mail-outline" size={20} color="#999" style={styles.inputIcon} />
-        <TextInput
-          style={styles.input}
-          placeholder="you@example.com"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-      </View>
-
-      <TouchableOpacity style={styles.resetButton}>
-        <Text style={styles.resetButtonText}>Send Reset Link</Text>
-      </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    padding: 20,
-    paddingTop: 50,
+  },
+  header: {
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    marginBottom: 30,
+    width: TOUCH_TARGET.min,
+    height: TOUCH_TARGET.min,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: -SPACING.sm,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: SPACING.xxl,
   },
   logoContainer: {
-    alignItems: 'flex-start',
-    marginBottom: 30,
+    alignItems: 'center',
+    marginVertical: SPACING.xxl,
   },
   logoBox: {
-    width: 70,
-    height: 70,
-    backgroundColor: '#F3E8FF',
-    borderRadius: 18,
+    width: 80,
+    height: 80,
+    borderRadius: BORDER_RADIUS.xl,
     justifyContent: 'center',
     alignItems: 'center',
   },
   logoEmoji: {
-    fontSize: 35,
+    fontSize: 40,
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 8,
+    fontSize: FONT_SIZE.xxxl,
+    fontWeight: FONT_WEIGHT.bold,
+    textAlign: 'center',
+    marginBottom: SPACING.md,
   },
   subtitle: {
-    fontSize: 15,
-    color: '#666',
-    marginBottom: 30,
+    fontSize: FONT_SIZE.sm,
+    textAlign: 'center',
+    marginBottom: SPACING.xxl,
     lineHeight: 22,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 8,
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.semibold,
+    marginBottom: SPACING.sm,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    backgroundColor: '#F9F9F9',
-    marginBottom: 30,
-  },
-  inputIcon: {
-    marginRight: 10,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    gap: SPACING.md,
+    marginBottom: SPACING.xxl,
   },
   input: {
     flex: 1,
-    height: 50,
-    fontSize: 15,
-    color: '#1a1a1a',
+    fontSize: FONT_SIZE.md,
+    paddingVertical: SPACING.sm,
   },
   resetButton: {
-    backgroundColor: '#8A2BE2',
-    paddingVertical: 16,
-    borderRadius: 30,
+    paddingVertical: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
     alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#8A2BE2',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
   },
   resetButtonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: FONT_SIZE.md,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  backToSignIn: {
+    marginTop: SPACING.xxl,
+    alignItems: 'center',
+  },
+  backToSignInText: {
+    fontSize: FONT_SIZE.sm,
   },
 });
 

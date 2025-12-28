@@ -1,92 +1,114 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 
 const SettingsScreen = ({ navigation }) => {
     const { colors, isDarkMode, toggleTheme } = useTheme();
     const [pushEnabled, setPushEnabled] = useState(true);
 
     return (
-        <View style={[styles.container, { backgroundColor: colors.background }]}>
-            {/* Header */}
-            <View style={[styles.header, { backgroundColor: colors.headerBackground, borderBottomColor: colors.border }]}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color={colors.text} />
-                </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
-                <View style={{ width: 24 }} />
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+            <View style={styles.container}>
+                {/* Header */}
+                <View style={styles.header}>
+                    <TouchableOpacity
+                        style={styles.backButton}
+                        onPress={() => navigation.goBack()}
+                        activeOpacity={0.7}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                        <Ionicons name="chevron-back" size={28} color={colors.text} />
+                    </TouchableOpacity>
+                    <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
+                    <View style={styles.placeholder} />
+                </View>
+
+                <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+                    {/* Push Notifications */}
+                    <Animatable.View animation="fadeInUp" duration={400} delay={0}>
+                        <View style={[styles.settingCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                            <View style={[styles.iconBox, { backgroundColor: '#EDE9FE' }]}>
+                                <Ionicons name="notifications" size={24} color="#8B5CF6" />
+                            </View>
+                            <View style={styles.settingInfo}>
+                                <Text style={[styles.settingTitle, { color: colors.text }]}>Push Notifications</Text>
+                                <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
+                                    Receive notifications about new trips and messages
+                                </Text>
+                            </View>
+                            <Switch
+                                value={pushEnabled}
+                                onValueChange={setPushEnabled}
+                                trackColor={{ false: colors.border, true: colors.primary }}
+                                thumbColor={'#fff'}
+                            />
+                        </View>
+                    </Animatable.View>
+
+                    {/* Native Push Info */}
+                    <Animatable.View animation="fadeInUp" duration={400} delay={50}>
+                        <View style={[styles.infoCard, { backgroundColor: colors.inputBackground }]}>
+                            <Ionicons name="information-circle-outline" size={20} color={colors.textSecondary} />
+                            <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+                                Full push notification support is available in the iOS and Android app versions.
+                            </Text>
+                        </View>
+                    </Animatable.View>
+
+                    {/* Dark Mode */}
+                    <Animatable.View animation="fadeInUp" duration={400} delay={100}>
+                        <View style={[styles.settingCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                            <View style={[styles.iconBox, { backgroundColor: '#FEF3C7' }]}>
+                                <Ionicons name={isDarkMode ? "moon" : "sunny"} size={24} color="#F59E0B" />
+                            </View>
+                            <View style={styles.settingInfo}>
+                                <Text style={[styles.settingTitle, { color: colors.text }]}>Dark Mode</Text>
+                                <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
+                                    Toggle between light and dark theme
+                                </Text>
+                            </View>
+                            <Switch
+                                value={isDarkMode}
+                                onValueChange={toggleTheme}
+                                trackColor={{ false: colors.border, true: colors.primary }}
+                                thumbColor={'#fff'}
+                            />
+                        </View>
+                    </Animatable.View>
+
+                    {/* Admin Dashboard */}
+                    <Animatable.View animation="fadeInUp" duration={400} delay={150}>
+                        <TouchableOpacity
+                            style={[styles.settingCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+                            onPress={() => navigation.navigate('AdminDashboard')}
+                            activeOpacity={0.7}
+                        >
+                            <View style={[styles.iconBox, { backgroundColor: '#EDE9FE' }]}>
+                                <Ionicons name="shield" size={24} color="#8B5CF6" />
+                            </View>
+                            <View style={styles.settingInfo}>
+                                <Text style={[styles.settingTitle, { color: colors.text }]}>Admin Dashboard</Text>
+                                <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
+                                    Manage users, KYC requests, and feedback
+                                </Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                    </Animatable.View>
+                </ScrollView>
             </View>
-
-            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                {/* Push Notifications */}
-                <View style={[styles.settingCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                    <View style={[styles.iconBox, { backgroundColor: '#EDE9FE' }]}>
-                        <Ionicons name="notifications" size={24} color="#8B5CF6" />
-                    </View>
-                    <View style={styles.settingInfo}>
-                        <Text style={[styles.settingTitle, { color: colors.text }]}>Push Notifications</Text>
-                        <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
-                            Receive notifications about new trips and messages
-                        </Text>
-                    </View>
-                    <Switch
-                        value={pushEnabled}
-                        onValueChange={setPushEnabled}
-                        trackColor={{ false: '#D1D5DB', true: '#A855F7' }}
-                        thumbColor={pushEnabled ? '#8A2BE2' : '#f4f3f4'}
-                    />
-                </View>
-
-                {/* Native Push Info */}
-                <View style={[styles.infoCard, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
-                    <Ionicons name="phone-portrait-outline" size={20} color={colors.textSecondary} />
-                    <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-                        Full push notification support is available in the iOS and Android app versions.
-                    </Text>
-                </View>
-
-                {/* Dark Mode */}
-                <View style={[styles.settingCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                    <View style={[styles.iconBox, { backgroundColor: '#FEF3C7' }]}>
-                        <Ionicons name={isDarkMode ? "moon" : "sunny"} size={24} color="#F59E0B" />
-                    </View>
-                    <View style={styles.settingInfo}>
-                        <Text style={[styles.settingTitle, { color: colors.text }]}>Dark Mode</Text>
-                        <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
-                            Toggle between light and dark theme
-                        </Text>
-                    </View>
-                    <Switch
-                        value={isDarkMode}
-                        onValueChange={toggleTheme}
-                        trackColor={{ false: '#D1D5DB', true: '#A855F7' }}
-                        thumbColor={isDarkMode ? '#8A2BE2' : '#f4f3f4'}
-                    />
-                </View>
-
-                {/* Admin Dashboard */}
-                <TouchableOpacity
-                    style={[styles.settingCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-                    onPress={() => navigation.navigate('AdminDashboard')}
-                >
-                    <View style={[styles.iconBox, { backgroundColor: '#EDE9FE' }]}>
-                        <Ionicons name="shield" size={24} color="#8B5CF6" />
-                    </View>
-                    <View style={styles.settingInfo}>
-                        <Text style={[styles.settingTitle, { color: colors.text }]}>Admin Dashboard</Text>
-                        <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
-                            Manage users, KYC requests, and feedback
-                        </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-                </TouchableOpacity>
-            </ScrollView>
-        </View>
+        </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
+    safeArea: {
+        flex: 1,
+    },
     container: {
         flex: 1,
     },
@@ -94,64 +116,67 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        paddingTop: 50,
-        paddingBottom: 16,
-        borderBottomWidth: 1,
+        paddingHorizontal: SPACING.lg,
+        paddingVertical: SPACING.sm,
     },
     backButton: {
-        padding: 4,
+        width: TOUCH_TARGET.min,
+        height: TOUCH_TARGET.min,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     headerTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
+        fontSize: FONT_SIZE.lg,
+        fontWeight: FONT_WEIGHT.semibold,
+    },
+    placeholder: {
+        width: TOUCH_TARGET.min,
     },
     content: {
         flex: 1,
-        paddingHorizontal: 20,
-        paddingTop: 20,
+        paddingHorizontal: SPACING.xl,
+        paddingTop: SPACING.lg,
     },
     settingCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 16,
-        borderRadius: 16,
-        marginBottom: 16,
+        padding: SPACING.lg,
+        borderRadius: BORDER_RADIUS.lg,
+        marginBottom: SPACING.lg,
         borderWidth: 1,
     },
     iconBox: {
         width: 48,
         height: 48,
-        borderRadius: 12,
+        borderRadius: BORDER_RADIUS.md,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 16,
+        marginRight: SPACING.lg,
     },
     settingInfo: {
         flex: 1,
     },
     settingTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        marginBottom: 4,
+        fontSize: FONT_SIZE.md,
+        fontWeight: FONT_WEIGHT.semibold,
+        marginBottom: SPACING.xs,
     },
     settingDescription: {
-        fontSize: 13,
-        lineHeight: 18,
+        fontSize: FONT_SIZE.sm,
+        lineHeight: 20,
     },
     infoCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 14,
-        borderRadius: 12,
-        marginBottom: 16,
-        borderWidth: 1,
-        gap: 10,
+        padding: SPACING.lg,
+        borderRadius: BORDER_RADIUS.md,
+        marginBottom: SPACING.lg,
+        gap: SPACING.md,
     },
     infoText: {
         flex: 1,
-        fontSize: 13,
-        lineHeight: 18,
+        fontSize: FONT_SIZE.sm,
+        lineHeight: 20,
     },
 });
 
