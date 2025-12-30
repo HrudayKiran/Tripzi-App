@@ -9,6 +9,8 @@ import firestore from '@react-native-firebase/firestore';
 import { auth } from '../firebase';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import { useKycGate } from '../hooks/useKycGate';
+import KycBlockingModal from '../components/KycBlockingModal';
 
 const { width } = Dimensions.get('window');
 
@@ -54,6 +56,8 @@ const GENDER_PREFERENCES = [
 
 const CreateTripScreen = ({ navigation }) => {
     const { colors } = useTheme();
+    const { isKycVerified, kycStatus, isLoading: isKycLoading } = useKycGate();
+    const [showKycModal, setShowKycModal] = useState(false);
     const [step, setStep] = useState(1);
     const totalSteps = 5;
 
@@ -181,29 +185,13 @@ const CreateTripScreen = ({ navigation }) => {
             return;
         }
 
-        try {
-            // Check KYC status - but allow posting even if Firestore is offline
-            let isKycVerified = true; // Default to true for testing
-            try {
-                const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
-                const userData = userDoc.data();
-                isKycVerified = userData?.kycStatus === 'verified';
-            } catch (kycError) {
-                console.log('KYC check failed (offline?), allowing post:', kycError);
-                isKycVerified = true; // Allow if can't check
-            }
+        // Check KYC status using the hook (already loaded)
+        if (!isKycVerified && kycStatus !== 'loading') {
+            setShowKycModal(true);
+            return;
+        }
 
-            if (!isKycVerified) {
-                Alert.alert(
-                    'KYC Required',
-                    'Complete KYC verification to post trips for traveler safety.',
-                    [
-                        { text: 'Later', style: 'cancel' },
-                        { text: 'Verify Now', onPress: () => navigation.navigate('KYC') },
-                    ]
-                );
-                return;
-            }
+        try {
 
             const tripData = {
                 title,
@@ -648,6 +636,13 @@ const CreateTripScreen = ({ navigation }) => {
                     </LinearGradient>
                 </TouchableOpacity>
             </View>
+
+            {/* KYC Blocking Modal */}
+            <KycBlockingModal
+                visible={showKycModal}
+                onClose={() => setShowKycModal(false)}
+                action="create a trip"
+            />
         </SafeAreaView>
     );
 };

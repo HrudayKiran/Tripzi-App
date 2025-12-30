@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, TextInput, ActivityIndicator, ScrollView, Modal, Animated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, TextInput, ActivityIndicator, ScrollView, Modal, Animated, Dimensions, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
@@ -35,6 +35,7 @@ const MessagesScreen = ({ navigation }) => {
     const [selectedUsers, setSelectedUsers] = useState<any[]>([]);
     const [groupSearchQuery, setGroupSearchQuery] = useState('');
     const [groupSearchResults, setGroupSearchResults] = useState<any[]>([]);
+    const [showMenuDropdown, setShowMenuDropdown] = useState(false);
     const currentUser = auth.currentUser;
 
     useEffect(() => {
@@ -270,12 +271,39 @@ const MessagesScreen = ({ navigation }) => {
         setIsSearching(false);
     };
 
+    const handleDeleteChat = (chat: any) => {
+        const chatName = chat.isGroupChat ? chat.groupName : (chat.otherUser?.displayName || 'this user');
+
+        Alert.alert(
+            'Delete Chat',
+            `Are you sure you want to delete your conversation with ${chatName}?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await firestore().collection('chats').doc(chat.id).delete();
+                            // Messages subcollection will be cleaned up by Cloud Function
+                        } catch (error) {
+                            console.error('Error deleting chat:', error);
+                            Alert.alert('Error', 'Failed to delete chat. Please try again.');
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
     const renderChatItem = ({ item, index }) => (
         <Animatable.View animation="fadeInUp" delay={index * 50}>
             <TouchableOpacity
                 style={[styles.chatItem, { backgroundColor: colors.card }]}
                 onPress={() => navigation.navigate('Message', { chatId: item.id })}
+                onLongPress={() => handleDeleteChat(item)}
                 activeOpacity={0.7}
+                delayLongPress={500}
             >
                 <Image
                     source={{ uri: item.isGroupChat ? 'https://via.placeholder.com/50' : (item.otherUser?.photoURL || 'https://via.placeholder.com/50') }}
@@ -323,17 +351,48 @@ const MessagesScreen = ({ navigation }) => {
                 <View style={styles.headerActions}>
                     <TouchableOpacity
                         style={[styles.headerBtn, { backgroundColor: colors.card }]}
-                        onPress={() => setShowGroupModal(true)}
+                        onPress={() => setShowMenuDropdown(!showMenuDropdown)}
                     >
-                        <Ionicons name="people-outline" size={22} color={colors.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.newChatButton, { backgroundColor: colors.primary }]}
-                        onPress={() => setIsSearching(true)}
-                    >
-                        <Ionicons name="add" size={24} color="#fff" />
+                        <Ionicons name="ellipsis-vertical" size={22} color={colors.text} />
                     </TouchableOpacity>
                 </View>
+
+                {/* Three-dots Dropdown Menu */}
+                {showMenuDropdown && (
+                    <View style={[styles.dropdownMenu, { backgroundColor: colors.card, shadowColor: colors.text }]}>
+                        <TouchableOpacity
+                            style={styles.dropdownItem}
+                            onPress={() => {
+                                setShowMenuDropdown(false);
+                                setIsSearching(true);
+                            }}
+                        >
+                            <Ionicons name="chatbubble-outline" size={20} color={colors.text} />
+                            <Text style={[styles.dropdownText, { color: colors.text }]}>New Chat</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.dropdownItem}
+                            onPress={() => {
+                                setShowMenuDropdown(false);
+                                setShowGroupModal(true);
+                            }}
+                        >
+                            <Ionicons name="people-outline" size={20} color={colors.text} />
+                            <Text style={[styles.dropdownText, { color: colors.text }]}>New Group</Text>
+                        </TouchableOpacity>
+                        <View style={[styles.dropdownDivider, { backgroundColor: colors.border }]} />
+                        <TouchableOpacity
+                            style={styles.dropdownItem}
+                            onPress={() => {
+                                setShowMenuDropdown(false);
+                                navigation.navigate('Settings');
+                            }}
+                        >
+                            <Ionicons name="settings-outline" size={20} color={colors.text} />
+                            <Text style={[styles.dropdownText, { color: colors.text }]}>Settings</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
             </View>
 
             {/* Search Bar */}
@@ -661,6 +720,36 @@ const styles = StyleSheet.create({
     groupUserItem: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, marginHorizontal: SPACING.lg, marginBottom: SPACING.sm, borderRadius: BORDER_RADIUS.md },
     checkbox: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#ccc', justifyContent: 'center', alignItems: 'center' },
     checkboxSelected: { backgroundColor: '#8B5CF6', borderColor: '#8B5CF6' },
+    // Dropdown menu styles
+    dropdownMenu: {
+        position: 'absolute',
+        top: 50,
+        right: SPACING.lg,
+        borderRadius: BORDER_RADIUS.lg,
+        paddingVertical: SPACING.sm,
+        minWidth: 160,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 8,
+        zIndex: 1000,
+    },
+    dropdownItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: SPACING.lg,
+        paddingVertical: SPACING.md,
+        gap: SPACING.md,
+    },
+    dropdownText: {
+        fontSize: FONT_SIZE.md,
+        fontWeight: FONT_WEIGHT.medium,
+    },
+    dropdownDivider: {
+        height: 1,
+        marginVertical: SPACING.xs,
+        marginHorizontal: SPACING.md,
+    },
 });
 
 export default MessagesScreen;

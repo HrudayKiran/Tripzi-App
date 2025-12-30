@@ -229,12 +229,24 @@ const FilterModal = ({ visible, onClose, onApply }: FilterModalProps) => {
                                         placeholder="Enter max budget..."
                                         placeholderTextColor={colors.textSecondary}
                                         keyboardType="numeric"
-                                        value={maxCost < 500000 ? maxCost.toString() : ''}
+                                        value={!BUDGET_OPTIONS.some(opt => opt.id === maxCost) ? maxCost.toString() : ''}
                                         onChangeText={(text) => {
-                                            const num = parseInt(text) || 500000;
-                                            setMaxCost(num);
+                                            if (text === '') {
+                                                // When cleared, keep current value or reset to highest
+                                                setMaxCost(500000);
+                                            } else {
+                                                const num = parseInt(text);
+                                                if (!isNaN(num) && num > 0) {
+                                                    setMaxCost(num);
+                                                }
+                                            }
                                         }}
                                     />
+                                    {!BUDGET_OPTIONS.some(opt => opt.id === maxCost) && maxCost < 500000 && (
+                                        <TouchableOpacity onPress={() => setMaxCost(500000)}>
+                                            <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                                        </TouchableOpacity>
+                                    )}
                                 </View>
                                 <Text style={[styles.helperText, { color: colors.textSecondary }]}>
                                     Or select from quick options above

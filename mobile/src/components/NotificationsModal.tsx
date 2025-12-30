@@ -1,12 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Animated, PanResponder, FlatList } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Animated, FlatList, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
-import { auth } from '../firebase';
+import { useNotifications, AppNotification, NotificationType } from '../hooks/useNotifications';
+import { useNavigation } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
 
@@ -16,138 +16,99 @@ type NotificationsModalProps = {
     onNotificationsChange?: (count: number) => void;
 };
 
-type Notification = {
-    id: number;
-    type: string;
-    title: string;
-    message: string;
-    time: string;
-    icon: string;
-    color: string;
+// Map notification types to icons and colors
+const getNotificationStyle = (type: NotificationType): { icon: string; color: string } => {
+    switch (type) {
+        case 'like':
+            return { icon: 'heart', color: '#EC4899' };
+        case 'comment':
+            return { icon: 'chatbubble', color: '#3B82F6' };
+        case 'message':
+            return { icon: 'mail', color: '#8B5CF6' };
+        case 'kyc_approved':
+            return { icon: 'shield-checkmark', color: '#10B981' };
+        case 'kyc_rejected':
+            return { icon: 'alert-circle', color: '#EF4444' };
+        case 'trip_join':
+            return { icon: 'person-add', color: '#10B981' };
+        case 'trip_full':
+            return { icon: 'people', color: '#8B5CF6' };
+        case 'action_required':
+            return { icon: 'notifications', color: '#F59E0B' };
+        default:
+            return { icon: 'notifications', color: '#6B7280' };
+    }
 };
 
-// Sample notifications data (only shown for first-time users)
-const SAMPLE_NOTIFICATIONS: Notification[] = [
-    { id: 1, type: 'trip', title: 'New trip to Ladakh!', message: 'Kiran posted a new adventure trip', time: '2 mins ago', icon: 'airplane', color: '#8B5CF6' },
-    { id: 2, type: 'like', title: 'Someone liked your trip', message: 'Your Goa trip got 5 new likes', time: '15 mins ago', icon: 'heart', color: '#EC4899' },
-    { id: 3, type: 'message', title: 'New message', message: 'Hey, interested in joining your trip!', time: '1 hour ago', icon: 'chatbubble', color: '#3B82F6' },
-    { id: 4, type: 'join', title: 'Trip request', message: 'Someone wants to join your Kerala trip', time: '3 hours ago', icon: 'person-add', color: '#10B981' },
-    { id: 5, type: 'reminder', title: 'Trip reminder', message: 'Your Manali trip starts in 3 days', time: '1 day ago', icon: 'calendar', color: '#F59E0B' },
-];
+// Format relative time
+const getTimeAgo = (date: Date): string => {
+    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (seconds < 60) return 'Just now';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+    return `${Math.floor(seconds / 86400)}d ago`;
+};
 
-const NOTIFICATION_STORAGE_KEY = 'tripzi_notifications_';
-
-// Swipeable Notification Item Component
-const SwipeableNotification = ({ notification, onDelete, colors }: { notification: Notification; onDelete: (id: number) => void; colors: any }) => {
-    const translateX = useRef(new Animated.Value(0)).current;
-    const itemHeight = useRef(new Animated.Value(80)).current;
-    const opacity = useRef(new Animated.Value(1)).current;
-
-    const panResponder = useRef(
-        PanResponder.create({
-            onMoveShouldSetPanResponder: (_, gesture) => {
-                return Math.abs(gesture.dx) > 10 && gesture.dx > 0;
-            },
-            onPanResponderMove: (_, gesture) => {
-                if (gesture.dx > 0) {
-                    translateX.setValue(gesture.dx);
-                }
-            },
-            onPanResponderRelease: (_, gesture) => {
-                if (gesture.dx > width * 0.4) {
-                    // Swipe past threshold - delete
-                    Animated.parallel([
-                        Animated.timing(translateX, { toValue: width, duration: 200, useNativeDriver: false }),
-                        Animated.timing(itemHeight, { toValue: 0, duration: 200, useNativeDriver: false }),
-                        Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: false }),
-                    ]).start(() => onDelete(notification.id));
-                } else {
-                    // Snap back
-                    Animated.spring(translateX, { toValue: 0, useNativeDriver: false }).start();
-                }
-            },
-        })
-    ).current;
+// Notification Item Component
+const NotificationItem = ({
+    notification,
+    onPress,
+    onDelete,
+    colors
+}: {
+    notification: AppNotification;
+    onPress: () => void;
+    onDelete: () => void;
+    colors: any;
+}) => {
+    const { icon, color } = getNotificationStyle(notification.type);
 
     return (
-        <Animated.View style={{ height: itemHeight, opacity }}>
-            {/* Delete background */}
-            <View style={[styles.deleteBackground, { backgroundColor: '#EF4444' }]}>
-                <Ionicons name="trash" size={24} color="#fff" />
-                <Text style={styles.deleteText}>Delete</Text>
+        <TouchableOpacity
+            style={[
+                styles.notificationItem,
+                { backgroundColor: colors.card },
+                !notification.read && { borderLeftWidth: 3, borderLeftColor: color }
+            ]}
+            onPress={onPress}
+            onLongPress={onDelete}
+            activeOpacity={0.7}
+            delayLongPress={500}
+        >
+            <View style={[styles.notificationIcon, { backgroundColor: `${color}20` }]}>
+                <Ionicons name={icon as any} size={20} color={color} />
             </View>
-
-            {/* Notification content */}
-            <Animated.View
-                style={[{ transform: [{ translateX }] }]}
-                {...panResponder.panHandlers}
-            >
-                <TouchableOpacity
-                    style={[styles.notificationItem, { backgroundColor: colors.card }]}
-                    activeOpacity={0.9}
-                >
-                    <View style={[styles.notificationIcon, { backgroundColor: `${notification.color}20` }]}>
-                        <Ionicons name={notification.icon as any} size={20} color={notification.color} />
-                    </View>
-                    <View style={styles.notificationContent}>
-                        <Text style={[styles.notificationTitle, { color: colors.text }]}>
-                            {notification.title}
-                        </Text>
-                        <Text style={[styles.notificationMessage, { color: colors.textSecondary }]} numberOfLines={1}>
-                            {notification.message}
-                        </Text>
-                        <Text style={[styles.notificationTime, { color: colors.textSecondary }]}>
-                            {notification.time}
-                        </Text>
-                    </View>
-                    <View style={[styles.unreadDot, { backgroundColor: notification.color }]} />
-                </TouchableOpacity>
-            </Animated.View>
-        </Animated.View>
+            <View style={styles.notificationContent}>
+                <Text style={[styles.notificationTitle, { color: colors.text }]}>
+                    {notification.title}
+                </Text>
+                <Text style={[styles.notificationMessage, { color: colors.textSecondary }]} numberOfLines={2}>
+                    {notification.message}
+                </Text>
+                <Text style={[styles.notificationTime, { color: colors.textSecondary }]}>
+                    {getTimeAgo(notification.createdAt)}
+                </Text>
+            </View>
+            {!notification.read && (
+                <View style={[styles.unreadDot, { backgroundColor: color }]} />
+            )}
+        </TouchableOpacity>
     );
 };
 
 const NotificationsModal = ({ visible, onClose, onNotificationsChange }: NotificationsModalProps) => {
     const { colors } = useTheme();
+    const navigation = useNavigation();
     const slideAnim = useRef(new Animated.Value(width)).current;
-    const [notifications, setNotifications] = useState<Notification[]>([]);
-    const [isLoaded, setIsLoaded] = useState(false);
 
-    // Load notifications from AsyncStorage on mount
-    useEffect(() => {
-        const loadNotifications = async () => {
-            try {
-                const userId = auth.currentUser?.uid || 'guest';
-                const stored = await AsyncStorage.getItem(NOTIFICATION_STORAGE_KEY + userId);
-                if (stored !== null) {
-                    setNotifications(JSON.parse(stored));
-                } else {
-                    // First time - show sample notifications
-                    setNotifications(SAMPLE_NOTIFICATIONS);
-                    await AsyncStorage.setItem(NOTIFICATION_STORAGE_KEY + userId, JSON.stringify(SAMPLE_NOTIFICATIONS));
-                }
-            } catch (error) {
-                console.log('Error loading notifications:', error);
-                setNotifications(SAMPLE_NOTIFICATIONS);
-            }
-            setIsLoaded(true);
-        };
-        loadNotifications();
-    }, []);
-
-    // Save notifications to AsyncStorage when they change
-    useEffect(() => {
-        const saveNotifications = async () => {
-            if (!isLoaded) return; // Don't save until initial load is complete
-            try {
-                const userId = auth.currentUser?.uid || 'guest';
-                await AsyncStorage.setItem(NOTIFICATION_STORAGE_KEY + userId, JSON.stringify(notifications));
-            } catch (error) {
-                console.log('Error saving notifications:', error);
-            }
-        };
-        saveNotifications();
-    }, [notifications, isLoaded]);
+    const {
+        notifications,
+        unreadCount,
+        loading,
+        markAsRead,
+        markAllAsRead,
+        deleteNotification
+    } = useNotifications();
 
     useEffect(() => {
         if (visible) {
@@ -169,15 +130,26 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
 
     // Report notification count changes
     useEffect(() => {
-        onNotificationsChange?.(notifications.length);
-    }, [notifications.length]);
+        onNotificationsChange?.(unreadCount);
+    }, [unreadCount]);
 
-    const clearAll = () => {
-        setNotifications([]);
+    const handleNotificationPress = async (notification: AppNotification) => {
+        // Mark as read
+        if (!notification.read) {
+            await markAsRead(notification.id);
+        }
+
+        // Navigate to deep link route
+        if (notification.deepLinkRoute) {
+            onClose();
+            setTimeout(() => {
+                navigation.navigate(notification.deepLinkRoute as never, notification.deepLinkParams as never);
+            }, 300);
+        }
     };
 
-    const deleteNotification = (id: number) => {
-        setNotifications(prev => prev.filter(n => n.id !== id));
+    const handleDeleteNotification = (notificationId: string) => {
+        deleteNotification(notificationId);
     };
 
     return (
@@ -199,6 +171,11 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                                     <Ionicons name="notifications" size={20} color={colors.primary} />
                                 </View>
                                 <Text style={[styles.title, { color: colors.text }]}>Notifications</Text>
+                                {unreadCount > 0 && (
+                                    <View style={styles.badge}>
+                                        <Text style={styles.badgeText}>{unreadCount}</Text>
+                                    </View>
+                                )}
                             </View>
                             <TouchableOpacity
                                 onPress={onClose}
@@ -209,37 +186,43 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                             </TouchableOpacity>
                         </View>
 
-                        {notifications.length > 0 ? (
+                        {loading ? (
+                            <View style={styles.loadingContainer}>
+                                <ActivityIndicator size="large" color={colors.primary} />
+                            </View>
+                        ) : notifications.length > 0 ? (
                             <>
-                                {/* Swipe hint */}
-                                <View style={styles.swipeHint}>
-                                    <Ionicons name="arrow-forward" size={14} color={colors.textSecondary} />
-                                    <Text style={[styles.swipeHintText, { color: colors.textSecondary }]}>
-                                        Swipe right to delete
+                                {/* Action buttons */}
+                                <View style={styles.actionRow}>
+                                    <Text style={[styles.hintText, { color: colors.textSecondary }]}>
+                                        Long press to delete
                                     </Text>
+                                    {unreadCount > 0 && (
+                                        <TouchableOpacity
+                                            style={styles.markAllButton}
+                                            onPress={markAllAsRead}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Ionicons name="checkmark-done" size={16} color={colors.primary} />
+                                            <Text style={[styles.markAllText, { color: colors.primary }]}>
+                                                Mark all read
+                                            </Text>
+                                        </TouchableOpacity>
+                                    )}
                                 </View>
-
-                                {/* Clear All Button */}
-                                <TouchableOpacity
-                                    style={styles.clearAllButton}
-                                    onPress={clearAll}
-                                    activeOpacity={0.7}
-                                >
-                                    <Ionicons name="trash-outline" size={16} color={colors.error} />
-                                    <Text style={[styles.clearAllText, { color: colors.error }]}>Clear All</Text>
-                                </TouchableOpacity>
 
                                 {/* Notifications List */}
                                 <FlatList
                                     data={notifications}
-                                    keyExtractor={(item) => item.id.toString()}
+                                    keyExtractor={(item) => item.id}
                                     contentContainerStyle={styles.content}
                                     showsVerticalScrollIndicator={false}
                                     renderItem={({ item, index }) => (
-                                        <Animatable.View animation="fadeInRight" delay={index * 50}>
-                                            <SwipeableNotification
+                                        <Animatable.View animation="fadeInRight" delay={index * 30}>
+                                            <NotificationItem
                                                 notification={item}
-                                                onDelete={deleteNotification}
+                                                onPress={() => handleNotificationPress(item)}
+                                                onDelete={() => handleDeleteNotification(item.id)}
                                                 colors={colors}
                                             />
                                         </Animatable.View>
@@ -274,18 +257,19 @@ const styles = StyleSheet.create({
     headerIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
     title: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold },
     closeButton: { width: TOUCH_TARGET.min, height: TOUCH_TARGET.min, justifyContent: 'center', alignItems: 'center' },
-    swipeHint: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: SPACING.sm, gap: SPACING.xs },
-    swipeHintText: { fontSize: FONT_SIZE.xs },
-    clearAllButton: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', paddingHorizontal: SPACING.xl, paddingVertical: SPACING.sm, gap: SPACING.xs },
-    clearAllText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.medium },
+    badge: { backgroundColor: '#EF4444', paddingHorizontal: SPACING.sm, paddingVertical: 2, borderRadius: 10, minWidth: 20, alignItems: 'center' },
+    badgeText: { color: '#fff', fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold },
+    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    actionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.xl, paddingVertical: SPACING.sm },
+    hintText: { fontSize: FONT_SIZE.xs },
+    markAllButton: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
+    markAllText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.medium },
     content: { paddingHorizontal: SPACING.xl, paddingBottom: SPACING.xxxl },
-    deleteBackground: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: BORDER_RADIUS.md, marginBottom: SPACING.sm, flexDirection: 'row', alignItems: 'center', paddingLeft: SPACING.xl, gap: SPACING.sm },
-    deleteText: { color: '#fff', fontWeight: FONT_WEIGHT.bold, fontSize: FONT_SIZE.sm },
     notificationItem: { flexDirection: 'row', alignItems: 'center', padding: SPACING.lg, borderRadius: BORDER_RADIUS.md, marginBottom: SPACING.sm },
     notificationIcon: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.md },
     notificationContent: { flex: 1 },
     notificationTitle: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold, marginBottom: SPACING.xs },
-    notificationMessage: { fontSize: FONT_SIZE.sm, marginBottom: SPACING.xs },
+    notificationMessage: { fontSize: FONT_SIZE.sm, marginBottom: SPACING.xs, lineHeight: 18 },
     notificationTime: { fontSize: FONT_SIZE.xs },
     unreadDot: { width: 8, height: 8, borderRadius: 4 },
     emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: SPACING.xxxl },

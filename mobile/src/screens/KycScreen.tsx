@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Image, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Image, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import firestore from '@react-native-firebase/firestore';
+import storage from '@react-native-firebase/storage';
 import { auth } from '../firebase';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
@@ -13,16 +15,44 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/consta
 const KycScreen = ({ navigation }) => {
   const { colors } = useTheme();
   const [aadhaarNumber, setAadhaarNumber] = useState('');
-  const [aadhaarImage, setAadhaarImage] = useState(null);
-  const [userImage, setUserImage] = useState(null);
+  const [aadhaarImage, setAadhaarImage] = useState<string | null>(null);
+  const [userImage, setUserImage] = useState<string | null>(null);
+  const [dateOfBirth, setDateOfBirth] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [errors, setErrors] = useState<{ aadhaar?: string; aadhaarImage?: string; userImage?: string }>({});
+  const [errors, setErrors] = useState<{ aadhaar?: string; aadhaarImage?: string; userImage?: string; dob?: string }>({});
 
-  const validateAadhaar = (number) => {
+  const validateAadhaar = (number: string) => {
     return /^\d{12}$/.test(number);
   };
 
-  const pickImage = async (setImage, type) => {
+  const calculateAge = (dob: Date): number => {
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const monthDiff = today.getMonth() - dob.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  const formatDate = (date: Date): string => {
+    return date.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  };
+
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      setDateOfBirth(selectedDate);
+      setErrors(prev => ({ ...prev, dob: undefined }));
+    }
+  };
+
+  const pickImage = async (setImage: (uri: string) => void, type: string) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission needed', 'Please grant camera roll permissions.');
@@ -38,17 +68,29 @@ const KycScreen = ({ navigation }) => {
 
     if (!result.canceled && result.assets[0]) {
       setImage(result.assets[0].uri);
-      setErrors(prev => ({ ...prev, [type]: null }));
+      setErrors(prev => ({ ...prev, [type === 'aadhaar' ? 'aadhaarImage' : 'userImage']: undefined }));
     }
   };
 
+  const uploadImageToStorage = async (uri: string, path: string): Promise<string> => {
+    const reference = storage().ref(path);
+    await reference.putFile(uri);
+    return await reference.getDownloadURL();
+  };
+
   const handleSubmitKyc = async () => {
-    const newErrors = {};
+    const newErrors: typeof errors = {};
 
     if (!aadhaarNumber) {
       newErrors.aadhaar = 'Aadhaar number is required';
     } else if (!validateAadhaar(aadhaarNumber)) {
       newErrors.aadhaar = 'Enter valid 12-digit Aadhaar number';
+    }
+
+    if (!dateOfBirth) {
+      newErrors.dob = 'Date of birth is required';
+    } else if (calculateAge(dateOfBirth) < 18) {
+      newErrors.dob = 'You must be at least 18 years old';
     }
 
     if (!aadhaarImage) {
@@ -68,14 +110,33 @@ const KycScreen = ({ navigation }) => {
     const currentUser = auth.currentUser;
 
     try {
-      await firestore().collection('users').doc(currentUser.uid).update({
-        kyc: {
-          aadhaarNumber,
-          aadhaarImageUri: aadhaarImage,
-          userImageUri: userImage,
-          status: 'pending',
-          submittedAt: firestore.FieldValue.serverTimestamp(),
-        },
+      // Upload images to Firebase Storage
+      const aadhaarImageUrl = await uploadImageToStorage(
+        aadhaarImage!,
+        `kyc/${currentUser!.uid}/aadhaar_${Date.now()}.jpg`
+      );
+      const selfieImageUrl = await uploadImageToStorage(
+        userImage!,
+        `kyc/${currentUser!.uid}/selfie_${Date.now()}.jpg`
+      );
+
+      // Create KYC document in dedicated collection
+      await firestore().collection('kyc').add({
+        userId: currentUser!.uid,
+        status: 'pending',
+        dateOfBirth: firestore.Timestamp.fromDate(dateOfBirth!),
+        ageVerified: calculateAge(dateOfBirth!) >= 18,
+        aadhaarNumber: aadhaarNumber, // Consider hashing in production
+        aadhaarImageUrl,
+        selfieImageUrl,
+        submittedAt: firestore.FieldValue.serverTimestamp(),
+        reviewedAt: null,
+        reviewedBy: null,
+        rejectionReason: null,
+      });
+
+      // Update user's kycStatus
+      await firestore().collection('users').doc(currentUser!.uid).update({
         kycStatus: 'pending',
       });
 
@@ -83,12 +144,12 @@ const KycScreen = ({ navigation }) => {
       Alert.alert('Success! 🎉', 'KYC submitted for verification. You will be notified once verified.');
       navigation.goBack();
     } catch (error) {
+      console.error('KYC submission error:', error);
       setUploading(false);
-      // Save locally if Firestore fails
-      Alert.alert('Submitted!', 'KYC saved locally. Will sync when online.');
-      navigation.goBack();
+      Alert.alert('Error', 'Failed to submit KYC. Please try again.');
     }
   };
+
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -162,6 +223,43 @@ const KycScreen = ({ navigation }) => {
             />
             {errors.aadhaar && <Text style={styles.errorText}>{errors.aadhaar}</Text>}
           </View>
+
+          {/* Date of Birth */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Date of Birth <Text style={styles.required}>*</Text>
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.datePickerButton,
+                { backgroundColor: colors.inputBackground, borderColor: errors.dob ? '#EF4444' : colors.border }
+              ]}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Ionicons name="calendar-outline" size={20} color={colors.textSecondary} />
+              <Text style={[styles.dateText, { color: dateOfBirth ? colors.text : colors.textSecondary }]}>
+                {dateOfBirth ? formatDate(dateOfBirth) : 'Select your date of birth'}
+              </Text>
+            </TouchableOpacity>
+            {errors.dob && <Text style={styles.errorText}>{errors.dob}</Text>}
+            {dateOfBirth && calculateAge(dateOfBirth) >= 18 && (
+              <View style={styles.ageVerifiedBadge}>
+                <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                <Text style={styles.ageVerifiedText}>Age verified (18+)</Text>
+              </View>
+            )}
+          </View>
+
+          {showDatePicker && (
+            <DateTimePicker
+              value={dateOfBirth || new Date(2000, 0, 1)}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={handleDateChange}
+              maximumDate={new Date()}
+              minimumDate={new Date(1920, 0, 1)}
+            />
+          )}
 
           {/* Aadhaar Image */}
           <View style={styles.inputGroup}>
@@ -266,6 +364,11 @@ const styles = StyleSheet.create({
   submitContainer: { marginTop: SPACING.xl },
   submitButton: { flexDirection: 'row', padding: SPACING.lg, borderRadius: BORDER_RADIUS.lg, alignItems: 'center', justifyContent: 'center', gap: SPACING.sm },
   submitButtonText: { color: '#fff', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
+  // DOB Picker styles
+  datePickerButton: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, padding: SPACING.md, borderRadius: BORDER_RADIUS.md, borderWidth: 1 },
+  dateText: { flex: 1, fontSize: FONT_SIZE.md },
+  ageVerifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.xs },
+  ageVerifiedText: { color: '#10B981', fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.medium },
 });
 
 export default KycScreen;

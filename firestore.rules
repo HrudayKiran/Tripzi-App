@@ -1,0 +1,190 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ==================== HELPER FUNCTIONS ====================
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if request is from the document owner
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Check if user's KYC is approved
+    function isKycApproved() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.kycStatus == 'approved';
+    }
+    
+    // Check if user is an admin
+    function isAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // ==================== USERS COLLECTION ====================
+    
+    match /users/{userId} {
+      // Anyone authenticated can read user profiles
+      allow read: if isAuthenticated();
+      
+      // Users can only create/update their own profile
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      
+      // Only admins can delete user profiles
+      allow delete: if isAdmin();
+    }
+    
+    // ==================== KYC COLLECTION ====================
+    
+    match /kyc/{kycId} {
+      // Users can read their own KYC submissions
+      allow read: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid || isAdmin());
+      
+      // Authenticated users can create KYC submissions
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.status == 'pending';
+      
+      // Only admins can update KYC status (approve/reject)
+      allow update: if isAdmin();
+      
+      // Only admins can delete KYC records
+      allow delete: if isAdmin();
+    }
+    
+    // ==================== TRIPS COLLECTION ====================
+    
+    match /trips/{tripId} {
+      // Anyone authenticated can read trips
+      allow read: if isAuthenticated();
+      
+      // Only KYC-verified users can create trips
+      allow create: if isKycApproved() && 
+        request.resource.data.userId == request.auth.uid;
+      
+      // Trip owner or admin can update
+      allow update: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid || isAdmin());
+      
+      // Trip owner or admin can delete
+      allow delete: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid || isAdmin());
+    }
+    
+    // ==================== CHATS COLLECTION ====================
+    
+    match /chats/{chatId} {
+      // Participants can read chat metadata
+      allow read: if isAuthenticated() && 
+        request.auth.uid in resource.data.participants;
+      
+      // Authenticated users can create chats
+      allow create: if isAuthenticated() && 
+        request.auth.uid in request.resource.data.participants;
+      
+      // Participants can update chat (last message, etc.)
+      allow update: if isAuthenticated() && 
+        request.auth.uid in resource.data.participants;
+      
+      // Participants can delete chat
+      allow delete: if isAuthenticated() && 
+        request.auth.uid in resource.data.participants;
+      
+      // Messages subcollection
+      match /messages/{messageId} {
+        // Participants can read messages
+        allow read: if isAuthenticated() && 
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        
+        // Participants can create messages
+        allow create: if isAuthenticated() && 
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants &&
+          request.resource.data.senderId == request.auth.uid;
+        
+        // Message sender can update/delete their own messages
+        allow update, delete: if isAuthenticated() && 
+          resource.data.senderId == request.auth.uid;
+      }
+    }
+    
+    // ==================== NOTIFICATIONS COLLECTION ====================
+    
+    match /notifications/{notificationId} {
+      // Users can only read their own notifications
+      allow read: if isAuthenticated() && 
+        resource.data.recipientId == request.auth.uid;
+      
+      // Only Cloud Functions can create notifications (deny client writes)
+      allow create: if false;
+      
+      // Users can update their own notifications (mark as read)
+      allow update: if isAuthenticated() && 
+        resource.data.recipientId == request.auth.uid;
+      
+      // Users can delete their own notifications
+      allow delete: if isAuthenticated() && 
+        resource.data.recipientId == request.auth.uid;
+    }
+    
+    // ==================== LIKES COLLECTION ====================
+    
+    match /likes/{likeId} {
+      // Anyone authenticated can read likes
+      allow read: if isAuthenticated();
+      
+      // KYC-verified users can create likes
+      allow create: if isKycApproved() && 
+        request.resource.data.userId == request.auth.uid;
+      
+      // Users can delete their own likes
+      allow delete: if isAuthenticated() && 
+        resource.data.userId == request.auth.uid;
+    }
+    
+    // ==================== COMMENTS COLLECTION ====================
+    
+    match /comments/{commentId} {
+      // Anyone authenticated can read comments
+      allow read: if isAuthenticated();
+      
+      // KYC-verified users can create comments
+      allow create: if isKycApproved() && 
+        request.resource.data.userId == request.auth.uid;
+      
+      // Comment owner can update/delete
+      allow update, delete: if isAuthenticated() && 
+        resource.data.userId == request.auth.uid;
+    }
+    
+    // ==================== PUSH TOKENS COLLECTION ====================
+    
+    match /push_tokens/{userId} {
+      // Users can only read/write their own tokens
+      allow read, write: if isOwner(userId);
+    }
+    
+    // ==================== STORIES COLLECTION ====================
+    
+    match /stories/{storyId} {
+      // Anyone authenticated can read stories
+      allow read: if isAuthenticated();
+      
+      // KYC-verified users can create stories
+      allow create: if isKycApproved() && 
+        request.resource.data.userId == request.auth.uid;
+      
+      // Story owner can delete
+      allow delete: if isAuthenticated() && 
+        resource.data.userId == request.auth.uid;
+    }
+  }
+}
