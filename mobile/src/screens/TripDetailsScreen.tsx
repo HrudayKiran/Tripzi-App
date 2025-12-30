@@ -131,7 +131,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
           }
         }
       } catch (error) {
-        console.log('Fetch ratings error:', error);
+        // Error handled silently
       }
     };
 
@@ -183,7 +183,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
 
       Alert.alert('Thank You! ⭐', 'Your rating has been submitted.');
     } catch (error) {
-      console.log('Submit rating error:', error);
+      // Error handled silently
       Alert.alert('Error', 'Failed to submit rating. Please try again.');
     } finally {
       setSubmittingRating(false);
@@ -218,7 +218,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
         setIsJoined(true);
       }
     } catch (error) {
-      console.log('Toggle error:', error);
+      // Error handled silently
       // Keep previous state on error
     }
   };
@@ -237,7 +237,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
         message: `🚀 Check out this trip: ${trip?.title}!\n\n📍 ${trip?.location || 'Adventure'}\n💰 ${formatCost(trip?.costPerPerson || trip?.cost)}/person\n\nJoin on Tripzi! 🌍`,
       });
     } catch (error) {
-      console.log('Share error:', error);
+      // Error handled silently
     }
   };
 
@@ -347,7 +347,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
       setShowEditModal(false);
       Alert.alert('Success', 'Trip updated successfully!');
     } catch (error: any) {
-      console.log('Save error:', error);
+      // Error handled silently
       Alert.alert('Error', 'Failed to update trip. Please try again.');
     } finally {
       setSaving(false);
@@ -370,7 +370,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
               Alert.alert('Deleted', 'Trip has been deleted.');
               navigation.goBack();
             } catch (error: any) {
-              console.log('Delete error:', error);
+              // Error handled silently
               Alert.alert('Error', 'Failed to delete trip. Please try again.');
             } finally {
               setDeleting(false);

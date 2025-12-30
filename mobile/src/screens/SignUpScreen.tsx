@@ -108,17 +108,12 @@ const SignUpScreen = ({ navigation }) => {
 
     setLoading(true);
     try {
-      console.log('📝 Creating account...');
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const { user } = userCredential;
-      console.log('✅ Account created:', user.uid);
 
-      console.log('📝 Updating profile...');
       await updateProfile(user, { displayName: fullName });
-      console.log('✅ Profile updated');
 
       // Save to Firestore using React Native Firebase with timeout fallback
-      console.log('📝 Saving to Firestore...');
       try {
         const firestorePromise = firestore().collection('users').doc(user.uid).set({
           displayName: fullName,
@@ -136,20 +131,16 @@ const SignUpScreen = ({ navigation }) => {
         );
 
         await Promise.race([firestorePromise, timeoutPromise]);
-        console.log('✅ User saved to Firestore');
       } catch (firestoreError: any) {
-        console.log('⚠️ Firestore save issue:', firestoreError?.message || firestoreError);
-        // Continue anyway - user is authenticated, Firestore will sync later
+        // Firestore sync will happen later - continue with navigation
       }
 
-      console.log('🚀 Navigating to App...');
       // Reset navigation stack and go to App
       navigation.reset({
         index: 0,
         routes: [{ name: 'App' }],
       });
     } catch (error: any) {
-      console.log('❌ SignUp Error:', error?.code, error?.message);
       let errorMessage = 'Failed to create account';
       if (error?.code === 'auth/email-already-in-use') {
         errorMessage = 'Email is already registered';

@@ -5,6 +5,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
+import { navigationRef } from './RootNavigation';
 
 import usePushNotifications from '../hooks/usePushNotifications';
 
@@ -92,7 +93,7 @@ const AppTabs = () => {
 const AppNavigator = () => {
     return (
         <ThemeProvider>
-            <NavigationContainer>
+            <NavigationContainer ref={navigationRef}>
                 <Stack.Navigator
                     screenOptions={{
                         headerShown: false,

@@ -50,7 +50,7 @@ const StartScreen = ({ navigation }) => {
       navigation.navigate('App');
     } catch (error: any) {
       if (error?.code !== statusCodes.SIGN_IN_CANCELLED) {
-        console.log('Google Sign-In error:', error?.message || error);
+        // Error handled silently
       }
     }
   };
@@ -144,7 +144,7 @@ const StartScreen = ({ navigation }) => {
                   }
                 } catch (error: any) {
                   if (error?.code !== statusCodes.SIGN_IN_CANCELLED) {
-                    console.log('Google Sign-Up error:', error?.message || error);
+                    // Error handled silently
                     Alert.alert('Sign Up Failed', 'Could not sign up with Google');
                   }
                 }

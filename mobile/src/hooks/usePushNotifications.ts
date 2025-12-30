@@ -1,80 +1,177 @@
-
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import messaging from '@react-native-firebase/messaging';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth, db } from '../firebase';
-import { collection, doc, setDoc } from 'firebase/firestore';
-import { Platform } from 'react-native';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
+import { Platform, Alert } from 'react-native';
+import * as RootNavigation from '../navigation/RootNavigation';
+
+interface NotificationData {
+  route?: string;
+  tripId?: string;
+  chatId?: string;
+  userId?: string;
+  [key: string]: string | undefined;
+}
+
+/**
+ * Generate a simple device identifier for token storage
+ */
+const getDeviceId = (): string => {
+  // Use a simple ID based on platform and timestamp to avoid expo-device issues
+  return `${Platform.OS}_${Date.now()}`;
+};
 
 const usePushNotifications = () => {
+  const hasHandledInitialNotification = useRef(false);
+
   useEffect(() => {
-    // onAuthStateChanged returns an unsubscribe function
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        // User is signed in, see docs for a list of available properties
-        // https://firebase.google.com/docs/reference/js/firebase.User
+    let unsubscribeAuth: (() => void) | null = null;
+    let unsubscribeOnNotificationOpened: (() => void) | null = null;
+    let unsubscribeOnMessage: (() => void) | null = null;
 
-        setupMessaging(user);
-      } else {
-        // User is signed out
+    const setup = async () => {
+      try {
+        // Handle notification that opened the app from quit state
+        const handleInitialNotification = async () => {
+          if (hasHandledInitialNotification.current) return;
+          hasHandledInitialNotification.current = true;
 
-      }
-    });
+          const remoteMessage = await messaging().getInitialNotification();
+          if (remoteMessage?.data) {
+            setTimeout(() => {
+              handleNotificationNavigation(remoteMessage.data as NotificationData);
+            }, 1000);
+          }
+        };
 
-    const setupMessaging = async (user: User) => {
-      // 1. Request Permission
-      const authStatus = await messaging().requestPermission();
-      const enabled =
-        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+        // Handle notification when app is in background and user taps on notification
+        unsubscribeOnNotificationOpened = messaging().onNotificationOpenedApp(
+          (remoteMessage) => {
+            if (remoteMessage.data) {
+              handleNotificationNavigation(remoteMessage.data as NotificationData);
+            }
+          }
+        );
 
-      if (enabled) {
+        // Handle notification when app is in foreground
+        unsubscribeOnMessage = messaging().onMessage(
+          async (remoteMessage) => {
+            const title = remoteMessage.notification?.title || 'New Notification';
+            const body = remoteMessage.notification?.body || '';
 
-        // 2. Get Token and Save to Firestore
-        getAndSaveToken(user);
+            Alert.alert(title, body, [
+              { text: 'Dismiss', style: 'cancel' },
+              {
+                text: 'View',
+                onPress: () => {
+                  if (remoteMessage.data) {
+                    handleNotificationNavigation(remoteMessage.data as NotificationData);
+                  }
+                },
+              },
+            ]);
+          }
+        );
 
-        // 3. Listen for Token Refreshes
-        messaging().onTokenRefresh((token: string) => getAndSaveToken(user, token));
-
-        // 4. Listen for Foreground Messages
-        messaging().onMessage(async (remoteMessage: unknown) => {
-          // Here you could show a local notification
+        // Auth state listener
+        unsubscribeAuth = auth().onAuthStateChanged((user) => {
+          if (user) {
+            setupMessaging(user);
+            handleInitialNotification();
+          }
         });
-
-      } else {
-
+      } catch (error) {
+        // Silent fail - push notifications are optional
       }
     };
 
-    const getAndSaveToken = async (user: User, freshToken?: string) => {
-        try {
+    const setupMessaging = async (user: any) => {
+      try {
+        const authStatus = await messaging().requestPermission();
+        const enabled =
+          authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+          authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+
+        if (enabled) {
+          getAndSaveToken(user);
+          messaging().onTokenRefresh((token: string) => getAndSaveToken(user, token));
+        }
+      } catch (error) {
+        // Silent fail
+      }
+    };
+
+    const getAndSaveToken = async (user: any, freshToken?: string) => {
+      try {
         const token = freshToken || await messaging().getToken();
-
-            await saveTokenToFirestore(user, token);
-        } catch (error) {
-
-        }
+        await saveTokenToFirestore(user, token);
+      } catch (error) {
+        // Silent fail
+      }
     };
 
-    const saveTokenToFirestore = async (user: User, token: string) => {
-        try {
-            const tokenRef = doc(collection(db, 'push_tokens'), user.uid);
-            await setDoc(tokenRef, {
-                token,
-                platform: Platform.OS,
-                updated_at: new Date().toISOString(),
-            }, { merge: true }); // Using merge to upsert
+    const saveTokenToFirestore = async (user: any, token: string) => {
+      try {
+        const deviceId = getDeviceId();
+        const tokenRef = firestore().collection('push_tokens').doc(user.uid);
 
-        } catch (error) {
-
-        }
+        await tokenRef.set({
+          tokens: {
+            [deviceId]: {
+              token,
+              platform: Platform.OS,
+              updatedAt: firestore.FieldValue.serverTimestamp(),
+            }
+          }
+        }, { merge: true });
+      } catch (error) {
+        // Silent fail
+      }
     };
 
-    // The returned function will be called on component unmount
-    return unsubscribe;
+    setup();
 
-  }, []); // Empty dependency array ensures this effect runs only once
+    return () => {
+      if (unsubscribeAuth) unsubscribeAuth();
+      if (unsubscribeOnNotificationOpened) unsubscribeOnNotificationOpened();
+      if (unsubscribeOnMessage) unsubscribeOnMessage();
+    };
+  }, []);
 
+  const handleNotificationNavigation = (data: NotificationData) => {
+    const route = data.route;
+    if (!route) return;
+
+    try {
+      switch (route) {
+        case 'TripDetails':
+          if (data.tripId) {
+            RootNavigation.navigate('TripDetails', { tripId: data.tripId });
+          }
+          break;
+        case 'Message':
+          if (data.chatId) {
+            RootNavigation.navigate('Message', { chatId: data.chatId });
+          }
+          break;
+        case 'KycScreen':
+        case 'KYC':
+          RootNavigation.navigate('KYC', {});
+          break;
+        case 'UserProfile':
+        case 'Profile':
+          if (data.userId) {
+            RootNavigation.navigate('UserProfile', { userId: data.userId });
+          }
+          break;
+        default:
+          RootNavigation.navigate('App', {});
+          break;
+      }
+    } catch (error) {
+      // Navigation might not be ready
+    }
+  };
 };
 
 export default usePushNotifications;

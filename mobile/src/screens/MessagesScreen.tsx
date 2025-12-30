@@ -88,14 +88,14 @@ const MessagesScreen = ({ navigation }) => {
                     setLoading(false);
                 },
                 (error) => {
-                    console.log('Chats load error:', error);
+                    // Error handled silently
                     setLoading(false);
                 }
             );
 
             return () => unsubscribe();
         } catch (error) {
-            console.log('Chat setup error:', error);
+            // Error handled silently
             setLoading(false);
         }
     };
@@ -296,6 +296,29 @@ const MessagesScreen = ({ navigation }) => {
         );
     };
 
+    // Format time for chat list
+    const formatChatTime = (timestamp: any) => {
+        if (!timestamp) return '';
+        try {
+            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+            const now = new Date();
+            const diffMs = now.getTime() - date.getTime();
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+            if (diffDays === 0) {
+                return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+            } else if (diffDays === 1) {
+                return 'Yesterday';
+            } else if (diffDays < 7) {
+                return date.toLocaleDateString('en-US', { weekday: 'short' });
+            } else {
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            }
+        } catch {
+            return '';
+        }
+    };
+
     const renderChatItem = ({ item, index }) => (
         <Animatable.View animation="fadeInUp" delay={index * 50}>
             <TouchableOpacity
@@ -305,22 +328,34 @@ const MessagesScreen = ({ navigation }) => {
                 activeOpacity={0.7}
                 delayLongPress={500}
             >
-                <Image
-                    source={{ uri: item.isGroupChat ? 'https://via.placeholder.com/50' : (item.otherUser?.photoURL || 'https://via.placeholder.com/50') }}
-                    style={styles.avatar}
-                />
-                <View style={styles.chatInfo}>
-                    <Text style={[styles.chatName, { color: colors.text }]}>
-                        {item.isGroupChat ? item.groupName : (item.otherUser?.displayName || 'User')}
-                    </Text>
-                    <Text style={[styles.lastMessage, { color: colors.textSecondary }]} numberOfLines={1}>
-                        {item.lastMessage || 'No messages yet'}
-                    </Text>
+                {/* Avatar with online indicator */}
+                <View style={styles.avatarContainer}>
+                    <Image
+                        source={{ uri: item.isGroupChat ? 'https://via.placeholder.com/50' : (item.otherUser?.photoURL || 'https://via.placeholder.com/50') }}
+                        style={styles.avatar}
+                    />
+                    {item.otherUser?.isOnline && <View style={styles.onlineIndicator} />}
                 </View>
-                <View style={styles.chatMeta}>
-                    <Text style={[styles.chatTime, { color: colors.textSecondary }]}>
-                        {item.lastMessageTimestamp?.toDate?.()?.toLocaleDateString() || ''}
-                    </Text>
+
+                <View style={styles.chatInfo}>
+                    <View style={styles.chatNameRow}>
+                        <Text style={[styles.chatName, { color: colors.text }]} numberOfLines={1}>
+                            {item.isGroupChat ? item.groupName : (item.otherUser?.displayName || 'User')}
+                        </Text>
+                        <Text style={[styles.chatTime, { color: item.unreadCount ? colors.primary : colors.textSecondary }]}>
+                            {formatChatTime(item.lastMessageTimestamp)}
+                        </Text>
+                    </View>
+                    <View style={styles.lastMessageRow}>
+                        <Text style={[styles.lastMessage, { color: colors.textSecondary }]} numberOfLines={1}>
+                            {item.lastMessage || 'No messages yet'}
+                        </Text>
+                        {item.unreadCount > 0 && (
+                            <View style={styles.unreadBadge}>
+                                <Text style={styles.unreadText}>{item.unreadCount > 99 ? '99+' : item.unreadCount}</Text>
+                            </View>
+                        )}
+                    </View>
                 </View>
             </TouchableOpacity>
         </Animatable.View>
@@ -345,16 +380,23 @@ const MessagesScreen = ({ navigation }) => {
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-            {/* Header */}
-            <View style={styles.header}>
-                <Text style={[styles.headerTitle, { color: colors.text }]}>Messages</Text>
-                <View style={styles.headerActions}>
-                    <TouchableOpacity
-                        style={[styles.headerBtn, { backgroundColor: colors.card }]}
-                        onPress={() => setShowMenuDropdown(!showMenuDropdown)}
-                    >
-                        <Ionicons name="ellipsis-vertical" size={22} color={colors.text} />
-                    </TouchableOpacity>
+            {/* Gradient Header */}
+            <LinearGradient
+                colors={['#8B5CF6', '#EC4899']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.gradientHeader}
+            >
+                <View style={styles.headerContent}>
+                    <Text style={styles.headerTitleGradient}>Messages</Text>
+                    <View style={styles.headerActions}>
+                        <TouchableOpacity
+                            style={styles.headerBtnGradient}
+                            onPress={() => setShowMenuDropdown(!showMenuDropdown)}
+                        >
+                            <Ionicons name="ellipsis-vertical" size={22} color="#fff" />
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
                 {/* Three-dots Dropdown Menu */}
@@ -393,7 +435,7 @@ const MessagesScreen = ({ navigation }) => {
                         </TouchableOpacity>
                     </View>
                 )}
-            </View>
+            </LinearGradient>
 
             {/* Search Bar */}
             <View style={styles.searchContainer}>
@@ -749,6 +791,71 @@ const styles = StyleSheet.create({
         height: 1,
         marginVertical: SPACING.xs,
         marginHorizontal: SPACING.md,
+    },
+    // Gradient header styles
+    gradientHeader: {
+        paddingHorizontal: SPACING.lg,
+        paddingVertical: SPACING.md,
+        paddingTop: SPACING.lg,
+    },
+    headerContent: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    headerTitleGradient: {
+        fontSize: 28,
+        fontWeight: '800',
+        color: '#fff',
+    },
+    headerBtnGradient: {
+        width: TOUCH_TARGET.min,
+        height: TOUCH_TARGET.min,
+        borderRadius: TOUCH_TARGET.min / 2,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.2)',
+    },
+    // Chat item improvements
+    avatarContainer: {
+        position: 'relative',
+        marginRight: SPACING.md,
+    },
+    onlineIndicator: {
+        position: 'absolute',
+        bottom: 2,
+        right: 2,
+        width: 14,
+        height: 14,
+        borderRadius: 7,
+        backgroundColor: '#10B981',
+        borderWidth: 2,
+        borderColor: '#fff',
+    },
+    chatNameRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
+    lastMessageRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    unreadBadge: {
+        backgroundColor: '#8B5CF6',
+        minWidth: 20,
+        height: 20,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 6,
+    },
+    unreadText: {
+        color: '#fff',
+        fontSize: 11,
+        fontWeight: '700',
     },
 });
 

@@ -63,7 +63,7 @@ const SignInScreen = ({ navigation }) => {
       showToast('Login successful! 🎉');
       navigation.navigate('App');
     } catch (error: any) {
-      console.log('Sign in error:', error?.code);
+      // Error handled silently
 
       if (error?.code === 'auth/invalid-email' || error?.code === 'auth/user-not-found') {
         setErrors({ email: 'Email not found or invalid' });

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 
 export type NotificationType =
     | 'like'
@@ -57,7 +57,7 @@ export function useNotifications(): UseNotificationsReturn {
     }, []);
 
     useEffect(() => {
-        const userId = auth.currentUser?.uid;
+        const userId = auth().currentUser?.uid;
         if (!userId) {
             setLoading(false);
             setNotifications([]);
@@ -70,7 +70,6 @@ export function useNotifications(): UseNotificationsReturn {
         const unsubscribe = firestore()
             .collection('notifications')
             .where('recipientId', '==', userId)
-            .orderBy('createdAt', 'desc')
             .limit(50)
             .onSnapshot(
                 (snapshot) => {
@@ -94,6 +93,8 @@ export function useNotifications(): UseNotificationsReturn {
                             createdAt: data.createdAt?.toDate() || new Date(),
                         } as AppNotification;
                     });
+                    // Sort client-side since we removed orderBy to avoid index requirement
+                    notifs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
                     setNotifications(notifs);
                     setUnreadCount(notifs.filter((n) => !n.read).length);
@@ -122,7 +123,7 @@ export function useNotifications(): UseNotificationsReturn {
     }, []);
 
     const markAllAsRead = useCallback(async () => {
-        const userId = auth.currentUser?.uid;
+        const userId = auth().currentUser?.uid;
         if (!userId) return;
 
         try {

@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, Text, Platform, KeyboardAvoidingView, Image, TouchableOpacity, Modal, ScrollView, Alert, Linking } from 'react-native';
+import { View, StyleSheet, Text, Platform, KeyboardAvoidingView, Image, TouchableOpacity, Modal, ScrollView, Alert, Linking, ActivityIndicator, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GiftedChat, Bubble, Send, InputToolbar } from 'react-native-gifted-chat';
 import { Ionicons } from '@expo/vector-icons';
 import firestore from '@react-native-firebase/firestore';
+import storage from '@react-native-firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import MapView, { Marker } from 'react-native-maps';
+import { LinearGradient } from 'expo-linear-gradient';
 import { auth } from '../firebase';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
@@ -26,6 +28,11 @@ const MessageScreen = ({ route, navigation }) => {
     const [selectedMessage, setSelectedMessage] = useState<any>(null);
     const [showMessageOptions, setShowMessageOptions] = useState(false);
     const [editingMessage, setEditingMessage] = useState<any>(null);
+    const [pendingMedia, setPendingMedia] = useState<{ uri: string; type: 'image' | 'location' } | null>(null);
+    const [mediaCaption, setMediaCaption] = useState('');
+    const [isSendingMedia, setIsSendingMedia] = useState(false);
+    const [showLocationPreview, setShowLocationPreview] = useState(false);
+    const [pendingLocation, setPendingLocation] = useState<{ latitude: number; longitude: number } | null>(null);
     const currentUser = auth.currentUser;
 
     useEffect(() => {
@@ -243,28 +250,47 @@ const MessageScreen = ({ route, navigation }) => {
         }
     };
 
-    // Send image message
-    const sendImageMessage = async (imageUri: string) => {
+    // Upload image to Firebase Storage and send message
+    const sendImageMessage = async (imageUri: string, caption: string = '') => {
         if (!activeChatId || !currentUser) return;
 
-        // For now, just send the local URI. In production, upload to Firebase Storage first.
-        firestore().collection('chats').doc(activeChatId).collection('messages').add({
-            text: '',
-            image: imageUri,
-            user: {
-                _id: currentUser.uid,
-                name: currentUser.displayName || 'User',
-                avatar: currentUser.photoURL,
-            },
-            createdAt: firestore.FieldValue.serverTimestamp(),
-        });
-        firestore().collection('chats').doc(activeChatId).update({
-            lastMessage: '📷 Photo',
-            lastMessageTimestamp: firestore.FieldValue.serverTimestamp(),
-        });
+        setIsSendingMedia(true);
+        try {
+            // Generate unique filename
+            const filename = `chats/${activeChatId}/${Date.now()}_${currentUser.uid}.jpg`;
+            const reference = storage().ref(filename);
+
+            // Upload to Storage
+            await reference.putFile(imageUri);
+            const downloadUrl = await reference.getDownloadURL();
+
+            // Save message with Storage URL
+            await firestore().collection('chats').doc(activeChatId).collection('messages').add({
+                text: caption,
+                image: downloadUrl,
+                user: {
+                    _id: currentUser.uid,
+                    name: currentUser.displayName || 'User',
+                    avatar: currentUser.photoURL,
+                },
+                status: 'sent',
+                createdAt: firestore.FieldValue.serverTimestamp(),
+            });
+
+            await firestore().collection('chats').doc(activeChatId).update({
+                lastMessage: caption || '📷 Photo',
+                lastMessageTimestamp: firestore.FieldValue.serverTimestamp(),
+            });
+        } catch (error) {
+            Alert.alert('Error', 'Failed to send image. Please try again.');
+        } finally {
+            setIsSendingMedia(false);
+            setPendingMedia(null);
+            setMediaCaption('');
+        }
     };
 
-    // Pick image from gallery
+    // Pick image from gallery - show preview first
     const pickImage = async () => {
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -272,11 +298,11 @@ const MessageScreen = ({ route, navigation }) => {
         });
 
         if (!result.canceled && result.assets[0]) {
-            sendImageMessage(result.assets[0].uri);
+            setPendingMedia({ uri: result.assets[0].uri, type: 'image' });
         }
     };
 
-    // Take photo with camera
+    // Take photo with camera - show preview first
     const takePhoto = async () => {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== 'granted') {
@@ -289,7 +315,7 @@ const MessageScreen = ({ route, navigation }) => {
         });
 
         if (!result.canceled && result.assets[0]) {
-            sendImageMessage(result.assets[0].uri);
+            setPendingMedia({ uri: result.assets[0].uri, type: 'image' });
         }
     };
 
@@ -299,7 +325,7 @@ const MessageScreen = ({ route, navigation }) => {
         setShowEmojiPicker(false);
     };
 
-    // Share current location
+    // Share current location - with preview
     const shareLocation = async () => {
         try {
             const { status } = await Location.requestForegroundPermissionsAsync();
@@ -313,28 +339,40 @@ const MessageScreen = ({ route, navigation }) => {
             });
 
             const { latitude, longitude } = location.coords;
-
-            // Send location message
-            if (activeChatId && currentUser) {
-                firestore().collection('chats').doc(activeChatId).collection('messages').add({
-                    text: '📍 Location',
-                    location: { latitude, longitude },
-                    user: {
-                        _id: currentUser.uid,
-                        name: currentUser.displayName || 'User',
-                        avatar: currentUser.photoURL,
-                    },
-                    status: 'sent',
-                    createdAt: firestore.FieldValue.serverTimestamp(),
-                });
-                firestore().collection('chats').doc(activeChatId).update({
-                    lastMessage: '📍 Location shared',
-                    lastMessageTimestamp: firestore.FieldValue.serverTimestamp(),
-                });
-            }
+            setPendingLocation({ latitude, longitude });
+            setShowLocationPreview(true);
         } catch (error) {
-            console.log('Location error:', error);
             Alert.alert('Error', 'Could not get your location. Please try again.');
+        }
+    };
+
+    // Confirm and send location
+    const confirmSendLocation = async () => {
+        if (!activeChatId || !currentUser || !pendingLocation) return;
+
+        setIsSendingMedia(true);
+        try {
+            await firestore().collection('chats').doc(activeChatId).collection('messages').add({
+                text: '📍 Location',
+                location: pendingLocation,
+                user: {
+                    _id: currentUser.uid,
+                    name: currentUser.displayName || 'User',
+                    avatar: currentUser.photoURL,
+                },
+                status: 'sent',
+                createdAt: firestore.FieldValue.serverTimestamp(),
+            });
+            await firestore().collection('chats').doc(activeChatId).update({
+                lastMessage: '📍 Location shared',
+                lastMessageTimestamp: firestore.FieldValue.serverTimestamp(),
+            });
+        } catch (error) {
+            Alert.alert('Error', 'Failed to share location.');
+        } finally {
+            setIsSendingMedia(false);
+            setShowLocationPreview(false);
+            setPendingLocation(null);
         }
     };
 
@@ -568,6 +606,132 @@ const MessageScreen = ({ route, navigation }) => {
                     </View>
                 </TouchableOpacity>
             </Modal>
+
+            {/* Media Preview Modal */}
+            <Modal visible={!!pendingMedia} transparent animationType="slide">
+                <View style={styles.previewModalContainer}>
+                    <View style={[styles.previewModalContent, { backgroundColor: colors.card }]}>
+                        {/* Header */}
+                        <View style={styles.previewHeader}>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setPendingMedia(null);
+                                    setMediaCaption('');
+                                }}
+                            >
+                                <Ionicons name="close" size={28} color={colors.text} />
+                            </TouchableOpacity>
+                            <Text style={[styles.previewTitle, { color: colors.text }]}>Send Photo</Text>
+                            <View style={{ width: 28 }} />
+                        </View>
+
+                        {/* Image Preview */}
+                        {pendingMedia && (
+                            <Image
+                                source={{ uri: pendingMedia.uri }}
+                                style={styles.previewImage}
+                                resizeMode="contain"
+                            />
+                        )}
+
+                        {/* Caption Input + Send */}
+                        <View style={[styles.previewFooter, { backgroundColor: colors.background }]}>
+                            <View style={[styles.captionInput, { backgroundColor: colors.inputBackground }]}>
+                                <Ionicons name="text-outline" size={20} color={colors.textSecondary} />
+                                <TextInput
+                                    style={[styles.captionTextInput, { color: colors.text }]}
+                                    placeholder="Add a caption..."
+                                    placeholderTextColor={colors.textSecondary}
+                                    value={mediaCaption}
+                                    onChangeText={setMediaCaption}
+                                    multiline
+                                />
+                            </View>
+                            <TouchableOpacity
+                                style={styles.sendMediaButton}
+                                onPress={() => pendingMedia && sendImageMessage(pendingMedia.uri, mediaCaption)}
+                                disabled={isSendingMedia}
+                            >
+                                <LinearGradient
+                                    colors={['#8B5CF6', '#EC4899']}
+                                    style={styles.sendMediaButtonGradient}
+                                >
+                                    {isSendingMedia ? (
+                                        <ActivityIndicator color="#fff" size="small" />
+                                    ) : (
+                                        <Ionicons name="send" size={22} color="#fff" />
+                                    )}
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Location Preview Modal */}
+            <Modal visible={showLocationPreview} transparent animationType="slide">
+                <View style={styles.previewModalContainer}>
+                    <View style={[styles.previewModalContent, { backgroundColor: colors.card }]}>
+                        {/* Header */}
+                        <View style={styles.previewHeader}>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setShowLocationPreview(false);
+                                    setPendingLocation(null);
+                                }}
+                            >
+                                <Ionicons name="close" size={28} color={colors.text} />
+                            </TouchableOpacity>
+                            <Text style={[styles.previewTitle, { color: colors.text }]}>Share Location</Text>
+                            <View style={{ width: 28 }} />
+                        </View>
+
+                        {/* Map Preview */}
+                        {pendingLocation && (
+                            <MapView
+                                style={styles.previewMap}
+                                initialRegion={{
+                                    latitude: pendingLocation.latitude,
+                                    longitude: pendingLocation.longitude,
+                                    latitudeDelta: 0.01,
+                                    longitudeDelta: 0.01,
+                                }}
+                            >
+                                <Marker coordinate={pendingLocation}>
+                                    <View style={styles.locationMarker}>
+                                        <LinearGradient colors={['#8B5CF6', '#EC4899']} style={styles.locationMarkerInner}>
+                                            <Ionicons name="location" size={20} color="#fff" />
+                                        </LinearGradient>
+                                    </View>
+                                </Marker>
+                            </MapView>
+                        )}
+
+                        {/* Send Button */}
+                        <View style={[styles.previewFooter, { backgroundColor: colors.background }]}>
+                            <Text style={[styles.locationInfo, { color: colors.textSecondary }]}>
+                                Sharing your current location
+                            </Text>
+                            <TouchableOpacity
+                                style={styles.sendMediaButton}
+                                onPress={confirmSendLocation}
+                                disabled={isSendingMedia}
+                            >
+                                <LinearGradient
+                                    colors={['#8B5CF6', '#EC4899']}
+                                    style={styles.sendMediaButtonGradient}
+                                >
+                                    {isSendingMedia ? (
+                                        <ActivityIndicator color="#fff" size="small" />
+                                    ) : (
+                                        <Ionicons name="send" size={22} color="#fff" />
+                                    )}
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -635,6 +799,20 @@ const styles = StyleSheet.create({
     locationMap: { width: 200, height: 150 },
     locationInfo: { flexDirection: 'row', alignItems: 'center', padding: SPACING.sm, gap: SPACING.xs },
     locationText: { fontSize: FONT_SIZE.xs },
+    // Preview modal styles
+    previewModalContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'space-between' },
+    previewModalContent: { flex: 1 },
+    previewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: SPACING.lg, paddingTop: SPACING.xl },
+    previewTitle: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold },
+    previewImage: { flex: 1, width: '100%' },
+    previewMap: { flex: 1, width: '100%' },
+    previewFooter: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, gap: SPACING.md },
+    captionInput: { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 25, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, gap: SPACING.sm },
+    captionTextInput: { flex: 1, fontSize: FONT_SIZE.md, maxHeight: 100 },
+    sendMediaButton: { width: 50, height: 50 },
+    sendMediaButtonGradient: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
+    locationMarker: { width: 40, height: 40 },
+    locationMarkerInner: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
 });
 
 export default MessageScreen;

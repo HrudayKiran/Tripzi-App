@@ -33,7 +33,7 @@ const ProfileScreen = ({ navigation }) => {
           });
         }
       }, (error) => {
-        console.log('User fetch error:', error);
+        // Error handled silently
         setUser({
           displayName: auth.currentUser?.displayName,
           email: auth.currentUser?.email,
@@ -80,7 +80,7 @@ const ProfileScreen = ({ navigation }) => {
       });
       Alert.alert('Success! ✓', 'Your KYC has been verified for testing.');
     } catch (error) {
-      console.log('KYC verify error:', error);
+      // Error handled silently
       Alert.alert('Done', 'KYC status updated.');
     }
   };
@@ -278,14 +278,11 @@ const ProfileScreen = ({ navigation }) => {
                 onPress={async () => {
                   setSwitchingAccount(true);
                   try {
-                    console.log('🔄 Switching to admin account...');
                     await signOut(auth);
-                    console.log('✅ Signed out');
                     setShowAccountModal(false);
                     // Navigate to Start screen for Google Sign-In
                     navigation.reset({ index: 0, routes: [{ name: 'Start' }] });
                   } catch (error: any) {
-                    console.error('❌ Switch failed:', error.message);
                     Alert.alert('⚠️ Error', error.message);
                     setShowAccountModal(false);
                   } finally {

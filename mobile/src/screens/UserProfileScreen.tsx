@@ -11,6 +11,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 import FollowersModal from '../components/FollowersModal';
 import TripCard from '../components/TripCard';
+import ProfilePictureViewer from '../components/ProfilePictureViewer';
 
 const { width, height } = Dimensions.get('window');
 
@@ -659,23 +660,18 @@ const UserProfileScreen = ({ route, navigation }) => {
                 onUserPress={navigateToProfile}
             />
 
-            {/* Full Image Modal */}
-            <Modal visible={showFullImage} transparent animationType="fade">
-                <TouchableOpacity
-                    style={styles.fullImageModal}
-                    activeOpacity={1}
-                    onPress={() => setShowFullImage(false)}
-                >
-                    <Image
-                        style={styles.fullImage}
-                        source={{ uri: profileImage || user?.photoURL || 'https://via.placeholder.com/400' }}
-                        resizeMode="contain"
-                    />
-                    <TouchableOpacity style={styles.closeFullImage} onPress={() => setShowFullImage(false)}>
-                        <Ionicons name="close" size={28} color="#fff" />
-                    </TouchableOpacity>
-                </TouchableOpacity>
-            </Modal>
+            {/* Profile Picture Viewer */}
+            <ProfilePictureViewer
+                visible={showFullImage}
+                imageUrl={profileImage || user?.photoURL}
+                userName={user?.displayName}
+                isOwnProfile={isOwnProfile}
+                onClose={() => setShowFullImage(false)}
+                onDeleted={() => {
+                    setProfileImage(null);
+                    setUser(prev => ({ ...prev, photoURL: null }));
+                }}
+            />
         </SafeAreaView>
     );
 };
