@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../firebase';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
@@ -8,14 +10,41 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '..
 
 const ForgotPasswordScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
   const { colors } = useTheme();
 
-  const handleResetPassword = () => {
+  const handleResetPassword = async () => {
     if (!email) {
       Alert.alert('Error', 'Please enter your email address');
       return;
     }
-    Alert.alert('Success', 'Password reset link sent to your email');
+
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      Alert.alert(
+        'Email Sent! 📧',
+        `A password reset link has been sent to ${email}. Please check your inbox.`,
+        [{ text: 'OK', onPress: () => navigation.navigate('SignIn') }]
+      );
+    } catch (error: any) {
+      let errorMessage = 'Failed to send reset email';
+      if (error?.code === 'auth/user-not-found') {
+        errorMessage = 'No account found with this email';
+      } else if (error?.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address';
+      } else if (error?.code === 'auth/too-many-requests') {
+        errorMessage = 'Too many attempts. Please try again later.';
+      }
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -58,16 +87,22 @@ const ForgotPasswordScreen = ({ navigation }) => {
               onChangeText={setEmail}
               keyboardType="email-address"
               autoCapitalize="none"
+              autoCorrect={false}
             />
           </View>
 
           {/* Reset Button */}
           <TouchableOpacity
-            style={[styles.resetButton, { backgroundColor: colors.primary }]}
+            style={[styles.resetButton, { backgroundColor: colors.primary, opacity: loading ? 0.6 : 1 }]}
             onPress={handleResetPassword}
             activeOpacity={0.8}
+            disabled={loading}
           >
-            <Text style={styles.resetButtonText}>Send Reset Link</Text>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.resetButtonText}>Send Reset Link</Text>
+            )}
           </TouchableOpacity>
 
           {/* Back to Sign In */}

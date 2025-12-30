@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import firestore from '@react-native-firebase/firestore';
 import { auth } from '../firebase';
 
@@ -6,6 +6,13 @@ const useTrips = () => {
     const [trips, setTrips] = useState([]); // Start empty, no fallback
     const [allTrips, setAllTrips] = useState([]); // Keep all trips for other uses
     const [loading, setLoading] = useState(true);
+    const [refreshKey, setRefreshKey] = useState(0);
+
+    // Refetch function to manually trigger a refresh
+    const refetch = useCallback(() => {
+        setLoading(true);
+        setRefreshKey(prev => prev + 1);
+    }, []);
 
     useEffect(() => {
         let unsubscribe = () => { };
@@ -84,9 +91,9 @@ const useTrips = () => {
         setTimeout(loadTrips, 500);
 
         return () => unsubscribe();
-    }, []);
+    }, [refreshKey]);
 
-    return { trips, allTrips, loading };
+    return { trips, allTrips, loading, refetch };
 };
 
 export default useTrips;

@@ -73,19 +73,39 @@ const MyTripsScreen = ({ navigation }) => {
     }
   };
 
+
   const filterTrips = () => {
     const now = new Date();
+    // Normalize to start of today for date comparison
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
     return joinedTrips.filter(trip => {
-      const fromDate = trip.fromDate ? new Date(trip.fromDate) : null;
-      const toDate = trip.toDate ? new Date(trip.toDate) : null;
+      // Parse dates - handle Firestore Timestamps
+      const fromDate = trip.fromDate?.toDate ? trip.fromDate.toDate() :
+        trip.fromDate ? new Date(trip.fromDate) : null;
+      const toDate = trip.toDate?.toDate ? trip.toDate.toDate() :
+        trip.toDate ? new Date(trip.toDate) : null;
+
+      // Normalize parsed dates to start of day
+      const fromDay = fromDate ? new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate()) : null;
+      const toDay = toDate ? new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate()) : null;
+
+      // Completed: Only when owner has marked the trip as completed
+      if (activeTab === 'Completed') {
+        return trip.isCompleted === true;
+      }
+
+      // Don't show completed trips in other tabs
+      if (trip.isCompleted) return false;
 
       if (activeTab === 'Upcoming') {
-        return !fromDate || fromDate > now;
+        // Upcoming: start date is in future OR no dates set
+        return !fromDay || fromDay > today;
       } else if (activeTab === 'Ongoing') {
-        return fromDate && toDate && fromDate <= now && toDate >= now;
-      } else {
-        return toDate && toDate < now;
+        // Ongoing: today is between start and end dates (inclusive)
+        return fromDay && toDay && fromDay <= today && toDay >= today;
       }
+      return false;
     });
   };
 

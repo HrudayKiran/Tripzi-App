@@ -99,7 +99,7 @@ const SplashScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={styles.container}>
-        {/* Top Section - Logo, Name, Tagline */}
+        {/* Top Section - Logo, Name, Tagline (30% of screen) */}
         <Animatable.View animation="fadeInDown" style={styles.topSection}>
           <View style={[styles.logoBox, { backgroundColor: colors.primary }]}>
             <Text style={styles.logoEmoji}>🚀</Text>
@@ -110,40 +110,37 @@ const SplashScreen = ({ navigation }) => {
           </Text>
         </Animatable.View>
 
-        {/* Bottom Section - Carousel & Button */}
-        <View style={styles.bottomSection}>
-          {/* Carousel */}
-          <Animatable.View animation="fadeInUp" delay={200} style={styles.carouselContainer}>
-            <FlatList
-              ref={flatListRef}
-              data={CAROUSEL_IMAGES}
-              renderItem={renderItem}
-              keyExtractor={(item) => item.id}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onViewableItemsChanged={onViewableItemsChanged}
-              viewabilityConfig={viewabilityConfig}
-              getItemLayout={(_, index) => ({
-                length: width - SPACING.xl * 2,
-                offset: (width - SPACING.xl * 2) * index,
-                index,
-              })}
-              onScrollToIndexFailed={() => { }}
-            />
-          </Animatable.View>
+        {/* Middle Section - Carousel (60% of screen) */}
+        <Animatable.View animation="fadeInUp" delay={200} style={styles.carouselSection}>
+          <FlatList
+            ref={flatListRef}
+            data={CAROUSEL_IMAGES}
+            renderItem={renderItem}
+            keyExtractor={(item) => item.id}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={viewabilityConfig}
+            getItemLayout={(_, index) => ({
+              length: width,
+              offset: width * index,
+              index,
+            })}
+            onScrollToIndexFailed={() => { }}
+          />
+        </Animatable.View>
 
-          {/* Get Started Button */}
-          <Animatable.View animation="fadeInUp" delay={400} style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: colors.primary }]}
-              onPress={handleNext}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.buttonText}>Join the Journey</Text>
-            </TouchableOpacity>
-          </Animatable.View>
-        </View>
+        {/* Bottom Section - Button (10% of screen) */}
+        <Animatable.View animation="fadeInUp" delay={400} style={styles.buttonSection}>
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: colors.primary }]}
+            onPress={handleNext}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.buttonText}>Join the Journey</Text>
+          </TouchableOpacity>
+        </Animatable.View>
       </View>
     </SafeAreaView>
   );
@@ -151,11 +148,13 @@ const SplashScreen = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  container: { flex: 1, paddingHorizontal: SPACING.xl },
+  container: { flex: 1 },
+  // Top section - 20% for logo, name, tagline
   topSection: {
+    height: height * 0.20,
     alignItems: 'center',
-    paddingTop: SPACING.xl,
-    paddingBottom: SPACING.lg,
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.xl,
   },
   logoBox: {
     width: 64,
@@ -173,13 +172,14 @@ const styles = StyleSheet.create({
   logoEmoji: { fontSize: 32 },
   appName: { fontSize: 42, fontWeight: FONT_WEIGHT.bold, marginBottom: SPACING.xs },
   tagline: { fontSize: FONT_SIZE.md },
-  bottomSection: { flex: 1, justifyContent: 'space-between' },
-  carouselContainer: { flex: 1 },
+  // Middle section - 60% for carousel
+  carouselSection: {
+    height: height * 0.60,
+  },
   slide: {
-    width: width - SPACING.xl * 2,
-    height: height * 0.52,
-    borderRadius: BORDER_RADIUS.xl,
-    overflow: 'hidden',
+    width: width,
+    height: height * 0.60,
+    // No borderRadius - square corners
   },
   slideImage: {
     width: '100%',
@@ -222,9 +222,16 @@ const styles = StyleSheet.create({
   locationText: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.semibold, color: '#333' },
   dotsContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.lg, gap: SPACING.sm },
   dot: { height: 8, borderRadius: 4 },
-  buttonContainer: { alignItems: 'center', paddingBottom: SPACING.lg },
+  // Bottom section - 20% for button
+  buttonSection: {
+    height: height * 0.20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.xl,
+    paddingBottom: SPACING.xxl,
+  },
   joinText: { fontSize: FONT_SIZE.xs, letterSpacing: 2, marginBottom: SPACING.md },
-  button: { width: '100%', paddingVertical: SPACING.lg, borderRadius: BORDER_RADIUS.xl, alignItems: 'center' },
+  button: { width: '100%', paddingVertical: SPACING.xl, borderRadius: BORDER_RADIUS.xl, alignItems: 'center' },
   buttonText: { color: '#fff', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
 });
 

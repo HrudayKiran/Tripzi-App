@@ -105,6 +105,55 @@ const StartScreen = ({ navigation }) => {
             >
               <Text style={[styles.createButtonText, { color: colors.primary }]}>Create New Account</Text>
             </TouchableOpacity>
+
+            {/* Google Sign Up */}
+            <TouchableOpacity
+              style={[styles.googleSignUpButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={async () => {
+                try {
+                  await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+                  try { await GoogleSignin.signOut(); } catch (e) { }
+
+                  const signInResult = await GoogleSignin.signIn();
+                  const idToken = (signInResult as any)?.data?.idToken || (signInResult as any)?.idToken;
+
+                  if (!idToken) {
+                    throw new Error('No idToken received');
+                  }
+
+                  const googleCredential = GoogleAuthProvider.credential(idToken);
+                  const userCredential = await signInWithCredential(auth, googleCredential);
+
+                  // Check if user profile exists
+                  const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+
+                  if (!userDoc.exists()) {
+                    // New user - go to profile completion
+                    navigation.navigate('GoogleProfile', {
+                      user: {
+                        uid: userCredential.user.uid,
+                        email: userCredential.user.email,
+                        displayName: userCredential.user.displayName,
+                        photoURL: userCredential.user.photoURL,
+                      }
+                    });
+                  } else {
+                    // Existing user - go to app
+                    showToast('Welcome back! 🎉');
+                    navigation.navigate('App');
+                  }
+                } catch (error: any) {
+                  if (error?.code !== statusCodes.SIGN_IN_CANCELLED) {
+                    console.log('Google Sign-Up error:', error?.message || error);
+                    Alert.alert('Sign Up Failed', 'Could not sign up with Google');
+                  }
+                }
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.googleIcon}>G</Text>
+              <Text style={[styles.googleButtonText, { color: colors.text }]}>Sign up with Google</Text>
+            </TouchableOpacity>
           </View>
         </Animatable.View>
 
@@ -224,6 +273,16 @@ const styles = StyleSheet.create({
   createButtonText: {
     fontSize: FONT_SIZE.md,
     fontWeight: FONT_WEIGHT.bold,
+  },
+  googleSignUpButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    gap: SPACING.md,
+    marginTop: SPACING.sm,
   },
   terms: {
     fontSize: FONT_SIZE.xs,

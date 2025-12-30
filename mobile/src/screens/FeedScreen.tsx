@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import TripCard from '../components/TripCard';
 import useTrips from '../api/useTrips';
@@ -12,19 +12,13 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '..
 import { auth } from '../firebase';
 import firestore from '@react-native-firebase/firestore';
 
-const CATEGORIES = [
-    { id: 'All', label: 'All', icon: 'apps', color: '#8B5CF6' },
-    { id: 'Recent', label: 'Recent', icon: 'time', color: '#3B82F6' },
-    { id: 'Budget', label: 'Budget', icon: 'wallet', color: '#10B981' },
-    { id: 'Popular', label: 'Popular', icon: 'flame', color: '#F59E0B' },
-    { id: 'Adventure', label: 'Adventure', icon: 'compass', color: '#EC4899' },
-];
+
 
 const FeedScreen = ({ navigation }) => {
-    const { trips, loading } = useTrips();
+    const { trips, loading, refetch } = useTrips();
     const { colors } = useTheme();
     const [searchQuery, setSearchQuery] = useState('');
-    const [activeCategory, setActiveCategory] = useState('All');
+    const [refreshing, setRefreshing] = useState(false);
     const [notificationsVisible, setNotificationsVisible] = useState(false);
     const [filterVisible, setFilterVisible] = useState(false);
     const [filters, setFilters] = useState<FilterOptions | null>(null);
@@ -199,28 +193,6 @@ const FeedScreen = ({ navigation }) => {
             );
         }
 
-        // Category filter
-        if (activeCategory !== 'All') {
-            if (activeCategory === 'Recent') {
-                // Sort by creation date and take latest
-                result = result.sort((a, b) => {
-                    const dateA = a.createdAt?.toDate?.()?.getTime() || 0;
-                    const dateB = b.createdAt?.toDate?.()?.getTime() || 0;
-                    return dateB - dateA;
-                });
-            } else if (activeCategory === 'Budget') {
-                result = result.filter(trip => (trip.cost || 0) < 20000);
-            } else if (activeCategory === 'Popular') {
-                result = result.filter(trip => (trip.likes || 0) > 5 || (trip.travelers || 0) > 3);
-            } else if (activeCategory === 'Adventure') {
-                result = result.filter(trip =>
-                    trip.tripType?.toLowerCase() === 'adventure' ||
-                    trip.title?.toLowerCase().includes('trek') ||
-                    trip.title?.toLowerCase().includes('hiking')
-                );
-            }
-        }
-
         // Apply additional filters
         if (filters) {
             if (filters.destination) {
@@ -259,7 +231,7 @@ const FeedScreen = ({ navigation }) => {
         }
 
         return result;
-    }, [trips, searchQuery, activeCategory, filters]);
+    }, [trips, searchQuery, filters]);
 
     const handleApplyFilters = (newFilters: FilterOptions) => {
         setFilters(newFilters);
@@ -267,11 +239,16 @@ const FeedScreen = ({ navigation }) => {
 
     const clearFilters = () => {
         setFilters(null);
-        setActiveCategory('All');
         setSearchQuery('');
     };
 
-    const hasActiveFilters = filters !== null || activeCategory !== 'All' || searchQuery !== '';
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        refetch();
+        setTimeout(() => setRefreshing(false), 1500);
+    }, [refetch]);
+
+    const hasActiveFilters = filters !== null || searchQuery !== '';
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -322,50 +299,6 @@ const FeedScreen = ({ navigation }) => {
                         color={filters ? '#fff' : colors.text}
                     />
                 </TouchableOpacity>
-            </View>
-
-            {/* Category Pills */}
-            <View style={styles.categoriesContainer}>
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.categoriesScroll}
-                >
-                    {CATEGORIES.map((category, index) => {
-                        const isActive = activeCategory === category.id;
-                        return (
-                            <Animatable.View
-                                key={category.id}
-                                animation="fadeInRight"
-                                delay={index * 50}
-                            >
-                                <TouchableOpacity
-                                    style={[
-                                        styles.categoryPill,
-                                        {
-                                            backgroundColor: isActive ? category.color : colors.card,
-                                            borderColor: isActive ? category.color : colors.border,
-                                        }
-                                    ]}
-                                    onPress={() => setActiveCategory(category.id)}
-                                    activeOpacity={0.7}
-                                >
-                                    <Ionicons
-                                        name={category.icon as any}
-                                        size={16}
-                                        color={isActive ? '#fff' : category.color}
-                                    />
-                                    <Text style={[
-                                        styles.categoryText,
-                                        { color: isActive ? '#fff' : colors.text }
-                                    ]}>
-                                        {category.label}
-                                    </Text>
-                                </TouchableOpacity>
-                            </Animatable.View>
-                        );
-                    })}
-                </ScrollView>
             </View>
 
             {/* Active Filters Badge */}
@@ -421,6 +354,14 @@ const FeedScreen = ({ navigation }) => {
                     )}
                     contentContainerStyle={styles.listContent}
                     showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            colors={[colors.primary]}
+                            tintColor={colors.primary}
+                        />
+                    }
                 />
             )}
 
@@ -485,7 +426,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: SPACING.lg,
-        paddingVertical: SPACING.md,
+        height: TOUCH_TARGET.comfortable,
         borderRadius: BORDER_RADIUS.lg,
         gap: SPACING.sm,
     },

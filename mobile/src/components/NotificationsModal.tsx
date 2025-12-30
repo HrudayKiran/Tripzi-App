@@ -3,8 +3,10 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Animated, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
+import { auth } from '../firebase';
 
 const { width } = Dimensions.get('window');
 
@@ -24,7 +26,7 @@ type Notification = {
     color: string;
 };
 
-// Sample notifications data
+// Sample notifications data (only shown for first-time users)
 const SAMPLE_NOTIFICATIONS: Notification[] = [
     { id: 1, type: 'trip', title: 'New trip to Ladakh!', message: 'Kiran posted a new adventure trip', time: '2 mins ago', icon: 'airplane', color: '#8B5CF6' },
     { id: 2, type: 'like', title: 'Someone liked your trip', message: 'Your Goa trip got 5 new likes', time: '15 mins ago', icon: 'heart', color: '#EC4899' },
@@ -32,6 +34,8 @@ const SAMPLE_NOTIFICATIONS: Notification[] = [
     { id: 4, type: 'join', title: 'Trip request', message: 'Someone wants to join your Kerala trip', time: '3 hours ago', icon: 'person-add', color: '#10B981' },
     { id: 5, type: 'reminder', title: 'Trip reminder', message: 'Your Manali trip starts in 3 days', time: '1 day ago', icon: 'calendar', color: '#F59E0B' },
 ];
+
+const NOTIFICATION_STORAGE_KEY = 'tripzi_notifications_';
 
 // Swipeable Notification Item Component
 const SwipeableNotification = ({ notification, onDelete, colors }: { notification: Notification; onDelete: (id: number) => void; colors: any }) => {
@@ -106,7 +110,44 @@ const SwipeableNotification = ({ notification, onDelete, colors }: { notificatio
 const NotificationsModal = ({ visible, onClose, onNotificationsChange }: NotificationsModalProps) => {
     const { colors } = useTheme();
     const slideAnim = useRef(new Animated.Value(width)).current;
-    const [notifications, setNotifications] = useState<Notification[]>(SAMPLE_NOTIFICATIONS);
+    const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [isLoaded, setIsLoaded] = useState(false);
+
+    // Load notifications from AsyncStorage on mount
+    useEffect(() => {
+        const loadNotifications = async () => {
+            try {
+                const userId = auth.currentUser?.uid || 'guest';
+                const stored = await AsyncStorage.getItem(NOTIFICATION_STORAGE_KEY + userId);
+                if (stored !== null) {
+                    setNotifications(JSON.parse(stored));
+                } else {
+                    // First time - show sample notifications
+                    setNotifications(SAMPLE_NOTIFICATIONS);
+                    await AsyncStorage.setItem(NOTIFICATION_STORAGE_KEY + userId, JSON.stringify(SAMPLE_NOTIFICATIONS));
+                }
+            } catch (error) {
+                console.log('Error loading notifications:', error);
+                setNotifications(SAMPLE_NOTIFICATIONS);
+            }
+            setIsLoaded(true);
+        };
+        loadNotifications();
+    }, []);
+
+    // Save notifications to AsyncStorage when they change
+    useEffect(() => {
+        const saveNotifications = async () => {
+            if (!isLoaded) return; // Don't save until initial load is complete
+            try {
+                const userId = auth.currentUser?.uid || 'guest';
+                await AsyncStorage.setItem(NOTIFICATION_STORAGE_KEY + userId, JSON.stringify(notifications));
+            } catch (error) {
+                console.log('Error saving notifications:', error);
+            }
+        };
+        saveNotifications();
+    }, [notifications, isLoaded]);
 
     useEffect(() => {
         if (visible) {

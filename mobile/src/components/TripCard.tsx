@@ -36,6 +36,8 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
     const [isJoining, setIsJoining] = useState(false);
     const [hasJoined, setHasJoined] = useState(false);
     const [commentCount, setCommentCount] = useState(0);
+    const [showFullDescription, setShowFullDescription] = useState(false);
+    const [userRating, setUserRating] = useState<{ avg: number; count: number } | null>(null);
     const heartScale = useRef(new Animated.Value(1)).current;
     const currentUser = auth.currentUser;
 
@@ -69,17 +71,41 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
         return () => unsubscribe();
     }, [trip.userId, currentUser?.uid]);
 
-    // Load comment count
+    // Load user rating
     useEffect(() => {
-        if (trip.id && trip.id !== 'fallback') {
-            firestore()
-                .collection('trips')
-                .doc(trip.id)
-                .collection('comments')
-                .get()
-                .then(snapshot => setCommentCount(snapshot.size))
-                .catch(() => setCommentCount(0));
-        }
+        if (!trip.userId) return;
+
+        firestore()
+            .collection('users')
+            .doc(trip.userId)
+            .get()
+            .then(doc => {
+                if (doc.exists) {
+                    const data = doc.data();
+                    if (data?.totalRating && data?.ratingCount) {
+                        setUserRating({
+                            avg: (data.totalRating / data.ratingCount).toFixed(1),
+                            count: data.ratingCount
+                        });
+                    }
+                }
+            })
+            .catch(() => { });
+    }, [trip.userId]);
+
+    // Real-time comment count listener
+    useEffect(() => {
+        if (!trip.id || trip.id === 'fallback') return;
+
+        const unsubscribe = firestore()
+            .collection('trips')
+            .doc(trip.id)
+            .collection('comments')
+            .onSnapshot(snapshot => {
+                setCommentCount(snapshot.size);
+            }, () => setCommentCount(0));
+
+        return () => unsubscribe();
     }, [trip.id]);
 
     const handleLikePress = () => {
@@ -143,94 +169,68 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
         }
     };
 
+    const handleFollow = async () => {
+        if (!currentUser || !trip.userId || trip.userId === currentUser.uid) return;
+
+        // Optimistic update
+        setIsFollowing(!isFollowing);
+
+        try {
+            const userRef = firestore().collection('users').doc(trip.userId);
+            const currentUserRef = firestore().collection('users').doc(currentUser.uid);
+
+            if (isFollowing) {
+                // Unfollow
+                await userRef.update({ followers: firestore.FieldValue.arrayRemove(currentUser.uid) });
+                await currentUserRef.update({ following: firestore.FieldValue.arrayRemove(trip.userId) });
+            } else {
+                // Follow
+                await userRef.update({ followers: firestore.FieldValue.arrayUnion(currentUser.uid) });
+                await currentUserRef.update({ following: firestore.FieldValue.arrayUnion(trip.userId) });
+            }
+        } catch (error) {
+            // Revert on error
+            console.log('Follow error:', error);
+            setIsFollowing(isFollowing);
+        }
+    };
+
     const handleJoinTrip = async () => {
         if (!currentUser) {
             Alert.alert('Sign In Required', 'Please sign in to join trips.');
             return;
         }
 
-        if (isJoining) return; // Prevent double-tap
-        setIsJoining(true);
-
-        // Safety timeout - reset isJoining after 5 seconds max
-        const timeoutId = setTimeout(() => {
-            console.log('⚠️ Toggle timeout - resetting');
-            setIsJoining(false);
-        }, 5000);
-
         try {
             if (hasJoined) {
-                // Leave trip
+                // Leave trip - instant toggle
                 await firestore().collection('trips').doc(trip.id).update({
                     participants: firestore.FieldValue.arrayRemove(currentUser.uid),
                     currentTravelers: firestore.FieldValue.increment(-1),
                 });
                 setHasJoined(false);
-                console.log('✅ Left trip');
             } else {
-                // Check KYC first
-                const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
-                const userData = userDoc.data();
-                console.log('📋 KYC Status:', userData?.kycStatus);
-
-                // Only block if explicitly set to non-verified (allow if field doesn't exist)
-                if (userData?.kycStatus && userData.kycStatus !== 'verified' && userData.kycStatus !== 'pending') {
-                    Alert.alert(
-                        'KYC Required',
-                        'Complete KYC verification to join trips.',
-                        [
-                            { text: 'Later', style: 'cancel' },
-                            { text: 'Verify Now', onPress: () => navigation.navigate('KYC' as never) },
-                        ]
-                    );
-                    clearTimeout(timeoutId);
-                    setIsJoining(false);
-                    return;
-                }
-
+                // Check spots first
                 const spotsLeft = (trip.maxTravelers || 8) - (trip.participants?.length || trip.currentTravelers || 1);
                 if (spotsLeft <= 0) {
                     Alert.alert('Trip Full', 'Sorry, this trip is already full.');
-                    clearTimeout(timeoutId);
-                    setIsJoining(false);
                     return;
                 }
-
-                // Join trip
+                // Join trip - instant toggle
                 await firestore().collection('trips').doc(trip.id).update({
                     participants: firestore.FieldValue.arrayUnion(currentUser.uid),
                     currentTravelers: firestore.FieldValue.increment(1),
                 });
-
-                // Add to group chat
-                const chatId = `trip_${trip.id}`;
-                const chatRef = firestore().collection('chats').doc(chatId);
-                const chatDoc = await chatRef.get();
-
-                if (chatDoc.exists) {
-                    await chatRef.update({
-                        participants: firestore.FieldValue.arrayUnion(currentUser.uid),
-                    });
-                }
-
                 setHasJoined(true);
-                console.log('✅ Joined trip');
             }
         } catch (error) {
             console.log('Toggle error:', error);
-            // Don't change state on error - keep previous state
-        } finally {
-            clearTimeout(timeoutId);
-            setIsJoining(false);
+            // Keep previous state on error
         }
     };
 
-    // Check if trip is completed (past end date)
-    const isCompleted = (() => {
-        if (!trip.toDate) return false;
-        const endDate = new Date(trip.toDate);
-        return endDate < new Date();
-    })();
+    // Check if trip is completed (marked by owner)
+    const isCompleted = trip.isCompleted === true;
 
     const transport = TRANSPORT_ICONS[trip.transportMode?.toLowerCase()] || TRANSPORT_ICONS.mixed;
     const spotsLeft = Math.max(0, (trip.maxTravelers || 8) - (trip.participants?.length || trip.currentTravelers || 1));
@@ -254,17 +254,25 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                             </Text>
                         </View>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.followButton, {
-                            backgroundColor: isFollowing ? 'transparent' : colors.primary,
-                            borderColor: colors.primary,
-                        }]}
-                        onPress={() => setIsFollowing(!isFollowing)}
-                    >
-                        <Text style={[styles.followButtonText, { color: isFollowing ? colors.primary : '#fff' }]}>
-                            {isFollowing ? 'Following' : 'Follow'}
-                        </Text>
-                    </TouchableOpacity>
+                    <View style={styles.headerRight}>
+                        {userRating && (
+                            <View style={styles.ratingBadge}>
+                                <Ionicons name="star" size={12} color="#F59E0B" />
+                                <Text style={styles.ratingText}>{userRating.avg}</Text>
+                            </View>
+                        )}
+                        <TouchableOpacity
+                            style={[styles.followButton, {
+                                backgroundColor: isFollowing ? 'transparent' : colors.primary,
+                                borderColor: colors.primary,
+                            }]}
+                            onPress={handleFollow}
+                        >
+                            <Text style={[styles.followButtonText, { color: isFollowing ? colors.primary : '#fff' }]}>
+                                {isFollowing ? 'Following' : 'Follow'}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
                 {/* Trip Image */}
@@ -284,26 +292,25 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                     </View>
                 </TouchableOpacity>
 
-                {/* Action Bar */}
+                {/* Action Bar - Instagram Style */}
                 <View style={styles.actionBar}>
                     <View style={styles.leftActions}>
                         <TouchableOpacity style={styles.actionButton} onPress={handleLikePress}>
-                            <Animated.View style={{ transform: [{ scale: heartScale }] }}>
-                                <Ionicons name={isLiked ? "heart" : "heart-outline"} size={28} color={isLiked ? '#EF4444' : colors.text} />
+                            <Animated.View style={[styles.actionItem, { transform: [{ scale: heartScale }] }]}>
+                                <Ionicons name={isLiked ? "heart" : "heart-outline"} size={26} color={isLiked ? '#EF4444' : colors.text} />
+                                <Text style={[styles.actionCount, { color: colors.text }]}>{likeCount || 0}</Text>
                             </Animated.View>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.actionButton} onPress={() => setShowComments(true)}>
-                            <View>
-                                <Ionicons name="chatbubble-outline" size={26} color={colors.text} />
-                                {commentCount > 0 && (
-                                    <View style={styles.commentBadge}>
-                                        <Text style={styles.commentBadgeText}>{commentCount > 99 ? '99+' : commentCount}</Text>
-                                    </View>
-                                )}
+                            <View style={styles.actionItem}>
+                                <Ionicons name="chatbubble-outline" size={24} color={colors.text} />
+                                <Text style={[styles.actionCount, { color: colors.text }]}>{commentCount || 0}</Text>
                             </View>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
-                            <Ionicons name="paper-plane-outline" size={26} color={colors.text} />
+                            <View style={styles.actionItem}>
+                                <Ionicons name="paper-plane-outline" size={24} color={colors.text} />
+                            </View>
                         </TouchableOpacity>
                     </View>
                     {isCompleted ? (
@@ -315,9 +322,8 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                         <CustomToggle
                             value={hasJoined}
                             onValueChange={handleJoinTrip}
-                            disabled={isJoining}
-                            onLabel="Joined"
-                            offLabel="Join"
+                            onLabel="Trip Joined"
+                            offLabel="Join Trip"
                             size="small"
                         />
                     )}
@@ -328,9 +334,21 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                     <Text style={[styles.likesText, { color: colors.text }]}>{likeCount || 0} likes</Text>
                     <Text style={[styles.tripTitle, { color: colors.text }]}>{trip.title || 'Amazing Adventure Trip'}</Text>
                     {trip.description && (
-                        <Text style={[styles.description, { color: colors.textSecondary }]} numberOfLines={2}>
-                            {trip.description}
-                        </Text>
+                        <View>
+                            <Text
+                                style={[styles.description, { color: colors.textSecondary }]}
+                                numberOfLines={showFullDescription ? undefined : 2}
+                            >
+                                {trip.description}
+                            </Text>
+                            {trip.description.length > 100 && (
+                                <TouchableOpacity onPress={() => setShowFullDescription(!showFullDescription)}>
+                                    <Text style={[styles.showMoreText, { color: colors.primary }]}>
+                                        {showFullDescription ? 'Show less' : '... Show more'}
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
                     )}
                 </View>
 
@@ -389,10 +407,13 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
 const styles = StyleSheet.create({
     card: { marginBottom: 1, overflow: 'hidden' },
     userHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: SPACING.md },
-    userInfo: { flexDirection: 'row', alignItems: 'center' },
+    userInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
     avatar: { width: 40, height: 40, borderRadius: 20, marginRight: SPACING.md },
     userName: { fontWeight: FONT_WEIGHT.bold, fontSize: FONT_SIZE.sm },
     postTime: { fontSize: FONT_SIZE.xs },
+    headerRight: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+    ratingBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.lg, gap: 2 },
+    ratingText: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold, color: '#D97706' },
     followButton: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.lg, borderWidth: 1 },
     followButtonText: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold },
     imageContainer: { position: 'relative', aspectRatio: 1 },
@@ -402,16 +423,17 @@ const styles = StyleSheet.create({
     typeBadge: { position: 'absolute', top: SPACING.md, right: SPACING.md, paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.sm },
     typeText: { color: '#fff', fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold },
     actionBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: SPACING.md },
-    leftActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
+    leftActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
     actionButton: { padding: SPACING.xs },
-    commentBadge: { position: 'absolute', top: -5, right: -8, backgroundColor: '#EF4444', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 },
-    commentBadgeText: { color: '#fff', fontSize: 10, fontWeight: FONT_WEIGHT.bold },
+    actionItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    actionCount: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold },
     joinButton: { backgroundColor: '#8B5CF6', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.lg },
     joinButtonText: { color: '#fff', fontWeight: FONT_WEIGHT.bold, fontSize: FONT_SIZE.sm },
     contentSection: { paddingHorizontal: SPACING.md, paddingBottom: SPACING.sm },
     likesText: { fontWeight: FONT_WEIGHT.bold, fontSize: FONT_SIZE.sm, marginBottom: SPACING.xs },
     tripTitle: { fontWeight: FONT_WEIGHT.bold, fontSize: FONT_SIZE.md, marginBottom: SPACING.xs },
     description: { fontSize: FONT_SIZE.sm, lineHeight: 20 },
+    showMoreText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold, marginTop: 2 },
     detailsRow: { flexDirection: 'row', justifyContent: 'space-around', padding: SPACING.md, borderTopWidth: 1 },
     detailItem: { alignItems: 'center' },
     detailEmoji: { fontSize: 18, marginBottom: 2 },

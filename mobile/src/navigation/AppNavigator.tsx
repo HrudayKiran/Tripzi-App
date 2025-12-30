@@ -33,6 +33,8 @@ import SettingsScreen from '../screens/SettingsScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
 import UsernameSetupScreen from '../screens/UsernameSetupScreen';
+import GoogleProfileScreen from '../screens/GoogleProfileScreen';
+import PhoneVerificationScreen from '../screens/PhoneVerificationScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -132,6 +134,8 @@ const AppNavigator = () => {
                     <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
                     <Stack.Screen name="UserProfile" component={UserProfileScreen} />
                     <Stack.Screen name="UsernameSetup" component={UsernameSetupScreen} />
+                    <Stack.Screen name="GoogleProfile" component={GoogleProfileScreen} />
+                    <Stack.Screen name="PhoneVerification" component={PhoneVerificationScreen} />
                 </Stack.Navigator>
             </NavigationContainer>
         </ThemeProvider>

@@ -55,7 +55,10 @@ const ProfileScreen = ({ navigation }) => {
           style: 'destructive',
           onPress: async () => {
             await signOut(auth);
-            navigation.navigate('Start');
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'Start' }],
+            });
           }
         },
       ]
@@ -231,7 +234,10 @@ const ProfileScreen = ({ navigation }) => {
                     style: 'destructive',
                     onPress: async () => {
                       await signOut(auth);
-                      navigation.navigate('Start');
+                      navigation.reset({
+                        index: 0,
+                        routes: [{ name: 'Start' }],
+                      });
                     }
                   }
                 ]
