@@ -349,6 +349,13 @@ const MessageScreen = ({ route, navigation }) => {
                 right: { color: '#fff' },
                 left: { color: colors.text },
             }}
+            onLongPress={() => {
+                const message = props.currentMessage;
+                if (message.user._id === currentUser?.uid) {
+                    setSelectedMessage(message);
+                    setShowMessageOptions(true);
+                }
+            }}
         />
     );
 
@@ -444,7 +451,6 @@ const MessageScreen = ({ route, navigation }) => {
                 renderBubble={renderBubble}
                 renderMessageImage={renderMessageImage}
                 renderCustomView={renderCustomView}
-                onLongPress={onLongPress}
                 renderInputToolbar={(props) => (
                     <InputToolbar
                         {...props}
@@ -455,16 +461,20 @@ const MessageScreen = ({ route, navigation }) => {
                 textInputProps={{
                     style: {
                         flex: 1,
-                        marginLeft: SPACING.sm,
-                        marginRight: SPACING.sm,
+                        marginHorizontal: SPACING.sm,
                         paddingHorizontal: SPACING.md,
-                        paddingVertical: SPACING.sm,
+                        paddingTop: Platform.OS === 'ios' ? SPACING.sm : SPACING.xs,
+                        paddingBottom: Platform.OS === 'ios' ? SPACING.sm : SPACING.xs,
                         backgroundColor: colors.background,
                         borderRadius: 20,
                         color: colors.text,
                         fontSize: 16,
+                        minHeight: 40,
+                        maxHeight: 100,
                     },
+                    placeholder: 'Type a message...',
                     placeholderTextColor: colors.textSecondary,
+                    multiline: true,
                 }}
                 renderSend={(props) => (
                     <Send {...props} containerStyle={styles.sendContainer}>
@@ -490,7 +500,6 @@ const MessageScreen = ({ route, navigation }) => {
                     </View>
                 )}
                 minInputToolbarHeight={60}
-                alwaysShowSend
             />
             {Platform.OS === 'android' && <KeyboardAvoidingView behavior="padding" />}
 
