@@ -1,0 +1,28 @@
+# Large files
+*.zip
+*.tar.gz
+
+# Build directories  
+android/
+ios/
+.expo/
+
+# Development utilities
+src/utils/seedFirestore.ts
+src/utils/setupTestUser.ts
+src/utils/markKycVerified.ts
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+
+# Test files
+__tests__/
+*.test.ts
+*.test.tsx
+jest.setup.js
+jest.config.js
