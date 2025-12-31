@@ -225,11 +225,8 @@ const CreateTripScreen = ({ navigation }) => {
                 coverImage: images[0] || 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800',
             };
 
-            console.log('Posting trip:', tripData);
-
             // Create trip
             const tripRef = await firestore().collection('trips').add(tripData);
-            console.log('Trip created with ID:', tripRef.id);
 
             // Create group chat for the trip
             try {
@@ -243,14 +240,13 @@ const CreateTripScreen = ({ navigation }) => {
                     lastMessage: 'Trip group created!',
                     lastMessageTime: firestore.FieldValue.serverTimestamp(),
                 });
-            } catch (chatError) {
-                console.log('Group chat creation failed (non-critical):', chatError);
+            } catch {
+                // Group chat creation failed (non-critical)
             }
 
             Alert.alert('Success! 🎉', 'Your trip has been posted!');
             navigation.navigate('Feed');
         } catch (error: any) {
-            console.log('Trip post error:', error);
             Alert.alert('Error', `Failed to post trip: ${error?.message || 'Unknown error'}. Please try again.`);
         }
     };

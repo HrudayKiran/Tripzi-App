@@ -114,8 +114,8 @@ const MessageScreen = ({ route, navigation }) => {
                     });
                     subscribeToChat(newChat.id);
                 }
-            } catch (error) {
-                console.log('Chat init error:', error);
+            } catch {
+                // Chat init error - silently handled
             }
         }
     };
@@ -134,8 +134,8 @@ const MessageScreen = ({ route, navigation }) => {
                         if (userDoc.exists) {
                             chatData.otherUser = userDoc.data();
                         }
-                    } catch (e) {
-                        console.log('User fetch error:', e);
+                    } catch {
+                        // User fetch failed silently
                     }
                 }
             }

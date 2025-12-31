@@ -52,13 +52,11 @@ const GoogleProfileScreen = ({ route, navigation }) => {
                 signUpMethod: 'google',
             });
 
-            // Navigate to phone verification
             navigation.navigate('PhoneVerification', {
                 phoneNumber: phoneNumber.trim(),
                 userId: user.uid,
             });
-        } catch (error: any) {
-            console.log('Profile save error:', error);
+        } catch {
             Alert.alert('Error', 'Failed to save profile. Please try again.');
         } finally {
             setLoading(false);

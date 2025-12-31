@@ -12,7 +12,6 @@ export const markUserKycVerified = async (email: string) => {
             .get();
 
         if (usersSnapshot.empty) {
-            console.log('User not found with email:', email);
             return false;
         }
 
@@ -28,10 +27,8 @@ export const markUserKycVerified = async (email: string) => {
             },
         });
 
-        console.log('User KYC verified successfully:', email);
         return true;
-    } catch (error) {
-        console.error('Error verifying KYC:', error);
+    } catch {
         return false;
     }
 };

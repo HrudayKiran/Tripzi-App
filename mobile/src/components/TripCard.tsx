@@ -121,8 +121,8 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
             await Share.share({
                 message: `🚀 Check out this trip to ${trip.location}!\n\n${trip.title}\n💰 ₹${formatCost(trip.cost || trip.totalCost)}/person\n📅 ${trip.duration || '3 days'}\n\nJoin on Tripzi! 🌍`,
             });
-        } catch (error) {
-            console.log('Share error:', error);
+        } catch {
+            // Share failed silently
         }
     };
 
@@ -188,9 +188,8 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                 await userRef.update({ followers: firestore.FieldValue.arrayUnion(currentUser.uid) });
                 await currentUserRef.update({ following: firestore.FieldValue.arrayUnion(trip.userId) });
             }
-        } catch (error) {
+        } catch {
             // Revert on error
-            console.log('Follow error:', error);
             setIsFollowing(isFollowing);
         }
     };
@@ -223,8 +222,7 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                 });
                 setHasJoined(true);
             }
-        } catch (error) {
-            console.log('Toggle error:', error);
+        } catch {
             // Keep previous state on error
         }
     };

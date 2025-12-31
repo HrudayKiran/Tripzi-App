@@ -5,14 +5,14 @@ import { getStorage } from 'firebase/storage';
 import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Your web app's Firebase configuration
+// Your Android app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyAqVCpvc-auL_AQsIQ8FRrMyHg3fuYiFhk",
+  apiKey: "AIzaSyAEU1lvIuQztqDB9-E4xthxrBh14XHEyAc",
   authDomain: "tripzi-52736816-98c83.firebaseapp.com",
   projectId: "tripzi-52736816-98c83",
-  storageBucket: "tripzi-52736816-98c83.appspot.com",
+  storageBucket: "tripzi-52736816-98c83.firebasestorage.app",
   messagingSenderId: "881054128450",
-  appId: "1:881054128450:web:a7645cdd7259bc6c2110db"
+  appId: "1:881054128450:android:602f1b3b9c50acac2110db"
 };
 
 // Initialize Firebase

@@ -101,9 +101,7 @@ const SplashScreen = ({ navigation }) => {
       <View style={styles.container}>
         {/* Top Section - Logo, Name, Tagline (30% of screen) */}
         <Animatable.View animation="fadeInDown" style={styles.topSection}>
-          <View style={[styles.logoBox, { backgroundColor: colors.primary }]}>
-            <Text style={styles.logoEmoji}>🚀</Text>
-          </View>
+          <Image source={require('../../assets/icon.png')} style={styles.logoImage} />
           <Text style={[styles.appName, { color: colors.text }]}>Tripzi</Text>
           <Text style={[styles.tagline, { color: colors.textSecondary }]}>
             Explore the world, <Text style={{ color: colors.primary, fontWeight: '700' }}>not alone</Text>
@@ -156,20 +154,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: SPACING.xl,
   },
-  logoBox: {
-    width: 64,
-    height: 64,
-    borderRadius: BORDER_RADIUS.xl,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: SPACING.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  logoEmoji: { fontSize: 32 },
+  logoImage: { width: 80, height: 80, borderRadius: BORDER_RADIUS.xl, marginBottom: SPACING.md },
   appName: { fontSize: 42, fontWeight: FONT_WEIGHT.bold, marginBottom: SPACING.xs },
   tagline: { fontSize: FONT_SIZE.md },
   // Middle section - 60% for carousel
@@ -179,7 +164,6 @@ const styles = StyleSheet.create({
   slide: {
     width: width,
     height: height * 0.60,
-    // No borderRadius - square corners
   },
   slideImage: {
     width: '100%',
@@ -220,8 +204,6 @@ const styles = StyleSheet.create({
   },
   locationIcon: { marginRight: SPACING.xs },
   locationText: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.semibold, color: '#333' },
-  dotsContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.lg, gap: SPACING.sm },
-  dot: { height: 8, borderRadius: 4 },
   // Bottom section - 20% for button
   buttonSection: {
     height: height * 0.20,
@@ -230,9 +212,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.xl,
     paddingBottom: SPACING.xxl,
   },
-  joinText: { fontSize: FONT_SIZE.xs, letterSpacing: 2, marginBottom: SPACING.md },
   button: { width: '100%', paddingVertical: SPACING.xl, borderRadius: BORDER_RADIUS.xl, alignItems: 'center' },
   buttonText: { color: '#fff', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
 });
 
 export default SplashScreen;
+

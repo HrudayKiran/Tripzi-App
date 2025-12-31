@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import TripCard from '../components/TripCard';
 import useTrips from '../api/useTrips';
@@ -96,9 +96,9 @@ const FeedScreen = ({ navigation }) => {
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
             {/* Header */}
             <View style={styles.header}>
-                <View>
-                    <Text style={[styles.greeting, { color: colors.textSecondary }]}>Explore</Text>
-                    <Text style={[styles.headerTitle, { color: colors.text }]}>Discover Trips 🌍</Text>
+                <View style={styles.headerRow}>
+                    <Image source={require('../../assets/icon.png')} style={styles.headerIcon} />
+                    <Text style={[styles.headerTitle, { color: colors.text }]}>Tripzi</Text>
                 </View>
                 <TouchableOpacity
                     style={[styles.notificationButton, { backgroundColor: colors.card }]}
@@ -144,68 +144,72 @@ const FeedScreen = ({ navigation }) => {
             </View>
 
             {/* Active Filters Badge */}
-            {hasActiveFilters && (
-                <Animatable.View animation="fadeIn" style={styles.activeFiltersContainer}>
-                    <View style={[styles.activeFiltersBadge, { backgroundColor: colors.primaryLight }]}>
-                        <Ionicons name="filter" size={14} color={colors.primary} />
-                        <Text style={[styles.activeFiltersText, { color: colors.primary }]}>
-                            {filteredTrips.length} trips found
-                        </Text>
-                        <TouchableOpacity onPress={clearFilters}>
-                            <Ionicons name="close" size={16} color={colors.primary} />
-                        </TouchableOpacity>
-                    </View>
-                </Animatable.View>
-            )}
+            {
+                hasActiveFilters && (
+                    <Animatable.View animation="fadeIn" style={styles.activeFiltersContainer}>
+                        <View style={[styles.activeFiltersBadge, { backgroundColor: colors.primaryLight }]}>
+                            <Ionicons name="filter" size={14} color={colors.primary} />
+                            <Text style={[styles.activeFiltersText, { color: colors.primary }]}>
+                                {filteredTrips.length} trips found
+                            </Text>
+                            <TouchableOpacity onPress={clearFilters}>
+                                <Ionicons name="close" size={16} color={colors.primary} />
+                            </TouchableOpacity>
+                        </View>
+                    </Animatable.View>
+                )
+            }
 
             {/* Trips List */}
-            {loading ? (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={colors.primary} />
-                    <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-                        Loading trips...
-                    </Text>
-                </View>
-            ) : filteredTrips.length === 0 ? (
-                <Animatable.View animation="fadeIn" style={styles.emptyContainer}>
-                    <View style={[styles.emptyIcon, { backgroundColor: colors.primaryLight }]}>
-                        <Ionicons name="compass-outline" size={48} color={colors.primary} />
+            {
+                loading ? (
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color={colors.primary} />
+                        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+                            Loading trips...
+                        </Text>
                     </View>
-                    <Text style={[styles.emptyTitle, { color: colors.text }]}>No trips found</Text>
-                    <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-                        Try adjusting your filters or search
-                    </Text>
-                    <TouchableOpacity
-                        style={[styles.clearButton, { backgroundColor: colors.primary }]}
-                        onPress={clearFilters}
-                    >
-                        <Text style={styles.clearButtonText}>Clear Filters</Text>
-                    </TouchableOpacity>
-                </Animatable.View>
-            ) : (
-                <FlatList
-                    data={filteredTrips}
-                    keyExtractor={(item) => item.id}
-                    renderItem={({ item, index }) => (
-                        <Animatable.View animation="fadeInUp" delay={index * 50}>
-                            <TripCard
-                                trip={item}
-                                onPress={() => navigation.navigate('TripDetails', { tripId: item.id })}
+                ) : filteredTrips.length === 0 ? (
+                    <Animatable.View animation="fadeIn" style={styles.emptyContainer}>
+                        <View style={[styles.emptyIcon, { backgroundColor: colors.primaryLight }]}>
+                            <Ionicons name="compass-outline" size={48} color={colors.primary} />
+                        </View>
+                        <Text style={[styles.emptyTitle, { color: colors.text }]}>No trips found</Text>
+                        <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                            Try adjusting your filters or search
+                        </Text>
+                        <TouchableOpacity
+                            style={[styles.clearButton, { backgroundColor: colors.primary }]}
+                            onPress={clearFilters}
+                        >
+                            <Text style={styles.clearButtonText}>Clear Filters</Text>
+                        </TouchableOpacity>
+                    </Animatable.View>
+                ) : (
+                    <FlatList
+                        data={filteredTrips}
+                        keyExtractor={(item) => item.id}
+                        renderItem={({ item, index }) => (
+                            <Animatable.View animation="fadeInUp" delay={index * 50}>
+                                <TripCard
+                                    trip={item}
+                                    onPress={() => navigation.navigate('TripDetails', { tripId: item.id })}
+                                />
+                            </Animatable.View>
+                        )}
+                        contentContainerStyle={styles.listContent}
+                        showsVerticalScrollIndicator={false}
+                        refreshControl={
+                            <RefreshControl
+                                refreshing={refreshing}
+                                onRefresh={onRefresh}
+                                colors={[colors.primary]}
+                                tintColor={colors.primary}
                             />
-                        </Animatable.View>
-                    )}
-                    contentContainerStyle={styles.listContent}
-                    showsVerticalScrollIndicator={false}
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={refreshing}
-                            onRefresh={onRefresh}
-                            colors={[colors.primary]}
-                            tintColor={colors.primary}
-                        />
-                    }
-                />
-            )}
+                        }
+                    />
+                )
+            }
 
             {/* Modals */}
             <NotificationsModal
@@ -218,7 +222,7 @@ const FeedScreen = ({ navigation }) => {
                 onClose={() => setFilterVisible(false)}
                 onApply={handleApplyFilters}
             />
-        </SafeAreaView>
+        </SafeAreaView >
     );
 };
 
@@ -234,9 +238,15 @@ const styles = StyleSheet.create({
         paddingTop: SPACING.md,
         paddingBottom: SPACING.lg,
     },
-    greeting: {
-        fontSize: FONT_SIZE.sm,
-        marginBottom: SPACING.xs,
+    headerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.md,
+    },
+    headerIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: BORDER_RADIUS.md,
     },
     headerTitle: {
         fontSize: FONT_SIZE.xxl,

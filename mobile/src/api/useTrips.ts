@@ -74,14 +74,12 @@ const useTrips = () => {
                             setLoading(false);
                         },
                         (error) => {
-                            console.log('Firestore error:', error.message);
                             setLoading(false);
                             // No fallback - just show empty
                             setTrips([]);
                         }
                     );
-            } catch (error) {
-                console.log('Firestore connection error:', error);
+            } catch {
                 setLoading(false);
                 setTrips([]);
             }

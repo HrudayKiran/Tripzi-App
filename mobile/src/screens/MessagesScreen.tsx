@@ -143,8 +143,8 @@ const MessagesScreen = ({ navigation }) => {
             }, {});
 
             setStories(Object.values(groupedStories));
-        } catch (error) {
-            console.log('Stories load error:', error);
+        } catch {
+            // Stories load failed silently
         }
     };
 
@@ -186,8 +186,8 @@ const MessagesScreen = ({ navigation }) => {
                 .map(doc => ({ id: doc.id, ...doc.data() }))
                 .filter(u => u.id !== currentUser?.uid);
             setGroupSearchResults(users);
-        } catch (error) {
-            console.log('Group search error:', error);
+        } catch {
+            // Group search failed silently
         }
     };
 
@@ -224,8 +224,8 @@ const MessagesScreen = ({ navigation }) => {
 
             // Navigate to the new group chat
             navigation.navigate('Message', { chatId: newGroup.id });
-        } catch (error) {
-            console.log('Create group error:', error);
+        } catch {
+            // Group creation failed silently
         }
     };
 
@@ -253,8 +253,7 @@ const MessagesScreen = ({ navigation }) => {
                 .filter(u => u.id !== currentUser?.uid);
 
             setSearchResults(users.length > 0 ? users : SAMPLE_USERS);
-        } catch (error) {
-            console.log('Search error:', error);
+        } catch {
             // Show sample users as fallback
             setSearchResults(SAMPLE_USERS);
         }
@@ -286,8 +285,7 @@ const MessagesScreen = ({ navigation }) => {
                         try {
                             await firestore().collection('chats').doc(chat.id).delete();
                             // Messages subcollection will be cleaned up by Cloud Function
-                        } catch (error) {
-                            console.error('Error deleting chat:', error);
+                        } catch {
                             Alert.alert('Error', 'Failed to delete chat. Please try again.');
                         }
                     },

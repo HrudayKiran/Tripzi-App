@@ -5,7 +5,9 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
+import { NetworkProvider } from '../contexts/NetworkContext';
 import { navigationRef } from './RootNavigation';
+import OfflineBanner from '../components/OfflineBanner';
 
 import usePushNotifications from '../hooks/usePushNotifications';
 
@@ -93,62 +95,57 @@ const AppTabs = () => {
 const AppNavigator = () => {
     return (
         <ThemeProvider>
-            <NavigationContainer ref={navigationRef}>
-                <Stack.Navigator
-                    screenOptions={{
-                        headerShown: false,
-                        cardStyleInterpolator: ({ current, layouts }) => ({
-                            cardStyle: {
-                                transform: [
-                                    {
-                                        translateX: current.progress.interpolate({
-                                            inputRange: [0, 1],
-                                            outputRange: [layouts.screen.width, 0],
-                                        }),
-                                    },
-                                ],
-                            },
-                        }),
-                        gestureEnabled: true,
-                        gestureDirection: 'horizontal',
-                    }}
-                >
-                    <Stack.Screen name="Splash" component={SplashScreen} />
-                    <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-                    <Stack.Screen name="Start" component={StartScreen} />
-                    <Stack.Screen name="SignIn" component={SignInScreen} />
-                    <Stack.Screen name="SignUp" component={SignUpScreen} />
-                    <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-                    <Stack.Screen name="App" component={AppTabs} />
-                    <Stack.Screen name="CreateTrip" component={CreateTripScreen} />
-                    <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
-                    <Stack.Screen name="Message" component={MessageScreen} />
-                    <Stack.Screen name="Comments" component={CommentsScreen} />
-                    <Stack.Screen name="Map" component={MapScreen} />
-                    <Stack.Screen name="CreateGroupChat" component={CreateGroupChatScreen} />
-                    <Stack.Screen name="KYC" component={KycScreen} />
-                    <Stack.Screen name="Terms" component={TermsScreen} />
-                    <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
-                    <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
-                    <Stack.Screen name="SuggestFeature" component={SuggestFeatureScreen} />
-                    <Stack.Screen name="Settings" component={SettingsScreen} />
-                    <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
-                    <Stack.Screen name="UserProfile" component={UserProfileScreen} />
-                    <Stack.Screen name="UsernameSetup" component={UsernameSetupScreen} />
-                    <Stack.Screen name="GoogleProfile" component={GoogleProfileScreen} />
-                    <Stack.Screen name="PhoneVerification" component={PhoneVerificationScreen} />
-                </Stack.Navigator>
-            </NavigationContainer>
+            <NetworkProvider>
+                <NavigationContainer ref={navigationRef}>
+                    <Stack.Navigator
+                        screenOptions={{
+                            headerShown: false,
+                            cardStyleInterpolator: ({ current, layouts }) => ({
+                                cardStyle: {
+                                    transform: [
+                                        {
+                                            translateX: current.progress.interpolate({
+                                                inputRange: [0, 1],
+                                                outputRange: [layouts.screen.width, 0],
+                                            }),
+                                        },
+                                    ],
+                                },
+                            }),
+                            gestureEnabled: true,
+                            gestureDirection: 'horizontal',
+                        }}
+                    >
+                        <Stack.Screen name="Splash" component={SplashScreen} />
+                        <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+                        <Stack.Screen name="Start" component={StartScreen} />
+                        <Stack.Screen name="SignIn" component={SignInScreen} />
+                        <Stack.Screen name="SignUp" component={SignUpScreen} />
+                        <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+                        <Stack.Screen name="App" component={AppTabs} />
+                        <Stack.Screen name="CreateTrip" component={CreateTripScreen} />
+                        <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
+                        <Stack.Screen name="Message" component={MessageScreen} />
+                        <Stack.Screen name="Comments" component={CommentsScreen} />
+                        <Stack.Screen name="Map" component={MapScreen} />
+                        <Stack.Screen name="CreateGroupChat" component={CreateGroupChatScreen} />
+                        <Stack.Screen name="KYC" component={KycScreen} />
+                        <Stack.Screen name="Terms" component={TermsScreen} />
+                        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+                        <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+                        <Stack.Screen name="SuggestFeature" component={SuggestFeatureScreen} />
+                        <Stack.Screen name="Settings" component={SettingsScreen} />
+                        <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+                        <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+                        <Stack.Screen name="UsernameSetup" component={UsernameSetupScreen} />
+                        <Stack.Screen name="GoogleProfile" component={GoogleProfileScreen} />
+                        <Stack.Screen name="PhoneVerification" component={PhoneVerificationScreen} />
+                    </Stack.Navigator>
+                </NavigationContainer>
+                <OfflineBanner />
+            </NetworkProvider>
         </ThemeProvider>
     );
 };
-
-const styles = StyleSheet.create({
-    tabBar: {
-        backgroundColor: '#fff',
-        borderTopWidth: 1,
-        borderTopColor: '#f0f0f0',
-    },
-});
 
 export default AppNavigator;

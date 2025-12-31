@@ -26,8 +26,8 @@ const AdminDashboardScreen = ({ navigation }) => {
                 pendingKYC: kycSnapshot.size,
                 feedback: feedbackSnapshot.size,
             });
-        } catch (error) {
-            console.log('Error fetching stats:', error);
+        } catch {
+            // Stats fetch failed silently
         }
     };
 
@@ -36,8 +36,8 @@ const AdminDashboardScreen = ({ navigation }) => {
             const snapshot = await firestore().collection('users').get();
             const usersList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setUsers(usersList);
-        } catch (error) {
-            console.log('Error fetching users:', error);
+        } catch {
+            // Users fetch failed silently
         }
     };
 

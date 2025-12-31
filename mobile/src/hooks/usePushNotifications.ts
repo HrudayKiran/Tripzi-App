@@ -154,7 +154,6 @@ const usePushNotifications = () => {
             RootNavigation.navigate('Message', { chatId: data.chatId });
           }
           break;
-        case 'KycScreen':
         case 'KYC':
           RootNavigation.navigate('KYC', {});
           break;

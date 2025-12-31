@@ -66,9 +66,8 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
                 ...doc.data(),
             })) as Comment[];
             setComments(commentsData);
-        } catch (error) {
-            console.log('Comments load error:', error);
-            // Show sample comments
+        } catch {
+            // Show sample comments on error
             setComments([
                 { id: 'sample_1', text: 'This looks amazing! 🔥', userId: 'sample', userName: 'Traveler', userImage: 'https://randomuser.me/api/portraits/men/1.jpg', createdAt: new Date() },
                 { id: 'sample_2', text: 'Count me in!', userId: 'sample', userName: 'Explorer', userImage: 'https://randomuser.me/api/portraits/women/2.jpg', createdAt: new Date() },
@@ -106,10 +105,9 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
                     createdAt: firestore.FieldValue.serverTimestamp(),
                 });
 
-            // Update with real ID
             setComments(prev => prev.map(c => c.id === tempId ? { ...c, id: docRef.id } : c));
-        } catch (error) {
-            console.log('Comment save error:', error);
+        } catch {
+            // Comment save failed silently
         }
     };
 
@@ -137,8 +135,8 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
                 .collection('comments')
                 .doc(editingComment.id)
                 .update({ text: updatedText });
-        } catch (error) {
-            console.log('Comment update error:', error);
+        } catch {
+            // Comment update failed silently
         }
     };
 
@@ -162,8 +160,7 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
                                 .collection('comments')
                                 .doc(comment.id)
                                 .delete();
-                        } catch (error) {
-                            console.log('Comment delete error:', error);
+                        } catch {
                             // Re-add if failed
                             setComments(prev => [comment, ...prev]);
                         }

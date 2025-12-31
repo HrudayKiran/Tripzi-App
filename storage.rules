@@ -1,0 +1,78 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // ==================== HELPER FUNCTIONS ====================
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if user owns the path
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Validate image file
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+    
+    // Validate file size (max 10MB)
+    function isValidSize() {
+      return request.resource.size < 10 * 1024 * 1024;
+    }
+    
+    // ==================== PROFILE IMAGES ====================
+    
+    match /profiles/{userId}/{fileName} {
+      // Anyone can read profile images
+      allow read: if true;
+      
+      // Only the user can upload/delete their profile images
+      allow write: if isOwner(userId) && isImage() && isValidSize();
+    }
+    
+    // ==================== TRIP IMAGES ====================
+    
+    match /trips/{userId}/{allPaths=**} {
+      // Anyone authenticated can read trip images
+      allow read: if isAuthenticated();
+      
+      // Only the user can upload/delete their trip images
+      allow write: if isOwner(userId) && isImage() && isValidSize();
+    }
+    
+    // ==================== STORY IMAGES ====================
+    
+    match /stories/{userId}/{allPaths=**} {
+      // Anyone authenticated can read stories
+      allow read: if isAuthenticated();
+      
+      // Only the user can upload/delete their stories
+      allow write: if isOwner(userId) && isImage() && isValidSize();
+    }
+    
+    // ==================== KYC DOCUMENTS ====================
+    
+    match /kyc/{userId}/{allPaths=**} {
+      // Only the user and admins can read KYC documents
+      // (Admin check would require custom claims or Firestore lookup)
+      allow read: if isOwner(userId);
+      
+      // Only the user can upload their KYC documents
+      allow write: if isOwner(userId) && isValidSize();
+    }
+    
+    // ==================== CHAT IMAGES ====================
+    
+    match /chats/{chatId}/{allPaths=**} {
+      // Participants can read chat images (simplified - anyone authenticated)
+      allow read: if isAuthenticated();
+      
+      // Authenticated users can upload to chats
+      allow write: if isAuthenticated() && isImage() && isValidSize();
+    }
+  }
+}

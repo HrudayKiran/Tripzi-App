@@ -38,8 +38,7 @@ const useTripLike = (trip) => {
           likes: firestore.FieldValue.arrayRemove(currentUser.uid),
         });
       }
-    } catch (error) {
-      console.log('Like error (keeping local state):', error);
+    } catch {
       // Keep optimistic update even if Firestore fails
     }
   };

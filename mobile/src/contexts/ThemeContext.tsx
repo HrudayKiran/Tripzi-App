@@ -83,8 +83,8 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
             if (savedTheme !== null) {
                 setIsDarkMode(savedTheme === 'dark');
             }
-        } catch (error) {
-            console.log('Error loading theme:', error);
+        } catch {
+            // Theme loading failed silently
         }
     };
 
@@ -93,8 +93,8 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
         setIsDarkMode(newTheme);
         try {
             await AsyncStorage.setItem('theme', newTheme ? 'dark' : 'light');
-        } catch (error) {
-            console.log('Error saving theme:', error);
+        } catch {
+            // Theme saving failed silently
         }
     };
 

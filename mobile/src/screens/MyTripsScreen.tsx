@@ -16,14 +16,11 @@ const MyTripsScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('Upcoming');
 
-  // Re-fetch when screen is focused (to catch auth changes)
   useFocusEffect(
     React.useCallback(() => {
       const currentUser = auth.currentUser;
-      console.log('MyTrips - currentUser:', currentUser?.uid);
 
       if (!currentUser) {
-        console.log('MyTrips - No user logged in');
         setJoinedTrips([]);
         setLoading(false);
         return;
@@ -37,7 +34,6 @@ const MyTripsScreen = ({ navigation }) => {
         .where('participants', 'array-contains', currentUser.uid)
         .onSnapshot(
           snapshot => {
-            console.log('MyTrips - Found trips:', snapshot.docs.length);
             const trips = snapshot.docs.map(doc => ({
               id: doc.id,
               ...doc.data(),
@@ -46,8 +42,7 @@ const MyTripsScreen = ({ navigation }) => {
             setLoading(false);
             setRefreshing(false);
           },
-          error => {
-            console.log('MyTrips - Error:', error);
+          () => {
             setLoading(false);
             setRefreshing(false);
           }
@@ -66,10 +61,9 @@ const MyTripsScreen = ({ navigation }) => {
         participants: firestore.FieldValue.arrayRemove(currentUser.uid),
         currentTravelers: firestore.FieldValue.increment(-1),
       });
-      // Remove from local state immediately
       setJoinedTrips(prev => prev.filter(trip => trip.id !== tripId));
-    } catch (error) {
-      console.log('Leave trip error:', error);
+    } catch {
+      // Leave trip operation failed
     }
   };
 
@@ -150,7 +144,7 @@ const MyTripsScreen = ({ navigation }) => {
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
       <View style={[styles.emptyIcon, { backgroundColor: colors.card }]}>
-        <Ionicons name="airplane-outline" size={48} color={colors.primary} />
+        <Image source={require('../../assets/icon.png')} style={styles.emptyIconImage} />
       </View>
       <Text style={[styles.emptyTitle, { color: colors.text }]}>No {activeTab} Trips</Text>
       <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
@@ -342,6 +336,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: SPACING.xl,
+  },
+  emptyIconImage: {
+    width: 60,
+    height: 60,
+    borderRadius: BORDER_RADIUS.md,
   },
   emptyTitle: {
     fontSize: FONT_SIZE.xl,

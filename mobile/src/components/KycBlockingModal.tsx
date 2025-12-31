@@ -32,7 +32,7 @@ export function KycBlockingModal({ visible, onClose, action = 'perform this acti
 
     const handleVerifyNow = () => {
         onClose();
-        navigation.navigate('KycScreen' as never);
+        navigation.navigate('KYC' as never);
     };
 
     return (
