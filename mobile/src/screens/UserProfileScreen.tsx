@@ -12,6 +12,7 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '..
 import FollowersModal from '../components/FollowersModal';
 import TripCard from '../components/TripCard';
 import ProfilePictureViewer from '../components/ProfilePictureViewer';
+import { pickAndUploadImage } from '../utils/imageUpload';
 
 const { width, height } = Dimensions.get('window');
 
@@ -32,10 +33,8 @@ const UserProfileScreen = ({ route, navigation }) => {
     const { colors } = useTheme();
     const [user, setUser] = useState(null);
     const [trips, setTrips] = useState([]);
-    const [stories, setStories] = useState([
+    const [stories, setStories] = useState<any[]>([
         { id: 'add', type: 'add' },
-        { id: '1', image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400', title: 'Ladakh', viewed: false },
-        { id: '2', image: 'https://images.unsplash.com/photo-1585409677983-0f6c41ca9c3b?w=400', title: 'Himalayas', viewed: true },
     ]);
     const [loading, setLoading] = useState(true);
     const [isFollowing, setIsFollowing] = useState(false);
@@ -136,7 +135,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                     id: currentUser.uid,
                     displayName: currentUser.displayName || 'User',
                     email: currentUser.email,
-                    photoURL: currentUser.photoURL || 'https://via.placeholder.com/120',
+                    photoURL: currentUser.photoURL || null,
                     bio: '',
                     kycStatus: 'pending',
                     followers: [],
@@ -172,25 +171,41 @@ const UserProfileScreen = ({ route, navigation }) => {
         }
     };
 
-    // Pick profile image
+    // Pick and upload profile image to Firebase Storage
     const pickProfileImage = async () => {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-            Alert.alert('Permission needed', 'Please grant camera roll permissions.');
+        if (!currentUser) {
+            Alert.alert('Error', 'Please log in to change your profile picture.');
             return;
         }
 
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.7,
-        });
+        try {
+            const result = await pickAndUploadImage({
+                folder: 'profiles',
+                userId: currentUser.uid,
+                aspect: [1, 1],
+                quality: 0.7,
+                allowsEditing: true,
+            });
 
-        if (!result.canceled && result.assets[0]) {
-            setProfileImage(result.assets[0].uri);
-            // Note: For production, upload to Firebase Storage and save URL
-            Alert.alert('Photo Updated!', 'Your profile photo has been changed locally. Cloud sync coming soon!');
+            if (result.success && result.url) {
+                // Update local state
+                setProfileImage(result.url);
+
+                // Update Firestore with the cloud URL
+                await firestore().collection('users').doc(currentUser.uid).update({
+                    photoURL: result.url,
+                });
+
+                // Update user state
+                setUser(prev => ({ ...prev, photoURL: result.url }));
+
+                Alert.alert('Success! ✨', 'Your profile photo has been updated.');
+            } else if (result.error && result.error !== 'Selection cancelled') {
+                Alert.alert('Upload Failed', result.error);
+            }
+        } catch (error) {
+            console.log('Profile image upload error:', error);
+            Alert.alert('Error', 'Failed to upload profile image. Please try again.');
         }
     };
 
@@ -355,7 +370,7 @@ const UserProfileScreen = ({ route, navigation }) => {
 
     const renderUserItem = ({ item }) => (
         <TouchableOpacity style={[styles.userItem, { backgroundColor: colors.card }]} onPress={() => navigateToProfile(item.id)}>
-            <Image source={{ uri: item.photoURL || 'https://via.placeholder.com/50' }} style={styles.userAvatar} />
+            <Image source={{ uri: item.photoURL || undefined }} style={styles.userAvatar} />
             <View style={styles.userInfo}>
                 <Text style={[styles.userItemName, { color: colors.text }]}>{item.displayName || 'User'}</Text>
                 {item.username && <Text style={[styles.userItemUsername, { color: colors.primary }]}>@{item.username}</Text>}
@@ -421,7 +436,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                     <View style={styles.profileTopRow}>
                         <TouchableOpacity onPress={isOwnProfile ? pickProfileImage : () => setShowFullImage(true)} style={styles.avatarWrapper}>
                             <LinearGradient colors={['#8B5CF6', '#EC4899']} style={styles.avatarGradient}>
-                                <Image style={styles.avatar} source={{ uri: profileImage || user.photoURL || 'https://via.placeholder.com/120' }} />
+                                <Image style={styles.avatar} source={{ uri: profileImage || user.photoURL || undefined }} />
                             </LinearGradient>
                             {isOwnProfile && (
                                 <View style={[styles.editAvatarBadge, { backgroundColor: colors.primary }]}>

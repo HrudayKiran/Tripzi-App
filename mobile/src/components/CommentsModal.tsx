@@ -66,12 +66,9 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
                 ...doc.data(),
             })) as Comment[];
             setComments(commentsData);
-        } catch {
-            // Show sample comments on error
-            setComments([
-                { id: 'sample_1', text: 'This looks amazing! 🔥', userId: 'sample', userName: 'Traveler', userImage: 'https://randomuser.me/api/portraits/men/1.jpg', createdAt: new Date() },
-                { id: 'sample_2', text: 'Count me in!', userId: 'sample', userName: 'Explorer', userImage: 'https://randomuser.me/api/portraits/women/2.jpg', createdAt: new Date() },
-            ]);
+        } catch (error) {
+            console.log('Load comments error:', error);
+            setComments([]); // No dummy data - show empty state
         }
     };
 
@@ -84,7 +81,7 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
             text: newComment.trim(),
             userId: currentUser.uid,
             userName: currentUser.displayName || 'User',
-            userImage: currentUser.photoURL || 'https://via.placeholder.com/40',
+            userImage: currentUser.photoURL || null,
             createdAt: new Date(),
         };
 
@@ -177,7 +174,7 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
         return (
             <View style={[styles.commentItem, { backgroundColor: colors.card }]}>
                 <Image
-                    source={{ uri: item.userImage || 'https://via.placeholder.com/40' }}
+                    source={{ uri: item.userImage || undefined }}
                     style={styles.commentAvatar}
                 />
                 <View style={styles.commentContent}>
@@ -269,7 +266,7 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
                             style={[styles.inputContainer, { borderTopColor: colors.border, backgroundColor: colors.background }]}
                         >
                             <Image
-                                source={{ uri: currentUser?.photoURL || 'https://via.placeholder.com/40' }}
+                                source={{ uri: currentUser?.photoURL || undefined }}
                                 style={styles.inputAvatar}
                             />
                             <TextInput

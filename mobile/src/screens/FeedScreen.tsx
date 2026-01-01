@@ -23,6 +23,54 @@ const FeedScreen = ({ navigation }) => {
     const [filterVisible, setFilterVisible] = useState(false);
     const [filters, setFilters] = useState<FilterOptions | null>(null);
     const [hasNotifications, setHasNotifications] = useState(true);
+    const [searchedUsers, setSearchedUsers] = useState<any[]>([]);
+    const [searchingUsers, setSearchingUsers] = useState(false);
+    const searchTimeout = useRef<NodeJS.Timeout | null>(null);
+
+    // Search users when query changes
+    useEffect(() => {
+        if (searchTimeout.current) {
+            clearTimeout(searchTimeout.current);
+        }
+
+        if (searchQuery.length < 2) {
+            setSearchedUsers([]);
+            return;
+        }
+
+        setSearchingUsers(true);
+        searchTimeout.current = setTimeout(async () => {
+            try {
+                const searchLower = searchQuery.toLowerCase();
+                const usersSnapshot = await firestore()
+                    .collection('users')
+                    .limit(10)
+                    .get();
+
+                const matchedUsers = usersSnapshot.docs
+                    .map(doc => ({ id: doc.id, ...doc.data() }))
+                    .filter(user =>
+                        user.displayName?.toLowerCase().includes(searchLower) ||
+                        user.username?.toLowerCase().includes(searchLower) ||
+                        user.email?.toLowerCase().includes(searchLower)
+                    )
+                    .slice(0, 5);
+
+                setSearchedUsers(matchedUsers);
+            } catch (error) {
+                console.log('User search error:', error);
+                setSearchedUsers([]);
+            } finally {
+                setSearchingUsers(false);
+            }
+        }, 300);
+
+        return () => {
+            if (searchTimeout.current) {
+                clearTimeout(searchTimeout.current);
+            }
+        };
+    }, [searchQuery]);
 
     const filteredTrips = useMemo(() => {
         let result = [...trips];
@@ -142,6 +190,42 @@ const FeedScreen = ({ navigation }) => {
                     />
                 </TouchableOpacity>
             </View>
+
+            {/* User Search Results */}
+            {searchQuery.length >= 2 && searchedUsers.length > 0 && (
+                <Animatable.View animation="fadeIn" style={[styles.userResultsContainer, { backgroundColor: colors.card }]}>
+                    <Text style={[styles.userResultsTitle, { color: colors.textSecondary }]}>PEOPLE</Text>
+                    {searchedUsers.map((user) => (
+                        <TouchableOpacity
+                            key={user.id}
+                            style={styles.userResultItem}
+                            onPress={() => {
+                                setSearchQuery('');
+                                setSearchedUsers([]);
+                                navigation.navigate('UserProfile', { userId: user.id });
+                            }}
+                        >
+                            <Image
+                                source={{ uri: user.photoURL || undefined }}
+                                style={styles.userResultAvatar}
+                            />
+                            <View style={styles.userResultInfo}>
+                                <Text style={[styles.userResultName, { color: colors.text }]}>
+                                    {user.displayName || 'User'}
+                                </Text>
+                                {user.username && (
+                                    <Text style={[styles.userResultUsername, { color: colors.primary }]}>
+                                        @{user.username}
+                                    </Text>
+                                )}
+                            </View>
+                            {user.kycStatus === 'verified' && (
+                                <Ionicons name="shield-checkmark" size={16} color="#10B981" />
+                            )}
+                        </TouchableOpacity>
+                    ))}
+                </Animatable.View>
+            )}
 
             {/* Active Filters Badge */}
             {
@@ -375,6 +459,42 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: FONT_SIZE.sm,
         fontWeight: FONT_WEIGHT.bold,
+    },
+    userResultsContainer: {
+        marginHorizontal: SPACING.xl,
+        borderRadius: BORDER_RADIUS.lg,
+        marginBottom: SPACING.md,
+        paddingVertical: SPACING.sm,
+    },
+    userResultsTitle: {
+        fontSize: FONT_SIZE.xs,
+        fontWeight: FONT_WEIGHT.semibold,
+        letterSpacing: 1,
+        paddingHorizontal: SPACING.lg,
+        paddingVertical: SPACING.sm,
+    },
+    userResultItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: SPACING.lg,
+        paddingVertical: SPACING.md,
+    },
+    userResultAvatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        marginRight: SPACING.md,
+    },
+    userResultInfo: {
+        flex: 1,
+    },
+    userResultName: {
+        fontSize: FONT_SIZE.sm,
+        fontWeight: FONT_WEIGHT.semibold,
+    },
+    userResultUsername: {
+        fontSize: FONT_SIZE.xs,
+        marginTop: 2,
     },
 });
 

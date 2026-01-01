@@ -148,6 +148,8 @@ const SignUpScreen = ({ navigation }) => {
         errorMessage = 'Invalid email address';
       } else if (error?.code === 'auth/weak-password') {
         errorMessage = 'Password is too weak';
+      } else if (error?.code === 'auth/network-request-failed') {
+        errorMessage = 'Please check your internet connection and try again.';
       } else if (error?.message) {
         errorMessage = error.message;
       }

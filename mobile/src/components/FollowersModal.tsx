@@ -50,7 +50,7 @@ const FollowersModal = ({ visible, onClose, title, users, onUserPress }: Followe
                 onPress={() => onUserPress(item.id)}
                 activeOpacity={0.7}
             >
-                <Image source={{ uri: item.photoURL || 'https://via.placeholder.com/50' }} style={styles.avatar} />
+                <Image source={{ uri: item.photoURL || undefined }} style={styles.avatar} />
                 <View style={styles.userInfo}>
                     <Text style={[styles.displayName, { color: colors.text }]}>{item.displayName || 'User'}</Text>
                     {item.username && <Text style={[styles.username, { color: colors.primary }]}>@{item.username}</Text>}

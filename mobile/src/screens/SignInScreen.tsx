@@ -71,6 +71,8 @@ const SignInScreen = ({ navigation }) => {
         setErrors({ password: 'Password is incorrect' });
       } else if (error?.code === 'auth/too-many-requests') {
         Alert.alert('Too Many Attempts', 'Please try again later.');
+      } else if (error?.code === 'auth/network-request-failed') {
+        Alert.alert('Network Error', 'Please check your internet connection and try again.');
       } else {
         Alert.alert('Sign In Failed', 'Please check your credentials and try again.');
       }

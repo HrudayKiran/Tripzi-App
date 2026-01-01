@@ -24,12 +24,16 @@ const getDeviceId = (): string => {
 const usePushNotifications = () => {
   const hasHandledInitialNotification = useRef(false);
 
+  console.log('🔔 [PUSH] usePushNotifications hook MOUNTED');
+
   useEffect(() => {
+    console.log('🔔 [PUSH] useEffect triggered - starting setup...');
     let unsubscribeAuth: (() => void) | null = null;
     let unsubscribeOnNotificationOpened: (() => void) | null = null;
     let unsubscribeOnMessage: (() => void) | null = null;
 
     const setup = async () => {
+      console.log('🔔 [PUSH] setup() called');
       try {
         // Handle notification that opened the app from quit state
         const handleInitialNotification = async () => {
@@ -81,38 +85,62 @@ const usePushNotifications = () => {
           }
         });
       } catch (error) {
-        // Silent fail - push notifications are optional
+        console.log('Push notification setup error:', error);
       }
     };
 
     const setupMessaging = async (user: any) => {
       try {
+        console.log('🔔 [PUSH] Starting messaging setup for user:', user.uid);
         const authStatus = await messaging().requestPermission();
+        console.log('🔔 [PUSH] Permission status:', authStatus);
+
         const enabled =
           authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
           authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
         if (enabled) {
+          console.log('🔔 [PUSH] Notifications ENABLED, getting token...');
           getAndSaveToken(user);
-          messaging().onTokenRefresh((token: string) => getAndSaveToken(user, token));
+          messaging().onTokenRefresh((token: string) => {
+            console.log('🔔 [PUSH] Token refreshed!');
+            getAndSaveToken(user, token);
+          });
+        } else {
+          console.log('🔔 [PUSH] Notifications DENIED by user');
         }
-      } catch (error) {
-        // Silent fail
+      } catch (error: any) {
+        console.log('🔔 [PUSH] Messaging setup ERROR:', error?.message || error);
       }
     };
 
     const getAndSaveToken = async (user: any, freshToken?: string) => {
       try {
+        console.log('🔔 [PUSH] Getting FCM token...');
         const token = freshToken || await messaging().getToken();
+
+        if (!token) {
+          console.log('🔔 [PUSH] ERROR: Token is empty/null!');
+          return;
+        }
+
+        console.log('🔔 [PUSH] FCM Token obtained:', token.substring(0, 30) + '...');
+        console.log('🔔 [PUSH] Token length:', token.length);
+
         await saveTokenToFirestore(user, token);
-      } catch (error) {
-        // Silent fail
+        console.log('🔔 [PUSH] ✅ Token saved to Firestore for user:', user.uid);
+      } catch (error: any) {
+        console.log('🔔 [PUSH] Token get/save ERROR:', error?.message || error);
       }
     };
 
     const saveTokenToFirestore = async (user: any, token: string) => {
       try {
         const deviceId = getDeviceId();
+        console.log('🔔 [PUSH] Saving token to Firestore...');
+        console.log('🔔 [PUSH] Device ID:', deviceId);
+        console.log('🔔 [PUSH] User ID:', user.uid);
+
         const tokenRef = firestore().collection('push_tokens').doc(user.uid);
 
         await tokenRef.set({
@@ -124,8 +152,10 @@ const usePushNotifications = () => {
             }
           }
         }, { merge: true });
-      } catch (error) {
-        // Silent fail
+
+        console.log('🔔 [PUSH] ✅ Firestore write successful!');
+      } catch (error: any) {
+        console.log('🔔 [PUSH] ❌ Firestore save ERROR:', error?.code, error?.message);
       }
     };
 

@@ -9,6 +9,7 @@ import firestore from '@react-native-firebase/firestore';
 import CommentsModal from './CommentsModal';
 import CustomToggle from './CustomToggle';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import { DEFAULT_TRIP_IMAGE, isValidImageUrl } from '../constants/defaults';
 
 const { width } = Dimensions.get('window');
 
@@ -84,7 +85,7 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                     const data = doc.data();
                     if (data?.totalRating && data?.ratingCount) {
                         setUserRating({
-                            avg: (data.totalRating / data.ratingCount).toFixed(1),
+                            avg: parseFloat((data.totalRating / data.ratingCount).toFixed(1)),
                             count: data.ratingCount
                         });
                     }
@@ -241,7 +242,10 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                     <TouchableOpacity style={styles.userInfo} onPress={handleUserPress}>
                         <Image
                             style={styles.avatar}
-                            source={{ uri: trip.user?.photoURL || trip.user?.image || 'https://randomuser.me/api/portraits/men/32.jpg' }}
+                            source={isValidImageUrl(trip.user?.photoURL || trip.user?.image)
+                                ? { uri: trip.user?.photoURL || trip.user?.image }
+                                : require('../../assets/icon.png')
+                            }
                         />
                         <View>
                             <Text style={[styles.userName, { color: colors.text }]}>
@@ -278,7 +282,7 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                     <View style={styles.imageContainer}>
                         <Image
                             style={styles.tripImage}
-                            source={{ uri: trip.coverImage || trip.image || 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80' }}
+                            source={{ uri: trip.coverImage || trip.image || DEFAULT_TRIP_IMAGE }}
                         />
                         <TouchableOpacity style={styles.locationBadge} onPress={handleLocationPress}>
                             <Ionicons name="location" size={14} color="#fff" />

@@ -447,7 +447,7 @@ const MessageScreen = ({ route, navigation }) => {
     };
 
     const displayName = chat?.isGroupChat ? chat.groupName : (chat?.otherUser?.displayName || recipientName || 'User');
-    const displayImage = chat?.isGroupChat ? 'https://via.placeholder.com/50' : (chat?.otherUser?.photoURL || recipientImage || 'https://via.placeholder.com/50');
+    const displayImage = chat?.isGroupChat ? undefined : (chat?.otherUser?.photoURL || recipientImage || undefined);
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>

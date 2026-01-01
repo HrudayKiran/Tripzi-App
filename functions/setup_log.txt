@@ -1,0 +1,16 @@
+Starting run at 2026-01-01T09:11:43.835Z
+Initialized Firebase Admin for project: tripzi-52736816-98c83
+Starting Setup Script...
+ERROR: FATAL LOG: Could not list collections: 5 NOT_FOUND: 
+Starting Setup Script...
+
+Processing account for testuser@tripzi.app...
+   ✓ Found real UID: Cehiv5h2CRTazQC7Dp9BVoGMPe13
+   -> Setting up account data...
+ERROR:    ❌ Error setting up testuser@tripzi.app: 5 NOT_FOUND: 
+ERROR: 
+❌ Fatal Error in main loop: 5 NOT_FOUND: 
+
+⚠️  Database connection issue. Check:
+   - serviceAccountKey.json contains the correct project_id
+   - admin.initializeApp project_id matches the Firestore database

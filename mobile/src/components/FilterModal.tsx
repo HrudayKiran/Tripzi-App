@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 type FilterModalProps = {
     visible: boolean;
@@ -50,11 +50,11 @@ const FilterModal = ({ visible, onClose, onApply }: FilterModalProps) => {
     const [destination, setDestination] = useState('');
     const [maxCost, setMaxCost] = useState(500000);
     const [maxTravelers, setMaxTravelers] = useState(50);
-    const slideAnim = useRef(new Animated.Value(width * 0.85)).current;
+    const slideAnim = useRef(new Animated.Value(width)).current;
 
     useEffect(() => {
         if (visible) {
-            slideAnim.setValue(width * 0.85);
+            slideAnim.setValue(width);
             Animated.spring(slideAnim, {
                 toValue: 0,
                 useNativeDriver: true,
@@ -63,7 +63,7 @@ const FilterModal = ({ visible, onClose, onApply }: FilterModalProps) => {
             }).start();
         } else {
             Animated.timing(slideAnim, {
-                toValue: width * 0.85,
+                toValue: width,
                 duration: 250,
                 useNativeDriver: true,
             }).start();
@@ -285,12 +285,10 @@ const FilterModal = ({ visible, onClose, onApply }: FilterModalProps) => {
 const styles = StyleSheet.create({
     modalOverlay: {
         flex: 1,
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
     },
-    backdrop: { flex: 1 },
-    modalContainer: { width: width * 0.85, height: '100%' },
+    backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+    modalContainer: { flex: 1, width: '100%', height: '100%' },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',

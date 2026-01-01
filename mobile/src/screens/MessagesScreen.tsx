@@ -11,13 +11,6 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '..
 
 const { width, height } = Dimensions.get('window');
 
-// Sample users for when Firestore is unavailable
-const SAMPLE_USERS = [
-    { id: 'user1', displayName: 'Travel Explorer', photoURL: 'https://randomuser.me/api/portraits/men/32.jpg', bio: 'Adventure seeker' },
-    { id: 'user2', displayName: 'Wanderlust', photoURL: 'https://randomuser.me/api/portraits/women/44.jpg', bio: 'Beach lover' },
-    { id: 'user3', displayName: 'Mountain Rider', photoURL: 'https://randomuser.me/api/portraits/men/22.jpg', bio: 'Bike trips' },
-];
-
 const MessagesScreen = ({ navigation }) => {
     const { colors } = useTheme();
     const [chats, setChats] = useState([]);
@@ -77,7 +70,7 @@ const MessagesScreen = ({ navigation }) => {
                                             chat.otherUser = userDoc.data();
                                         }
                                     } catch (e) {
-                                        chat.otherUser = { displayName: 'User', photoURL: 'https://via.placeholder.com/50' };
+                                        chat.otherUser = { displayName: 'User', photoURL: null };
                                     }
                                 }
                             }
@@ -122,7 +115,7 @@ const MessagesScreen = ({ navigation }) => {
                             trip.user = userDoc.data();
                         }
                     } catch (e) {
-                        trip.user = { displayName: 'User', photoURL: 'https://via.placeholder.com/50' };
+                        trip.user = { displayName: 'User', photoURL: null };
                     }
                     return trip;
                 })
@@ -252,10 +245,10 @@ const MessagesScreen = ({ navigation }) => {
                 .map(doc => ({ id: doc.id, ...doc.data() }))
                 .filter(u => u.id !== currentUser?.uid);
 
-            setSearchResults(users.length > 0 ? users : SAMPLE_USERS);
-        } catch {
-            // Show sample users as fallback
-            setSearchResults(SAMPLE_USERS);
+            setSearchResults(users);
+        } catch (error) {
+            console.log('User search error:', error);
+            setSearchResults([]); // No dummy data
         }
     };
 
@@ -329,7 +322,10 @@ const MessagesScreen = ({ navigation }) => {
                 {/* Avatar with online indicator */}
                 <View style={styles.avatarContainer}>
                     <Image
-                        source={{ uri: item.isGroupChat ? 'https://via.placeholder.com/50' : (item.otherUser?.photoURL || 'https://via.placeholder.com/50') }}
+                        source={item.isGroupChat
+                            ? require('../../assets/icon.png')
+                            : { uri: item.otherUser?.photoURL || undefined }
+                        }
                         style={styles.avatar}
                     />
                     {item.otherUser?.isOnline && <View style={styles.onlineIndicator} />}
@@ -470,7 +466,7 @@ const MessagesScreen = ({ navigation }) => {
                                     style={styles.storyRing}
                                 >
                                     <Image
-                                        source={{ uri: storyGroup.user?.photoURL || 'https://via.placeholder.com/50' }}
+                                        source={{ uri: storyGroup.user?.photoURL || undefined }}
                                         style={styles.storyAvatar}
                                     />
                                 </LinearGradient>
@@ -547,7 +543,7 @@ const MessagesScreen = ({ navigation }) => {
                             {/* Header */}
                             <View style={styles.storyHeader}>
                                 <Image
-                                    source={{ uri: currentStory.user?.photoURL || 'https://via.placeholder.com/50' }}
+                                    source={{ uri: currentStory.user?.photoURL || undefined }}
                                     style={styles.storyHeaderAvatar}
                                 />
                                 <Text style={styles.storyHeaderName}>
@@ -560,7 +556,7 @@ const MessagesScreen = ({ navigation }) => {
 
                             {/* Story Content */}
                             <Image
-                                source={{ uri: currentStory.stories?.[0]?.imageUrl || 'https://via.placeholder.com/400' }}
+                                source={{ uri: currentStory.stories?.[0]?.imageUrl || undefined }}
                                 style={styles.storyImage}
                                 resizeMode="contain"
                             />

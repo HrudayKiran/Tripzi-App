@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import firestore from '@react-native-firebase/firestore';
 import { auth } from '../firebase';
 
-export type KycStatus = 'loading' | 'none' | 'pending' | 'approved' | 'rejected';
+export type KycStatus = 'loading' | 'none' | 'pending' | 'approved' | 'verified' | 'rejected';
 
 interface UseKycGateReturn {
     kycStatus: KycStatus;
@@ -47,7 +47,7 @@ export function useKycGate(): UseKycGateReturn {
 
     return {
         kycStatus,
-        isKycVerified: kycStatus === 'approved',
+        isKycVerified: kycStatus === 'approved' || kycStatus === 'verified',
         isLoading,
     };
 }

@@ -464,7 +464,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
             >
               <Image
                 style={styles.creatorAvatar}
-                source={{ uri: trip.user?.photoURL || 'https://via.placeholder.com/40' }}
+                source={{ uri: trip.user?.photoURL || undefined }}
               />
               <View>
                 <Text style={[styles.creatorName, { color: colors.text }]}>
@@ -710,7 +710,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
                     <View key={review.id} style={[styles.reviewItem, { backgroundColor: colors.card }]}>
                       <View style={styles.reviewHeader}>
                         <Image
-                          source={{ uri: review.userPhoto || 'https://via.placeholder.com/40' }}
+                          source={{ uri: review.userPhoto || undefined }}
                           style={styles.reviewAvatar}
                         />
                         <View style={styles.reviewInfo}>

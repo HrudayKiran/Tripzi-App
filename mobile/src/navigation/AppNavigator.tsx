@@ -10,6 +10,7 @@ import { navigationRef } from './RootNavigation';
 import OfflineBanner from '../components/OfflineBanner';
 
 import usePushNotifications from '../hooks/usePushNotifications';
+import usePermissions from '../hooks/usePermissions';
 
 import SplashScreen from '../screens/SplashScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
@@ -45,6 +46,7 @@ const Tab = createBottomTabNavigator();
 const AppTabs = () => {
     const { colors } = useTheme();
     usePushNotifications();
+    usePermissions(); // Request all permissions on app start
     return (
         <Tab.Navigator
             screenOptions={{
@@ -54,10 +56,13 @@ const AppTabs = () => {
                     backgroundColor: colors.card,
                     borderTopColor: colors.border,
                     borderTopWidth: 1,
+                    height: 70,
+                    paddingBottom: 10,
+                    paddingTop: 8,
                 },
                 tabBarActiveTintColor: colors.primary,
                 tabBarInactiveTintColor: colors.textSecondary,
-                tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
+                tabBarLabelStyle: { fontSize: 12, fontWeight: '600', marginBottom: 4 },
             }}
         >
             <Tab.Screen

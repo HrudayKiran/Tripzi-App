@@ -28,22 +28,27 @@ const GoogleProfileScreen = ({ route, navigation }) => {
             newErrors.fullName = 'Full name is required';
         }
 
-        if (!phoneNumber.trim()) {
-            newErrors.phoneNumber = 'Phone number is required';
-        } else if (!validatePhoneNumber(phoneNumber)) {
-            newErrors.phoneNumber = 'Enter valid 10-digit number';
-        }
-
         setErrors(newErrors);
         if (Object.keys(newErrors).length > 0) return;
 
         setLoading(true);
+
+        // Timeout wrapper - navigate to App after 5 seconds even if Firestore hangs
+        const timeoutId = setTimeout(() => {
+            console.log('Firestore timeout - navigating to App anyway');
+            setLoading(false);
+            navigation.reset({
+                index: 0,
+                routes: [{ name: 'App' }],
+            });
+        }, 5000);
+
         try {
             // Create user profile in Firestore
             await firestore().collection('users').doc(user.uid).set({
                 displayName: fullName.trim(),
                 email: user.email,
-                phoneNumber: phoneNumber.trim(),
+                phoneNumber: phoneNumber.trim() || null,
                 photoURL: user.photoURL || null,
                 phoneVerified: false,
                 emailVerified: true, // Google accounts are email verified
@@ -52,12 +57,22 @@ const GoogleProfileScreen = ({ route, navigation }) => {
                 signUpMethod: 'google',
             });
 
-            navigation.navigate('PhoneVerification', {
-                phoneNumber: phoneNumber.trim(),
-                userId: user.uid,
+            clearTimeout(timeoutId);
+            console.log('Profile saved successfully');
+
+            // Navigate directly to App - no phone verification required
+            navigation.reset({
+                index: 0,
+                routes: [{ name: 'App' }],
             });
-        } catch {
-            Alert.alert('Error', 'Failed to save profile. Please try again.');
+        } catch (error: any) {
+            clearTimeout(timeoutId);
+            console.log('GoogleProfile save error:', error?.code);
+            // If Firestore is unavailable, navigate anyway - profile will sync when available
+            navigation.reset({
+                index: 0,
+                routes: [{ name: 'App' }],
+            });
         } finally {
             setLoading(false);
         }

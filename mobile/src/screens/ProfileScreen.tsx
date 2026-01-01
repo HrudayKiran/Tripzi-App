@@ -130,7 +130,7 @@ const ProfileScreen = ({ navigation }) => {
             <View style={styles.avatarContainer}>
               <Image
                 style={styles.avatar}
-                source={{ uri: user?.photoURL || auth.currentUser?.photoURL || 'https://via.placeholder.com/120' }}
+                source={{ uri: user?.photoURL || auth.currentUser?.photoURL || undefined }}
               />
               <View style={[styles.onlineIndicator, { borderColor: colors.card }]} />
             </View>

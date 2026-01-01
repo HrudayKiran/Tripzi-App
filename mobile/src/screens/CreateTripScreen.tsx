@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Image, Platform, Modal } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Image, Platform, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import firestore from '@react-native-firebase/firestore';
+import storage from '@react-native-firebase/storage';
 import { auth } from '../firebase';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
@@ -91,6 +92,7 @@ const CreateTripScreen = ({ navigation }) => {
     const [placesToVisit, setPlacesToVisit] = useState('');
 
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
+    const [isPosting, setIsPosting] = useState(false);
 
     const pickImages = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -191,11 +193,38 @@ const CreateTripScreen = ({ navigation }) => {
             return;
         }
 
+        setIsPosting(true);
+
         try {
+            // Upload images to Firebase Storage first
+            let uploadedImageUrls: string[] = [];
+            if (images.length > 0) {
+                console.log('Uploading', images.length, 'images to Firebase Storage...');
+                for (let i = 0; i < images.length; i++) {
+                    const imageUri = images[i];
+                    const filename = `trips/${currentUser.uid}/${Date.now()}_${i}.jpg`;
+                    const reference = storage().ref(filename);
+
+                    try {
+                        await reference.putFile(imageUri);
+                        const downloadUrl = await reference.getDownloadURL();
+                        uploadedImageUrls.push(downloadUrl);
+                        console.log(`Image ${i + 1} uploaded:`, downloadUrl.substring(0, 50) + '...');
+                    } catch (uploadError) {
+                        console.log('Image upload error:', uploadError);
+                        // Continue with other images
+                    }
+                }
+            }
+
+            // Use uploaded URLs or fallback image
+            const finalImages = uploadedImageUrls.length > 0
+                ? uploadedImageUrls
+                : ['https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800'];
 
             const tripData = {
                 title,
-                images,
+                images: finalImages,
                 fromLocation,
                 toLocation,
                 mapsLink: generateMapsLink(toLocation),
@@ -222,11 +251,12 @@ const CreateTripScreen = ({ navigation }) => {
                 createdAt: firestore.FieldValue.serverTimestamp(),
                 location: toLocation,
                 tripType: tripTypes[0] || 'Adventure',
-                coverImage: images[0] || 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800',
+                coverImage: finalImages[0],
             };
 
             // Create trip
             const tripRef = await firestore().collection('trips').add(tripData);
+            console.log('Trip created with ID:', tripRef.id);
 
             // Create group chat for the trip
             try {
@@ -244,9 +274,11 @@ const CreateTripScreen = ({ navigation }) => {
                 // Group chat creation failed (non-critical)
             }
 
+            setIsPosting(false);
             Alert.alert('Success! 🎉', 'Your trip has been posted!');
             navigation.navigate('Feed');
         } catch (error: any) {
+            setIsPosting(false);
             Alert.alert('Error', `Failed to post trip: ${error?.message || 'Unknown error'}. Please try again.`);
         }
     };

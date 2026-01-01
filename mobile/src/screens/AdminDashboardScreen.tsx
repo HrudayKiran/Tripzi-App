@@ -104,7 +104,7 @@ const AdminDashboardScreen = ({ navigation }) => {
                         {users.map((user) => (
                             <View key={user.id} style={[styles.userCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                                 <Image
-                                    source={{ uri: user.photoURL || 'https://via.placeholder.com/50' }}
+                                    source={{ uri: user.photoURL || undefined }}
                                     style={styles.userAvatar}
                                 />
                                 <View style={styles.userInfo}>

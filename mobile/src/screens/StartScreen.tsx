@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ToastAndroid, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ToastAndroid, Platform, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
@@ -61,9 +61,7 @@ const StartScreen = ({ navigation }) => {
         <Animatable.View animation="fadeInUp" duration={500} style={styles.content}>
           {/* Logo */}
           <View style={styles.logoContainer}>
-            <View style={[styles.logoBox, { backgroundColor: colors.primary }]}>
-              <Text style={styles.rocketEmoji}>🚀</Text>
-            </View>
+            <Image source={require('../../assets/icon.png')} style={styles.logoImage} />
           </View>
 
           {/* Welcome Text */}
@@ -123,12 +121,22 @@ const StartScreen = ({ navigation }) => {
 
                   const googleCredential = GoogleAuthProvider.credential(idToken);
                   const userCredential = await signInWithCredential(auth, googleCredential);
+                  console.log('Google Sign Up successful, user:', userCredential.user.uid);
 
-                  // Check if user profile exists
-                  const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+                  // Try to check if user profile exists, but navigate anyway if Firestore is unavailable
+                  let isExistingUser = false;
+                  try {
+                    const firestore = require('@react-native-firebase/firestore').default;
+                    const userDoc = await firestore().collection('users').doc(userCredential.user.uid).get();
+                    isExistingUser = userDoc.exists;
+                  } catch (firestoreError: any) {
+                    console.log('Firestore check failed (will treat as new user):', firestoreError?.code);
+                    // Continue as new user - profile completion will create the doc
+                  }
 
-                  if (!userDoc.exists()) {
-                    // New user - go to profile completion
+                  if (!isExistingUser) {
+                    // New user or Firestore unavailable - go to profile completion
+                    console.log('Navigating to GoogleProfile');
                     navigation.navigate('GoogleProfile', {
                       user: {
                         uid: userCredential.user.uid,
@@ -139,13 +147,27 @@ const StartScreen = ({ navigation }) => {
                     });
                   } else {
                     // Existing user - go to app
+                    console.log('Existing Google user, navigating to App');
                     showToast('Welcome back! 🎉');
                     navigation.navigate('App');
                   }
                 } catch (error: any) {
+                  console.log('Google Sign Up error:', error);
                   if (error?.code !== statusCodes.SIGN_IN_CANCELLED) {
-                    // Error handled silently
-                    Alert.alert('Sign Up Failed', 'Could not sign up with Google');
+                    // Only show error if it's not a Firestore issue (user is already signed in at this point)
+                    if (error?.code === 'firestore/unavailable') {
+                      // User is signed in, just navigate to profile completion
+                      navigation.navigate('GoogleProfile', {
+                        user: {
+                          uid: auth.currentUser?.uid,
+                          email: auth.currentUser?.email,
+                          displayName: auth.currentUser?.displayName,
+                          photoURL: auth.currentUser?.photoURL,
+                        }
+                      });
+                    } else {
+                      Alert.alert('Sign Up Failed', error?.message || 'Could not sign up with Google');
+                    }
                   }
                 }
               }}
@@ -195,15 +217,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: SPACING.xxl,
   },
-  logoBox: {
+  logoImage: {
     width: 80,
     height: 80,
     borderRadius: BORDER_RADIUS.xl,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  rocketEmoji: {
-    fontSize: 40,
   },
   welcome: {
     fontSize: FONT_SIZE.xxxl,

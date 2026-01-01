@@ -172,6 +172,16 @@ service cloud.firestore {
       allow read, write: if isOwner(userId);
     }
     
+    // ==================== APP CONFIG COLLECTION ====================
+    
+    match /app_config/{configId} {
+      // Anyone authenticated can read app config (carousel, settings, etc.)
+      allow read: if isAuthenticated();
+      
+      // Only admins can write app config
+      allow write: if isAdmin();
+    }
+    
     // ==================== STORIES COLLECTION ====================
     
     match /stories/{storyId} {

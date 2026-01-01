@@ -42,8 +42,8 @@ const useTrips = () => {
                                                     trip.user = { id: userDoc.id, ...userDoc.data() };
                                                 }
                                             } catch (e) {
-                                                // User fetch failed, use default
-                                                trip.user = { displayName: 'Traveler', photoURL: 'https://randomuser.me/api/portraits/men/32.jpg' };
+                                                // User fetch failed, use null values
+                                                trip.user = { displayName: 'Unknown Traveler', photoURL: null };
                                             }
                                         }
                                         return trip;
