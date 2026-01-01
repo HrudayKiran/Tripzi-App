@@ -330,8 +330,65 @@ const UserProfileScreen = ({ route, navigation }) => {
         } catch (error) { }
     };
 
-    const handleMessage = () => {
-        navigation.navigate('Message', { recipientId: userId, recipientName: user?.displayName, recipientImage: user?.photoURL });
+    const handleMessage = async () => {
+        if (!currentUser || !user) return;
+        try {
+            // Create or get existing chat using Firestore directly
+            const chatQuery = await firestore()
+                .collection('chats')
+                .where('type', '==', 'direct')
+                .where('participants', 'array-contains', currentUser.uid)
+                .get();
+
+            let chatId = null;
+            for (const doc of chatQuery.docs) {
+                const data = doc.data();
+                if (data.participants.includes(userId)) {
+                    chatId = doc.id;
+                    break;
+                }
+            }
+
+            if (!chatId) {
+                // Create new chat
+                const currentUserDoc = await firestore().collection('users').doc(currentUser.uid).get();
+                const currentUserData = currentUserDoc.data();
+
+                const newChatRef = await firestore().collection('chats').add({
+                    type: 'direct',
+                    participants: [currentUser.uid, userId],
+                    participantDetails: {
+                        [currentUser.uid]: {
+                            displayName: currentUserData?.displayName || currentUser.displayName || 'User',
+                            photoURL: currentUserData?.photoURL || currentUser.photoURL || '',
+                        },
+                        [userId]: {
+                            displayName: user.displayName || 'User',
+                            photoURL: user.photoURL || '',
+                        },
+                    },
+                    unreadCount: {
+                        [currentUser.uid]: 0,
+                        [userId]: 0,
+                    },
+                    mutedBy: [],
+                    pinnedBy: [],
+                    createdAt: firestore.FieldValue.serverTimestamp(),
+                    updatedAt: firestore.FieldValue.serverTimestamp(),
+                });
+                chatId = newChatRef.id;
+            }
+
+            navigation.navigate('Chat', {
+                chatId,
+                otherUserId: userId,
+                otherUserName: user.displayName,
+                otherUserPhoto: user.photoURL,
+            });
+        } catch (error) {
+            console.log('Error starting chat:', error);
+            Alert.alert('Error', 'Could not start chat. Please try again.');
+        }
     };
 
     const navigateToProfile = (uid) => {

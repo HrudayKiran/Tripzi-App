@@ -23,7 +23,7 @@ const StartScreen = ({ navigation }) => {
 
   useEffect(() => {
     GoogleSignin.configure({
-      webClientId: '881054128450-dho8i7lsv2a5enu2u3s0sac75ttmp0fg.apps.googleusercontent.com',
+      webClientId: '334857280812-mb7tsrfd5q53ubachdlftnmogmskqu2c.apps.googleusercontent.com',
     });
   }, []);
 

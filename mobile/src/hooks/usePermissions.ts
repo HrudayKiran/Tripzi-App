@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { Platform, Alert, Linking } from 'react-native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import * as Notifications from 'expo-notifications';
-import messaging from '@react-native-firebase/messaging';
+import { getMessaging, requestPermission, AuthorizationStatus } from '@react-native-firebase/messaging';
 
 interface PermissionStatus {
     notifications: boolean;
@@ -70,10 +69,11 @@ export function usePermissions(): UsePermissionsReturn {
             console.log('Requesting notification permission...');
 
             // For Firebase Cloud Messaging
-            const authStatus = await messaging().requestPermission();
+            const messaging = getMessaging();
+            const authStatus = await requestPermission(messaging);
             const enabled =
-                authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-                authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+                authStatus === AuthorizationStatus.AUTHORIZED ||
+                authStatus === AuthorizationStatus.PROVISIONAL;
 
             if (enabled) {
                 console.log('FCM notification permission granted');

@@ -1,41 +1,41 @@
 {
   "project_info": {
-    "project_number": "881054128450",
-    "project_id": "tripzi-52736816-98c83",
-    "storage_bucket": "tripzi-52736816-98c83.firebasestorage.app"
+    "project_number": "334857280812",
+    "project_id": "tripzi-app",
+    "storage_bucket": "tripzi-app.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:881054128450:android:602f1b3b9c50acac2110db",
+        "mobilesdk_app_id": "1:334857280812:android:a2948142078ba52a4fa089",
         "android_client_info": {
           "package_name": "com.tripzi.mobile"
         }
       },
       "oauth_client": [
         {
-          "client_id": "881054128450-ic73kemffv5579ar71t2a9va0b6b74kp.apps.googleusercontent.com",
+          "client_id": "334857280812-dee5ev8j9bbh41nh5vk54rrueh5of85d.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.tripzi.mobile",
-            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+            "certificate_hash": "43b55b6afa0038699b724e7d5f7abf8051e262f6"
           }
         },
         {
-          "client_id": "881054128450-dho8i7lsv2a5enu2u3s0sac75ttmp0fg.apps.googleusercontent.com",
+          "client_id": "334857280812-mb7tsrfd5q53ubachdlftnmogmskqu2c.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyAEU1lvIuQztqDB9-E4xthxrBh14XHEyAc"
+          "current_key": "AIzaSyAT8YWdG94YSiMORTWf1NiNQRNDtJ9FW6w"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "881054128450-dho8i7lsv2a5enu2u3s0sac75ttmp0fg.apps.googleusercontent.com",
+              "client_id": "334857280812-mb7tsrfd5q53ubachdlftnmogmskqu2c.apps.googleusercontent.com",
               "client_type": 3
             }
           ]

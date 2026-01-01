@@ -73,10 +73,7 @@ const ProfileScreen = ({ navigation }) => {
     try {
       await firestore().collection('users').doc(currentUser.uid).update({
         kycStatus: 'verified',
-        kyc: {
-          status: 'verified',
-          verifiedAt: firestore.FieldValue.serverTimestamp(),
-        },
+        kycVerifiedAt: firestore.FieldValue.serverTimestamp(),
       });
       Alert.alert('Success! ✓', 'Your KYC has been verified for testing.');
     } catch (error) {

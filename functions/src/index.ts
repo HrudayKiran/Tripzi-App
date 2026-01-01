@@ -4,17 +4,13 @@ import * as admin from "firebase-admin";
 
 // Initialize Firebase Admin with explicit project settings
 const app = admin.initializeApp({
-  projectId: "tripzi-52736816-98c83",
-  databaseURL: "https://tripzi-52736816-98c83-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "tripzi-app",
 });
 
-// Use the default database explicitly with REST mode
+// Use the default database
 const db = admin.firestore(app);
 db.settings({
   ignoreUndefinedProperties: true,
-  preferRest: true,
-  host: "asia-south1-firestore.googleapis.com",
-  ssl: true
 });
 
 
@@ -303,13 +299,22 @@ export const onMessageCreated = onDocumentCreated(
     const senderDoc = await db.collection("users").doc(message.senderId).get();
     const sender = senderDoc.data() || {};
 
-    const displayName = chat.isGroupChat ?
+    // For direct chats, show sender name; for groups, show group name
+    const displayName = chat.type === 'group' ?
       chat.groupName :
       sender.displayName || "Someone";
 
     const messagePreview = message.text?.substring(0, 50) || "Sent an image";
 
+    // Increment unread counts for recipients
+    const unreadUpdates: { [key: string]: admin.firestore.FieldValue } = {};
     for (const recipientId of recipients) {
+      unreadUpdates[`unreadCount.${recipientId}`] = admin.firestore.FieldValue.increment(1);
+    }
+    await db.collection("chats").doc(chatId).update(unreadUpdates);
+
+    for (const recipientId of recipients) {
+      // Create in-app notification
       await createNotification({
         recipientId,
         type: "message",
@@ -320,17 +325,19 @@ export const onMessageCreated = onDocumentCreated(
         actorId: message.senderId,
         actorName: sender.displayName,
         actorPhotoUrl: sender.photoURL,
-        deepLinkRoute: "Message",
+        deepLinkRoute: "Chat",
         deepLinkParams: { chatId },
       });
 
+      // Send push notification
       await sendPushToUser(recipientId, {
         title: displayName,
         body: messagePreview,
-        data: { route: "Message", chatId },
+        data: { route: "Chat", chatId },
       });
     }
   });
+
 
 // ==================== KYC NOTIFICATIONS ====================
 

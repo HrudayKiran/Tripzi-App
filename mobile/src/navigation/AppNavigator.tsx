@@ -22,12 +22,16 @@ import FeedScreen from '../screens/FeedScreen';
 import MyTripsScreen from '../screens/MyTripsScreen';
 import MessagesScreen from '../screens/MessagesScreen';
 import MessageScreen from '../screens/MessageScreen';
+import ChatsListScreen from '../screens/ChatsListScreen';
+import ChatScreen from '../screens/ChatScreen';
 import CreateTripScreen from '../screens/CreateTripScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import CommentsScreen from '../screens/CommentsScreen';
 import MapScreen from '../screens/MapScreen';
 import TripDetailsScreen from '../screens/TripDetailsScreen';
-import CreateGroupChatScreen from '../screens/CreateGroupChatScreen';
+import CreateGroupScreen from '../screens/CreateGroupScreen';
+import GroupInfoScreen from '../screens/GroupInfoScreen';
+import StoriesScreen from '../screens/StoriesScreen';
 import KycScreen from '../screens/KycScreen';
 import TermsScreen from '../screens/TermsScreen';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
@@ -81,7 +85,7 @@ const AppTabs = () => {
             />
             <Tab.Screen
                 name="Messages"
-                component={MessagesScreen}
+                component={ChatsListScreen}
                 options={{
                     tabBarIcon: ({ color, size }) => <Ionicons name="chatbubble-outline" size={size} color={color} />,
                 }}
@@ -131,9 +135,12 @@ const AppNavigator = () => {
                         <Stack.Screen name="CreateTrip" component={CreateTripScreen} />
                         <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
                         <Stack.Screen name="Message" component={MessageScreen} />
+                        <Stack.Screen name="Chat" component={ChatScreen} />
                         <Stack.Screen name="Comments" component={CommentsScreen} />
                         <Stack.Screen name="Map" component={MapScreen} />
-                        <Stack.Screen name="CreateGroupChat" component={CreateGroupChatScreen} />
+                        <Stack.Screen name="CreateGroupChat" component={CreateGroupScreen} />
+                        <Stack.Screen name="GroupInfo" component={GroupInfoScreen} />
+                        <Stack.Screen name="Stories" component={StoriesScreen} />
                         <Stack.Screen name="KYC" component={KycScreen} />
                         <Stack.Screen name="Terms" component={TermsScreen} />
                         <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />

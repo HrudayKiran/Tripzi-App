@@ -20,11 +20,8 @@ export const markUserKycVerified = async (email: string) => {
         // Update KYC status
         await firestore().collection('users').doc(userDoc.id).update({
             kycStatus: 'verified',
-            kyc: {
-                status: 'verified',
-                verifiedAt: firestore.FieldValue.serverTimestamp(),
-                verifiedBy: 'admin',
-            },
+            kycVerifiedAt: firestore.FieldValue.serverTimestamp(),
+            kycVerifiedBy: 'admin',
         });
 
         return true;
