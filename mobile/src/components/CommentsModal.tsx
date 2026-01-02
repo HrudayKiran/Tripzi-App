@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, FlatList, Image, KeyboardAvoidingView, Platform, Animated, Alert } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, FlatList, Image, KeyboardAvoidingView, Platform, Animated, Alert, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import firestore from '@react-native-firebase/firestore';
 import { auth } from '../firebase';
 import { useTheme } from '../contexts/ThemeContext';
+import DefaultAvatar from './DefaultAvatar';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 
 type Comment = {
@@ -24,6 +26,7 @@ type CommentsModalProps = {
 
 const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
     const { colors } = useTheme();
+    const navigation = useNavigation();
     const [comments, setComments] = useState<Comment[]>([]);
     const [newComment, setNewComment] = useState('');
     const [editingComment, setEditingComment] = useState<Comment | null>(null);
@@ -40,7 +43,6 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
                 speed: 14,
                 bounciness: 0,
             }).start();
-            loadComments();
         } else {
             Animated.timing(slideAnim, {
                 toValue: 500,
@@ -50,27 +52,32 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
         }
     }, [visible]);
 
-    const loadComments = async () => {
-        if (!tripId) return;
+    // Real-time comments listener
+    useEffect(() => {
+        if (!visible || !tripId) return;
 
-        try {
-            const commentsRef = firestore()
-                .collection('trips')
-                .doc(tripId)
-                .collection('comments')
-                .orderBy('createdAt', 'desc');
+        const commentsRef = firestore()
+            .collection('trips')
+            .doc(tripId)
+            .collection('comments')
+            .orderBy('createdAt', 'desc');
 
-            const snapshot = await commentsRef.get();
-            const commentsData = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-            })) as Comment[];
-            setComments(commentsData);
-        } catch (error) {
-            console.log('Load comments error:', error);
-            setComments([]); // No dummy data - show empty state
-        }
-    };
+        const unsubscribe = commentsRef.onSnapshot(
+            (snapshot) => {
+                const commentsData = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                })) as Comment[];
+                setComments(commentsData);
+            },
+            (error) => {
+                console.log('Comments listener error:', error);
+                setComments([]);
+            }
+        );
+
+        return () => unsubscribe();
+    }, [visible, tripId]);
 
     const handleSendComment = async () => {
         if (!newComment.trim() || !currentUser) return;
@@ -101,8 +108,8 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
                     userImage: comment.userImage,
                     createdAt: firestore.FieldValue.serverTimestamp(),
                 });
-
-            setComments(prev => prev.map(c => c.id === tempId ? { ...c, id: docRef.id } : c));
+            // Real-time listener will update the list automatically
+            Keyboard.dismiss();
         } catch {
             // Comment save failed silently
         }
@@ -167,19 +174,29 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
         );
     };
 
+    const handleUserPress = (userId: string) => {
+        onClose();
+        navigation.navigate('UserProfile' as never, { userId } as never);
+    };
+
     const renderComment = ({ item }: { item: Comment }) => {
         const isOwner = item.userId === currentUser?.uid;
         const isEditing = editingComment?.id === item.id;
 
         return (
             <View style={[styles.commentItem, { backgroundColor: colors.card }]}>
-                <Image
-                    source={{ uri: item.userImage || undefined }}
-                    style={styles.commentAvatar}
-                />
+                <TouchableOpacity onPress={() => handleUserPress(item.userId)}>
+                    <DefaultAvatar
+                        uri={item.userImage}
+                        size={40}
+                        style={styles.commentAvatar}
+                    />
+                </TouchableOpacity>
                 <View style={styles.commentContent}>
                     <View style={styles.commentHeader}>
-                        <Text style={[styles.commentUserName, { color: colors.text }]}>{item.userName}</Text>
+                        <TouchableOpacity onPress={() => handleUserPress(item.userId)}>
+                            <Text style={[styles.commentUserName, { color: colors.text }]}>{item.userName}</Text>
+                        </TouchableOpacity>
                         {isOwner && !isEditing && (
                             <View style={styles.commentActions}>
                                 <TouchableOpacity onPress={() => handleEditComment(item)} style={styles.actionBtn}>
@@ -225,69 +242,74 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
 
     return (
         <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-            <View style={styles.overlay}>
-                <TouchableOpacity style={styles.backdrop} onPress={onClose} />
-                <Animated.View
-                    style={[
-                        styles.container,
-                        { backgroundColor: colors.background, transform: [{ translateY: slideAnim }] }
-                    ]}
-                >
-                    <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
-                        {/* Header */}
-                        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                            <View style={styles.headerHandle} />
-                            <Text style={[styles.title, { color: colors.text }]}>Comments</Text>
-                            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                                <Ionicons name="close" size={24} color={colors.text} />
-                            </TouchableOpacity>
-                        </View>
+            <KeyboardAvoidingView
+                style={{ flex: 1 }}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+            >
+                <View style={styles.overlay}>
+                    <TouchableOpacity style={styles.backdrop} onPress={onClose} />
+                    <Animated.View
+                        style={[
+                            styles.container,
+                            { backgroundColor: colors.background, transform: [{ translateY: slideAnim }] }
+                        ]}
+                    >
+                        <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+                            {/* Header */}
+                            <View style={[styles.header, { borderBottomColor: colors.border }]}>
+                                <View style={styles.headerHandle} />
+                                <Text style={[styles.title, { color: colors.text }]}>Comments</Text>
+                                <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                                    <Ionicons name="close" size={24} color={colors.text} />
+                                </TouchableOpacity>
+                            </View>
 
-                        {/* Comments List */}
-                        <FlatList
-                            data={comments}
-                            renderItem={renderComment}
-                            keyExtractor={(item, index) => item.id || `comment_${index}`}
-                            contentContainerStyle={styles.commentsList}
-                            showsVerticalScrollIndicator={false}
-                            ListEmptyComponent={
-                                <View style={styles.emptyContainer}>
-                                    <Ionicons name="chatbubble-outline" size={48} color={colors.textSecondary} />
-                                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                                        No comments yet. Be the first!
-                                    </Text>
-                                </View>
-                            }
-                        />
+                            {/* Comments List */}
+                            <FlatList
+                                data={comments}
+                                renderItem={renderComment}
+                                keyExtractor={(item, index) => item.id || `comment_${index}`}
+                                contentContainerStyle={styles.commentsList}
+                                showsVerticalScrollIndicator={false}
+                                keyboardShouldPersistTaps="handled"
+                                ListEmptyComponent={
+                                    <View style={styles.emptyContainer}>
+                                        <Ionicons name="chatbubble-outline" size={48} color={colors.textSecondary} />
+                                        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                                            No comments yet. Be the first!
+                                        </Text>
+                                    </View>
+                                }
+                            />
 
-                        {/* Input */}
-                        <KeyboardAvoidingView
-                            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                            style={[styles.inputContainer, { borderTopColor: colors.border, backgroundColor: colors.background }]}
-                        >
-                            <Image
-                                source={{ uri: currentUser?.photoURL || undefined }}
-                                style={styles.inputAvatar}
-                            />
-                            <TextInput
-                                style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text }]}
-                                placeholder="Add a comment..."
-                                placeholderTextColor={colors.textSecondary}
-                                value={newComment}
-                                onChangeText={setNewComment}
-                                multiline
-                            />
-                            <TouchableOpacity
-                                style={[styles.sendButton, { backgroundColor: newComment.trim() ? colors.primary : colors.border }]}
-                                onPress={handleSendComment}
-                                disabled={!newComment.trim()}
-                            >
-                                <Ionicons name="send" size={18} color="#fff" />
-                            </TouchableOpacity>
-                        </KeyboardAvoidingView>
-                    </SafeAreaView>
-                </Animated.View>
-            </View>
+                            {/* Input */}
+                            <View style={[styles.inputContainer, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+                                <DefaultAvatar
+                                    uri={currentUser?.photoURL}
+                                    size={36}
+                                    style={styles.inputAvatar}
+                                />
+                                <TextInput
+                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text }]}
+                                    placeholder="Add a comment..."
+                                    placeholderTextColor={colors.textSecondary}
+                                    value={newComment}
+                                    onChangeText={setNewComment}
+                                    multiline
+                                />
+                                <TouchableOpacity
+                                    style={[styles.sendButton, { backgroundColor: newComment.trim() ? colors.primary : colors.border }]}
+                                    onPress={handleSendComment}
+                                    disabled={!newComment.trim()}
+                                >
+                                    <Ionicons name="send" size={18} color="#fff" />
+                                </TouchableOpacity>
+                            </View>
+                        </SafeAreaView>
+                    </Animated.View>
+                </View>
+            </KeyboardAvoidingView>
         </Modal>
     );
 };

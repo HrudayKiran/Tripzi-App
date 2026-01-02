@@ -563,21 +563,6 @@ const UserProfileScreen = ({ route, navigation }) => {
                     )}
                 </Animatable.View>
 
-                {/* Stories */}
-                {isOwnProfile && (
-                    <Animatable.View animation="fadeInUp" delay={200} style={styles.storiesSection}>
-                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Stories</Text>
-                        <FlatList
-                            data={stories}
-                            renderItem={renderStory}
-                            keyExtractor={(item) => item.id}
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.storiesList}
-                        />
-                    </Animatable.View>
-                )}
-
                 {/* Posts */}
                 <Animatable.View animation="fadeInUp" delay={300} style={styles.postsSection}>
                     <View style={styles.postsSectionHeader}>
@@ -791,7 +776,9 @@ const styles = StyleSheet.create({
     addStoryGradient: { width: 72, height: 72, borderRadius: 36, justifyContent: 'center', alignItems: 'center' },
     storyImage: { width: 66, height: 66, borderRadius: 33, backgroundColor: '#fff' },
     storyTitle: { fontSize: FONT_SIZE.xs, marginTop: SPACING.xs, maxWidth: 70 },
-    postsSection: { marginTop: SPACING.lg },
+    postsSection: { marginTop: SPACING.lg, marginHorizontal: SPACING.lg },
+    postsSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md },
+    addPostButton: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
     postsContainer: { marginTop: SPACING.md },
     tripCard: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, borderRadius: BORDER_RADIUS.lg, marginBottom: SPACING.md },
     tripContent: { flex: 1, flexDirection: 'row', alignItems: 'center' },

@@ -7,9 +7,56 @@ import { useTheme } from '../contexts/ThemeContext';
 import CustomToggle from '../components/CustomToggle';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 
+import { auth } from '../firebase';
+import firestore from '@react-native-firebase/firestore';
+
 const SettingsScreen = ({ navigation }) => {
     const { colors, isDarkMode, toggleTheme } = useTheme();
     const [pushEnabled, setPushEnabled] = useState(true);
+    const currentUser = auth.currentUser;
+
+    // Load initial setting
+    React.useEffect(() => {
+        if (!currentUser) return;
+        const loadSettings = async () => {
+            try {
+                const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
+                if (userDoc.exists) {
+                    // Default to true if not set
+                    const isEnabled = userDoc.data()?.pushNotifications !== false;
+                    setPushEnabled(isEnabled);
+                }
+            } catch (error) {
+                console.log('Error loading settings:', error);
+            }
+        };
+        loadSettings();
+    }, [currentUser]);
+
+    const handlePushToggle = async (value: boolean) => {
+        setPushEnabled(value);
+        if (!currentUser) return;
+        try {
+            await firestore().collection('users').doc(currentUser.uid).update({
+                pushNotifications: value,
+                pushToken: value ? firestore.FieldValue.delete() : firestore.FieldValue.delete() // Just deleting token on disable for now, or re-register logic could go here
+            });
+            // If enabling, we might want to re-trigger token registration logic in AppNavigator or similar
+            if (value) {
+                // In a real app, you would call your registerForPushNotificationsAsync() here
+                // For now, we update the preference which the app check on startup
+                await firestore().collection('users').doc(currentUser.uid).set({
+                    pushNotifications: true
+                }, { merge: true });
+            } else {
+                await firestore().collection('users').doc(currentUser.uid).update({
+                    pushNotifications: false
+                });
+            }
+        } catch (error) {
+            console.log('Error updating settings:', error);
+        }
+    };
 
     return (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
@@ -43,7 +90,7 @@ const SettingsScreen = ({ navigation }) => {
                             </View>
                             <CustomToggle
                                 value={pushEnabled}
-                                onValueChange={() => setPushEnabled(!pushEnabled)}
+                                onValueChange={() => handlePushToggle(!pushEnabled)}
                                 onLabel="On"
                                 offLabel="Off"
                                 size="medium"
@@ -65,7 +112,7 @@ const SettingsScreen = ({ navigation }) => {
                     <Animatable.View animation="fadeInUp" duration={400} delay={100}>
                         <View style={[styles.settingCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                             <View style={[styles.iconBox, { backgroundColor: '#FEF3C7' }]}>
-                                <Ionicons name={isDarkMode ? "moon" : "sunny"} size={24} color="#F59E0B" />
+                                <Ionicons name="moon" size={24} color="#F59E0B" />
                             </View>
                             <View style={styles.settingInfo}>
                                 <Text style={[styles.settingTitle, { color: colors.text }]}>Dark Mode</Text>

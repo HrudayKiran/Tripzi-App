@@ -212,6 +212,18 @@ const CreateGroupScreen = ({ navigation }) => {
                     createdAt: firestore.FieldValue.serverTimestamp(),
                 });
 
+            // Update parent chat with lastMessage
+            await firestore().collection('chats').doc(chatRef.id).update({
+                lastMessage: {
+                    text: `${currentUserData?.displayName || 'Someone'} created the group "${groupName.trim()}"`,
+                    senderId: 'system',
+                    senderName: 'System',
+                    timestamp: firestore.FieldValue.serverTimestamp(),
+                    type: 'system',
+                },
+                updatedAt: firestore.FieldValue.serverTimestamp(),
+            });
+
             navigation.replace('Chat', { chatId: chatRef.id });
         } catch (error) {
             console.error('Failed to create group:', error);

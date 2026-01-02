@@ -46,8 +46,8 @@ const StartScreen = ({ navigation }) => {
       await signInWithCredential(auth, googleCredential);
 
       showToast('Login successful! 🎉');
-      // Navigate directly to App - username setup can be done from profile
-      navigation.navigate('App');
+      // Reset navigation stack to prevent going back to auth
+      navigation.reset({ index: 0, routes: [{ name: 'App' }] });
     } catch (error: any) {
       if (error?.code !== statusCodes.SIGN_IN_CANCELLED) {
         // Error handled silently

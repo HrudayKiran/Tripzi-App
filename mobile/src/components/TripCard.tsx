@@ -1,5 +1,5 @@
 import React, { memo, useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Share, Animated, Dimensions, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Share, Animated, Dimensions, Alert, Linking, ScrollView, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import useTripLike from '../hooks/useTripLike';
@@ -7,7 +7,9 @@ import { useTheme } from '../contexts/ThemeContext';
 import { auth } from '../firebase';
 import firestore from '@react-native-firebase/firestore';
 import CommentsModal from './CommentsModal';
+import ShareModal from './ShareModal';
 import CustomToggle from './CustomToggle';
+import DefaultAvatar from './DefaultAvatar';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
 import { DEFAULT_TRIP_IMAGE, isValidImageUrl } from '../constants/defaults';
 
@@ -39,6 +41,9 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
     const [commentCount, setCommentCount] = useState(0);
     const [showFullDescription, setShowFullDescription] = useState(false);
     const [userRating, setUserRating] = useState<{ avg: number; count: number } | null>(null);
+    const [activeImageIndex, setActiveImageIndex] = useState(0);
+    const [showShare, setShowShare] = useState(false);
+    const [showMenu, setShowMenu] = useState(false);
     const heartScale = useRef(new Animated.Value(1)).current;
     const currentUser = auth.currentUser;
 
@@ -115,16 +120,6 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
             Animated.spring(heartScale, { toValue: 1, useNativeDriver: true, speed: 50 }),
         ]).start();
         handleLike();
-    };
-
-    const handleShare = async () => {
-        try {
-            await Share.share({
-                message: `🚀 Check out this trip to ${trip.location}!\n\n${trip.title}\n💰 ₹${formatCost(trip.cost || trip.totalCost)}/person\n📅 ${trip.duration || '3 days'}\n\nJoin on Tripzi! 🌍`,
-            });
-        } catch {
-            // Share failed silently
-        }
     };
 
     const formatCost = (cost) => {
@@ -228,6 +223,10 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
         }
     };
 
+    const handleShare = () => {
+        setShowShare(true);
+    };
+
     // Check if trip is completed (marked by owner)
     const isCompleted = trip.isCompleted === true;
 
@@ -240,12 +239,10 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                 {/* User Header */}
                 <View style={styles.userHeader}>
                     <TouchableOpacity style={styles.userInfo} onPress={handleUserPress}>
-                        <Image
+                        <DefaultAvatar
+                            uri={trip.user?.photoURL || trip.user?.image}
+                            size={40}
                             style={styles.avatar}
-                            source={isValidImageUrl(trip.user?.photoURL || trip.user?.image)
-                                ? { uri: trip.user?.photoURL || trip.user?.image }
-                                : require('../../assets/icon.png')
-                            }
                         />
                         <View>
                             <Text style={[styles.userName, { color: colors.text }]}>
@@ -277,22 +274,63 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                     </View>
                 </View>
 
-                {/* Trip Image */}
-                <TouchableOpacity onPress={onPress} activeOpacity={0.95}>
-                    <View style={styles.imageContainer}>
-                        <Image
-                            style={styles.tripImage}
-                            source={{ uri: trip.coverImage || trip.image || DEFAULT_TRIP_IMAGE }}
-                        />
-                        <TouchableOpacity style={styles.locationBadge} onPress={handleLocationPress}>
-                            <Ionicons name="location" size={14} color="#fff" />
-                            <Text style={styles.locationText}>{trip.location || 'Adventure'}</Text>
-                        </TouchableOpacity>
-                        <View style={[styles.typeBadge, { backgroundColor: colors.primary }]}>
-                            <Text style={styles.typeText}>{trip.tripType || 'Trip'}</Text>
-                        </View>
+                {/* Trip Images Carousel */}
+                <View style={styles.imageContainer}>
+                    {(() => {
+                        const images = trip.images?.length > 0
+                            ? trip.images
+                            : [trip.coverImage || trip.image || DEFAULT_TRIP_IMAGE];
+                        return (
+                            <>
+                                <ScrollView
+                                    horizontal
+                                    pagingEnabled
+                                    showsHorizontalScrollIndicator={false}
+                                    scrollEventThrottle={16}
+                                    decelerationRate="fast"
+                                    onMomentumScrollEnd={(e) => {
+                                        const index = Math.round(e.nativeEvent.contentOffset.x / width);
+                                        setActiveImageIndex(index);
+                                    }}
+                                >
+                                    {images.map((item, index) => (
+                                        <Image
+                                            key={`img_${index}`}
+                                            style={styles.tripImage}
+                                            source={{ uri: item }}
+                                            resizeMode="cover"
+                                        />
+                                    ))}
+                                </ScrollView>
+                                {images.length > 1 && (
+                                    <View style={styles.imageDotsContainer}>
+                                        {images.map((_, index) => (
+                                            <View
+                                                key={index}
+                                                style={[
+                                                    styles.imageDot,
+                                                    { backgroundColor: index === activeImageIndex ? '#fff' : 'rgba(255,255,255,0.5)' }
+                                                ]}
+                                            />
+                                        ))}
+                                    </View>
+                                )}
+                                {images.length > 1 && (
+                                    <View style={styles.imageCountBadge}>
+                                        <Text style={styles.imageCountText}>{activeImageIndex + 1}/{images.length}</Text>
+                                    </View>
+                                )}
+                            </>
+                        );
+                    })()}
+                    <TouchableOpacity style={styles.locationBadge} onPress={handleLocationPress}>
+                        <Ionicons name="location" size={14} color="#fff" />
+                        <Text style={styles.locationText}>{trip.location || 'Adventure'}</Text>
+                    </TouchableOpacity>
+                    <View style={[styles.typeBadge, { backgroundColor: colors.primary }]}>
+                        <Text style={styles.typeText}>{trip.tripType || 'Trip'}</Text>
                     </View>
-                </TouchableOpacity>
+                </View>
 
                 {/* Action Bar - Instagram Style */}
                 <View style={styles.actionBar}>
@@ -314,21 +352,26 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                                 <Ionicons name="paper-plane-outline" size={24} color={colors.text} />
                             </View>
                         </TouchableOpacity>
+                        {/* Toggle moved here next to share */}
+                        {isCompleted ? (
+                            <View style={styles.completedBadge}>
+                                <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                                <Text style={styles.completedText}>Done</Text>
+                            </View>
+                        ) : (
+                            <CustomToggle
+                                value={hasJoined}
+                                onValueChange={handleJoinTrip}
+                                onLabel="Joined"
+                                offLabel="Join"
+                                size="small"
+                            />
+                        )}
                     </View>
-                    {isCompleted ? (
-                        <View style={styles.completedBadge}>
-                            <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-                            <Text style={styles.completedText}>Completed</Text>
-                        </View>
-                    ) : (
-                        <CustomToggle
-                            value={hasJoined}
-                            onValueChange={handleJoinTrip}
-                            onLabel="Trip Joined"
-                            offLabel="Join Trip"
-                            size="small"
-                        />
-                    )}
+                    {/* Three dots menu at end */}
+                    <TouchableOpacity style={styles.moreButton} onPress={() => setShowMenu(true)}>
+                        <Ionicons name="ellipsis-horizontal" size={24} color={colors.text} />
+                    </TouchableOpacity>
                 </View>
 
                 {/* Likes & Title */}
@@ -394,14 +437,52 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                         </View>
                     ))}
                 </View>
-            </View>
+            </View >
 
             {/* Comments Modal */}
-            <CommentsModal
+            < CommentsModal
                 visible={showComments}
                 onClose={() => setShowComments(false)}
                 tripId={trip.id}
             />
+
+            {/* Share Modal */}
+            < ShareModal
+                visible={showShare}
+                onClose={() => setShowShare(false)}
+                tripId={trip.id}
+                tripTitle={trip.title || 'Trip'}
+                tripImage={trip.coverImage || trip.images?.[0]}
+            />
+
+            {/* Three Dots Menu Modal */}
+            <Modal visible={showMenu} transparent animationType="fade" onRequestClose={() => setShowMenu(false)}>
+                <TouchableOpacity
+                    style={styles.menuOverlay}
+                    activeOpacity={1}
+                    onPress={() => setShowMenu(false)}
+                >
+                    <View style={[styles.menuContainer, { backgroundColor: colors.card }]}>
+                        <TouchableOpacity
+                            style={styles.menuOption}
+                            onPress={() => {
+                                setShowMenu(false);
+                                onPress && onPress();
+                            }}
+                        >
+                            <Ionicons name="eye-outline" size={22} color={colors.text} />
+                            <Text style={[styles.menuOptionText, { color: colors.text }]}>View Full Details</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.menuOption}
+                            onPress={() => setShowMenu(false)}
+                        >
+                            <Ionicons name="close-outline" size={22} color={colors.textSecondary} />
+                            <Text style={[styles.menuOptionText, { color: colors.textSecondary }]}>Cancel</Text>
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </>
     );
 });
@@ -418,8 +499,12 @@ const styles = StyleSheet.create({
     ratingText: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold, color: '#D97706' },
     followButton: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.lg, borderWidth: 1 },
     followButtonText: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold },
-    imageContainer: { position: 'relative', aspectRatio: 1 },
-    tripImage: { width: '100%', height: '100%' },
+    imageContainer: { position: 'relative', aspectRatio: 4 / 5 },
+    tripImage: { width, aspectRatio: 4 / 5 },
+    imageDotsContainer: { position: 'absolute', bottom: 16, alignSelf: 'center', flexDirection: 'row', gap: SPACING.xs },
+    imageDot: { width: 8, height: 8, borderRadius: 4 },
+    imageCountBadge: { position: 'absolute', top: SPACING.md, left: SPACING.md, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.sm },
+    imageCountText: { color: '#fff', fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.semibold },
     locationBadge: { position: 'absolute', bottom: SPACING.md, left: SPACING.md, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.lg },
     locationText: { color: '#fff', fontSize: FONT_SIZE.xs, marginLeft: SPACING.xs },
     typeBadge: { position: 'absolute', top: SPACING.md, right: SPACING.md, paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.sm },
@@ -429,6 +514,7 @@ const styles = StyleSheet.create({
     actionButton: { padding: SPACING.xs },
     actionItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     actionCount: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold },
+    moreButton: { padding: SPACING.xs },
     joinButton: { backgroundColor: '#8B5CF6', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.lg },
     joinButtonText: { color: '#fff', fontWeight: FONT_WEIGHT.bold, fontSize: FONT_SIZE.sm },
     contentSection: { paddingHorizontal: SPACING.md, paddingBottom: SPACING.sm },
@@ -449,6 +535,10 @@ const styles = StyleSheet.create({
     toggleLabel: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold },
     completedBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#D1FAE5', paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.lg, gap: 4 },
     completedText: { color: '#10B981', fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold },
+    menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    menuContainer: { width: '80%', borderRadius: BORDER_RADIUS.xl, padding: SPACING.md, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 10 },
+    menuOption: { flexDirection: 'row', alignItems: 'center', padding: SPACING.lg, gap: SPACING.md, borderRadius: BORDER_RADIUS.lg },
+    menuOptionText: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
 });
 
 export default TripCard;

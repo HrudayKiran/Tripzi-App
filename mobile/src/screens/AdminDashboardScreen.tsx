@@ -8,7 +8,10 @@ const AdminDashboardScreen = ({ navigation }) => {
     const { colors } = useTheme();
     const [activeTab, setActiveTab] = useState('KYC Requests');
     const [stats, setStats] = useState({ users: 0, pendingKYC: 0, feedback: 0 });
-    const [users, setUsers] = useState([]);
+    const [users, setUsers] = useState<any[]>([]);
+    const [kycRequests, setKycRequests] = useState<any[]>([]);
+    const [feedbacks, setFeedbacks] = useState<any[]>([]);
+    const [deleting, setDeleting] = useState<string | null>(null);
 
     useEffect(() => {
         fetchStats();
@@ -26,6 +29,9 @@ const AdminDashboardScreen = ({ navigation }) => {
                 pendingKYC: kycSnapshot.size,
                 feedback: feedbackSnapshot.size,
             });
+
+            setKycRequests(kycSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setFeedbacks(feedbackSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         } catch {
             // Stats fetch failed silently
         }
@@ -38,6 +44,37 @@ const AdminDashboardScreen = ({ navigation }) => {
             setUsers(usersList);
         } catch {
             // Users fetch failed silently
+        }
+    };
+
+    const handleDeleteUser = async (userId: string) => {
+        setDeleting(userId);
+        try {
+            // 1. Delete user's trips
+            const tripsSnapshot = await firestore().collection('trips').where('userId', '==', userId).get();
+            const batch = firestore().batch();
+
+            tripsSnapshot.docs.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+
+            // 2. Delete user from users collection
+            batch.delete(firestore().collection('users').doc(userId));
+
+            // Commit batch
+            await batch.commit();
+
+            // 3. Delete user's chats (optional: complex due to participants array)
+            // Ideally should remove user from participants arrays or delete 1-on-1 chats
+
+            // Refresh data
+            await Promise.all([fetchStats(), fetchUsers()]);
+            alert('User deleted successfully');
+        } catch (error) {
+            console.error(error);
+            alert('Error deleting user');
+        } finally {
+            setDeleting(null);
         }
     };
 
@@ -110,7 +147,7 @@ const AdminDashboardScreen = ({ navigation }) => {
                                 <View style={styles.userInfo}>
                                     <Text style={[styles.userName, { color: colors.text }]}>{user.displayName || 'User'}</Text>
                                     <Text style={[styles.userDetail, { color: colors.textSecondary }]}>
-                                        aadhaar • {user.kyc?.aadhaar || 'Not provided'}
+                                        {user.email}
                                     </Text>
                                 </View>
                                 {user.kyc?.status === 'verified' && (
@@ -118,24 +155,59 @@ const AdminDashboardScreen = ({ navigation }) => {
                                         <Text style={styles.verifiedText}>verified</Text>
                                     </View>
                                 )}
-                                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                                <TouchableOpacity
+                                    style={[styles.deleteButton, { backgroundColor: '#FEE2E2' }]}
+                                    onPress={() => handleDeleteUser(user.id)}
+                                    disabled={deleting === user.id}
+                                >
+                                    <Ionicons name="trash" size={20} color="#EF4444" />
+                                </TouchableOpacity>
                             </View>
                         ))}
                     </>
                 )}
 
                 {activeTab === 'KYC Requests' && (
-                    <View style={styles.emptyState}>
-                        <Ionicons name="document-text-outline" size={64} color="#D1D5DB" />
-                        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No pending KYC requests</Text>
-                    </View>
+                    <>
+                        {kycRequests.length === 0 ? (
+                            <View style={styles.emptyState}>
+                                <Ionicons name="document-text-outline" size={64} color="#D1D5DB" />
+                                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No pending KYC requests</Text>
+                            </View>
+                        ) : (
+                            kycRequests.map((req) => (
+                                <View key={req.id} style={[styles.userCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                    <View style={styles.userInfo}>
+                                        <Text style={[styles.userName, { color: colors.text }]}>{req.displayName}</Text>
+                                        <Text style={[styles.userDetail, { color: colors.textSecondary }]}>Aadhaar: {req.kyc?.aadhaar}</Text>
+                                    </View>
+                                    <TouchableOpacity style={[styles.actionButton, { backgroundColor: '#D1FAE5' }]}>
+                                        <Text style={{ color: '#10B981', fontWeight: 'bold' }}>Verify</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ))
+                        )}
+                    </>
                 )}
 
                 {activeTab === 'Feedback' && (
-                    <View style={styles.emptyState}>
-                        <Ionicons name="chatbubble-outline" size={64} color="#D1D5DB" />
-                        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No feedback yet</Text>
-                    </View>
+                    <>
+                        {feedbacks.length === 0 ? (
+                            <View style={styles.emptyState}>
+                                <Ionicons name="chatbubble-outline" size={64} color="#D1D5DB" />
+                                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No feedback yet</Text>
+                            </View>
+                        ) : (
+                            feedbacks.map((item) => (
+                                <View key={item.id} style={[styles.feedbackCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                    <Text style={[styles.feedbackText, { color: colors.text }]}>{item.text || item.message}</Text>
+                                    <Text style={[styles.feedbackDate, { color: colors.textSecondary }]}>
+                                        {item.createdAt?.toDate().toLocaleDateString()}
+                                    </Text>
+                                </View>
+                            ))
+                        )}
+                    </>
                 )}
             </ScrollView>
         </View>
@@ -271,6 +343,32 @@ const styles = StyleSheet.create({
     emptyText: {
         fontSize: 16,
         marginTop: 16,
+    },
+    deleteButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    actionButton: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 8,
+    },
+    feedbackCard: {
+        padding: 16,
+        borderRadius: 16,
+        marginBottom: 12,
+        borderWidth: 1,
+    },
+    feedbackText: {
+        fontSize: 14,
+        lineHeight: 20,
+        marginBottom: 8,
+    },
+    feedbackDate: {
+        fontSize: 12,
     },
 });
 

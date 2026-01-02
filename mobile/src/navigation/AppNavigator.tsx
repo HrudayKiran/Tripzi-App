@@ -19,6 +19,7 @@ import SignInScreen from '../screens/SignInScreen';
 import SignUpScreen from '../screens/SignUpScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import FeedScreen from '../screens/FeedScreen';
+import ReelsScreen from '../screens/ReelsScreen';
 import MyTripsScreen from '../screens/MyTripsScreen';
 import MessagesScreen from '../screens/MessagesScreen';
 import MessageScreen from '../screens/MessageScreen';
@@ -77,10 +78,10 @@ const AppTabs = () => {
                 }}
             />
             <Tab.Screen
-                name="My Trips"
-                component={MyTripsScreen}
+                name="Reels"
+                component={ReelsScreen}
                 options={{
-                    tabBarIcon: ({ color, size }) => <Ionicons name="map-outline" size={size} color={color} />,
+                    tabBarIcon: ({ color, size }) => <Ionicons name="play-circle-outline" size={size} color={color} />,
                 }}
             />
             <Tab.Screen
@@ -121,8 +122,7 @@ const AppNavigator = () => {
                                     ],
                                 },
                             }),
-                            gestureEnabled: true,
-                            gestureDirection: 'horizontal',
+                            gestureEnabled: false,
                         }}
                     >
                         <Stack.Screen name="Splash" component={SplashScreen} />
@@ -131,7 +131,12 @@ const AppNavigator = () => {
                         <Stack.Screen name="SignIn" component={SignInScreen} />
                         <Stack.Screen name="SignUp" component={SignUpScreen} />
                         <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-                        <Stack.Screen name="App" component={AppTabs} />
+                        <Stack.Screen
+                            name="App"
+                            component={AppTabs}
+                            options={{ gestureEnabled: false }}
+                        />
+                        <Stack.Screen name="MyTrips" component={MyTripsScreen} />
                         <Stack.Screen name="CreateTrip" component={CreateTripScreen} />
                         <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
                         <Stack.Screen name="Message" component={MessageScreen} />

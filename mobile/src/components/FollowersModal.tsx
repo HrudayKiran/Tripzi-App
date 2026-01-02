@@ -50,7 +50,15 @@ const FollowersModal = ({ visible, onClose, title, users, onUserPress }: Followe
                 onPress={() => onUserPress(item.id)}
                 activeOpacity={0.7}
             >
-                <Image source={{ uri: item.photoURL || undefined }} style={styles.avatar} />
+                {item.photoURL ? (
+                    <Image source={{ uri: item.photoURL }} style={styles.avatar} />
+                ) : (
+                    <View style={[styles.avatarPlaceholder, { backgroundColor: colors.primary }]}>
+                        <Text style={styles.avatarInitial}>
+                            {(item.displayName || 'U').charAt(0).toUpperCase()}
+                        </Text>
+                    </View>
+                )}
                 <View style={styles.userInfo}>
                     <Text style={[styles.displayName, { color: colors.text }]}>{item.displayName || 'User'}</Text>
                     {item.username && <Text style={[styles.username, { color: colors.primary }]}>@{item.username}</Text>}
@@ -198,6 +206,19 @@ const styles = StyleSheet.create({
         height: 56,
         borderRadius: 28,
         marginRight: SPACING.md,
+    },
+    avatarPlaceholder: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        marginRight: SPACING.md,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    avatarInitial: {
+        color: '#fff',
+        fontSize: FONT_SIZE.xl,
+        fontWeight: FONT_WEIGHT.bold,
     },
     userInfo: {
         flex: 1,

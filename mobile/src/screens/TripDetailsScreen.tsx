@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
 import CustomToggle from '../components/CustomToggle';
+import DefaultAvatar from '../components/DefaultAvatar';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
 
 const { width } = Dimensions.get('window');
@@ -82,6 +83,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
   const [showDateModal, setShowDateModal] = useState<'from' | 'to' | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [participantsData, setParticipantsData] = useState<any[]>([]);
 
   const scrollY = useRef(new Animated.Value(0)).current;
   const isOwner = trip?.userId === user?.uid;
@@ -104,6 +106,30 @@ const TripDetailsScreen = ({ route, navigation }) => {
     });
     return () => unsubscribe();
   }, [tripId, user?.uid]);
+
+  // Fetch participant data when trip.participants changes
+  useEffect(() => {
+    const fetchParticipants = async () => {
+      if (!trip?.participants || trip.participants.length === 0) {
+        setParticipantsData([]);
+        return;
+      }
+      try {
+        const participantPromises = trip.participants.slice(0, 8).map(async (uid: string) => {
+          const userDoc = await firestore().collection('users').doc(uid).get();
+          if (userDoc.exists) {
+            return { id: uid, ...userDoc.data() };
+          }
+          return { id: uid, displayName: 'Traveler', photoURL: null };
+        });
+        const participants = await Promise.all(participantPromises);
+        setParticipantsData(participants);
+      } catch (error) {
+        console.log('Error fetching participants:', error);
+      }
+    };
+    fetchParticipants();
+  }, [trip?.participants]);
 
   // Fetch ratings for completed trips
   useEffect(() => {
@@ -243,7 +269,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
 
   const handleMessage = () => {
     const chatId = `trip_${tripId}`;
-    navigation.navigate('Message', {
+    navigation.navigate('Chat', {
       chatId,
       tripTitle: trip?.title,
       isGroupChat: true,
@@ -405,39 +431,49 @@ const TripDetailsScreen = ({ route, navigation }) => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header with Back Button Only */}
-      <SafeAreaView edges={['top']} style={styles.headerContainer}>
-        <View style={[styles.header, { backgroundColor: 'transparent' }]}>
-          <TouchableOpacity
-            style={[styles.headerButton, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-
       <ScrollView
         showsVerticalScrollIndicator={false}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
         scrollEventThrottle={16}
       >
+        {/* Header with Back Button - Now inside scroll */}
+        <SafeAreaView edges={['top']} style={styles.headerInScroll}>
+          <View style={styles.header}>
+            <TouchableOpacity
+              style={[styles.headerButton, { backgroundColor: colors.card }]}
+              onPress={() => navigation.goBack()}
+            >
+              <Ionicons name="arrow-back" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
+              {trip.title || 'Trip Details'}
+            </Text>
+            <View style={{ width: 44 }} />
+          </View>
+        </SafeAreaView>
+
         {/* Trip Images Carousel */}
         <View style={styles.imageCarousel}>
-          <FlatList
-            data={images}
+          <ScrollView
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
+            scrollEventThrottle={16}
+            decelerationRate="fast"
             onMomentumScrollEnd={(e) => {
               const index = Math.round(e.nativeEvent.contentOffset.x / width);
               setActiveImageIndex(index);
             }}
-            renderItem={({ item }) => (
-              <Image source={{ uri: item }} style={styles.carouselImage} />
-            )}
-            keyExtractor={(item, index) => `img_${index}`}
-          />
+          >
+            {images.map((item, index) => (
+              <Image
+                key={`img_${index}`}
+                source={{ uri: item }}
+                style={styles.carouselImage}
+                resizeMode="cover"
+              />
+            ))}
+          </ScrollView>
           {images.length > 1 && (
             <View style={styles.imageDotsContainer}>
               {images.map((_, index) => (
@@ -451,6 +487,11 @@ const TripDetailsScreen = ({ route, navigation }) => {
               ))}
             </View>
           )}
+          {images.length > 1 && (
+            <View style={styles.imageCountBadge}>
+              <Text style={styles.imageCountText}>{activeImageIndex + 1}/{images.length}</Text>
+            </View>
+          )}
         </View>
 
         {/* Content */}
@@ -462,9 +503,10 @@ const TripDetailsScreen = ({ route, navigation }) => {
               style={styles.creatorInfo}
               onPress={() => navigation.navigate('UserProfile', { userId: trip.userId })}
             >
-              <Image
+              <DefaultAvatar
+                uri={trip.user?.photoURL}
+                size={48}
                 style={styles.creatorAvatar}
-                source={{ uri: trip.user?.photoURL || undefined }}
               />
               <View>
                 <Text style={[styles.creatorName, { color: colors.text }]}>
@@ -600,13 +642,18 @@ const TripDetailsScreen = ({ route, navigation }) => {
               Travelers ({trip.participants?.length || 1}/{trip.maxTravelers || 8})
             </Text>
             <View style={styles.participantsRow}>
-              {[...Array(Math.min(5, trip.participants?.length || 1))].map((_, i) => (
-                <View key={i} style={[styles.participantAvatar, { marginLeft: i > 0 ? -10 : 0 }]}>
-                  <Image
-                    source={{ uri: `https://randomuser.me/api/portraits/${i % 2 === 0 ? 'men' : 'women'}/${i + 1}.jpg` }}
+              {participantsData.slice(0, 5).map((participant, i) => (
+                <TouchableOpacity
+                  key={participant.id}
+                  style={[styles.participantAvatar, { marginLeft: i > 0 ? -10 : 0 }]}
+                  onPress={() => navigation.navigate('UserProfile', { userId: participant.id })}
+                >
+                  <DefaultAvatar
+                    uri={participant.photoURL}
+                    size={36}
                     style={styles.participantImage}
                   />
-                </View>
+                </TouchableOpacity>
               ))}
               {(trip.participants?.length || 1) > 5 && (
                 <View style={[styles.moreParticipants, { backgroundColor: colors.primary }]}>
@@ -1058,13 +1105,16 @@ const DetailRow = ({ icon, label, value, colors }) => (
 const styles = StyleSheet.create({
   container: { flex: 1 },
   centeredContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  headerContainer: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
+  headerInScroll: { marginBottom: SPACING.sm },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
+  headerTitle: { flex: 1, fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, textAlign: 'center', marginHorizontal: SPACING.md },
   headerButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  imageCarousel: { height: 300 },
-  carouselImage: { width, height: 300 },
+  imageCarousel: { aspectRatio: 4 / 5, overflow: 'hidden' },
+  carouselImage: { width: width, aspectRatio: 4 / 5 },
   imageDotsContainer: { position: 'absolute', bottom: 20, alignSelf: 'center', flexDirection: 'row', gap: SPACING.xs },
   imageDot: { width: 8, height: 8, borderRadius: 4 },
+  imageCountBadge: { position: 'absolute', top: SPACING.md, right: SPACING.md, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.sm },
+  imageCountText: { color: '#fff', fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.semibold },
   contentContainer: { borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, marginTop: -20, padding: SPACING.xl },
   title: { fontSize: 28, fontWeight: FONT_WEIGHT.bold, marginBottom: SPACING.md },
   creatorInfo: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.lg },

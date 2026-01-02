@@ -108,7 +108,7 @@ const MyTripsScreen = ({ navigation }) => {
   const renderTripCard = ({ item }) => (
     <Animatable.View animation="fadeInUp" duration={400} style={[styles.tripCard, { backgroundColor: colors.card }]}>
       <TouchableOpacity
-        onPress={() => navigation.navigate('TripDetails', { trip: item })}
+        onPress={() => navigation.navigate('TripDetails', { tripId: item.id })}
         style={styles.cardContent}
       >
         <Image
@@ -123,22 +123,26 @@ const MyTripsScreen = ({ navigation }) => {
             📍 {item.toLocation || item.location || 'Location TBD'}
           </Text>
           <Text style={[styles.tripDate, { color: colors.textSecondary }]}>
-            📅 {item.fromDate ? new Date(item.fromDate).toLocaleDateString() : 'Date TBD'}
+            📅 {item.fromDate ? (
+              item.fromDate.toDate ? item.fromDate.toDate().toLocaleDateString() : new Date(item.fromDate).toLocaleDateString()
+            ) : 'Date TBD'}
           </Text>
         </View>
       </TouchableOpacity>
-      {activeTab === 'Upcoming' && (
-        <View style={styles.toggleSection}>
-          <CustomToggle
-            value={true}
-            onValueChange={() => handleLeaveTrip(item.id)}
-            onLabel="Joined"
-            offLabel="Leave"
-            size="medium"
-          />
-        </View>
-      )}
-    </Animatable.View>
+      {
+        activeTab === 'Upcoming' && (
+          <View style={styles.toggleSection}>
+            <CustomToggle
+              value={true}
+              onValueChange={() => handleLeaveTrip(item.id)}
+              onLabel="Joined"
+              offLabel="Leave"
+              size="medium"
+            />
+          </View>
+        )
+      }
+    </Animatable.View >
   );
 
   const renderEmptyState = () => (
@@ -245,6 +249,7 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: SPACING.xl,
     paddingVertical: SPACING.lg,
+    paddingTop: 60,
   },
   title: {
     fontSize: FONT_SIZE.xxl,

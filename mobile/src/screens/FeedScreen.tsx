@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, Image } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Modal, Dimensions } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import TripCard from '../components/TripCard';
+import DefaultAvatar from '../components/DefaultAvatar';
 import useTrips from '../api/useTrips';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
@@ -12,15 +13,17 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '..
 import { auth } from '../firebase';
 import firestore from '@react-native-firebase/firestore';
 
-
+const { width, height } = Dimensions.get('window');
 
 const FeedScreen = ({ navigation }) => {
     const { trips, loading, refetch } = useTrips();
     const { colors } = useTheme();
+    const insets = useSafeAreaInsets();
     const [searchQuery, setSearchQuery] = useState('');
     const [refreshing, setRefreshing] = useState(false);
     const [notificationsVisible, setNotificationsVisible] = useState(false);
     const [filterVisible, setFilterVisible] = useState(false);
+    const [searchVisible, setSearchVisible] = useState(false);
     const [filters, setFilters] = useState<FilterOptions | null>(null);
     const [hasNotifications, setHasNotifications] = useState(true);
     const [searchedUsers, setSearchedUsers] = useState<any[]>([]);
@@ -99,24 +102,20 @@ const FeedScreen = ({ navigation }) => {
             if (filters.minDays && filters.minDays > 1) {
                 result = result.filter(trip => (trip.duration || 1) >= filters.minDays);
             }
-
-            // Sorting
-            if (filters.sortBy === 'newest') {
-                result.sort((a, b) => {
-                    const dateA = a.createdAt?.toDate?.() || new Date(0);
-                    const dateB = b.createdAt?.toDate?.() || new Date(0);
-                    return dateB - dateA;
-                });
-            } else if (filters.sortBy === 'oldest') {
-                result.sort((a, b) => {
-                    const dateA = a.createdAt?.toDate?.() || new Date(0);
-                    const dateB = b.createdAt?.toDate?.() || new Date(0);
-                    return dateA - dateB;
-                });
-            } else if (filters.sortBy === 'budget') {
-                result.sort((a, b) => (a.cost || 0) - (b.cost || 0));
-            } else if (filters.sortBy === 'popular') {
-                result.sort((a, b) => (b.likes || 0) - (a.likes || 0));
+            if (filters.tripType) {
+                result = result.filter(trip =>
+                    trip.tripTypes?.some(t => t.toLowerCase().includes(filters.tripType.toLowerCase()))
+                );
+            }
+            if (filters.transportMode) {
+                result = result.filter(trip =>
+                    trip.transportModes?.some(t => t.toLowerCase().includes(filters.transportMode.toLowerCase()))
+                );
+            }
+            if (filters.genderPreference && filters.genderPreference !== 'anyone') {
+                result = result.filter(trip =>
+                    trip.genderPreference === filters.genderPreference || trip.genderPreference === 'anyone'
+                );
             }
         }
 
@@ -140,162 +139,207 @@ const FeedScreen = ({ navigation }) => {
 
     const hasActiveFilters = filters !== null || searchQuery !== '';
 
-    return (
-        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-            {/* Header */}
-            <View style={styles.header}>
-                <View style={styles.headerRow}>
-                    <Image source={require('../../assets/icon.png')} style={styles.headerIcon} />
-                    <Text style={[styles.headerTitle, { color: colors.text }]}>Tripzi</Text>
-                </View>
+    // Header component that scrolls with content
+    const ListHeader = () => (
+        <View style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}>
+            <View style={styles.headerRow}>
+                <Image source={require('../../assets/icon.png')} style={styles.headerIcon} />
+                <Text style={[styles.headerTitle, { color: colors.text }]}>Tripzi</Text>
+            </View>
+            <View style={styles.headerActions}>
                 <TouchableOpacity
-                    style={[styles.notificationButton, { backgroundColor: colors.card }]}
-                    onPress={() => setNotificationsVisible(true)}
+                    style={[styles.iconButton, { backgroundColor: colors.card }]}
+                    onPress={() => setSearchVisible(true)}
                     activeOpacity={0.7}
                 >
-                    <Ionicons name="notifications-outline" size={22} color={colors.text} />
-                    {hasNotifications && <View style={[styles.notificationDot, { backgroundColor: colors.error }]} />}
+                    <Ionicons name="search-outline" size={18} color={colors.text} />
                 </TouchableOpacity>
-            </View>
-
-            {/* Search Bar */}
-            <View style={styles.searchContainer}>
-                <View style={[styles.searchBox, { backgroundColor: colors.inputBackground }]}>
-                    <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
-                    <TextInput
-                        style={[styles.searchInput, { color: colors.text }]}
-                        placeholder="Search trips, places..."
-                        placeholderTextColor={colors.textSecondary}
-                        onChangeText={setSearchQuery}
-                        value={searchQuery}
-                    />
-                    {searchQuery.length > 0 && (
-                        <TouchableOpacity onPress={() => setSearchQuery('')}>
-                            <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
-                        </TouchableOpacity>
-                    )}
-                </View>
                 <TouchableOpacity
-                    style={[
-                        styles.filterButton,
-                        { backgroundColor: filters ? colors.primary : colors.inputBackground }
-                    ]}
+                    style={[styles.iconButton, { backgroundColor: filters ? colors.primary : colors.card }]}
                     onPress={() => setFilterVisible(true)}
                     activeOpacity={0.7}
                 >
-                    <Ionicons
-                        name="options-outline"
-                        size={22}
-                        color={filters ? '#fff' : colors.text}
-                    />
+                    <Ionicons name="options-outline" size={18} color={filters ? '#fff' : colors.text} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.iconButton, { backgroundColor: colors.card }]}
+                    onPress={() => setNotificationsVisible(true)}
+                    activeOpacity={0.7}
+                >
+                    <Ionicons name="notifications-outline" size={18} color={colors.text} />
+                    {hasNotifications && <View style={[styles.notificationDot, { backgroundColor: colors.error }]} />}
                 </TouchableOpacity>
             </View>
+        </View>
+    );
 
-            {/* User Search Results */}
-            {searchQuery.length >= 2 && searchedUsers.length > 0 && (
-                <Animatable.View animation="fadeIn" style={[styles.userResultsContainer, { backgroundColor: colors.card }]}>
-                    <Text style={[styles.userResultsTitle, { color: colors.textSecondary }]}>PEOPLE</Text>
-                    {searchedUsers.map((user) => (
-                        <TouchableOpacity
-                            key={user.id}
-                            style={styles.userResultItem}
-                            onPress={() => {
-                                setSearchQuery('');
-                                setSearchedUsers([]);
-                                navigation.navigate('UserProfile', { userId: user.id });
-                            }}
-                        >
-                            <Image
-                                source={{ uri: user.photoURL || undefined }}
-                                style={styles.userResultAvatar}
+    // Search Modal
+    const SearchModal = () => (
+        <Modal visible={searchVisible} animationType="slide" transparent>
+            <View style={[styles.searchModalContainer, { backgroundColor: colors.background }]}>
+                <SafeAreaView style={{ flex: 1 }}>
+                    <View style={styles.searchModalHeader}>
+                        <View style={[styles.searchBox, { backgroundColor: colors.inputBackground }]}>
+                            <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
+                            <TextInput
+                                style={[styles.searchInput, { color: colors.text }]}
+                                placeholder="Search trips, places, people..."
+                                placeholderTextColor={colors.textSecondary}
+                                onChangeText={setSearchQuery}
+                                value={searchQuery}
+                                autoFocus
                             />
-                            <View style={styles.userResultInfo}>
-                                <Text style={[styles.userResultName, { color: colors.text }]}>
-                                    {user.displayName || 'User'}
-                                </Text>
-                                {user.username && (
-                                    <Text style={[styles.userResultUsername, { color: colors.primary }]}>
-                                        @{user.username}
-                                    </Text>
-                                )}
-                            </View>
-                            {user.kycStatus === 'verified' && (
-                                <Ionicons name="shield-checkmark" size={16} color="#10B981" />
+                            {searchQuery.length > 0 && (
+                                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                                    <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                                </TouchableOpacity>
                             )}
+                        </View>
+                        <TouchableOpacity onPress={() => setSearchVisible(false)} style={styles.cancelButton}>
+                            <Text style={[styles.cancelText, { color: colors.primary }]}>Cancel</Text>
                         </TouchableOpacity>
-                    ))}
-                </Animatable.View>
+                    </View>
+
+                    {/* User Search Results */}
+                    {searchQuery.length >= 2 && searchedUsers.length > 0 && (
+                        <Animatable.View animation="fadeIn" style={[styles.userResultsContainer, { backgroundColor: colors.card }]}>
+                            <Text style={[styles.userResultsTitle, { color: colors.textSecondary }]}>PEOPLE</Text>
+                            {searchedUsers.map((user) => (
+                                <TouchableOpacity
+                                    key={user.id}
+                                    style={styles.userResultItem}
+                                    onPress={() => {
+                                        setSearchQuery('');
+                                        setSearchedUsers([]);
+                                        setSearchVisible(false);
+                                        navigation.navigate('UserProfile', { userId: user.id });
+                                    }}
+                                >
+                                    <DefaultAvatar
+                                        uri={user.photoURL}
+                                        size={40}
+                                        style={styles.userResultAvatar}
+                                    />
+                                    <View style={styles.userResultInfo}>
+                                        <Text style={[styles.userResultName, { color: colors.text }]}>
+                                            {user.displayName || 'User'}
+                                        </Text>
+                                        {user.username && (
+                                            <Text style={[styles.userResultUsername, { color: colors.primary }]}>
+                                                @{user.username}
+                                            </Text>
+                                        )}
+                                    </View>
+                                    {user.kycStatus === 'verified' && (
+                                        <Ionicons name="shield-checkmark" size={16} color="#10B981" />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </Animatable.View>
+                    )}
+
+                    {/* Trip Search Results */}
+                    {searchQuery.length >= 2 && filteredTrips.length > 0 && (
+                        <Animatable.View animation="fadeIn" style={[styles.userResultsContainer, { backgroundColor: colors.card }]}>
+                            <Text style={[styles.userResultsTitle, { color: colors.textSecondary }]}>TRIPS</Text>
+                            {filteredTrips.slice(0, 5).map((trip) => (
+                                <TouchableOpacity
+                                    key={trip.id}
+                                    style={styles.userResultItem}
+                                    onPress={() => {
+                                        setSearchQuery('');
+                                        setSearchVisible(false);
+                                        navigation.navigate('TripDetails', { tripId: trip.id });
+                                    }}
+                                >
+                                    <Image
+                                        source={{ uri: trip.coverImage || trip.images?.[0] }}
+                                        style={styles.tripResultImage}
+                                    />
+                                    <View style={styles.userResultInfo}>
+                                        <Text style={[styles.userResultName, { color: colors.text }]} numberOfLines={1}>
+                                            {trip.title}
+                                        </Text>
+                                        <Text style={[styles.userResultUsername, { color: colors.textSecondary }]}>
+                                            📍 {trip.location}
+                                        </Text>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                        </Animatable.View>
+                    )}
+                </SafeAreaView>
+            </View>
+        </Modal>
+    );
+
+    return (
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+            {loading ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={colors.primary} />
+                    <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+                        Loading trips...
+                    </Text>
+                </View>
+            ) : filteredTrips.length === 0 ? (
+                <FlatList
+                    data={[]}
+                    ListHeaderComponent={ListHeader}
+                    ListEmptyComponent={
+                        <Animatable.View animation="fadeIn" style={styles.emptyContainer}>
+                            <View style={[styles.emptyIcon, { backgroundColor: colors.primaryLight }]}>
+                                <Ionicons name="compass-outline" size={48} color={colors.primary} />
+                            </View>
+                            <Text style={[styles.emptyTitle, { color: colors.text }]}>No trips found</Text>
+                            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                                Try adjusting your filters or search
+                            </Text>
+                            {hasActiveFilters && (
+                                <TouchableOpacity
+                                    style={[styles.clearButton, { backgroundColor: colors.primary }]}
+                                    onPress={clearFilters}
+                                >
+                                    <Text style={styles.clearButtonText}>Clear Filters</Text>
+                                </TouchableOpacity>
+                            )}
+                        </Animatable.View>
+                    }
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            colors={[colors.primary]}
+                            tintColor={colors.primary}
+                        />
+                    }
+                    renderItem={() => null}
+                />
+            ) : (
+                <FlatList
+                    data={filteredTrips}
+                    keyExtractor={(item) => item.id}
+                    ListHeaderComponent={ListHeader}
+                    renderItem={({ item }) => (
+                        <TripCard
+                            trip={item}
+                            onPress={() => navigation.navigate('TripDetails', { tripId: item.id })}
+                        />
+                    )}
+                    showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            colors={[colors.primary]}
+                            tintColor={colors.primary}
+                        />
+                    }
+                />
             )}
 
-            {/* Active Filters Badge */}
-            {
-                hasActiveFilters && (
-                    <Animatable.View animation="fadeIn" style={styles.activeFiltersContainer}>
-                        <View style={[styles.activeFiltersBadge, { backgroundColor: colors.primaryLight }]}>
-                            <Ionicons name="filter" size={14} color={colors.primary} />
-                            <Text style={[styles.activeFiltersText, { color: colors.primary }]}>
-                                {filteredTrips.length} trips found
-                            </Text>
-                            <TouchableOpacity onPress={clearFilters}>
-                                <Ionicons name="close" size={16} color={colors.primary} />
-                            </TouchableOpacity>
-                        </View>
-                    </Animatable.View>
-                )
-            }
-
-            {/* Trips List */}
-            {
-                loading ? (
-                    <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" color={colors.primary} />
-                        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-                            Loading trips...
-                        </Text>
-                    </View>
-                ) : filteredTrips.length === 0 ? (
-                    <Animatable.View animation="fadeIn" style={styles.emptyContainer}>
-                        <View style={[styles.emptyIcon, { backgroundColor: colors.primaryLight }]}>
-                            <Ionicons name="compass-outline" size={48} color={colors.primary} />
-                        </View>
-                        <Text style={[styles.emptyTitle, { color: colors.text }]}>No trips found</Text>
-                        <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-                            Try adjusting your filters or search
-                        </Text>
-                        <TouchableOpacity
-                            style={[styles.clearButton, { backgroundColor: colors.primary }]}
-                            onPress={clearFilters}
-                        >
-                            <Text style={styles.clearButtonText}>Clear Filters</Text>
-                        </TouchableOpacity>
-                    </Animatable.View>
-                ) : (
-                    <FlatList
-                        data={filteredTrips}
-                        keyExtractor={(item) => item.id}
-                        renderItem={({ item, index }) => (
-                            <Animatable.View animation="fadeInUp" delay={index * 50}>
-                                <TripCard
-                                    trip={item}
-                                    onPress={() => navigation.navigate('TripDetails', { tripId: item.id })}
-                                />
-                            </Animatable.View>
-                        )}
-                        contentContainerStyle={styles.listContent}
-                        showsVerticalScrollIndicator={false}
-                        refreshControl={
-                            <RefreshControl
-                                refreshing={refreshing}
-                                onRefresh={onRefresh}
-                                colors={[colors.primary]}
-                                tintColor={colors.primary}
-                            />
-                        }
-                    />
-                )
-            }
-
             {/* Modals */}
+            <SearchModal />
             <NotificationsModal
                 visible={notificationsVisible}
                 onClose={() => setNotificationsVisible(false)}
@@ -306,55 +350,61 @@ const FeedScreen = ({ navigation }) => {
                 onClose={() => setFilterVisible(false)}
                 onApply={handleApplyFilters}
             />
-        </SafeAreaView >
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
+    container: { flex: 1 },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: SPACING.xl,
-        paddingTop: SPACING.md,
-        paddingBottom: SPACING.lg,
+        paddingHorizontal: SPACING.lg,
+        paddingBottom: SPACING.sm,
     },
     headerRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: SPACING.md,
+        gap: SPACING.sm,
     },
     headerIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: BORDER_RADIUS.md,
+        width: 28,
+        height: 28,
+        borderRadius: 6,
     },
     headerTitle: {
-        fontSize: FONT_SIZE.xxl,
+        fontSize: 22,
         fontWeight: FONT_WEIGHT.bold,
     },
-    notificationButton: {
-        width: TOUCH_TARGET.min,
-        height: TOUCH_TARGET.min,
-        borderRadius: TOUCH_TARGET.min / 2,
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.sm,
+    },
+    iconButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
         justifyContent: 'center',
         alignItems: 'center',
     },
     notificationDot: {
         position: 'absolute',
-        top: 10,
-        right: 10,
+        top: 6,
+        right: 6,
         width: 8,
         height: 8,
         borderRadius: 4,
     },
-    searchContainer: {
+    searchModalContainer: {
+        flex: 1,
+    },
+    searchModalHeader: {
         flexDirection: 'row',
-        paddingHorizontal: SPACING.xl,
-        marginBottom: SPACING.lg,
+        alignItems: 'center',
+        paddingHorizontal: SPACING.lg,
+        paddingVertical: SPACING.md,
         gap: SPACING.md,
     },
     searchBox: {
@@ -362,7 +412,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: SPACING.lg,
-        height: TOUCH_TARGET.comfortable,
+        height: 44,
         borderRadius: BORDER_RADIUS.lg,
         gap: SPACING.sm,
     },
@@ -370,67 +420,26 @@ const styles = StyleSheet.create({
         flex: 1,
         fontSize: FONT_SIZE.sm,
     },
-    filterButton: {
-        width: TOUCH_TARGET.comfortable,
-        height: TOUCH_TARGET.comfortable,
-        borderRadius: BORDER_RADIUS.md,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    categoriesContainer: {
-        marginBottom: SPACING.lg,
-    },
-    categoriesScroll: {
-        paddingHorizontal: SPACING.xl,
-        gap: SPACING.sm,
-    },
-    categoryPill: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: SPACING.lg,
+    cancelButton: {
         paddingVertical: SPACING.sm,
-        borderRadius: BORDER_RADIUS.xl,
-        borderWidth: 1,
-        gap: SPACING.xs,
     },
-    categoryText: {
-        fontSize: FONT_SIZE.sm,
-        fontWeight: FONT_WEIGHT.medium,
-    },
-    activeFiltersContainer: {
-        paddingHorizontal: SPACING.xl,
-        marginBottom: SPACING.md,
-    },
-    activeFiltersBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'flex-start',
-        paddingHorizontal: SPACING.md,
-        paddingVertical: SPACING.sm,
-        borderRadius: BORDER_RADIUS.lg,
-        gap: SPACING.sm,
-    },
-    activeFiltersText: {
-        fontSize: FONT_SIZE.xs,
-        fontWeight: FONT_WEIGHT.medium,
-    },
-    listContent: {
-        paddingBottom: SPACING.xxxl,
+    cancelText: {
+        fontSize: FONT_SIZE.md,
+        fontWeight: FONT_WEIGHT.semibold,
     },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        gap: SPACING.md,
     },
     loadingText: {
+        marginTop: SPACING.lg,
         fontSize: FONT_SIZE.sm,
     },
     emptyContainer: {
-        flex: 1,
-        justifyContent: 'center',
         alignItems: 'center',
-        paddingHorizontal: SPACING.xxxl,
+        paddingTop: SPACING.xxxl * 2,
+        paddingHorizontal: SPACING.xl,
     },
     emptyIcon: {
         width: 100,
@@ -461,7 +470,7 @@ const styles = StyleSheet.create({
         fontWeight: FONT_WEIGHT.bold,
     },
     userResultsContainer: {
-        marginHorizontal: SPACING.xl,
+        marginHorizontal: SPACING.lg,
         borderRadius: BORDER_RADIUS.lg,
         marginBottom: SPACING.md,
         paddingVertical: SPACING.sm,
@@ -483,6 +492,12 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 20,
+        marginRight: SPACING.md,
+    },
+    tripResultImage: {
+        width: 50,
+        height: 50,
+        borderRadius: BORDER_RADIUS.md,
         marginRight: SPACING.md,
     },
     userResultInfo: {

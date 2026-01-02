@@ -21,6 +21,7 @@ import { useChats, Chat } from '../hooks/useChats';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface SearchUser {
     id: string;
@@ -41,6 +42,33 @@ const ChatsListScreen = ({ navigation }) => {
     const [searchResults, setSearchResults] = useState<SearchUser[]>([]);
     const [searching, setSearching] = useState(false);
     const [startingChat, setStartingChat] = useState(false);
+    const [storyUsers, setStoryUsers] = useState<any[]>([]);
+
+    // Fetch following users for stories
+    React.useEffect(() => {
+        if (!currentUser) return;
+        const unsubscribe = firestore()
+            .collection('users')
+            .doc(currentUser.uid)
+            .onSnapshot(async (doc) => {
+                if (doc.exists) {
+                    const userData = doc.data();
+                    const following = userData?.following || [];
+                    if (following.length > 0) {
+                        const users = await Promise.all(
+                            following.slice(0, 10).map(async (uid: string) => {
+                                try {
+                                    const userDoc = await firestore().collection('users').doc(uid).get();
+                                    return userDoc.exists ? { id: uid, ...userDoc.data() } : null;
+                                } catch { return null; }
+                            })
+                        );
+                        setStoryUsers(users.filter(Boolean));
+                    }
+                }
+            });
+        return () => unsubscribe();
+    }, [currentUser]);
 
     const getOtherParticipant = useCallback(
         (chat: Chat) => {
@@ -300,6 +328,42 @@ const ChatsListScreen = ({ navigation }) => {
         </View>
     );
 
+    // Stories header component
+    const renderStoriesHeader = () => (
+        <View style={styles.storiesContainer}>
+            {/* Your story */}
+            <TouchableOpacity style={styles.storyItem} onPress={() => navigation.navigate('Stories')}>
+                <LinearGradient colors={['#8B5CF6', '#EC4899']} style={styles.storyGradient}>
+                    <View style={[styles.storyInner, { backgroundColor: colors.card }]}>
+                        <Ionicons name="add" size={28} color={colors.primary} />
+                    </View>
+                </LinearGradient>
+                <Text style={[styles.storyName, { color: colors.textSecondary }]} numberOfLines={1}>Your Story</Text>
+            </TouchableOpacity>
+            {/* Following users stories */}
+            {storyUsers.map((user) => (
+                <TouchableOpacity
+                    key={user.id}
+                    style={styles.storyItem}
+                    onPress={() => navigation.navigate('UserProfile', { userId: user.id })}
+                >
+                    <LinearGradient colors={['#F59E0B', '#EF4444']} style={styles.storyGradient}>
+                        {user.photoURL ? (
+                            <Image source={{ uri: user.photoURL }} style={styles.storyAvatar} />
+                        ) : (
+                            <View style={[styles.storyAvatarPlaceholder, { backgroundColor: colors.primary }]}>
+                                <Text style={styles.storyInitial}>{(user.displayName || 'U').charAt(0).toUpperCase()}</Text>
+                            </View>
+                        )}
+                    </LinearGradient>
+                    <Text style={[styles.storyName, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {user.displayName?.split(' ')[0] || 'User'}
+                    </Text>
+                </TouchableOpacity>
+            ))}
+        </View>
+    );
+
     if (loading) {
         return (
             <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -316,13 +380,6 @@ const ChatsListScreen = ({ navigation }) => {
             <View style={styles.header}>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Messages</Text>
                 <View style={styles.headerButtons}>
-                    <TouchableOpacity
-                        style={[styles.headerButton, { backgroundColor: colors.card }]}
-                        onPress={() => navigation.navigate('Stories')}
-                        activeOpacity={0.7}
-                    >
-                        <Ionicons name="add-circle-outline" size={22} color={colors.text} />
-                    </TouchableOpacity>
                     <TouchableOpacity
                         style={[styles.headerButton, { backgroundColor: colors.card }]}
                         onPress={() => navigation.navigate('CreateGroupChat')}
@@ -358,6 +415,7 @@ const ChatsListScreen = ({ navigation }) => {
                     />
                 }
                 showsVerticalScrollIndicator={false}
+                ListHeaderComponent={renderStoriesHeader}
             />
 
             {/* Search Modal */}
@@ -615,11 +673,67 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        padding: SPACING.xxxl,
+        padding: SPACING.xl,
     },
     noResultsText: {
         marginTop: SPACING.md,
         fontSize: FONT_SIZE.md,
+        textAlign: 'center',
+    },
+    // Stories Styles
+    storiesContainer: {
+        flexDirection: 'row',
+        paddingVertical: SPACING.md,
+        paddingHorizontal: SPACING.lg,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.05)',
+    },
+    storyItem: {
+        alignItems: 'center',
+        marginRight: SPACING.lg,
+        width: 72,
+    },
+    storyGradient: {
+        width: 68,
+        height: 68,
+        borderRadius: 34,
+        padding: 3,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
+    storyInner: {
+        width: 62,
+        height: 62,
+        borderRadius: 31,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 3,
+        borderColor: '#fff',
+    },
+    storyAvatar: {
+        width: 62,
+        height: 62,
+        borderRadius: 31,
+        borderWidth: 3,
+        borderColor: '#fff',
+    },
+    storyAvatarPlaceholder: {
+        width: 62,
+        height: 62,
+        borderRadius: 31,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 3,
+        borderColor: '#fff',
+    },
+    storyInitial: {
+        color: '#fff',
+        fontSize: FONT_SIZE.xl,
+        fontWeight: FONT_WEIGHT.bold,
+    },
+    storyName: {
+        fontSize: FONT_SIZE.xs,
         textAlign: 'center',
     },
     searchResultsList: {

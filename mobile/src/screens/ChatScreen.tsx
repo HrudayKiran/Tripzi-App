@@ -754,6 +754,16 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                                 </View>
                             )}
 
+                            {/* Text content - FIXED: Was missing */}
+                            {item.text && !item.deletedForEveryoneAt && (
+                                <Text style={[
+                                    styles.messageText,
+                                    { color: isOwn ? '#fff' : colors.text, marginBottom: (item.type !== 'text') ? 4 : 0 }
+                                ]}>
+                                    {item.text}
+                                </Text>
+                            )}
+
                             {/* Image message */}
                             {item.type === 'image' && item.mediaUrl && (
                                 <TouchableOpacity onPress={() => setViewingImage(item.mediaUrl!)}>
@@ -1145,6 +1155,10 @@ const styles = StyleSheet.create({
     replyPreview: { borderLeftWidth: 2, paddingLeft: SPACING.sm, marginBottom: SPACING.xs },
     replyName: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.semibold },
     replyText: { fontSize: FONT_SIZE.xs },
+    messageText: {
+        fontSize: FONT_SIZE.md,
+        lineHeight: 22,
+    },
     messageImage: { width: SCREEN_WIDTH * 0.6, height: SCREEN_WIDTH * 0.6, borderRadius: BORDER_RADIUS.md },
     messageText: { fontSize: FONT_SIZE.md, lineHeight: 20 },
     messageFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4, gap: 4 },

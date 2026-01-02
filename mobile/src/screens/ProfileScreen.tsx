@@ -149,8 +149,21 @@ const ProfileScreen = ({ navigation }) => {
           </Animatable.View>
         </TouchableOpacity>
 
-        {/* Menu Items */}
+        {/* My Trips Section */}
         <Animatable.View animation="fadeInUp" delay={100} duration={400} style={styles.menuSection}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>MY TRIPS</Text>
+
+          <MenuItem
+            icon="map-outline"
+            iconColor="#6366F1"
+            iconBg="#E0E7FF"
+            text="My Trips"
+            onPress={() => navigation.navigate('MyTrips')}
+          />
+        </Animatable.View>
+
+        {/* Menu Items */}
+        <Animatable.View animation="fadeInUp" delay={150} duration={400} style={styles.menuSection}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>GENERAL</Text>
 
           <MenuItem

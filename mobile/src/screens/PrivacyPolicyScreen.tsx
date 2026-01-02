@@ -29,7 +29,7 @@ const PrivacyPolicyScreen = ({ navigation }) => {
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           <Animatable.View animation="fadeInUp" duration={400}>
             <Text style={[styles.lastUpdated, { color: colors.textSecondary }]}>
-              Last updated: December 2024
+              Last updated: January 2026
             </Text>
 
             <Section title="1. Information We Collect" colors={colors}>
