@@ -4,7 +4,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import * as Animatable from 'react-native-animatable';
 import { Ionicons } from '@expo/vector-icons';
 import firestore from '@react-native-firebase/firestore';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 import CustomToggle from '../components/CustomToggle';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
 import { useFocusEffect } from '@react-navigation/native';
@@ -18,9 +18,9 @@ const MyTripsScreen = ({ navigation }) => {
 
   useFocusEffect(
     React.useCallback(() => {
-      const currentUser = auth.currentUser;
+      const currentUser = auth().currentUser;
 
-      if (!currentUser) {
+      if (!currentUser?.uid) {
         setJoinedTrips([]);
         setLoading(false);
         return;
@@ -250,6 +250,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.xl,
     paddingVertical: SPACING.lg,
     paddingTop: 60,
+    marginBottom: SPACING.lg,
   },
   title: {
     fontSize: FONT_SIZE.xxl,

@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import firestore from '@react-native-firebase/firestore';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import DefaultAvatar from './DefaultAvatar';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
@@ -33,7 +33,7 @@ const ShareModal = ({ visible, onClose, tripId, tripTitle, tripImage }: ShareMod
     const [sending, setSending] = useState(false);
     const [showToast, setShowToast] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const currentUser = auth.currentUser;
+    const currentUser = auth().currentUser;
 
     // Fetch following list
     useEffect(() => {

@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import firestore from '@react-native-firebase/firestore';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
 
@@ -14,7 +14,7 @@ const UsernameSetupScreen = ({ navigation }) => {
     const [username, setUsername] = useState('');
     const [isChecking, setIsChecking] = useState(false);
     const [isAvailable, setIsAvailable] = useState(null);
-    const currentUser = auth.currentUser;
+    const currentUser = auth().currentUser;
 
     const checkUsername = async (value) => {
         const cleaned = value.toLowerCase().replace(/[^a-z0-9_]/g, '');

@@ -3,14 +3,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TextInput, FlatList, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { IconButton } from 'react-native-paper';
 import firestore from '@react-native-firebase/firestore';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 
 const CommentsScreen = ({ route, navigation }) => {
   const { tripId } = route.params;
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
   const [loading, setLoading] = useState(true);
-  const currentUser = auth.currentUser;
+  const currentUser = auth().currentUser;
 
   useEffect(() => {
     const unsubscribe = firestore()
@@ -72,14 +72,14 @@ const CommentsScreen = ({ route, navigation }) => {
 
   return (
     <View style={styles.container}>
-        <View style={styles.header}>
-            <IconButton
-                icon="arrow-left"
-                size={28}
-                onPress={() => navigation.goBack()}
-            />
-            <Text style={styles.title}>Comments</Text>
-        </View>
+      <View style={styles.header}>
+        <IconButton
+          icon="arrow-left"
+          size={28}
+          onPress={() => navigation.goBack()}
+        />
+        <Text style={styles.title}>Comments</Text>
+      </View>
       <FlatList
         data={comments}
         renderItem={renderComment}
@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
-    },
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',

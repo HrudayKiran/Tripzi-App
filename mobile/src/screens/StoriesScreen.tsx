@@ -11,6 +11,8 @@ import {
     Dimensions,
     Animated,
     TouchableWithoutFeedback,
+    TextInput,
+    Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -46,9 +48,21 @@ interface StoryGroup {
     hasUnviewed: boolean;
 }
 
-const StoriesScreen = ({ navigation }) => {
+const StoriesScreen = ({ navigation, route }) => {
     const { colors } = useTheme();
-    const currentUser = auth().currentUser;
+
+    // Use state for currentUser to properly handle auth state
+    const [currentUser, setCurrentUser] = useState(auth().currentUser);
+
+    // Listen for auth state changes
+    React.useEffect(() => {
+        const unsubscribe = auth().onAuthStateChanged((user) => {
+            console.log('📸 [STORY AUTH] Auth state changed:', user?.uid || 'null');
+            setCurrentUser(user);
+        });
+        return () => unsubscribe();
+    }, []);
+
     const [storyGroups, setStoryGroups] = useState<StoryGroup[]>([]);
     const [myStories, setMyStories] = useState<Story[]>([]);
     const [loading, setLoading] = useState(true);
@@ -61,9 +75,15 @@ const StoriesScreen = ({ navigation }) => {
     const progressAnim = useRef(new Animated.Value(0)).current;
     const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+    // Edit story state
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editCaption, setEditCaption] = useState('');
+    const [editingStoryId, setEditingStoryId] = useState<string | null>(null);
+    const [savingEdit, setSavingEdit] = useState(false);
+
     useEffect(() => {
         loadStories();
-    }, []);
+    }, [currentUser]); // Reload when user changes
 
     const loadStories = async () => {
         if (!currentUser) return;
@@ -71,31 +91,38 @@ const StoriesScreen = ({ navigation }) => {
 
         try {
             const now = new Date();
-            // Get stories from last 24 hours
-            const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
             // Get stories from followed users
             const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
             const following = userDoc.data()?.following || [];
             const usersToFetch = [currentUser.uid, ...following];
 
-            const storiesSnapshot = await firestore()
-                .collection('stories')
-                .where('userId', 'in', usersToFetch.slice(0, 10)) // Firestore limit
-                .where('expiresAt', '>', now)
-                .orderBy('expiresAt')
-                .orderBy('createdAt', 'desc')
-                .get();
+            // Simplified query - only filter by userId, then filter locally
+            // This avoids compound index issues with 'in' + range queries
+            let storiesSnapshot;
+            if (usersToFetch.length === 0) {
+                storiesSnapshot = { docs: [] };
+            } else {
+                storiesSnapshot = await firestore()
+                    .collection('stories')
+                    .where('userId', 'in', usersToFetch.slice(0, 10)) // Firestore limit
+                    .get();
+            }
 
             const storiesMap = new Map<string, StoryGroup>();
 
             storiesSnapshot.docs.forEach((doc) => {
                 const story = { id: doc.id, ...doc.data() } as Story;
+
+                // Filter expired stories locally
+                const expiresAt = story.expiresAt?.toDate ? story.expiresAt.toDate() : new Date(story.expiresAt);
+                if (expiresAt <= now) return; // Skip expired stories
+
                 const existing = storiesMap.get(story.userId);
 
                 if (existing) {
                     existing.stories.push(story);
-                    if (!story.viewedBy.includes(currentUser.uid)) {
+                    if (!story.viewedBy?.includes(currentUser.uid)) {
                         existing.hasUnviewed = true;
                     }
                 } else {
@@ -104,9 +131,18 @@ const StoriesScreen = ({ navigation }) => {
                         userDisplayName: story.userDisplayName,
                         userPhotoURL: story.userPhotoURL,
                         stories: [story],
-                        hasUnviewed: !story.viewedBy.includes(currentUser.uid),
+                        hasUnviewed: !story.viewedBy?.includes(currentUser.uid),
                     });
                 }
+            });
+
+            // Sort stories within each group by createdAt
+            storiesMap.forEach((group) => {
+                group.stories.sort((a, b) => {
+                    const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+                    const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+                    return bTime - aTime;
+                });
             });
 
             // Separate my stories
@@ -114,6 +150,13 @@ const StoriesScreen = ({ navigation }) => {
             if (myGroup) {
                 setMyStories(myGroup.stories);
                 storiesMap.delete(currentUser.uid);
+
+                // Check if we should auto-open my story
+                if (route?.params?.viewMyStory) {
+                    setViewingGroup(myGroup);
+                    // Reset params so it doesn't open again on reload
+                    navigation.setParams({ viewMyStory: undefined });
+                }
             } else {
                 setMyStories([]);
             }
@@ -143,8 +186,7 @@ const StoriesScreen = ({ navigation }) => {
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 quality: 0.8,
-                allowsEditing: true,
-                aspect: [9, 16],
+                allowsEditing: false,
             });
 
             if (!result.canceled && result.assets[0]) {
@@ -164,8 +206,7 @@ const StoriesScreen = ({ navigation }) => {
 
             const result = await ImagePicker.launchCameraAsync({
                 quality: 0.8,
-                allowsEditing: true,
-                aspect: [9, 16],
+                allowsEditing: false,
             });
 
             if (!result.canceled && result.assets[0]) {
@@ -297,6 +338,90 @@ const StoriesScreen = ({ navigation }) => {
         progressAnim.stopAnimation();
         setViewingGroup(null);
         setCurrentStoryIndex(0);
+    };
+
+    // Edit Story
+    const openEditModal = (story: Story) => {
+        progressAnim.stopAnimation();
+        setPaused(true);
+        setEditingStoryId(story.id);
+        setEditCaption(story.caption || '');
+        setShowEditModal(true);
+    };
+
+    const saveStoryEdit = async () => {
+        if (!editingStoryId) return;
+        setSavingEdit(true);
+        try {
+            await firestore().collection('stories').doc(editingStoryId).update({
+                caption: editCaption.trim(),
+            });
+            setShowEditModal(false);
+            loadStories();
+            Alert.alert('Success', 'Story updated!');
+        } catch (error) {
+            Alert.alert('Error', 'Failed to update story.');
+        } finally {
+            setSavingEdit(false);
+        }
+    };
+
+    const replaceStoryImage = async () => {
+        if (!editingStoryId) return;
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                quality: 0.8,
+                allowsEditing: false,
+            });
+
+            if (!result.canceled && result.assets[0]) {
+                setSavingEdit(true);
+                // Upload new image
+                const filename = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
+                const storageRef = storage().ref(`stories/${currentUser?.uid}/${filename}`);
+                await storageRef.putFile(result.assets[0].uri);
+                const downloadUrl = await storageRef.getDownloadURL();
+
+                // Update story
+                await firestore().collection('stories').doc(editingStoryId).update({
+                    mediaUrl: downloadUrl,
+                });
+
+                setShowEditModal(false);
+                loadStories();
+                Alert.alert('Success', 'Story image updated!');
+            }
+        } catch (error) {
+            Alert.alert('Error', 'Failed to update image.');
+        } finally {
+            setSavingEdit(false);
+        }
+    };
+
+    // Delete Story
+    const deleteStory = async (storyId: string) => {
+        Alert.alert(
+            'Delete Story',
+            'Are you sure you want to delete this story?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await firestore().collection('stories').doc(storyId).delete();
+                            closeStoryViewer();
+                            loadStories();
+                            Alert.alert('Deleted', 'Story has been removed.');
+                        } catch (error) {
+                            Alert.alert('Error', 'Failed to delete story.');
+                        }
+                    },
+                },
+            ]
+        );
     };
 
     const renderStoryItem = ({ item }: { item: StoryGroup }) => (
@@ -470,17 +595,80 @@ const StoriesScreen = ({ navigation }) => {
                             </TouchableWithoutFeedback>
                         </View>
 
-                        {/* View count for own stories */}
+                        {/* View count and Edit/Delete for own stories */}
                         {viewingGroup.userId === currentUser?.uid && (
-                            <View style={styles.viewCountContainer}>
-                                <Ionicons name="eye" size={20} color="#fff" />
-                                <Text style={styles.viewCountText}>
-                                    {viewingGroup.stories[currentStoryIndex]?.viewCount || 0} views
-                                </Text>
+                            <View style={styles.ownStoryActions}>
+                                <View style={styles.viewCountContainer}>
+                                    <Ionicons name="eye" size={20} color="#fff" />
+                                    <Text style={styles.viewCountText}>
+                                        {viewingGroup.stories[currentStoryIndex]?.viewCount || 0} views
+                                    </Text>
+                                </View>
+                                <View style={styles.storyActionButtons}>
+                                    <TouchableOpacity
+                                        style={styles.storyActionButton}
+                                        onPress={() => openEditModal(viewingGroup.stories[currentStoryIndex])}
+                                    >
+                                        <Ionicons name="pencil" size={22} color="#fff" />
+                                        <Text style={styles.storyActionText}>Edit</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.storyActionButton, { backgroundColor: 'rgba(239,68,68,0.8)' }]}
+                                        onPress={() => deleteStory(viewingGroup.stories[currentStoryIndex].id)}
+                                    >
+                                        <Ionicons name="trash" size={22} color="#fff" />
+                                        <Text style={styles.storyActionText}>Delete</Text>
+                                    </TouchableOpacity>
+                                </View>
                             </View>
                         )}
                     </View>
                 )}
+            </Modal>
+
+            {/* Edit Story Modal */}
+            <Modal visible={showEditModal} animationType="slide" transparent>
+                <View style={styles.editModalContainer}>
+                    <View style={[styles.editModalContent, { backgroundColor: colors.background }]}>
+                        <View style={styles.editModalHeader}>
+                            <Text style={[styles.editModalTitle, { color: colors.text }]}>Edit Story</Text>
+                            <TouchableOpacity onPress={() => { setShowEditModal(false); setPaused(false); }}>
+                                <Ionicons name="close" size={24} color={colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <Text style={[styles.editLabel, { color: colors.textSecondary }]}>Caption</Text>
+                        <TextInput
+                            style={[styles.editCaptionInput, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
+                            value={editCaption}
+                            onChangeText={setEditCaption}
+                            placeholder="Add a caption..."
+                            placeholderTextColor={colors.textSecondary}
+                            multiline
+                        />
+
+                        <TouchableOpacity
+                            style={[styles.replaceImageButton, { backgroundColor: colors.card }]}
+                            onPress={replaceStoryImage}
+                            disabled={savingEdit}
+                        >
+                            <Ionicons name="image" size={20} color={colors.primary} />
+                            <Text style={[styles.replaceImageText, { color: colors.primary }]}>Replace Image</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.saveEditButton, { backgroundColor: colors.primary }]}
+                            onPress={saveStoryEdit}
+                            disabled={savingEdit}
+                        >
+                            {savingEdit ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <Text style={styles.saveEditText}>Save Changes</Text>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                </View>
             </Modal>
         </SafeAreaView>
     );
@@ -524,8 +712,23 @@ const styles = StyleSheet.create({
     touchAreas: { position: 'absolute', top: 100, bottom: 100, left: 0, right: 0, flexDirection: 'row' },
     touchAreaLeft: { flex: 1 },
     touchAreaRight: { flex: 1 },
-    viewCountContainer: { position: 'absolute', bottom: 40, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: SPACING.xs },
+    viewCountContainer: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
     viewCountText: { color: '#fff', fontSize: FONT_SIZE.sm },
+    ownStoryActions: { position: 'absolute', bottom: 40, left: 0, right: 0, paddingHorizontal: SPACING.lg },
+    storyActionButtons: { flexDirection: 'row', justifyContent: 'center', gap: SPACING.md, marginTop: SPACING.md },
+    storyActionButton: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.lg },
+    storyActionText: { color: '#fff', fontWeight: FONT_WEIGHT.semibold },
+    // Edit Modal
+    editModalContainer: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+    editModalContent: { borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, padding: SPACING.xl },
+    editModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },
+    editModalTitle: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold },
+    editLabel: { fontSize: FONT_SIZE.sm, marginBottom: SPACING.xs },
+    editCaptionInput: { borderWidth: 1, borderRadius: BORDER_RADIUS.md, padding: SPACING.md, minHeight: 80, textAlignVertical: 'top', marginBottom: SPACING.lg },
+    replaceImageButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, padding: SPACING.md, borderRadius: BORDER_RADIUS.md, marginBottom: SPACING.lg },
+    replaceImageText: { fontWeight: FONT_WEIGHT.semibold },
+    saveEditButton: { padding: SPACING.md, borderRadius: BORDER_RADIUS.md, alignItems: 'center' },
+    saveEditText: { color: '#fff', fontWeight: FONT_WEIGHT.bold, fontSize: FONT_SIZE.md },
 });
 
 export default StoriesScreen;

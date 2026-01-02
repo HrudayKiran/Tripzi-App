@@ -10,7 +10,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import NotificationsModal from '../components/NotificationsModal';
 import FilterModal, { FilterOptions } from '../components/FilterModal';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
-import { auth } from '../firebase';
+
 import firestore from '@react-native-firebase/firestore';
 
 const { width, height } = Dimensions.get('window');
@@ -173,105 +173,7 @@ const FeedScreen = ({ navigation }) => {
         </View>
     );
 
-    // Search Modal
-    const SearchModal = () => (
-        <Modal visible={searchVisible} animationType="slide" transparent>
-            <View style={[styles.searchModalContainer, { backgroundColor: colors.background }]}>
-                <SafeAreaView style={{ flex: 1 }}>
-                    <View style={styles.searchModalHeader}>
-                        <View style={[styles.searchBox, { backgroundColor: colors.inputBackground }]}>
-                            <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
-                            <TextInput
-                                style={[styles.searchInput, { color: colors.text }]}
-                                placeholder="Search trips, places, people..."
-                                placeholderTextColor={colors.textSecondary}
-                                onChangeText={setSearchQuery}
-                                value={searchQuery}
-                                autoFocus
-                            />
-                            {searchQuery.length > 0 && (
-                                <TouchableOpacity onPress={() => setSearchQuery('')}>
-                                    <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
-                                </TouchableOpacity>
-                            )}
-                        </View>
-                        <TouchableOpacity onPress={() => setSearchVisible(false)} style={styles.cancelButton}>
-                            <Text style={[styles.cancelText, { color: colors.primary }]}>Cancel</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* User Search Results */}
-                    {searchQuery.length >= 2 && searchedUsers.length > 0 && (
-                        <Animatable.View animation="fadeIn" style={[styles.userResultsContainer, { backgroundColor: colors.card }]}>
-                            <Text style={[styles.userResultsTitle, { color: colors.textSecondary }]}>PEOPLE</Text>
-                            {searchedUsers.map((user) => (
-                                <TouchableOpacity
-                                    key={user.id}
-                                    style={styles.userResultItem}
-                                    onPress={() => {
-                                        setSearchQuery('');
-                                        setSearchedUsers([]);
-                                        setSearchVisible(false);
-                                        navigation.navigate('UserProfile', { userId: user.id });
-                                    }}
-                                >
-                                    <DefaultAvatar
-                                        uri={user.photoURL}
-                                        size={40}
-                                        style={styles.userResultAvatar}
-                                    />
-                                    <View style={styles.userResultInfo}>
-                                        <Text style={[styles.userResultName, { color: colors.text }]}>
-                                            {user.displayName || 'User'}
-                                        </Text>
-                                        {user.username && (
-                                            <Text style={[styles.userResultUsername, { color: colors.primary }]}>
-                                                @{user.username}
-                                            </Text>
-                                        )}
-                                    </View>
-                                    {user.kycStatus === 'verified' && (
-                                        <Ionicons name="shield-checkmark" size={16} color="#10B981" />
-                                    )}
-                                </TouchableOpacity>
-                            ))}
-                        </Animatable.View>
-                    )}
-
-                    {/* Trip Search Results */}
-                    {searchQuery.length >= 2 && filteredTrips.length > 0 && (
-                        <Animatable.View animation="fadeIn" style={[styles.userResultsContainer, { backgroundColor: colors.card }]}>
-                            <Text style={[styles.userResultsTitle, { color: colors.textSecondary }]}>TRIPS</Text>
-                            {filteredTrips.slice(0, 5).map((trip) => (
-                                <TouchableOpacity
-                                    key={trip.id}
-                                    style={styles.userResultItem}
-                                    onPress={() => {
-                                        setSearchQuery('');
-                                        setSearchVisible(false);
-                                        navigation.navigate('TripDetails', { tripId: trip.id });
-                                    }}
-                                >
-                                    <Image
-                                        source={{ uri: trip.coverImage || trip.images?.[0] }}
-                                        style={styles.tripResultImage}
-                                    />
-                                    <View style={styles.userResultInfo}>
-                                        <Text style={[styles.userResultName, { color: colors.text }]} numberOfLines={1}>
-                                            {trip.title}
-                                        </Text>
-                                        <Text style={[styles.userResultUsername, { color: colors.textSecondary }]}>
-                                            📍 {trip.location}
-                                        </Text>
-                                    </View>
-                                </TouchableOpacity>
-                            ))}
-                        </Animatable.View>
-                    )}
-                </SafeAreaView>
-            </View>
-        </Modal>
-    );
+    // SearchModal has been inlined in the return statement to prevent re-mounting
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -338,8 +240,103 @@ const FeedScreen = ({ navigation }) => {
                 />
             )}
 
-            {/* Modals */}
-            <SearchModal />
+            {/* Search Modal - Inlined to prevent re-mounting on state change */}
+            <Modal visible={searchVisible} animationType="slide" transparent>
+                <View style={[styles.searchModalContainer, { backgroundColor: colors.background }]}>
+                    <SafeAreaView style={{ flex: 1 }}>
+                        <View style={styles.searchModalHeader}>
+                            <View style={[styles.searchBox, { backgroundColor: colors.inputBackground }]}>
+                                <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
+                                <TextInput
+                                    style={[styles.searchInput, { color: colors.text }]}
+                                    placeholder="Search trips, places, people..."
+                                    placeholderTextColor={colors.textSecondary}
+                                    onChangeText={setSearchQuery}
+                                    value={searchQuery}
+                                    autoFocus
+                                />
+                                {searchQuery.length > 0 && (
+                                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                                        <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                            <TouchableOpacity onPress={() => setSearchVisible(false)} style={styles.cancelButton}>
+                                <Text style={[styles.cancelText, { color: colors.primary }]}>Cancel</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* User Search Results */}
+                        {searchQuery.length >= 2 && searchedUsers.length > 0 && (
+                            <Animatable.View animation="fadeIn" style={[styles.userResultsContainer, { backgroundColor: colors.card }]}>
+                                <Text style={[styles.userResultsTitle, { color: colors.textSecondary }]}>PEOPLE</Text>
+                                {searchedUsers.map((user) => (
+                                    <TouchableOpacity
+                                        key={user.id}
+                                        style={styles.userResultItem}
+                                        onPress={() => {
+                                            setSearchQuery('');
+                                            setSearchedUsers([]);
+                                            setSearchVisible(false);
+                                            navigation.navigate('UserProfile', { userId: user.id });
+                                        }}
+                                    >
+                                        <DefaultAvatar
+                                            uri={user.photoURL}
+                                            size={40}
+                                            style={styles.userResultAvatar}
+                                        />
+                                        <View style={styles.userResultInfo}>
+                                            <Text style={[styles.userResultName, { color: colors.text }]}>
+                                                {user.displayName || 'User'}
+                                            </Text>
+                                            {user.username && (
+                                                <Text style={[styles.userResultUsername, { color: colors.primary }]}>
+                                                    @{user.username}
+                                                </Text>
+                                            )}
+                                        </View>
+                                        {user.kycStatus === 'verified' && (
+                                            <Ionicons name="shield-checkmark" size={16} color="#10B981" />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </Animatable.View>
+                        )}
+
+                        {/* Trip Search Results */}
+                        {searchQuery.length >= 2 && filteredTrips.length > 0 && (
+                            <Animatable.View animation="fadeIn" style={[styles.userResultsContainer, { backgroundColor: colors.card }]}>
+                                <Text style={[styles.userResultsTitle, { color: colors.textSecondary }]}>TRIPS</Text>
+                                {filteredTrips.slice(0, 5).map((trip) => (
+                                    <TouchableOpacity
+                                        key={trip.id}
+                                        style={styles.userResultItem}
+                                        onPress={() => {
+                                            setSearchQuery('');
+                                            setSearchVisible(false);
+                                            navigation.navigate('TripDetails', { tripId: trip.id });
+                                        }}
+                                    >
+                                        <Image
+                                            source={{ uri: trip.coverImage || trip.images?.[0] }}
+                                            style={styles.tripResultImage}
+                                        />
+                                        <View style={styles.userResultInfo}>
+                                            <Text style={[styles.userResultName, { color: colors.text }]} numberOfLines={1}>
+                                                {trip.title}
+                                            </Text>
+                                            <Text style={[styles.userResultUsername, { color: colors.textSecondary }]}>
+                                                📍 {trip.location}
+                                            </Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                ))}
+                            </Animatable.View>
+                        )}
+                    </SafeAreaView>
+                </View>
+            </Modal>
             <NotificationsModal
                 visible={notificationsVisible}
                 onClose={() => setNotificationsVisible(false)}

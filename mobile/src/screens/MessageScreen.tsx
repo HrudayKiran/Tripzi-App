@@ -9,7 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import MapView, { Marker } from 'react-native-maps';
 import { LinearGradient } from 'expo-linear-gradient';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 
@@ -33,7 +33,7 @@ const MessageScreen = ({ route, navigation }) => {
     const [isSendingMedia, setIsSendingMedia] = useState(false);
     const [showLocationPreview, setShowLocationPreview] = useState(false);
     const [pendingLocation, setPendingLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-    const currentUser = auth.currentUser;
+    const currentUser = auth().currentUser;
 
     useEffect(() => {
         initializeChat();

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import firestore from '@react-native-firebase/firestore';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import * as ImagePicker from 'expo-image-picker';
@@ -30,7 +30,7 @@ const SuggestFeatureScreen = ({ navigation }) => {
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
+      allowsEditing: false,
       quality: 0.7,
     });
     if (!result.canceled && result.assets[0]) {
@@ -60,7 +60,7 @@ const SuggestFeatureScreen = ({ navigation }) => {
       return;
     }
     try {
-      const currentUser = auth.currentUser;
+      const currentUser = auth().currentUser;
       await firestore().collection('suggestions').add({
         title: featureTitle,
         description: featureDescription,
@@ -83,7 +83,7 @@ const SuggestFeatureScreen = ({ navigation }) => {
       return;
     }
     try {
-      const currentUser = auth.currentUser;
+      const currentUser = auth().currentUser;
       await firestore().collection('bugs').add({
         title: bugTitle,
         description: bugDescription,

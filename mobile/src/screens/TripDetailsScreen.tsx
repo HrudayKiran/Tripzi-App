@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Animated, Dimensions, FlatList, Linking, Alert, Share, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import firestore from '@react-native-firebase/firestore';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
@@ -54,7 +54,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
   const [isJoined, setIsJoined] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const { tripId } = route.params;
-  const user = auth.currentUser;
+  const user = auth().currentUser;
 
   // Rating states
   const [userRating, setUserRating] = useState(0);
@@ -169,6 +169,11 @@ const TripDetailsScreen = ({ route, navigation }) => {
   const handleSubmitRating = async () => {
     if (!user) {
       Alert.alert('Sign In Required', 'Please sign in to rate trips.');
+      return;
+    }
+
+    if (!isJoined) {
+      Alert.alert('Join Trip Required', 'You must join this trip to leave a rating.');
       return;
     }
 
@@ -697,53 +702,68 @@ const TripDetailsScreen = ({ route, navigation }) => {
                 </View>
               ) : (
                 /* Participant View - Show rating form */
+                /* Participant View - Show rating form */
                 <View style={[styles.ratingCard, { backgroundColor: colors.card }]}>
-                  <Text style={[styles.ratingCardTitle, { color: colors.text }]}>
-                    {hasRated ? 'Update Your Rating' : 'Rate This Trip'}
-                  </Text>
-
-                  {/* Star Rating */}
-                  <View style={styles.starsRow}>
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <TouchableOpacity
-                        key={star}
-                        onPress={() => setUserRating(star)}
-                        style={styles.starButton}
-                      >
-                        <Ionicons
-                          name={star <= userRating ? 'star' : 'star-outline'}
-                          size={36}
-                          color={star <= userRating ? '#F59E0B' : colors.textSecondary}
-                        />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-
-                  {/* Feedback Input */}
-                  <TextInput
-                    style={[styles.feedbackInput, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                    placeholder="Share your experience... (optional)"
-                    placeholderTextColor={colors.textSecondary}
-                    value={userFeedback}
-                    onChangeText={setUserFeedback}
-                    multiline
-                    maxLength={500}
-                  />
-
-                  {/* Submit Button */}
-                  <TouchableOpacity
-                    style={[styles.submitRatingButton, { backgroundColor: colors.primary, opacity: submittingRating ? 0.6 : 1 }]}
-                    onPress={handleSubmitRating}
-                    disabled={submittingRating}
-                  >
-                    {submittingRating ? (
-                      <ActivityIndicator color="#fff" size="small" />
-                    ) : (
-                      <Text style={styles.submitRatingButtonText}>
-                        {hasRated ? 'Update Rating' : 'Submit Rating'}
+                  {isJoined ? (
+                    <>
+                      <Text style={[styles.ratingCardTitle, { color: colors.text }]}>
+                        {hasRated ? 'Update Your Rating' : 'Rate This Trip'}
                       </Text>
-                    )}
-                  </TouchableOpacity>
+
+                      {/* Star Rating */}
+                      <View style={styles.starsRow}>
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <TouchableOpacity
+                            key={star}
+                            onPress={() => setUserRating(star)}
+                            style={styles.starButton}
+                          >
+                            <Ionicons
+                              name={star <= userRating ? 'star' : 'star-outline'}
+                              size={36}
+                              color={star <= userRating ? '#F59E0B' : colors.textSecondary}
+                            />
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+
+                      {/* Feedback Input */}
+                      <TextInput
+                        style={[styles.feedbackInput, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                        placeholder="Share your experience... (optional)"
+                        placeholderTextColor={colors.textSecondary}
+                        value={userFeedback}
+                        onChangeText={setUserFeedback}
+                        multiline
+                        maxLength={500}
+                      />
+
+                      {/* Submit Button */}
+                      <TouchableOpacity
+                        style={[styles.submitRatingButton, { backgroundColor: colors.primary, opacity: submittingRating ? 0.6 : 1 }]}
+                        onPress={handleSubmitRating}
+                        disabled={submittingRating}
+                      >
+                        {submittingRating ? (
+                          <ActivityIndicator color="#fff" size="small" />
+                        ) : (
+                          <Text style={styles.submitRatingButtonText}>
+                            {hasRated ? 'Update Rating' : 'Submit Rating'}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <View style={{ alignItems: 'center', padding: SPACING.lg }}>
+                      <Ionicons name="lock-closed-outline" size={48} color={colors.textSecondary} />
+                      <Text style={[styles.ratingCardTitle, { color: colors.text, marginTop: SPACING.md }]}>
+                        Join Trip to Rate
+                      </Text>
+                      <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: SPACING.xs }}>
+                        Only travelers who have joined this trip can leave ratings and reviews.
+                      </Text>
+                    </View>
+                  )}
                 </View>
               )}
 

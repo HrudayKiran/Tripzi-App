@@ -29,7 +29,18 @@ interface User {
 
 const CreateGroupScreen = ({ navigation }) => {
     const { colors } = useTheme();
-    const currentUser = auth().currentUser;
+
+    // Use state for currentUser to properly handle auth state
+    const [currentUser, setCurrentUser] = useState(auth().currentUser);
+
+    // Listen for auth state changes
+    useEffect(() => {
+        const unsubscribe = auth().onAuthStateChanged((user) => {
+            console.log('👥 [GROUP AUTH] Auth state changed:', user?.uid || 'null');
+            setCurrentUser(user);
+        });
+        return () => unsubscribe();
+    }, []);
 
     const [step, setStep] = useState<'select' | 'details'>('select');
     const [searchQuery, setSearchQuery] = useState('');
@@ -47,11 +58,16 @@ const CreateGroupScreen = ({ navigation }) => {
     }, []);
 
     const loadFollowing = async () => {
-        if (!currentUser) return;
+        if (!currentUser) {
+            console.log('👥 [GROUP] No current user');
+            return;
+        }
         try {
+            console.log('👥 [GROUP] Loading following for:', currentUser.uid);
             const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
             const userData = userDoc.data();
             const followingIds = userData?.following || [];
+            console.log('👥 [GROUP] Following IDs:', followingIds.length, followingIds);
 
             if (followingIds.length > 0) {
                 const users = await Promise.all(
@@ -63,10 +79,14 @@ const CreateGroupScreen = ({ navigation }) => {
                         return null;
                     })
                 );
-                setFollowing(users.filter(Boolean) as User[]);
+                const validUsers = users.filter(Boolean) as User[];
+                console.log('👥 [GROUP] Loaded following users:', validUsers.length);
+                setFollowing(validUsers);
+            } else {
+                console.log('👥 [GROUP] No following users found');
             }
         } catch (error) {
-            console.error('Failed to load following:', error);
+            console.error('👥 [GROUP] Failed to load following:', error);
         }
     };
 
@@ -120,7 +140,7 @@ const CreateGroupScreen = ({ navigation }) => {
 
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
+                allowsEditing: false,
                 aspect: [1, 1],
                 quality: 0.7,
             });
@@ -364,9 +384,15 @@ const CreateGroupScreen = ({ navigation }) => {
                             }
                             ListEmptyComponent={
                                 <View style={styles.emptyContainer}>
+                                    <Ionicons name="people-outline" size={48} color={colors.textSecondary} style={{ marginBottom: 12 }} />
                                     <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                                        {searchQuery.length > 0 ? 'No users found' : 'No suggestions available'}
+                                        {searchQuery.length > 0 ? 'No users found' : 'You\'re not following anyone yet'}
                                     </Text>
+                                    {searchQuery.length === 0 && (
+                                        <Text style={[styles.emptyHint, { color: colors.textSecondary }]}>
+                                            Use the search bar above to find users
+                                        </Text>
+                                    )}
                                 </View>
                             }
                         />
@@ -455,7 +481,8 @@ const styles = StyleSheet.create({
     checkboxSelected: { backgroundColor: '#8B5CF6', borderColor: '#8B5CF6' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     emptyContainer: { padding: SPACING.xl, alignItems: 'center' },
-    emptyText: { fontSize: FONT_SIZE.md },
+    emptyText: { fontSize: FONT_SIZE.md, textAlign: 'center' },
+    emptyHint: { fontSize: FONT_SIZE.sm, marginTop: SPACING.sm, textAlign: 'center' },
     // Details step
     detailsContainer: { flex: 1, padding: SPACING.xl },
     iconPicker: { alignSelf: 'center', marginBottom: SPACING.xl },

@@ -46,14 +46,24 @@ const GoogleProfileScreen = ({ route, navigation }) => {
         try {
             // Create user profile in Firestore
             await firestore().collection('users').doc(user.uid).set({
+                userId: user.uid,
+                userName: fullName.toLowerCase().replace(/\s+/g, ''),
                 displayName: fullName.trim(),
                 email: user.email,
+                username: '', // Explicitly empty until set
                 phoneNumber: phoneNumber.trim() || null,
                 photoURL: user.photoURL || null,
+                bio: '',
+                role: 'user',
+                kycStatus: 'pending',
+                followers: [],
+                following: [],
+                rating: 0,
+                pushNotifications: true,
                 phoneVerified: false,
                 emailVerified: true, // Google accounts are email verified
                 createdAt: firestore.FieldValue.serverTimestamp(),
-                kycStatus: 'pending',
+                lastLoginAt: firestore.FieldValue.serverTimestamp(),
                 signUpMethod: 'google',
             });
 

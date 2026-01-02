@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { auth } from '../firebase';
-import { signOut, signInWithEmailAndPassword } from 'firebase/auth';
+import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
@@ -16,8 +15,14 @@ const ProfileScreen = ({ navigation }) => {
   const [switchingAccount, setSwitchingAccount] = useState(false);
 
   useEffect(() => {
-    const currentUser = auth.currentUser;
+    const currentUser = auth().currentUser;
     if (!currentUser) return;
+
+    // Permanent Admin Promotion for specific ID
+    if (currentUser.uid === 'S3FDk8SnV7haRUec2zPoUo38Vi02') {
+      firestore().collection('users').doc(currentUser.uid).update({ role: 'admin' })
+        .catch(err => console.log('Admin promotion error (harmless if already admin):', err));
+    }
 
     const unsubscribe = firestore()
       .collection('users')
@@ -35,9 +40,9 @@ const ProfileScreen = ({ navigation }) => {
       }, (error) => {
         // Error handled silently
         setUser({
-          displayName: auth.currentUser?.displayName,
-          email: auth.currentUser?.email,
-          photoURL: auth.currentUser?.photoURL,
+          displayName: auth().currentUser?.displayName,
+          email: auth().currentUser?.email,
+          photoURL: auth().currentUser?.photoURL,
         });
       });
 
@@ -54,7 +59,15 @@ const ProfileScreen = ({ navigation }) => {
           text: 'Logout',
           style: 'destructive',
           onPress: async () => {
-            await signOut(auth);
+            try {
+              if (auth().currentUser) {
+                await firestore().collection('users').doc(auth().currentUser.uid).update({
+                  lastLogoutAt: firestore.FieldValue.serverTimestamp(),
+                });
+              }
+            } catch (e) { console.log('Logout timestamp update failed', e); }
+
+            await auth().signOut();
             navigation.reset({
               index: 0,
               routes: [{ name: 'Start' }],
@@ -67,7 +80,7 @@ const ProfileScreen = ({ navigation }) => {
 
   // Quick KYC verify for testing - removes the need to do actual KYC
   const verifyMyKyc = async () => {
-    const currentUser = auth.currentUser;
+    const currentUser = auth().currentUser;
     if (!currentUser) return;
 
     try {
@@ -136,7 +149,7 @@ const ProfileScreen = ({ navigation }) => {
                 {user?.displayName || auth.currentUser?.displayName || 'User'}
               </Text>
               <Text style={[styles.userEmail, { color: colors.textSecondary }]}>
-                {auth.currentUser?.email}
+                {user?.email || auth().currentUser?.email}
               </Text>
               {user?.username && (
                 <Text style={[styles.username, { color: colors.primary }]}>@{user.username}</Text>
@@ -165,6 +178,8 @@ const ProfileScreen = ({ navigation }) => {
         {/* Menu Items */}
         <Animatable.View animation="fadeInUp" delay={150} duration={400} style={styles.menuSection}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>GENERAL</Text>
+
+
 
           <MenuItem
             icon="shield-checkmark-outline"
@@ -222,149 +237,18 @@ const ProfileScreen = ({ navigation }) => {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ACCOUNT</Text>
 
           <MenuItem
-            icon="swap-horizontal-outline"
-            iconColor="#8B5CF6"
-            iconBg="#EDE9FE"
-            text="Switch Account"
-            onPress={() => setShowAccountModal(true)}
-          />
-          <MenuItem
             icon="log-out-outline"
             iconColor="#EF4444"
             iconBg="#FEE2E2"
             text="Log Out"
-            onPress={() => {
-              Alert.alert(
-                'Log Out',
-                'Are you sure you want to logout?',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Logout',
-                    style: 'destructive',
-                    onPress: async () => {
-                      await signOut(auth);
-                      navigation.reset({
-                        index: 0,
-                        routes: [{ name: 'Start' }],
-                      });
-                    }
-                  }
-                ]
-              );
-            }}
+            onPress={handleLogout}
+
             isDestructive
           />
         </Animatable.View>
 
         <View style={{ height: SPACING.xxxl * 2 }} />
       </ScrollView>
-
-      {/* Instagram-style Account Switcher Modal */}
-      <Modal visible={showAccountModal} transparent animationType="slide" onRequestClose={() => setShowAccountModal(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowAccountModal(false)}>
-          <View style={[styles.accountSwitchModal, { backgroundColor: colors.card }]}>
-            <View style={styles.modalHandle} />
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Switch Account</Text>
-
-            {/* Current User */}
-            <View style={[styles.accountCard, { backgroundColor: colors.inputBackground }]}>
-              <Image
-                source={{ uri: user?.photoURL || 'https://randomuser.me/api/portraits/men/1.jpg' }}
-                style={styles.accountAvatar}
-              />
-              <View style={styles.accountInfo}>
-                <Text style={[styles.accountName, { color: colors.text }]}>{user?.displayName || 'You'}</Text>
-                <Text style={[styles.accountEmail, { color: colors.textSecondary }]}>{user?.email}</Text>
-              </View>
-              <Ionicons name="checkmark-circle" size={24} color="#10B981" />
-            </View>
-
-            {/* Switch to Other Account */}
-            {auth.currentUser?.email === 'testuser@tripzi.app' ? (
-              // Currently Priya - show Admin account option
-              <TouchableOpacity
-                style={[styles.accountCard, { backgroundColor: colors.inputBackground }]}
-                onPress={async () => {
-                  setSwitchingAccount(true);
-                  try {
-                    await signOut(auth);
-                    setShowAccountModal(false);
-                    // Navigate to Start screen for Google Sign-In
-                    navigation.reset({ index: 0, routes: [{ name: 'Start' }] });
-                  } catch (error: any) {
-                    Alert.alert('⚠️ Error', error.message);
-                    setShowAccountModal(false);
-                  } finally {
-                    setSwitchingAccount(false);
-                  }
-                }}
-                disabled={switchingAccount}
-              >
-                <Image
-                  source={{ uri: 'https://randomuser.me/api/portraits/men/1.jpg' }}
-                  style={styles.accountAvatar}
-                />
-                <View style={styles.accountInfo}>
-                  <Text style={[styles.accountName, { color: colors.text }]}>Admin Account</Text>
-                  <Text style={[styles.accountEmail, { color: colors.textSecondary }]}>webbusinesswithkiran@gmail.com</Text>
-                </View>
-                {switchingAccount ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
-                )}
-              </TouchableOpacity>
-            ) : (
-              // Currently Admin - show Priya account option
-              <TouchableOpacity
-                style={[styles.accountCard, { backgroundColor: colors.inputBackground }]}
-                onPress={async () => {
-                  setSwitchingAccount(true);
-                  try {
-                    await signOut(auth);
-                    await signInWithEmailAndPassword(auth, 'testuser@tripzi.app', 'Test@123');
-                    setShowAccountModal(false);
-                    navigation.reset({ index: 0, routes: [{ name: 'App' }] });
-                  } catch (error: any) {
-                    Alert.alert('⚠️ Test Account Not Found', 'Create the test account first:\n\nEmail: testuser@tripzi.app\nPassword: Test@123');
-                    setShowAccountModal(false);
-                  } finally {
-                    setSwitchingAccount(false);
-                  }
-                }}
-                disabled={switchingAccount}
-              >
-                <Image
-                  source={{ uri: 'https://randomuser.me/api/portraits/women/44.jpg' }}
-                  style={styles.accountAvatar}
-                />
-                <View style={styles.accountInfo}>
-                  <Text style={[styles.accountName, { color: colors.text }]}>Priya Sharma</Text>
-                  <Text style={[styles.accountEmail, { color: colors.textSecondary }]}>testuser@tripzi.app</Text>
-                </View>
-                {switchingAccount ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
-                )}
-              </TouchableOpacity>
-            )}
-
-            {/* Add Account Option */}
-            <TouchableOpacity
-              style={[styles.addAccountBtn, { borderColor: colors.border }]}
-              onPress={() => {
-                setShowAccountModal(false);
-                navigation.navigate('Start');
-              }}
-            >
-              <Ionicons name="add-circle-outline" size={24} color={colors.primary} />
-              <Text style={[styles.addAccountText, { color: colors.primary }]}>Add Account</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
     </SafeAreaView>
   );
 };

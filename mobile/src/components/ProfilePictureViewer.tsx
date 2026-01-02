@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { deleteFromStorage } from '../utils/imageUpload';
 import firestore from '@react-native-firebase/firestore';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 import { SPACING, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
 
 const { width, height } = Dimensions.get('window');
@@ -65,7 +65,7 @@ const ProfilePictureViewer = ({
 
             if (deleted) {
                 // 2. Update Firestore to remove URL
-                const userId = auth.currentUser?.uid;
+                const userId = auth().currentUser?.uid;
                 if (userId) {
                     await firestore().collection('users').doc(userId).update({
                         photoURL: null,

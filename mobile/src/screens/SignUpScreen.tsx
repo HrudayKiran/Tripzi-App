@@ -1,9 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
-import { auth } from '../firebase';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
@@ -31,6 +30,16 @@ const SignUpScreen = ({ navigation }) => {
   const [errors, setErrors] = useState<Errors>({});
   const [touched, setTouched] = useState<{ [key: string]: boolean }>({});
   const { colors } = useTheme();
+
+  const showToast = (message: string) => {
+    if (Platform.OS === 'android') {
+      import('react-native').then(({ ToastAndroid }) => {
+        ToastAndroid.show(message, ToastAndroid.SHORT);
+      });
+    } else {
+      Alert.alert('Success', message);
+    }
+  };
 
   const validatePhoneNumber = (phone: string) => {
     // Indian phone number validation (10 digits)
@@ -108,33 +117,39 @@ const SignUpScreen = ({ navigation }) => {
 
     setLoading(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await auth().createUserWithEmailAndPassword(email, password);
       const { user } = userCredential;
 
-      await updateProfile(user, { displayName: fullName });
+      await user.updateProfile({ displayName: fullName });
 
       // Save to Firestore using React Native Firebase with timeout fallback
+      // Create user profile in Firestore
       try {
-        const firestorePromise = firestore().collection('users').doc(user.uid).set({
+        await firestore().collection('users').doc(userCredential.user.uid).set({
+          userId: userCredential.user.uid,
+          email: email,
           displayName: fullName,
-          email,
+          username: fullName.toLowerCase().replace(/\s+/g, '') + Math.floor(Math.random() * 1000),
           phoneNumber: phoneNumber || null,
-          phoneVerified: false,
-          emailVerified: false,
-          createdAt: firestore.FieldValue.serverTimestamp(),
+          photoURL: null,
+          bio: '',
+          role: 'user',
           kycStatus: 'pending',
+          followers: [],
+          following: [],
+          rating: 0,
+          pushNotifications: true,
+          emailVerified: false,
+          phoneVerified: false,
+          createdAt: firestore.FieldValue.serverTimestamp(),
+          lastLoginAt: firestore.FieldValue.serverTimestamp(),
         });
-
-        // Wait max 8 seconds for Firestore, then proceed anyway
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Firestore timeout')), 8000)
-        );
-
-        await Promise.race([firestorePromise, timeoutPromise]);
       } catch (firestoreError: any) {
-        // Firestore sync will happen later - continue with navigation
+        console.error('Firestore sync error:', firestoreError);
+        Alert.alert('Account Created', 'Your account was created but profile setup failed. Please check your internet.');
       }
 
+      showToast('Successfully Created Account! 🎉');
       // Reset navigation stack and go to App
       navigation.reset({
         index: 0,

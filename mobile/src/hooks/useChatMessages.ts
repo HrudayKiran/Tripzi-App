@@ -1,6 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
+
+// Module-level lock to prevent duplicate sends across hook instances
+// Key: chatId + messageText hash, Value: timestamp of last send
+const sendLockMap = new Map<string, number>();
+const SEND_LOCK_DURATION = 2000; // 2 seconds lock per message
 
 // Firestore types
 type FirestoreTimestamp = { toDate: () => Date } | Date | null;
@@ -111,54 +116,85 @@ export function useChatMessages(chatId: string | undefined): UseChatMessagesRetu
         return () => unsubscribe();
     }, [chatId, currentUser?.uid]);
 
+    // Lock to prevent double-send
+    const sendingLock = useRef(false);
+
     const sendMessage = useCallback(
         async (text: string, replyTo?: ReplyTo): Promise<void> => {
             if (!chatId || !currentUser || !text.trim()) return;
 
-            const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
-            const userData = userDoc.data();
+            // Create a unique key for this message to prevent duplicates
+            const messageKey = `${chatId}:${text.trim().substring(0, 50)}`;
+            const now = Date.now();
+            const lastSendTime = sendLockMap.get(messageKey);
 
-            const messageData: Omit<Message, 'id'> = {
-                senderId: currentUser.uid,
-                senderName: userData?.displayName || currentUser.displayName || 'User',
-                type: 'text',
-                text: text.trim(),
-                status: 'sent',
-                readBy: {},
-                deliveredTo: [],
-                deletedFor: [],
-                createdAt: firestore.FieldValue.serverTimestamp() as any,
-            };
-
-            if (replyTo) {
-                messageData.replyTo = replyTo;
+            // Check if this exact message was sent recently (within lock duration)
+            if (lastSendTime && (now - lastSendTime) < SEND_LOCK_DURATION) {
+                console.log('💬 [MESSAGES] Blocked duplicate: same message sent', now - lastSendTime, 'ms ago');
+                return;
             }
 
-            // Create message
-            await firestore()
-                .collection('chats')
-                .doc(chatId)
-                .collection('messages')
-                .add(messageData);
+            // Also check ref lock
+            if (sendingLock.current) {
+                console.log('💬 [MESSAGES] Blocked duplicate: ref lock active');
+                return;
+            }
 
-            // Update chat's lastMessage and updatedAt
-            await firestore()
-                .collection('chats')
-                .doc(chatId)
-                .update({
-                    lastMessage: {
-                        text: text.trim(),
-                        senderId: currentUser.uid,
-                        senderName: userData?.displayName || currentUser.displayName || 'User',
-                        timestamp: firestore.FieldValue.serverTimestamp(),
-                        type: 'text',
-                    },
-                    updatedAt: firestore.FieldValue.serverTimestamp(),
-                    // Increment unread count for other participants
-                    [`unreadCount.${currentUser.uid}`]: 0,
-                });
+            // Set both locks
+            sendLockMap.set(messageKey, now);
+            sendingLock.current = true;
 
-            console.log('💬 [MESSAGES] Message sent successfully');
+            try {
+                const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
+                const userData = userDoc.data();
+
+                const messageData: Omit<Message, 'id'> = {
+                    senderId: currentUser.uid,
+                    senderName: userData?.displayName || currentUser.displayName || 'User',
+                    type: 'text',
+                    text: text.trim(),
+                    status: 'sent',
+                    readBy: {},
+                    deliveredTo: [],
+                    deletedFor: [],
+                    createdAt: firestore.FieldValue.serverTimestamp() as any,
+                };
+
+                if (replyTo) {
+                    messageData.replyTo = replyTo;
+                }
+
+                // Create message
+                await firestore()
+                    .collection('chats')
+                    .doc(chatId)
+                    .collection('messages')
+                    .add(messageData);
+
+                // Update chat's lastMessage and updatedAt
+                await firestore()
+                    .collection('chats')
+                    .doc(chatId)
+                    .update({
+                        lastMessage: {
+                            text: text.trim(),
+                            senderId: currentUser.uid,
+                            senderName: userData?.displayName || currentUser.displayName || 'User',
+                            timestamp: firestore.FieldValue.serverTimestamp(),
+                            type: 'text',
+                        },
+                        updatedAt: firestore.FieldValue.serverTimestamp(),
+                        // Increment unread count for other participants
+                        [`unreadCount.${currentUser.uid}`]: 0,
+                    });
+
+                console.log('💬 [MESSAGES] Message sent successfully');
+            } finally {
+                // Unlock after a short delay to prevent rapid re-sends
+                setTimeout(() => {
+                    sendingLock.current = false;
+                }, 500);
+            }
         },
         [chatId, currentUser]
     );

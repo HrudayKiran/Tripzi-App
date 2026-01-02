@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
@@ -7,13 +7,15 @@ import { useTheme } from '../contexts/ThemeContext';
 import CustomToggle from '../components/CustomToggle';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import functions from '@react-native-firebase/functions';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 const SettingsScreen = ({ navigation }) => {
     const { colors, isDarkMode, toggleTheme } = useTheme();
     const [pushEnabled, setPushEnabled] = useState(true);
-    const currentUser = auth.currentUser;
+    const currentUser = auth().currentUser;
 
     // Load initial setting
     React.useEffect(() => {
@@ -56,6 +58,37 @@ const SettingsScreen = ({ navigation }) => {
         } catch (error) {
             console.log('Error updating settings:', error);
         }
+    };
+
+    const handleDeleteAccount = () => {
+        Alert.alert(
+            "Delete Account",
+            "Are you sure? This will permanently delete your profile, trips, photos, and messages. This action cannot be undone.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            // Use the callable Cloud Function (no reauthentication needed!)
+                            // Region must match where the function is deployed (us-central1 for v1)
+                            const deleteMyAccount = functions().httpsCallable('deleteMyAccount');
+                            console.log('Calling deleteMyAccount function...');
+                            const result = await deleteMyAccount();
+                            console.log('deleteMyAccount result:', result);
+
+                            // Sign out locally after successful deletion
+                            await auth().signOut();
+                            Alert.alert("Account Deleted", "Your account has been successfully deleted.");
+                        } catch (error: any) {
+                            console.error("Delete account error:", error);
+                            Alert.alert("Error", error.message || "Could not delete account. Please try again later.");
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     return (
@@ -147,6 +180,26 @@ const SettingsScreen = ({ navigation }) => {
                                 </Text>
                             </View>
                             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                    </Animatable.View>
+
+                    {/* Delete Account */}
+                    <Animatable.View animation="fadeInUp" duration={400} delay={200}>
+                        <TouchableOpacity
+                            style={[styles.settingCard, { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}
+                            onPress={handleDeleteAccount}
+                            activeOpacity={0.7}
+                        >
+                            <View style={[styles.iconBox, { backgroundColor: '#FEF2F2' }]}>
+                                <Ionicons name="trash-outline" size={24} color="#DC2626" />
+                            </View>
+                            <View style={styles.settingInfo}>
+                                <Text style={[styles.settingTitle, { color: '#DC2626' }]}>Delete Account</Text>
+                                <Text style={[styles.settingDescription, { color: '#EF4444' }]}>
+                                    Permanently remove your account and data
+                                </Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color="#DC2626" />
                         </TouchableOpacity>
                     </Animatable.View>
                 </ScrollView>

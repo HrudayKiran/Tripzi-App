@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import firestore from '@react-native-firebase/firestore';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import DefaultAvatar from './DefaultAvatar';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
@@ -32,7 +32,7 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
     const [editingComment, setEditingComment] = useState<Comment | null>(null);
     const [editText, setEditText] = useState('');
     const slideAnim = useRef(new Animated.Value(500)).current;
-    const currentUser = auth.currentUser;
+    const currentUser = auth().currentUser;
 
     useEffect(() => {
         if (visible) {

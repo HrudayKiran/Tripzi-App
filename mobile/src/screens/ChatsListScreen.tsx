@@ -34,7 +34,18 @@ interface SearchUser {
 const ChatsListScreen = ({ navigation }) => {
     const { colors } = useTheme();
     const { chats, loading, refreshChats } = useChats();
-    const currentUser = auth().currentUser;
+
+    // Use state for currentUser to properly handle auth state
+    const [currentUser, setCurrentUser] = useState(auth().currentUser);
+
+    // Listen for auth state changes
+    React.useEffect(() => {
+        const unsubscribe = auth().onAuthStateChanged((user) => {
+            console.log('📱 [AUTH] Auth state changed:', user?.uid || 'null');
+            setCurrentUser(user);
+        });
+        return () => unsubscribe();
+    }, []);
 
     // Search state
     const [showSearch, setShowSearch] = useState(false);
@@ -43,10 +54,19 @@ const ChatsListScreen = ({ navigation }) => {
     const [searching, setSearching] = useState(false);
     const [startingChat, setStartingChat] = useState(false);
     const [storyUsers, setStoryUsers] = useState<any[]>([]);
+    const [myStories, setMyStories] = useState<any[]>([]);
+
+    // Messages Settings modal
+    const [showMessagesSettings, setShowMessagesSettings] = useState(false);
+    const [readReceipts, setReadReceipts] = useState(true);
 
     // Fetch following users for stories
     React.useEffect(() => {
-        if (!currentUser) return;
+        if (!currentUser) {
+            console.log('📱 [STORIES] No current user');
+            return;
+        }
+        console.log('📱 [STORIES] Setting up listener for:', currentUser.uid);
         const unsubscribe = firestore()
             .collection('users')
             .doc(currentUser.uid)
@@ -54,6 +74,7 @@ const ChatsListScreen = ({ navigation }) => {
                 if (doc.exists) {
                     const userData = doc.data();
                     const following = userData?.following || [];
+                    console.log('📱 [STORIES] Following count:', following.length);
                     if (following.length > 0) {
                         const users = await Promise.all(
                             following.slice(0, 10).map(async (uid: string) => {
@@ -63,9 +84,38 @@ const ChatsListScreen = ({ navigation }) => {
                                 } catch { return null; }
                             })
                         );
-                        setStoryUsers(users.filter(Boolean));
+                        const validUsers = users.filter(Boolean);
+                        console.log('📱 [STORIES] Story users loaded:', validUsers.length);
+                        setStoryUsers(validUsers);
+                    } else {
+                        console.log('📱 [STORIES] No following users');
+                        setStoryUsers([]);
                     }
+                } else {
+                    console.log('📱 [STORIES] User doc does not exist');
                 }
+            });
+        return () => unsubscribe();
+    }, [currentUser]);
+
+    // Fetch user's own stories to determine "Your Story" visibility
+    React.useEffect(() => {
+        if (!currentUser) return;
+
+        const now = new Date();
+        const unsubscribe = firestore()
+            .collection('stories')
+            .where('userId', '==', currentUser.uid)
+            .onSnapshot((snapshot) => {
+                const activeStories = snapshot.docs
+                    .map((doc) => ({ id: doc.id, ...doc.data() }))
+                    .filter((story: any) => {
+                        if (!story.expiresAt) return true;
+                        const expiresAt = story.expiresAt.toDate ? story.expiresAt.toDate() : new Date(story.expiresAt);
+                        return expiresAt > now;
+                    });
+                console.log('📱 [MY STORIES] Active stories:', activeStories.length);
+                setMyStories(activeStories);
             });
         return () => unsubscribe();
     }, [currentUser]);
@@ -316,30 +366,34 @@ const ChatsListScreen = ({ navigation }) => {
             <Ionicons name="chatbubbles-outline" size={80} color={colors.textSecondary} />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>No Chats Yet</Text>
             <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-                Tap the search button to find people and start chatting!
+                Tap the search icon to find people and start chatting!
             </Text>
-            <TouchableOpacity
-                style={[styles.startChatButton, { backgroundColor: colors.primary }]}
-                onPress={() => setShowSearch(true)}
-            >
-                <Ionicons name="search" size={18} color="#fff" />
-                <Text style={styles.startChatButtonText}>Find People</Text>
-            </TouchableOpacity>
         </View>
     );
 
     // Stories header component
     const renderStoriesHeader = () => (
         <View style={styles.storiesContainer}>
-            {/* Your story */}
-            <TouchableOpacity style={styles.storyItem} onPress={() => navigation.navigate('Stories')}>
-                <LinearGradient colors={['#8B5CF6', '#EC4899']} style={styles.storyGradient}>
-                    <View style={[styles.storyInner, { backgroundColor: colors.card }]}>
-                        <Ionicons name="add" size={28} color={colors.primary} />
-                    </View>
-                </LinearGradient>
-                <Text style={[styles.storyName, { color: colors.textSecondary }]} numberOfLines={1}>Your Story</Text>
-            </TouchableOpacity>
+            {/* Your story - Only show if user has stories */}
+            {myStories.length > 0 && (
+                <TouchableOpacity
+                    style={styles.storyItem}
+                    onPress={() => navigation.navigate('Stories', { viewMyStory: true })}
+                >
+                    <LinearGradient colors={['#8B5CF6', '#EC4899']} style={styles.storyGradient}>
+                        {currentUser?.photoURL ? (
+                            <Image source={{ uri: currentUser.photoURL }} style={styles.storyAvatar} />
+                        ) : (
+                            <View style={[styles.storyAvatarPlaceholder, { backgroundColor: colors.primary }]}>
+                                <Text style={styles.storyInitial}>
+                                    {(currentUser?.displayName || 'U').charAt(0).toUpperCase()}
+                                </Text>
+                            </View>
+                        )}
+                    </LinearGradient>
+                    <Text style={[styles.storyName, { color: colors.textSecondary }]} numberOfLines={1}>Your Story</Text>
+                </TouchableOpacity>
+            )}
             {/* Following users stories */}
             {storyUsers.map((user) => (
                 <TouchableOpacity
@@ -382,20 +436,23 @@ const ChatsListScreen = ({ navigation }) => {
                 <View style={styles.headerButtons}>
                     <TouchableOpacity
                         style={[styles.headerButton, { backgroundColor: colors.card }]}
-                        onPress={() => navigation.navigate('CreateGroupChat')}
-                        activeOpacity={0.7}
-                    >
-                        <Ionicons name="people-outline" size={22} color={colors.text} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.headerButton, { backgroundColor: colors.card }]}
                         onPress={() => setShowSearch(true)}
                         activeOpacity={0.7}
                     >
                         <Ionicons name="search-outline" size={22} color={colors.text} />
                     </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.headerButton, { backgroundColor: colors.card }]}
+                        onPress={() => setShowMessagesSettings(true)}
+                        activeOpacity={0.7}
+                    >
+                        <Ionicons name="ellipsis-vertical" size={22} color={colors.text} />
+                    </TouchableOpacity>
                 </View>
             </View>
+
+            {/* Stories Section - Minimal gap */}
+            {renderStoriesHeader()}
 
             {/* Chat List */}
             <FlatList
@@ -415,7 +472,6 @@ const ChatsListScreen = ({ navigation }) => {
                     />
                 }
                 showsVerticalScrollIndicator={false}
-                ListHeaderComponent={renderStoriesHeader}
             />
 
             {/* Search Modal */}
@@ -484,6 +540,50 @@ const ChatsListScreen = ({ navigation }) => {
                     </SafeAreaView>
                 </View>
             </Modal>
+
+            {/* WhatsApp-style Dropdown Menu */}
+            <Modal visible={showMessagesSettings} animationType="fade" transparent>
+                <TouchableOpacity
+                    style={styles.dropdownOverlay}
+                    activeOpacity={1}
+                    onPress={() => setShowMessagesSettings(false)}
+                >
+                    <View style={[styles.dropdownMenu, { backgroundColor: colors.card }]}>
+                        <TouchableOpacity
+                            style={styles.dropdownItem}
+                            onPress={() => {
+                                setShowMessagesSettings(false);
+                                navigation.navigate('CreateGroupChat');
+                            }}
+                        >
+                            <Ionicons name="people" size={20} color={colors.text} />
+                            <Text style={[styles.dropdownText, { color: colors.text }]}>New group</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.dropdownItem}
+                            onPress={() => {
+                                setShowMessagesSettings(false);
+                                navigation.navigate('Stories');
+                            }}
+                        >
+                            <Ionicons name="add-circle" size={20} color={colors.text} />
+                            <Text style={[styles.dropdownText, { color: colors.text }]}>Add story</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.dropdownItem}
+                            onPress={() => {
+                                setShowMessagesSettings(false);
+                                navigation.navigate('MessageSettings');
+                            }}
+                        >
+                            <Ionicons name="settings" size={20} color={colors.text} />
+                            <Text style={[styles.dropdownText, { color: colors.text }]}>Settings</Text>
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -503,7 +603,20 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: SPACING.xl,
         paddingTop: SPACING.md,
-        paddingBottom: SPACING.lg,
+        paddingBottom: SPACING.sm,
+    },
+    persistentSearchBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginHorizontal: SPACING.xl,
+        marginBottom: SPACING.sm,
+        paddingHorizontal: SPACING.md,
+        paddingVertical: SPACING.sm,
+        borderRadius: BORDER_RADIUS.lg,
+        gap: SPACING.sm,
+    },
+    persistentSearchText: {
+        fontSize: FONT_SIZE.sm,
     },
     headerTitle: {
         fontSize: FONT_SIZE.xxl,
@@ -683,7 +796,7 @@ const styles = StyleSheet.create({
     // Stories Styles
     storiesContainer: {
         flexDirection: 'row',
-        paddingVertical: SPACING.md,
+        paddingVertical: SPACING.sm,
         paddingHorizontal: SPACING.lg,
         borderBottomWidth: 1,
         borderBottomColor: 'rgba(0,0,0,0.05)',
@@ -787,6 +900,33 @@ const styles = StyleSheet.create({
     },
     startingChatText: {
         marginTop: SPACING.md,
+        fontSize: FONT_SIZE.md,
+    },
+    // Dropdown Menu
+    dropdownOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+    },
+    dropdownMenu: {
+        position: 'absolute',
+        top: 60,
+        right: SPACING.lg,
+        borderRadius: BORDER_RADIUS.md,
+        minWidth: 180,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    dropdownItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: SPACING.md,
+        paddingHorizontal: SPACING.lg,
+        gap: SPACING.md,
+    },
+    dropdownText: {
         fontSize: FONT_SIZE.md,
     },
 });

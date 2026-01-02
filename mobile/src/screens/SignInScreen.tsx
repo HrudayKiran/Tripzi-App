@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ToastAndroid } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
@@ -59,7 +59,14 @@ const SignInScreen = ({ navigation }) => {
 
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await auth().signInWithEmailAndPassword(email, password);
+      // Update lastLoginAt
+      try {
+        await firestore().collection('users').doc(userCredential.user.uid).update({
+          lastLoginAt: firestore.FieldValue.serverTimestamp(),
+        });
+      } catch (e) { console.log('Login timestamp update failed', e); }
+
       showToast('Login successful! 🎉');
       navigation.navigate('App');
     } catch (error: any) {

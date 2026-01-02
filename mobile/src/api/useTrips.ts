@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import firestore from '@react-native-firebase/firestore';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 
 const useTrips = () => {
     const [trips, setTrips] = useState([]); // Start empty, no fallback
@@ -19,7 +19,7 @@ const useTrips = () => {
 
         const loadTrips = async () => {
             try {
-                const currentUser = auth.currentUser;
+                const currentUser = auth().currentUser;
 
                 // Subscribe to Firestore
                 unsubscribe = firestore()

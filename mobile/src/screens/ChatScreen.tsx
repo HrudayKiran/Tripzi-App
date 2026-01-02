@@ -53,6 +53,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     const [sending, setSending] = useState(false);
     const [uploading, setUploading] = useState(false);
     const flatListRef = useRef<FlatList>(null);
+    const sendingRef = useRef(false); // Ref-based lock to prevent double-send
     const currentUser = auth().currentUser;
 
     // Context menu state
@@ -87,6 +88,13 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     const [isTyping, setIsTyping] = useState(false);
     const [otherUserTyping, setOtherUserTyping] = useState(false);
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Chat menu state (three-dots)
+    const [showChatMenu, setShowChatMenu] = useState(false);
+
+    // Multi-select state for bulk message deletion
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
+    const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
 
     // Get chat details
     const chat = chats.find((c) => c.id === chatId);
@@ -184,20 +192,26 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     };
 
     const handleSend = async () => {
-        if (!inputText.trim() || sending) return;
+        // Use ref for immediate check to prevent rapid double-taps
+        if (!inputText.trim() || sending || sendingRef.current) return;
 
+        sendingRef.current = true; // Lock immediately
         setSending(true);
         setIsTyping(false);
         updateTypingStatus(false);
 
+        const textToSend = inputText.trim();
+        setInputText(''); // Clear input immediately to prevent re-send
+
         try {
-            await sendMessage(inputText.trim(), replyingTo || undefined);
-            setInputText('');
+            await sendMessage(textToSend, replyingTo || undefined);
             setReplyingTo(null);
         } catch (error) {
             console.error('Failed to send message:', error);
+            setInputText(textToSend); // Restore on error
         } finally {
             setSending(false);
+            sendingRef.current = false; // Unlock
         }
     };
 
@@ -218,13 +232,13 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             const result = useCamera
                 ? await ImagePicker.launchCameraAsync({
                     mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                    quality: 0.7,
-                    allowsEditing: true,
+                    quality: 0.8,
+                    allowsEditing: false,
                 })
                 : await ImagePicker.launchImageLibraryAsync({
                     mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                    quality: 0.7,
-                    allowsEditing: true,
+                    quality: 0.8,
+                    allowsEditing: false,
                 });
 
             if (!result.canceled && result.assets[0]) {
@@ -634,6 +648,114 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         }
     };
 
+    // Clear all messages in chat
+    const handleClearChat = () => {
+        Alert.alert(
+            'Clear Chat',
+            'Are you sure you want to delete all messages? This cannot be undone.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Clear All',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const messagesRef = firestore()
+                                .collection('chats')
+                                .doc(chatId)
+                                .collection('messages');
+
+                            const snapshot = await messagesRef.get();
+                            const batch = firestore().batch();
+
+                            snapshot.docs.forEach((doc) => {
+                                batch.update(doc.ref, {
+                                    deletedFor: firestore.FieldValue.arrayUnion(currentUser?.uid),
+                                });
+                            });
+
+                            await batch.commit();
+                            setShowChatMenu(false);
+                        } catch (error) {
+                            console.error('Failed to clear chat:', error);
+                            Alert.alert('Error', 'Failed to clear chat.');
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
+    // Toggle message selection
+    const toggleMessageSelection = (messageId: string) => {
+        setSelectedMessages((prev) => {
+            const newSet = new Set(prev);
+            if (newSet.has(messageId)) {
+                newSet.delete(messageId);
+            } else {
+                newSet.add(messageId);
+            }
+            return newSet;
+        });
+    };
+
+    // Handle bulk delete
+    const handleBulkDelete = (forEveryone: boolean = false) => {
+        if (selectedMessages.size === 0) return;
+
+        Alert.alert(
+            `Delete ${selectedMessages.size} Message${selectedMessages.size > 1 ? 's' : ''}`,
+            forEveryone
+                ? 'These messages will be deleted for everyone.'
+                : 'These messages will be removed from your view.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const batch = firestore().batch();
+
+                            selectedMessages.forEach((msgId) => {
+                                const msgRef = firestore()
+                                    .collection('chats')
+                                    .doc(chatId)
+                                    .collection('messages')
+                                    .doc(msgId);
+
+                                if (forEveryone) {
+                                    batch.update(msgRef, {
+                                        deletedForEveryoneAt: firestore.FieldValue.serverTimestamp(),
+                                        text: '',
+                                        mediaUrl: null,
+                                    });
+                                } else {
+                                    batch.update(msgRef, {
+                                        deletedFor: firestore.FieldValue.arrayUnion(currentUser?.uid),
+                                    });
+                                }
+                            });
+
+                            await batch.commit();
+                            setSelectedMessages(new Set());
+                            setIsSelectionMode(false);
+                        } catch (error) {
+                            console.error('Failed to delete messages:', error);
+                            Alert.alert('Error', 'Failed to delete messages.');
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
+    // Cancel selection mode
+    const cancelSelectionMode = () => {
+        setIsSelectionMode(false);
+        setSelectedMessages(new Set());
+    };
+
     const formatMessageTime = (timestamp: any) => {
         if (!timestamp) return '';
         try {
@@ -897,7 +1019,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     </View>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.moreButton} activeOpacity={0.7}>
+                <TouchableOpacity style={styles.moreButton} activeOpacity={0.7} onPress={() => setShowChatMenu(true)}>
                     <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
                 </TouchableOpacity>
             </View>
@@ -926,8 +1048,8 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             {/* Messages */}
             <KeyboardAvoidingView
                 style={styles.messagesContainer}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                keyboardVerticalOffset={90}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
             >
                 <FlatList
                     ref={flatListRef}
@@ -1048,6 +1170,25 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 </Pressable>
             </Modal>
 
+            {/* Chat Menu (Three-dots) */}
+            <Modal visible={showChatMenu} transparent animationType="fade">
+                <TouchableOpacity
+                    style={styles.dropdownOverlay}
+                    activeOpacity={1}
+                    onPress={() => setShowChatMenu(false)}
+                >
+                    <View style={[styles.dropdownMenu, { backgroundColor: colors.card }]}>
+                        <TouchableOpacity
+                            style={styles.dropdownItem}
+                            onPress={handleClearChat}
+                        >
+                            <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                            <Text style={[styles.dropdownText, { color: '#EF4444' }]}>Clear chat</Text>
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
             {/* Attachment Picker */}
             <Modal visible={showAttachmentPicker} transparent animationType="slide">
                 <Pressable style={styles.attachmentOverlay} onPress={() => setShowAttachmentPicker(false)}>
@@ -1160,7 +1301,7 @@ const styles = StyleSheet.create({
         lineHeight: 22,
     },
     messageImage: { width: SCREEN_WIDTH * 0.6, height: SCREEN_WIDTH * 0.6, borderRadius: BORDER_RADIUS.md },
-    messageText: { fontSize: FONT_SIZE.md, lineHeight: 20 },
+
     messageFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4, gap: 4 },
     editedLabel: { fontSize: FONT_SIZE.xs, fontStyle: 'italic', marginRight: 4 },
     messageTime: { fontSize: 10 },
@@ -1215,6 +1356,16 @@ const styles = StyleSheet.create({
     imageViewerModal: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
     imageViewerClose: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: SPACING.md },
     fullImage: { width: '100%', height: '80%' },
+    // Dropdown menu styles
+    dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' },
+    dropdownMenu: { position: 'absolute', top: 60, right: 16, minWidth: 150, borderRadius: BORDER_RADIUS.lg, paddingVertical: SPACING.sm, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4 },
+    dropdownItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, gap: SPACING.md },
+    dropdownText: { fontSize: FONT_SIZE.md },
+    // Selection mode bar styles
+    selectionBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1 },
+    selectionBarText: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
+    selectionBarActions: { flexDirection: 'row', gap: SPACING.md },
+    selectionBarButton: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.md },
 });
 
 export default ChatScreen;

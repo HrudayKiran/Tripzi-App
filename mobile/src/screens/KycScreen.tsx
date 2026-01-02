@@ -8,7 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
 
@@ -61,7 +61,7 @@ const KycScreen = ({ navigation }) => {
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
+      allowsEditing: false,
       aspect: type === 'aadhaar' ? [16, 10] : [1, 1],
       quality: 0.8,
     });
@@ -107,7 +107,7 @@ const KycScreen = ({ navigation }) => {
     }
 
     setUploading(true);
-    const currentUser = auth.currentUser;
+    const currentUser = auth().currentUser;
 
     try {
       // Upload images to Firebase Storage

@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import useTripLike from '../hooks/useTripLike';
 import { useTheme } from '../contexts/ThemeContext';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import CommentsModal from './CommentsModal';
 import ShareModal from './ShareModal';
@@ -45,7 +45,7 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
     const [showShare, setShowShare] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const heartScale = useRef(new Animated.Value(1)).current;
-    const currentUser = auth.currentUser;
+    const currentUser = auth().currentUser;
 
     // Initialize join state from props (no real-time listener to avoid re-render conflicts)
     useEffect(() => {
@@ -260,17 +260,19 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                                 <Text style={styles.ratingText}>{userRating.avg}</Text>
                             </View>
                         )}
-                        <TouchableOpacity
-                            style={[styles.followButton, {
-                                backgroundColor: isFollowing ? 'transparent' : colors.primary,
-                                borderColor: colors.primary,
-                            }]}
-                            onPress={handleFollow}
-                        >
-                            <Text style={[styles.followButtonText, { color: isFollowing ? colors.primary : '#fff' }]}>
-                                {isFollowing ? 'Following' : 'Follow'}
-                            </Text>
-                        </TouchableOpacity>
+                        {trip.userId !== currentUser?.uid && (
+                            <TouchableOpacity
+                                style={[styles.followButton, {
+                                    backgroundColor: isFollowing ? 'transparent' : colors.primary,
+                                    borderColor: colors.primary,
+                                }]}
+                                onPress={handleFollow}
+                            >
+                                <Text style={[styles.followButtonText, { color: isFollowing ? colors.primary : '#fff' }]}>
+                                    {isFollowing ? 'Following' : 'Follow'}
+                                </Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
                 </View>
 
@@ -325,7 +327,7 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                     })()}
                     <TouchableOpacity style={styles.locationBadge} onPress={handleLocationPress}>
                         <Ionicons name="location" size={14} color="#fff" />
-                        <Text style={styles.locationText}>{trip.location || 'Adventure'}</Text>
+                        <Text style={styles.locationText}>{trip.location}</Text>
                     </TouchableOpacity>
                     <View style={[styles.typeBadge, { backgroundColor: colors.primary }]}>
                         <Text style={styles.typeText}>{trip.tripType || 'Trip'}</Text>
@@ -376,8 +378,7 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
 
                 {/* Likes & Title */}
                 <View style={styles.contentSection}>
-                    <Text style={[styles.likesText, { color: colors.text }]}>{likeCount || 0} likes</Text>
-                    <Text style={[styles.tripTitle, { color: colors.text }]}>{trip.title || 'Amazing Adventure Trip'}</Text>
+                    <Text style={[styles.tripTitle, { color: colors.text }]}>{trip.title}</Text>
                     {trip.description && (
                         <View>
                             <Text

@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
 import { useKycGate } from '../hooks/useKycGate';
@@ -177,10 +177,11 @@ const CreateTripScreen = ({ navigation }) => {
         return `https://www.google.com/maps/search/?api=1&query=${encoded}`;
     };
 
+
     const handlePostTrip = async () => {
         if (!validateStep(step)) return;
 
-        const currentUser = auth.currentUser;
+        const currentUser = auth().currentUser;
         if (!currentUser) {
             Alert.alert('Error', 'You need to be logged in to create a trip.');
             navigation.navigate('Start');
@@ -276,7 +277,7 @@ const CreateTripScreen = ({ navigation }) => {
 
             setIsPosting(false);
             Alert.alert('Success! 🎉', 'Your trip has been posted!');
-            navigation.navigate('Feed');
+            navigation.navigate('UserProfile', { userId: auth().currentUser?.uid });
         } catch (error: any) {
             setIsPosting(false);
             Alert.alert('Error', `Failed to post trip: ${error?.message || 'Unknown error'}. Please try again.`);

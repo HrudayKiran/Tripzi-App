@@ -6,7 +6,7 @@ import * as Animatable from 'react-native-animatable';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import firestore from '@react-native-firebase/firestore';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 import FollowersModal from '../components/FollowersModal';
@@ -29,7 +29,10 @@ const FALLBACK_USER = {
 };
 
 const UserProfileScreen = ({ route, navigation }) => {
-    const { userId } = route.params;
+    const currentUser = auth().currentUser;
+    // Default to current user if no param passed (e.g. from Tab bar)
+    const userId = route.params?.userId || currentUser?.uid;
+
     const { colors } = useTheme();
     const [user, setUser] = useState(null);
     const [trips, setTrips] = useState([]);
@@ -55,7 +58,7 @@ const UserProfileScreen = ({ route, navigation }) => {
     const [hostRating, setHostRating] = useState<{ average: number; count: number } | null>(null);
     const [showFullImage, setShowFullImage] = useState(false);
     const storyProgress = useRef(new Animated.Value(0)).current;
-    const currentUser = auth.currentUser;
+
     const isOwnProfile = userId === currentUser?.uid;
 
     useEffect(() => {
@@ -63,6 +66,11 @@ const UserProfileScreen = ({ route, navigation }) => {
     }, [userId]);
 
     const loadUserData = async () => {
+        if (!userId) {
+            setLoading(false);
+            return;
+        }
+
         try {
             const userDoc = await firestore().collection('users').doc(userId).get();
 
@@ -113,22 +121,24 @@ const UserProfileScreen = ({ route, navigation }) => {
                 }
 
                 // Fetch host ratings for this user
-                try {
-                    const ratingsSnapshot = await firestore()
-                        .collection('ratings')
-                        .where('hostId', '==', userId)
-                        .get();
+                if (userId) {
+                    try {
+                        const ratingsSnapshot = await firestore()
+                            .collection('ratings')
+                            .where('hostId', '==', userId)
+                            .get();
 
-                    if (ratingsSnapshot.docs.length > 0) {
-                        const totalRating = ratingsSnapshot.docs.reduce((sum, doc) => sum + (doc.data().rating || 0), 0);
-                        const avgRating = totalRating / ratingsSnapshot.docs.length;
-                        setHostRating({
-                            average: Math.round(avgRating * 10) / 10,
-                            count: ratingsSnapshot.docs.length,
-                        });
+                        if (ratingsSnapshot.docs.length > 0) {
+                            const totalRating = ratingsSnapshot.docs.reduce((sum, doc) => sum + (doc.data().rating || 0), 0);
+                            const avgRating = totalRating / ratingsSnapshot.docs.length;
+                            setHostRating({
+                                average: Math.round(avgRating * 10) / 10,
+                                count: ratingsSnapshot.docs.length,
+                            });
+                        }
+                    } catch (e) {
+                        console.log('Host rating fetch error:', e);
                     }
-                } catch (e) {
-                    console.log('Host rating fetch error:', e);
                 }
             } else if (isOwnProfile && currentUser) {
                 setUser({
@@ -184,7 +194,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                 userId: currentUser.uid,
                 aspect: [1, 1],
                 quality: 0.7,
-                allowsEditing: true,
+                allowsEditing: false,
             });
 
             if (result.success && result.url) {
@@ -219,7 +229,7 @@ const UserProfileScreen = ({ route, navigation }) => {
 
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
+            allowsEditing: false,
             aspect: [9, 16],
             quality: 0.8,
         });
@@ -544,7 +554,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                         </View>
                     </View>
 
-                    {/* Actions */}
+                    {/* Actions - Only show for other users */}
                     {!isOwnProfile && (
                         <View style={styles.actionButtons}>
                             <TouchableOpacity
@@ -767,7 +777,25 @@ const styles = StyleSheet.create({
     followButton: { flex: 1, paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.lg, alignItems: 'center', borderWidth: 2 },
     followButtonText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
     messageButton: { flex: 1, flexDirection: 'row', paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.lg, alignItems: 'center', justifyContent: 'center', borderWidth: 2, gap: SPACING.xs },
-    messageButtonText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
+    messageButtonText: {
+        fontSize: FONT_SIZE.sm,
+        fontWeight: FONT_WEIGHT.bold,
+        marginLeft: SPACING.xs,
+    },
+    editProfileButton: {
+        marginHorizontal: SPACING.xl,
+        paddingVertical: SPACING.sm,
+        borderRadius: BORDER_RADIUS.md,
+        borderWidth: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: SPACING.md,
+        marginBottom: SPACING.sm,
+    },
+    editProfileButtonText: {
+        fontSize: FONT_SIZE.sm,
+        fontWeight: FONT_WEIGHT.bold,
+    },
     storiesSection: { marginTop: SPACING.lg },
     sectionTitle: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, marginHorizontal: SPACING.lg, marginBottom: SPACING.md },
     storiesList: { paddingHorizontal: SPACING.lg },
@@ -825,8 +853,7 @@ const styles = StyleSheet.create({
     userItemUsername: { fontSize: FONT_SIZE.sm },
     emptyList: { alignItems: 'center', paddingVertical: SPACING.xxxl },
     emptyListText: { fontSize: FONT_SIZE.sm, marginTop: SPACING.md },
-    postsSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md },
-    addPostButton: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+
     postsGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -1 },
     gridItem: { width: '33.333%', aspectRatio: 1, padding: 1 },
     gridImage: { width: '100%', height: '100%', borderRadius: 2 },

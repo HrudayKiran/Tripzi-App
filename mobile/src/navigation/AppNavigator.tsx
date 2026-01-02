@@ -8,6 +8,8 @@ import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { NetworkProvider } from '../contexts/NetworkContext';
 import { navigationRef } from './RootNavigation';
 import OfflineBanner from '../components/OfflineBanner';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 
 import usePushNotifications from '../hooks/usePushNotifications';
 import usePermissions from '../hooks/usePermissions';
@@ -44,6 +46,7 @@ import UserProfileScreen from '../screens/UserProfileScreen';
 import UsernameSetupScreen from '../screens/UsernameSetupScreen';
 import GoogleProfileScreen from '../screens/GoogleProfileScreen';
 import PhoneVerificationScreen from '../screens/PhoneVerificationScreen';
+import MessageSettingsScreen from '../screens/MessageSettingsScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -103,6 +106,51 @@ const AppTabs = () => {
 };
 
 const AppNavigator = () => {
+    const [user, setUser] = React.useState(auth().currentUser);
+    const [initializing, setInitializing] = React.useState(true);
+
+    React.useEffect(() => {
+        const subscriber = auth().onAuthStateChanged(async (userState) => {
+            setUser(userState);
+
+            // Ghost Session Check: If we have an auth user, verify they exist in Firestore
+            if (userState) {
+                try {
+                    const userDoc = await firestore().collection('users').doc(userState.uid).get();
+                    if (!userDoc.exists) {
+                        console.log('Ghost session detected (User missing in DB). Signing out...');
+                        await auth().signOut();
+                        // setUser(null) will trigger via the next onAuthStateChanged update
+                    }
+                } catch (e) {
+                    console.error('Error checking user existence:', e);
+                }
+            }
+
+            if (initializing) setInitializing(false);
+        });
+        return subscriber; // unsubscribe on unmount
+    }, []);
+
+    // Effect to handle navigation based on auth state
+    React.useEffect(() => {
+        if (initializing) return;
+
+        if (user && navigationRef.current) {
+            // User is logged in -> Go to App (Skip Splash/Start)
+            navigationRef.current.reset({
+                index: 0,
+                routes: [{ name: 'App' }],
+            });
+        } else if (!user && navigationRef.current) {
+            // User is logged out -> Go to Splash (Restores Splash Screen flow)
+            navigationRef.current.reset({
+                index: 0,
+                routes: [{ name: 'Splash' }],
+            });
+        }
+    }, [user, initializing]);
+
     return (
         <ThemeProvider>
             <NetworkProvider>
@@ -157,6 +205,7 @@ const AppNavigator = () => {
                         <Stack.Screen name="UsernameSetup" component={UsernameSetupScreen} />
                         <Stack.Screen name="GoogleProfile" component={GoogleProfileScreen} />
                         <Stack.Screen name="PhoneVerification" component={PhoneVerificationScreen} />
+                        <Stack.Screen name="MessageSettings" component={MessageSettingsScreen} />
                     </Stack.Navigator>
                 </NavigationContainer>
                 <OfflineBanner />

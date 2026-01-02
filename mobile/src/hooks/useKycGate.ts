@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import firestore from '@react-native-firebase/firestore';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 
 export type KycStatus = 'loading' | 'none' | 'pending' | 'approved' | 'verified' | 'rejected';
 
@@ -19,7 +19,7 @@ export function useKycGate(): UseKycGateReturn {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const userId = auth.currentUser?.uid;
+        const userId = auth().currentUser?.uid;
         if (!userId) {
             setKycStatus('none');
             setIsLoading(false);

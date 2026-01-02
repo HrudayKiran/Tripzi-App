@@ -1,6 +1,14 @@
 import { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } from "firebase-functions/v2/firestore";
-import { onRequest } from "firebase-functions/v2/https";
+
+// Use 'functions' for v1 triggers (Auth)
+// Use 'functions' for v1 triggers (Auth)
+import * as functions from "firebase-functions/v1";
+// v2 https imports removed - not currently used
+import { setGlobalOptions } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
+
+// Set global options for all v2 functions
+setGlobalOptions({ region: "asia-south1" });
 
 // Initialize Firebase Admin with explicit project settings
 const app = admin.initializeApp({
@@ -224,10 +232,11 @@ export const onLikeCreated = onDocumentCreated(
 // ==================== COMMENT NOTIFICATIONS ====================
 
 /**
- * Send notification when someone comments on a trip/post.
+ * Send notification when someone comments on a trip.
+ * Listens to subcollection: trips/{tripId}/comments/{commentId}
  */
 export const onCommentCreated = onDocumentCreated(
-  { document: "comments/{commentId}", database: "default" },
+  { document: "trips/{tripId}/comments/{commentId}", database: "default" },
   async (event) => {
     if (!event.data) return;
 
@@ -245,6 +254,7 @@ export const onCommentCreated = onDocumentCreated(
     const commenterDoc = await db.collection("users").doc(comment.userId).get();
     const commenter = commenterDoc.data() || {};
 
+    // Helper to truncate text
     const truncatedText = comment.text?.substring(0, 50) || "";
     const displayText = truncatedText.length < comment.text?.length ?
       `${truncatedText}...` :
@@ -443,6 +453,131 @@ export const onTripJoin = onDocumentUpdated(
     }
   });
 
+// ==================== RATING NOTIFICATIONS & AGGREGATION ====================
+
+/**
+ * 1. Notify host when rated.
+ * 2. Update host's average rating field.
+ */
+export const onRatingCreated = onDocumentCreated(
+  { document: "ratings/{ratingId}", database: "default" },
+  async (event) => {
+    if (!event.data) return;
+
+    const rating = event.data.data();
+    // rating: { tripId, hostId, userId, rating, feedback, ... }
+
+    if (!rating.hostId || !rating.rating) return;
+
+    // A. AGGREGATION: Update User's Average Rating
+    const ratingsSnapshot = await db.collection("ratings")
+      .where("hostId", "==", rating.hostId)
+      .get();
+
+    let total = 0;
+    ratingsSnapshot.forEach(doc => {
+      total += (doc.data().rating || 0);
+    });
+
+    const count = ratingsSnapshot.size;
+    const average = count > 0 ? Number((total / count).toFixed(1)) : 0;
+
+    await db.collection("users").doc(rating.hostId).update({
+      rating: average
+    });
+
+    // B. NOTIFICATION: Notify Host
+    const raterDoc = await db.collection("users").doc(rating.userId).get();
+    const rater = raterDoc.data() || {};
+
+    await createNotification({
+      recipientId: rating.hostId,
+      type: "rating",
+      title: "New Rating! ⭐",
+      message: `${rater.displayName || "Someone"} gave you ${rating.rating} stars!`,
+      entityId: rating.tripId,
+      entityType: "trip",
+      actorId: rating.userId,
+      actorName: rater.displayName,
+      actorPhotoUrl: rater.photoURL,
+      deepLinkRoute: "TripDetails", // Or Profile
+      deepLinkParams: { tripId: rating.tripId },
+    });
+
+    await sendPushToUser(rating.hostId, {
+      title: "New Rating! ⭐",
+      body: `You received a ${rating.rating}-star rating from ${rater.displayName || "Someone"}.`,
+      data: { route: "UserProfile", userId: rating.hostId }, // Go to own profile to see stats
+    });
+  });
+
+// ==================== FOLLOW NOTIFICATION ====================
+
+/**
+ * Detect when 'followers' array changes => Send Notification.
+ */
+export const onUserFollowed = onDocumentUpdated(
+  { document: "users/{userId}", database: "default" },
+  async (event) => {
+    if (!event.data) return;
+
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+    const userId = event.params.userId; // The user BEING followed
+
+    const beforeFollowers = before.followers || [];
+    const afterFollowers = after.followers || [];
+
+    // Find new followers
+    const newFollowers = afterFollowers.filter((uid: string) => !beforeFollowers.includes(uid));
+
+    if (newFollowers.length === 0) return;
+
+    for (const followerId of newFollowers) {
+      const followerDoc = await db.collection("users").doc(followerId).get();
+      const follower = followerDoc.data() || {};
+
+      await createNotification({
+        recipientId: userId,
+        type: "follow",
+        title: "New Follower! 👋",
+        message: `${follower.displayName || "Someone"} started following you.`,
+        entityId: followerId,
+        entityType: "user",
+        actorId: followerId,
+        actorName: follower.displayName,
+        actorPhotoUrl: follower.photoURL,
+        deepLinkRoute: "UserProfile",
+        deepLinkParams: { userId: followerId },
+      });
+
+      await sendPushToUser(userId, {
+        title: "New Follower! 👋",
+        body: `${follower.displayName || "Someone"} started following you.`,
+        data: { route: "UserProfile", userId: followerId },
+      });
+    }
+  });
+
+// ==================== STORY NOTIFICATION ====================
+
+/**
+ * Notify followers when a user posts a story.
+ * (Limited to batch sending to avoid massive fanout bills, usually topics are better here)
+ * For MVP: We will just log it or send to top 5 followers? 
+ * Actually, let's skip massive fanout for now as it's dangerous for free tier. 
+ * We will fully implement it but Commented OUT the heavy loop.
+ */
+export const onStoryCreated = onDocumentCreated(
+  { document: "stories/{storyId}", database: "default" },
+  async (event) => {
+    // Placeholder for Story Notifications
+    // Requires Fetching all followers -> Sending msg.
+    // Dangerous for > 100 followers on Blaze/Spark plan limits.
+    // console.log("Story created - Notification logic reserved for scalability update.");
+    return;
+  });
+
 // ==================== NEW USER WELCOME NOTIFICATION ====================
 
 /**
@@ -468,7 +603,7 @@ export const onUserCreated = onDocumentCreated(
     });
   });
 
-import * as functions from "firebase-functions/v1";
+
 
 // ==================== AUTH TRIGGERS (v1) ====================
 
@@ -483,11 +618,19 @@ export const createProfileOnAuth = functions.auth.user().onCreate(async (user: f
   const userDoc = await userRef.get();
 
   if (!userDoc.exists) {
+    // Fetch fresh user data to get the latest displayName (in case client updated it quickly)
+    let freshUser = user;
+    try {
+      freshUser = await admin.auth().getUser(user.uid);
+    } catch (e) {
+      console.log("Error fetching fresh user data, using event data:", e);
+    }
+
     await userRef.set({
       userId: user.uid,
       email: user.email,
-      displayName: user.displayName || "",
-      photoURL: user.photoURL || null,
+      displayName: freshUser.displayName || user.displayName || "",
+      photoURL: freshUser.photoURL || user.photoURL || null,
       emailVerified: user.emailVerified || false,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -501,19 +644,7 @@ export const createProfileOnAuth = functions.auth.user().onCreate(async (user: f
   }
 });
 
-/**
- * Cleanup user data when user is deleted from Auth Console or Programmatically.
- */
-export const cleanupOnAuthDelete = functions.auth.user().onDelete(async (user: functions.auth.UserRecord) => {
-  if (!user) return;
-
-  console.log(`Auth user deleted: ${user.uid}. Starting cleanup...`);
-  await cleanupUserData(user.uid);
-
-  // Also try to delete the user document itself if it still exists
-  // (This might trigger onUserDeleted, but that's fine, cleanup is idempotent-ish)
-  await db.collection("users").doc(user.uid).delete();
-});
+// NOTE: cleanupOnAuthDelete has been removed - use cleanupAccountOnAuthDelete instead
 
 // ==================== CLEANUP HELPERS ====================
 
@@ -522,32 +653,74 @@ export const cleanupOnAuthDelete = functions.auth.user().onDelete(async (user: f
  */
 async function cleanupUserData(userId: string) {
   console.log(`Running cleanupUserData for: ${userId}`);
-  const batch = db.batch();
   let deleteCount = 0;
 
+  // Use individual try-catch for each section so one failure doesn't stop others
+
+  // 1. Delete user's trips and their comments
   try {
-    // 1. Delete user's trips
     const tripsSnapshot = await db.collection("trips")
       .where("userId", "==", userId)
       .get();
 
     for (const doc of tripsSnapshot.docs) {
-      // Also delete trip comments subcollection
-      const commentsSnapshot = await doc.ref.collection("comments").get();
-      for (const comment of commentsSnapshot.docs) {
-        batch.delete(comment.ref);
-        deleteCount++;
+      // Delete trip comments subcollection
+      try {
+        const commentsSnapshot = await doc.ref.collection("comments").get();
+        for (const comment of commentsSnapshot.docs) {
+          await comment.ref.delete();
+          deleteCount++;
+        }
+      } catch (e) {
+        console.log(`Could not delete comments for trip ${doc.id}`);
       }
-      batch.delete(doc.ref);
+      await doc.ref.delete();
       deleteCount++;
     }
+    console.log(`Deleted ${tripsSnapshot.size} trips for ${userId}`);
+  } catch (e: any) {
+    console.log(`Error deleting trips for ${userId}:`, e.message);
+  }
 
-    // 2. Delete push_tokens document
-    const pushTokenRef = db.collection("push_tokens").doc(userId);
-    batch.delete(pushTokenRef);
+  // 2. Delete user's stories
+  try {
+    const storiesSnapshot = await db.collection("stories")
+      .where("userId", "==", userId)
+      .get();
+    for (const doc of storiesSnapshot.docs) {
+      await doc.ref.delete();
+      deleteCount++;
+    }
+    console.log(`Deleted ${storiesSnapshot.size} stories for ${userId}`);
+  } catch (e: any) {
+    console.log(`Error deleting stories for ${userId}:`, e.message);
+  }
+
+  // 3. Delete ratings made by user
+  try {
+    const ratingsSnapshot = await db.collection("ratings")
+      .where("userId", "==", userId)
+      .get();
+    for (const doc of ratingsSnapshot.docs) {
+      await doc.ref.delete();
+      deleteCount++;
+    }
+    console.log(`Deleted ${ratingsSnapshot.size} ratings for ${userId}`);
+  } catch (e: any) {
+    console.log(`Error deleting ratings for ${userId}:`, e.message);
+  }
+
+  // 4. Delete push_tokens document (CRITICAL)
+  try {
+    await db.collection("push_tokens").doc(userId).delete();
+    console.log(`Deleted push_token for ${userId}`);
     deleteCount++;
+  } catch (e: any) {
+    console.log(`Error deleting push_token for ${userId}:`, e.message);
+  }
 
-    // 3. Remove user from chats and delete chats where user is the only participant
+  // 5. Remove user from chats and delete chats where user is the only participant
+  try {
     const chatsSnapshot = await db.collection("chats")
       .where("participants", "array-contains", userId)
       .get();
@@ -557,43 +730,42 @@ async function cleanupUserData(userId: string) {
       const participants = chatData.participants || [];
 
       if (participants.length <= 1) {
-        // User is the only participant, delete the chat
-        batch.delete(chatDoc.ref);
+        await chatDoc.ref.delete();
         deleteCount++;
       } else {
-        // Remove user from participants
-        batch.update(chatDoc.ref, {
+        await chatDoc.ref.update({
           participants: admin.firestore.FieldValue.arrayRemove(userId)
         });
       }
     }
-
-    // 4. Delete user's storage files
-    const bucket = admin.storage().bucket();
-
-    // Delete profile images
-    try {
-      await bucket.deleteFiles({ prefix: `profiles/${userId}/` });
-    } catch (e) {
-      console.log(`No profile images to delete for user ${userId}`);
-    }
-
-    // Delete trip images
-    try {
-      await bucket.deleteFiles({ prefix: `trips/${userId}/` });
-    } catch (e) {
-      console.log(`No trip images to delete for user ${userId}`);
-    }
-
-    // Commit all Firestore deletions
-    if (deleteCount > 0) {
-      await batch.commit();
-    }
-
-    console.log(`Cleanup complete for ${userId}. Deleted/updated ${deleteCount} docs.`);
-  } catch (error) {
-    console.error(`Error cleaning up user ${userId}:`, error);
+    console.log(`Processed ${chatsSnapshot.size} chats for ${userId}`);
+  } catch (e: any) {
+    console.log(`Error processing chats for ${userId}:`, e.message);
   }
+
+  // 6. Delete user's storage files (CRITICAL)
+  // Use explicit bucket name for reliability
+  const bucket = admin.storage().bucket("tripzi-app.firebasestorage.app");
+
+  // Delete profile images
+  try {
+    console.log(`Deleting storage: profiles/${userId}/`);
+    await bucket.deleteFiles({ prefix: `profiles/${userId}/` });
+    console.log(`Deleted profile images for ${userId}`);
+  } catch (e: any) {
+    console.log(`No profile images to delete or storage error for user ${userId}:`, e.message);
+  }
+
+  // Delete trip images
+  try {
+    console.log(`Deleting storage: trips/${userId}/`);
+    await bucket.deleteFiles({ prefix: `trips/${userId}/` });
+    console.log(`Deleted trip images for ${userId}`);
+  } catch (e: any) {
+    console.log(`No trip images to delete or storage error for user ${userId}:`, e.message);
+  }
+
+  console.log(`Cleanup complete for ${userId}. Deleted/updated ${deleteCount} docs.`);
 }
 
 
@@ -610,142 +782,68 @@ export const onUserDeleted = onDocumentDeleted(
     await cleanupUserData(userId);
   });
 
-// ==================== JSON IMPORT FROM CLOUD STORAGE ====================
+/**
+ * Trigger cleanup when the Firebase Auth account is deleted.
+ * This is the primary trigger for the "Delete Account" feature in the app.
+ */
+/**
+ * Trigger cleanup when the Firebase Auth account is deleted.
+ * This is the primary trigger for the "Delete Account" feature in the app.
+ * Using v1 trigger because v2 identity events are primarily blocking.
+ */
+export const cleanupAccountOnAuthDelete = functions.auth.user().onDelete(async (user: functions.auth.UserRecord) => {
+  console.log(`Auth User deleted: ${user.uid}. Triggering cleanup...`);
+
+  // 1. Run the standard cleanup (Push tokens, trips, storage)
+  await cleanupUserData(user.uid);
+
+  // 2. Explicitly delete the Firestore User Document 
+  // (This ensures the profile is gone, avoiding ghost users)
+  try {
+    await admin.firestore().collection("users").doc(user.uid).delete();
+    console.log(`Verified Firestore profile deleted for ${user.uid}`);
+  } catch (e) {
+    console.log(`Error deleting user profile doc:`, e);
+  }
+});
 
 /**
- * HTTP Cloud Function to import JSON data from Cloud Storage to Firestore.
- * 
- * Usage: POST to this function URL with body:
- * {
- *   "bucketPath": "path/to/file.json",  // Path in Cloud Storage
- *   "collection": "splash_carousel",     // Target Firestore collection
- *   "useIdField": "id"                   // Optional: field to use as document ID
- * }
- * 
- * Or call with query params:
- * ?bucketPath=path/to/file.json&collection=splash_carousel&useIdField=id
+ * Callable Cloud Function to delete the current user's account.
+ * Uses admin privileges, so no reauthentication is required on the client.
+ * Runs cleanup DIRECTLY to guarantee deletion (doesn't rely on trigger).
  */
-export const importJsonToFirestore = onRequest(
-  { cors: true, region: "asia-south1" },
-  async (req, res) => {
-    try {
-      // Get parameters from body or query
-      const bucketPath = req.body?.bucketPath || req.query.bucketPath;
-      const collection = req.body?.collection || req.query.collection;
-      const useIdField = req.body?.useIdField || req.query.useIdField;
-
-      if (!bucketPath || !collection) {
-        res.status(400).json({
-          error: "Missing required parameters",
-          usage: "POST with { bucketPath: 'path/to/file.json', collection: 'targetCollection', useIdField: 'id' }"
-        });
-        return;
-      }
-
-      console.log(`Importing ${bucketPath} to collection ${collection}`);
-
-      // Get the file from Cloud Storage
-      const bucket = admin.storage().bucket();
-      const file = bucket.file(bucketPath);
-
-      // Check if file exists
-      const [exists] = await file.exists();
-      if (!exists) {
-        res.status(404).json({ error: `File not found: ${bucketPath}` });
-        return;
-      }
-
-      // Download and parse JSON
-      const [contents] = await file.download();
-      const jsonData = JSON.parse(contents.toString("utf8"));
-
-      // Handle both array and single object
-      const items = Array.isArray(jsonData) ? jsonData : [jsonData];
-
-      if (items.length === 0) {
-        res.status(400).json({ error: "JSON file is empty" });
-        return;
-      }
-
-      // Use batch writes for efficiency
-      const batch = db.batch();
-      let count = 0;
-
-      for (const item of items) {
-        let docRef;
-
-        // Use specified field as document ID, or auto-generate
-        if (useIdField && item[useIdField]) {
-          docRef = db.collection(collection).doc(String(item[useIdField]));
-        } else {
-          docRef = db.collection(collection).doc();
-        }
-
-        batch.set(docRef, {
-          ...item,
-          importedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        count++;
-      }
-
-      await batch.commit();
-
-      console.log(`Successfully imported ${count} documents to ${collection}`);
-
-      res.status(200).json({
-        success: true,
-        message: `Imported ${count} documents to collection '${collection}'`,
-        collection,
-        documentsCreated: count,
-      });
-
-    } catch (error: any) {
-      console.error("Import error:", error);
-      res.status(500).json({
-        error: "Import failed",
-        message: error.message,
-      });
-    }
+export const deleteMyAccount = functions.https.onCall(async (data, context) => {
+  // Verify the user is authenticated
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "You must be logged in to delete your account.");
   }
-);
 
-/**
- * Simple HTTP function to directly import carousel data without needing a file.
- * Just call this URL to set up the splash carousel.
- */
-export const setupCarousel = onRequest(
-  { cors: true, region: "asia-south1" },
-  async (req, res) => {
+  const uid = context.auth.uid;
+  console.log(`deleteMyAccount called for user: ${uid}`);
+
+  try {
+    // 1. Run cleanup FIRST (before deleting auth, to guarantee it runs)
+    console.log(`Running cleanup for ${uid} BEFORE auth deletion...`);
+    await cleanupUserData(uid);
+
+    // 2. Delete the Firestore user document explicitly
     try {
-      const carouselData = [
-        { id: "1", image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800", title: "Ladakh", subtitle: "Ride through the mountains", location: "Khardung La Pass" },
-        { id: "2", image: "https://images.unsplash.com/photo-1585409677983-0f6c41ca9c3b?w=800", title: "Himalayas", subtitle: "Touch the clouds", location: "Valley of Flowers" },
-        { id: "3", image: "https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=800", title: "Kerala", subtitle: "Backwater paradise", location: "Alleppey" },
-        { id: "4", image: "https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=800", title: "Goa", subtitle: "Beach vibes", location: "Palolem Beach" },
-        { id: "5", image: "https://images.unsplash.com/photo-1477587458883-47145ed94245?w=800", title: "Rajasthan", subtitle: "Desert adventures", location: "Jaisalmer" },
-      ];
-
-      // Write to app_config/splash_carousel (the format the app expects)
-      await db.collection("app_config").doc("splash_carousel").set({
-        images: carouselData,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      console.log("Carousel setup complete!");
-
-      res.status(200).json({
-        success: true,
-        message: "Carousel data written to app_config/splash_carousel",
-        imagesCount: carouselData.length,
-      });
-
-    } catch (error: any) {
-      console.error("Setup carousel error:", error);
-      res.status(500).json({
-        error: "Setup failed",
-        message: error.message,
-      });
+      await admin.firestore().collection("users").doc(uid).delete();
+      console.log(`Deleted Firestore user doc for ${uid}`);
+    } catch (e) {
+      console.log(`User doc may not exist or already deleted:`, e);
     }
+
+    // 3. Delete the Auth user using Admin SDK
+    await admin.auth().deleteUser(uid);
+    console.log(`Successfully deleted Auth user: ${uid}`);
+
+    return { success: true, message: "Account deleted successfully." };
+  } catch (error: any) {
+    console.error(`Failed to delete user ${uid}:`, error);
+    throw new functions.https.HttpsError("internal", "Failed to delete account. Please try again.");
   }
-);
+});
+
+// NOTE: importJsonToFirestore and setupCarousel have been removed to reduce quota usage.
+// If needed again, they can be restored from git history.

@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { LinearGradient } from 'expo-linear-gradient';
 import firestore from '@react-native-firebase/firestore';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 
@@ -29,7 +29,7 @@ const MessagesScreen = ({ navigation }) => {
     const [groupSearchQuery, setGroupSearchQuery] = useState('');
     const [groupSearchResults, setGroupSearchResults] = useState<any[]>([]);
     const [showMenuDropdown, setShowMenuDropdown] = useState(false);
-    const currentUser = auth.currentUser;
+    const currentUser = auth().currentUser;
 
     useEffect(() => {
         loadChats();

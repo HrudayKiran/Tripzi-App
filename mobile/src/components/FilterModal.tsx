@@ -19,6 +19,9 @@ export type FilterOptions = {
     maxTravelers: number;
     minDays: number;
     destination: string;
+    tripType?: string;
+    transportMode?: string;
+    genderPreference?: string;
 };
 
 const SORT_OPTIONS = [

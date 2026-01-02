@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { auth } from '../firebase';
+import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 
 const useTripLike = (trip) => {
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(trip.likes?.length || 0);
-  const currentUser = auth.currentUser;
+  const currentUser = auth().currentUser;
 
   useEffect(() => {
     if (currentUser && trip.likes?.includes(currentUser.uid)) {
