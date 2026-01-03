@@ -23,16 +23,16 @@ const getDeviceId = (): string => {
 const usePushNotifications = () => {
   const hasHandledInitialNotification = useRef(false);
 
-  console.log('🔔 [PUSH] usePushNotifications hook MOUNTED');
+
 
   useEffect(() => {
-    console.log('🔔 [PUSH] useEffect triggered - starting setup...');
+
     let unsubscribeAuth: (() => void) | null = null;
     let unsubscribeOnNotificationOpened: (() => void) | null = null;
     let unsubscribeOnMessage: (() => void) | null = null;
 
     const setup = async () => {
-      console.log('🔔 [PUSH] setup() called');
+
       try {
         const messaging = getMessaging(); // Modular instance
 
@@ -87,60 +87,60 @@ const usePushNotifications = () => {
           }
         });
       } catch (error) {
-        console.log('Push notification setup error:', error);
+
       }
     };
 
     const setupMessaging = async (user: any) => {
       try {
-        console.log('🔔 [PUSH] Starting messaging setup for user:', user.uid);
+
         const messaging = getMessaging();
         const authStatus = await requestPermission(messaging);
-        console.log('🔔 [PUSH] Permission status:', authStatus);
+
 
         const enabled =
           authStatus === AuthorizationStatus.AUTHORIZED ||
           authStatus === AuthorizationStatus.PROVISIONAL;
 
         if (enabled) {
-          console.log('🔔 [PUSH] Notifications ENABLED, getting token...');
+
           getAndSaveToken(user);
           // Token refresh currently requires using instance method in some versions, 
           // or check documentation. safely sticking to getToken for now.
           // Note: onTokenRefresh might be deprecated or moved.
           // For simplicity, we just get the token once per session.
         } else {
-          console.log('🔔 [PUSH] Notifications DENIED by user');
+
         }
       } catch (error: any) {
-        console.log('🔔 [PUSH] Messaging setup ERROR:', error?.message || error);
+
       }
     };
 
     const getAndSaveToken = async (user: any, freshToken?: string) => {
       try {
-        console.log('🔔 [PUSH] Getting FCM token...');
+
         const messaging = getMessaging();
         const token = freshToken || await getToken(messaging);
 
         if (!token) {
-          console.log('🔔 [PUSH] ERROR: Token is empty/null!');
+
           return;
         }
 
-        console.log('🔔 [PUSH] FCM Token obtained:', token.substring(0, 30) + '...');
+
 
         await saveTokenToFirestore(user, token);
-        console.log('🔔 [PUSH] ✅ Token saved to Firestore for user:', user.uid);
+
       } catch (error: any) {
-        console.log('🔔 [PUSH] Token get/save ERROR:', error?.message || error);
+
       }
     };
 
     const saveTokenToFirestore = async (user: any, token: string) => {
       try {
         const deviceId = getDeviceId();
-        console.log('🔔 [PUSH] Saving token to Firestore...');
+
 
         const db = getFirestore();
         const tokenRef = doc(db, 'push_tokens', user.uid);
@@ -155,9 +155,9 @@ const usePushNotifications = () => {
           }
         }, { merge: true });
 
-        console.log('🔔 [PUSH] ✅ Firestore write successful!');
+
       } catch (error: any) {
-        console.log('🔔 [PUSH] ❌ Firestore save ERROR:', error?.code, error?.message);
+
       }
     };
 

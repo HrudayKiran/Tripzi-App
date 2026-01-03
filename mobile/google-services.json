@@ -14,11 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "334857280812-dee5ev8j9bbh41nh5vk54rrueh5of85d.apps.googleusercontent.com",
+          "client_id": "334857280812-l2q6bcj5ppauatufl45nsk741356n7cs.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.tripzi.mobile",
-            "certificate_hash": "43b55b6afa0038699b724e7d5f7abf8051e262f6"
+            "certificate_hash": "68e43aabd25f4e0bd5d03e98081876b89057d9e7"
           }
         },
         {

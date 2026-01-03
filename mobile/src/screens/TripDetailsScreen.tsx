@@ -125,7 +125,8 @@ const TripDetailsScreen = ({ route, navigation }) => {
         const participants = await Promise.all(participantPromises);
         setParticipantsData(participants);
       } catch (error) {
-        console.log('Error fetching participants:', error);
+        // Error fetching participants
+
       }
     };
     fetchParticipants();

@@ -1,5 +1,5 @@
 import React, { memo, useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Share, Animated, Dimensions, Alert, Linking, ScrollView, Modal } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Share, Animated, Dimensions, Alert, Linking, ScrollView, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import useTripLike from '../hooks/useTripLike';
@@ -12,6 +12,7 @@ import CustomToggle from './CustomToggle';
 import DefaultAvatar from './DefaultAvatar';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
 import { DEFAULT_TRIP_IMAGE, isValidImageUrl } from '../constants/defaults';
+import { Video, ResizeMode } from 'expo-av';
 
 const { width } = Dimensions.get('window');
 
@@ -44,6 +45,9 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
     const [activeImageIndex, setActiveImageIndex] = useState(0);
     const [showShare, setShowShare] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
+    const [isMuted, setIsMuted] = useState(true);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const videoRef = useRef<Video>(null);
     const heartScale = useRef(new Animated.Value(1)).current;
     const currentUser = auth().currentUser;
 
@@ -279,9 +283,12 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                 {/* Trip Images Carousel */}
                 <View style={styles.imageContainer}>
                     {(() => {
-                        const images = trip.images?.length > 0
-                            ? trip.images
-                            : [trip.coverImage || trip.image || DEFAULT_TRIP_IMAGE];
+                        let hasVideo = !!trip.video;
+                        // Construct media array: Video first, then images
+                        const images = hasVideo
+                            ? [trip.video, ...(trip.images || [])]
+                            : (trip.images?.length > 0 ? trip.images : [trip.coverImage || trip.image || DEFAULT_TRIP_IMAGE]);
+
                         return (
                             <>
                                 <ScrollView
@@ -290,19 +297,63 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                                     showsHorizontalScrollIndicator={false}
                                     scrollEventThrottle={16}
                                     decelerationRate="fast"
+                                    nestedScrollEnabled={true}
+                                    snapToInterval={width}
+                                    snapToAlignment="start"
+                                    disableIntervalMomentum={true}
                                     onMomentumScrollEnd={(e) => {
                                         const index = Math.round(e.nativeEvent.contentOffset.x / width);
                                         setActiveImageIndex(index);
+                                        // Auto-pause video if scrolled away
+                                        if (hasVideo && index !== 0) {
+                                            setIsPlaying(false);
+                                        }
                                     }}
                                 >
-                                    {images.map((item, index) => (
-                                        <Image
-                                            key={`img_${index}`}
-                                            style={styles.tripImage}
-                                            source={{ uri: item }}
-                                            resizeMode="cover"
-                                        />
-                                    ))}
+                                    {images.map((item, index) => {
+                                        const isVideoItem = hasVideo && index === 0;
+
+                                        if (isVideoItem) {
+                                            return (
+                                                <Pressable
+                                                    key={`vid_${index}`}
+                                                    style={styles.tripImage}
+                                                    onPress={() => setIsPlaying(!isPlaying)}
+                                                >
+                                                    <Video
+                                                        ref={videoRef}
+                                                        style={styles.tripImage}
+                                                        source={{ uri: item }}
+                                                        useNativeControls={false}
+                                                        resizeMode={ResizeMode.COVER}
+                                                        isLooping
+                                                        shouldPlay={isPlaying && activeImageIndex === index}
+                                                        isMuted={isMuted}
+                                                    />
+                                                    {!isPlaying && (
+                                                        <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }]}>
+                                                            <Ionicons name="play-circle" size={60} color="rgba(255, 255, 255, 0.8)" />
+                                                        </View>
+                                                    )}
+                                                    <TouchableOpacity
+                                                        style={styles.muteButton}
+                                                        onPress={() => setIsMuted(!isMuted)}
+                                                    >
+                                                        <Ionicons name={isMuted ? "volume-mute" : "volume-high"} size={20} color="#fff" />
+                                                    </TouchableOpacity>
+                                                </Pressable>
+                                            );
+                                        }
+
+                                        return (
+                                            <Image
+                                                key={`img_${index}`}
+                                                style={styles.tripImage}
+                                                source={{ uri: item }}
+                                                resizeMode="cover"
+                                            />
+                                        );
+                                    })}
                                 </ScrollView>
                                 {images.length > 1 && (
                                     <View style={styles.imageDotsContainer}>
@@ -329,9 +380,6 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                         <Ionicons name="location" size={14} color="#fff" />
                         <Text style={styles.locationText}>{trip.location}</Text>
                     </TouchableOpacity>
-                    <View style={[styles.typeBadge, { backgroundColor: colors.primary }]}>
-                        <Text style={styles.typeText}>{trip.tripType || 'Trip'}</Text>
-                    </View>
                 </View>
 
                 {/* Action Bar - Instagram Style */}
@@ -456,14 +504,14 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                 tripImage={trip.coverImage || trip.images?.[0]}
             />
 
-            {/* Three Dots Menu Modal */}
+            {/* Three Dots Menu - Small Popup Style */}
             <Modal visible={showMenu} transparent animationType="fade" onRequestClose={() => setShowMenu(false)}>
                 <TouchableOpacity
                     style={styles.menuOverlay}
                     activeOpacity={1}
                     onPress={() => setShowMenu(false)}
                 >
-                    <View style={[styles.menuContainer, { backgroundColor: colors.card }]}>
+                    <View style={[styles.menuPopup, { backgroundColor: colors.card }]}>
                         <TouchableOpacity
                             style={styles.menuOption}
                             onPress={() => {
@@ -471,15 +519,26 @@ const TripCard = memo(({ trip, onPress }: TripCardProps) => {
                                 onPress && onPress();
                             }}
                         >
-                            <Ionicons name="eye-outline" size={22} color={colors.text} />
-                            <Text style={[styles.menuOptionText, { color: colors.text }]}>View Full Details</Text>
+                            <Ionicons name="eye-outline" size={20} color={colors.text} />
+                            <Text style={[styles.menuOptionText, { color: colors.text }]}>View Details</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.menuOption}
+                            onPress={() => {
+                                setShowMenu(false);
+                                // TODO: Implement save/bookmark functionality
+                                Alert.alert('Saved', 'Trip saved to your bookmarks!');
+                            }}
+                        >
+                            <Ionicons name="bookmark-outline" size={20} color={colors.text} />
+                            <Text style={[styles.menuOptionText, { color: colors.text }]}>Save</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.menuOption}
                             onPress={() => setShowMenu(false)}
                         >
-                            <Ionicons name="close-outline" size={22} color={colors.textSecondary} />
-                            <Text style={[styles.menuOptionText, { color: colors.textSecondary }]}>Cancel</Text>
+                            <Ionicons name="flag-outline" size={20} color="#EF4444" />
+                            <Text style={[styles.menuOptionText, { color: '#EF4444' }]}>Report</Text>
                         </TouchableOpacity>
                     </View>
                 </TouchableOpacity>
@@ -506,6 +565,7 @@ const styles = StyleSheet.create({
     imageDot: { width: 8, height: 8, borderRadius: 4 },
     imageCountBadge: { position: 'absolute', top: SPACING.md, left: SPACING.md, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.sm },
     imageCountText: { color: '#fff', fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.semibold },
+    muteButton: { position: 'absolute', bottom: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.6)', padding: 6, borderRadius: 20 },
     locationBadge: { position: 'absolute', bottom: SPACING.md, left: SPACING.md, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.lg },
     locationText: { color: '#fff', fontSize: FONT_SIZE.xs, marginLeft: SPACING.xs },
     typeBadge: { position: 'absolute', top: SPACING.md, right: SPACING.md, paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.sm },
@@ -536,10 +596,10 @@ const styles = StyleSheet.create({
     toggleLabel: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold },
     completedBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#D1FAE5', paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.lg, gap: 4 },
     completedText: { color: '#10B981', fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold },
-    menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-    menuContainer: { width: '80%', borderRadius: BORDER_RADIUS.xl, padding: SPACING.md, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 10 },
-    menuOption: { flexDirection: 'row', alignItems: 'center', padding: SPACING.lg, gap: SPACING.md, borderRadius: BORDER_RADIUS.lg },
-    menuOptionText: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
+    menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end', alignItems: 'flex-end', paddingBottom: 80, paddingRight: SPACING.md },
+    menuPopup: { minWidth: 160, borderRadius: BORDER_RADIUS.lg, paddingVertical: SPACING.xs, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 10 },
+    menuOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: SPACING.md, paddingHorizontal: SPACING.lg, gap: SPACING.sm },
+    menuOptionText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.medium },
 });
 
 export default TripCard;

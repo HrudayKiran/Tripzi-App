@@ -10,7 +10,7 @@ const SEND_LOCK_DURATION = 2000; // 2 seconds lock per message
 // Firestore types
 type FirestoreTimestamp = { toDate: () => Date } | Date | null;
 
-export type MessageType = 'text' | 'image' | 'location' | 'voice' | 'system';
+export type MessageType = 'text' | 'image' | 'video' | 'location' | 'voice' | 'system' | 'trip_share';
 export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read';
 
 export interface ReplyTo {
@@ -74,7 +74,6 @@ export function useChatMessages(chatId: string | undefined): UseChatMessagesRetu
             return;
         }
 
-        console.log('💬 [MESSAGES] Setting up listener for chat:', chatId);
 
         const unsubscribe = firestore()
             .collection('chats')
@@ -104,7 +103,6 @@ export function useChatMessages(chatId: string | undefined): UseChatMessagesRetu
                     setLoading(false);
                     setError(null);
 
-                    console.log('💬 [MESSAGES] Loaded', messagesList.length, 'messages');
                 },
                 (err) => {
                     console.error('💬 [MESSAGES] Error:', err);
@@ -130,13 +128,11 @@ export function useChatMessages(chatId: string | undefined): UseChatMessagesRetu
 
             // Check if this exact message was sent recently (within lock duration)
             if (lastSendTime && (now - lastSendTime) < SEND_LOCK_DURATION) {
-                console.log('💬 [MESSAGES] Blocked duplicate: same message sent', now - lastSendTime, 'ms ago');
                 return;
             }
 
             // Also check ref lock
             if (sendingLock.current) {
-                console.log('💬 [MESSAGES] Blocked duplicate: ref lock active');
                 return;
             }
 
@@ -188,7 +184,7 @@ export function useChatMessages(chatId: string | undefined): UseChatMessagesRetu
                         [`unreadCount.${currentUser.uid}`]: 0,
                     });
 
-                console.log('💬 [MESSAGES] Message sent successfully');
+
             } finally {
                 // Unlock after a short delay to prevent rapid re-sends
                 setTimeout(() => {
@@ -230,7 +226,7 @@ export function useChatMessages(chatId: string | undefined): UseChatMessagesRetu
             });
 
             await batch.commit();
-            console.log('💬 [MESSAGES] Marked', unreadMessages.length, 'messages as read');
+
         } catch (err) {
             console.error('💬 [MESSAGES] Error marking as read:', err);
         }
@@ -238,7 +234,7 @@ export function useChatMessages(chatId: string | undefined): UseChatMessagesRetu
 
     const loadMoreMessages = useCallback(() => {
         // Pagination can be implemented here if needed
-        console.log('💬 [MESSAGES] Load more requested');
+
     }, []);
 
     return {

@@ -25,7 +25,7 @@ const DEBUG_TOKEN = 'YOUR-DEBUG-TOKEN'; // Replace with your debug token
  */
 export const initializeAppCheck = async () => {
     if (!ENABLE_APP_CHECK) {
-        console.log('App Check disabled in development');
+
         return;
     }
 
@@ -40,11 +40,11 @@ export const initializeAppCheck = async () => {
             isTokenAutoRefreshEnabled: true,
         });
 
-        console.log('✅ App Check initialized successfully');
+
 
         // Get initial token to verify it's working
         const { token } = await appCheck().getToken(true);
-        console.log('App Check token obtained:', token.substring(0, 20) + '...');
+
 
     } catch (error) {
         console.error('Failed to initialize App Check:', error);

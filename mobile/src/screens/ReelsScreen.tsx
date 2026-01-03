@@ -72,7 +72,8 @@ const ReelsScreen = () => {
                 );
                 setReels(reelsData);
             } catch (error) {
-                console.log('Error fetching reels:', error);
+                // Error
+
             } finally {
                 setLoading(false);
             }

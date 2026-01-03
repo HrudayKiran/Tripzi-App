@@ -93,7 +93,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                         .get();
 
                     setTrips(tripsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), user: userData })));
-                } catch (e) { console.log('Trips error:', e); }
+                } catch (e) { }
 
                 // Load followers/following
                 if (userData.followers?.length > 0) {
@@ -137,7 +137,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                             });
                         }
                     } catch (e) {
-                        console.log('Host rating fetch error:', e);
+
                     }
                 }
             } else if (isOwnProfile && currentUser) {
@@ -160,7 +160,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                 setProfileImage(FALLBACK_USER.photoURL);
             }
         } catch (error) {
-            console.log('Error loading user:', error);
+
             if (isOwnProfile && currentUser) {
                 setUser({
                     id: currentUser.uid,
@@ -214,7 +214,8 @@ const UserProfileScreen = ({ route, navigation }) => {
                 Alert.alert('Upload Failed', result.error);
             }
         } catch (error) {
-            console.log('Profile image upload error:', error);
+            // Error upload blocked
+
             Alert.alert('Error', 'Failed to upload profile image. Please try again.');
         }
     };
@@ -396,7 +397,8 @@ const UserProfileScreen = ({ route, navigation }) => {
                 otherUserPhoto: user.photoURL,
             });
         } catch (error) {
-            console.log('Error starting chat:', error);
+            // Error starting chat
+
             Alert.alert('Error', 'Could not start chat. Please try again.');
         }
     };
@@ -482,7 +484,7 @@ const UserProfileScreen = ({ route, navigation }) => {
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>
                 {/* Header */}
                 <LinearGradient colors={['#8B5CF6', '#EC4899', '#F59E0B']} style={styles.gradientHeader}>
                     <View style={styles.headerRow}>

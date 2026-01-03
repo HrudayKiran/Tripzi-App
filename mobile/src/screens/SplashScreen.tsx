@@ -71,7 +71,7 @@ const SplashScreen = ({ navigation }) => {
         })));
       }
     } catch (error) {
-      console.log('Carousel load error:', error);
+
       // Fallback to defaults without images
       setCarouselImages(DEFAULT_CAROUSEL.map(item => ({
         ...item,

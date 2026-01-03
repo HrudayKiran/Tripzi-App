@@ -75,7 +75,8 @@ const AdminDashboardScreen = ({ navigation }) => {
             setKycRequests(pendingRequests);
 
         } catch (e) {
-            console.log('Error fetching stats:', e);
+            // Error fetching stats
+
         }
     };
 
@@ -98,7 +99,7 @@ const AdminDashboardScreen = ({ navigation }) => {
             ].sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 
             setFeedbacks(allFeedback);
-        } catch (e) { console.log('Error fetching feedback', e); }
+        } catch (e) { }
     };
 
     const handleVerifyKyc = async (userId: string) => {

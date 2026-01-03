@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, FlatList, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, FlatList, TextInput, ActivityIndicator, Alert, Share } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import firestore from '@react-native-firebase/firestore';
+import functions from '@react-native-firebase/functions';
 import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import DefaultAvatar from './DefaultAvatar';
@@ -65,7 +67,7 @@ const ShareModal = ({ visible, onClose, tripId, tripTitle, tripImage }: ShareMod
                 const users = (await Promise.all(usersPromises)).filter(Boolean) as User[];
                 setFollowing(users);
             } catch (error) {
-                console.log('Error fetching following:', error);
+
                 setFollowing([]);
             } finally {
                 setLoading(false);
@@ -148,10 +150,48 @@ const ShareModal = ({ visible, onClose, tripId, tripTitle, tripImage }: ShareMod
                 onClose();
             }, 2000);
         } catch (error) {
-            console.log('Share error:', error);
+
             setShowToast(false);
         } finally {
             setSending(false);
+        }
+    };
+
+    const handleShareExternal = async () => {
+        setSending(true);
+        try {
+            const { data } = await functions().httpsCallable('generateShareLink')({
+                tripId,
+                tripTitle,
+            });
+
+            const shareContent = {
+                message: data.message,
+                title: data.title,
+                url: data.webLink, // iOS support
+            };
+
+            const result = await Share.share(shareContent);
+            if (result.action === Share.sharedAction) {
+                onClose();
+            }
+        } catch (error) {
+            Alert.alert('Error', 'Failed to generate share link.');
+        } finally {
+            setSending(false);
+        }
+    };
+
+    const handleCopyLink = async () => {
+        try {
+            // For now constructing manual link if function call is too slow/complex for just copy
+            // Ideally we use the deep link
+            const link = `https://tripzi.app/trip/${tripId}`;
+            await Clipboard.setStringAsync(link);
+            setShowToast(true);
+            setTimeout(() => setShowToast(false), 2000);
+        } catch (error) {
+            Alert.alert('Error', 'Failed to copy link');
         }
     };
 
@@ -201,6 +241,25 @@ const ShareModal = ({ visible, onClose, tripId, tripTitle, tripImage }: ShareMod
                             ) : (
                                 <Text style={styles.sendText}>Send</Text>
                             )}
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* External Share Option */}
+                    <View style={styles.externalOptions}>
+                        <TouchableOpacity style={styles.externalShareButton} onPress={handleShareExternal} disabled={sending}>
+                            <View style={[styles.externalShareIcon, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                <Ionicons name="share-social-outline" size={24} color={colors.text} />
+                            </View>
+                            <Text style={[styles.externalShareText, { color: colors.text }]}>Share via...</Text>
+                            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.externalShareButton} onPress={handleCopyLink} disabled={sending}>
+                            <View style={[styles.externalShareIcon, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                <Ionicons name="link-outline" size={24} color={colors.text} />
+                            </View>
+                            <Text style={[styles.externalShareText, { color: colors.text }]}>Copy Link</Text>
+                            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
 
@@ -298,6 +357,24 @@ const styles = StyleSheet.create({
         gap: SPACING.sm,
     },
     searchInput: { flex: 1, fontSize: FONT_SIZE.sm },
+    externalShareButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: SPACING.lg,
+        paddingVertical: SPACING.md,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.05)',
+        gap: SPACING.md,
+    },
+    externalShareIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+    },
+    externalShareText: { flex: 1, fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.medium },
     selectedBadge: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.sm },
     selectedText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold },
     listContent: { paddingHorizontal: SPACING.lg },
@@ -345,6 +422,10 @@ const styles = StyleSheet.create({
         gap: SPACING.sm,
     },
     toastText: { color: '#fff', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
+    externalOptions: {
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.05)',
+    },
 });
 
 export default ShareModal;

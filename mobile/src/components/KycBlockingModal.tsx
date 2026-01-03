@@ -19,7 +19,8 @@ const { width } = Dimensions.get('window');
 interface KycBlockingModalProps {
     visible: boolean;
     onClose: () => void;
-    action?: string; // e.g., "create a post", "join this trip"
+    status: 'none' | 'pending' | 'verified' | 'rejected' | 'loading' | 'approved';
+    action?: string;
 }
 
 /**

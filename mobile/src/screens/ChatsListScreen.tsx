@@ -41,7 +41,7 @@ const ChatsListScreen = ({ navigation }) => {
     // Listen for auth state changes
     React.useEffect(() => {
         const unsubscribe = auth().onAuthStateChanged((user) => {
-            console.log('📱 [AUTH] Auth state changed:', user?.uid || 'null');
+
             setCurrentUser(user);
         });
         return () => unsubscribe();
@@ -63,10 +63,10 @@ const ChatsListScreen = ({ navigation }) => {
     // Fetch following users for stories
     React.useEffect(() => {
         if (!currentUser) {
-            console.log('📱 [STORIES] No current user');
+
             return;
         }
-        console.log('📱 [STORIES] Setting up listener for:', currentUser.uid);
+
         const unsubscribe = firestore()
             .collection('users')
             .doc(currentUser.uid)
@@ -74,7 +74,7 @@ const ChatsListScreen = ({ navigation }) => {
                 if (doc.exists) {
                     const userData = doc.data();
                     const following = userData?.following || [];
-                    console.log('📱 [STORIES] Following count:', following.length);
+
                     if (following.length > 0) {
                         const users = await Promise.all(
                             following.slice(0, 10).map(async (uid: string) => {
@@ -85,14 +85,14 @@ const ChatsListScreen = ({ navigation }) => {
                             })
                         );
                         const validUsers = users.filter(Boolean);
-                        console.log('📱 [STORIES] Story users loaded:', validUsers.length);
+
                         setStoryUsers(validUsers);
                     } else {
-                        console.log('📱 [STORIES] No following users');
+
                         setStoryUsers([]);
                     }
                 } else {
-                    console.log('📱 [STORIES] User doc does not exist');
+
                 }
             });
         return () => unsubscribe();
@@ -114,7 +114,7 @@ const ChatsListScreen = ({ navigation }) => {
                         const expiresAt = story.expiresAt.toDate ? story.expiresAt.toDate() : new Date(story.expiresAt);
                         return expiresAt > now;
                     });
-                console.log('📱 [MY STORIES] Active stories:', activeStories.length);
+
                 setMyStories(activeStories);
             });
         return () => unsubscribe();

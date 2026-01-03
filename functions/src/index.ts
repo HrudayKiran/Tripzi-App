@@ -745,7 +745,8 @@ async function cleanupUserData(userId: string) {
 
   // 6. Delete user's storage files (CRITICAL)
   // Use explicit bucket name for reliability
-  const bucket = admin.storage().bucket("tripzi-app.firebasestorage.app");
+  const bucketName = "tripzi-app.firebasestorage.app";
+  const bucket = admin.storage().bucket(bucketName);
 
   // Delete profile images
   try {
@@ -763,6 +764,42 @@ async function cleanupUserData(userId: string) {
     console.log(`Deleted trip images for ${userId}`);
   } catch (e: any) {
     console.log(`No trip images to delete or storage error for user ${userId}:`, e.message);
+  }
+
+  // Delete trip videos (New)
+  try {
+    console.log(`Deleting storage: trip_videos/${userId}/`);
+    await bucket.deleteFiles({ prefix: `trip_videos/${userId}/` });
+    console.log(`Deleted trip videos for ${userId}`);
+  } catch (e: any) {
+    console.log(`No trip videos to delete or storage error for user ${userId}:`, e.message);
+  }
+
+  // 7. Remove Live Location Shares (New)
+  try {
+    // This is hard to query efficiently without a collection group index on 'userId', 
+    // but we can assume live shares are transient. 
+    // A better approach for critical cleanup would be a Collection Group query.
+    // For now, let's try a best-effort Collection Group query if index exists, 
+    // otherwise relies on expiration function.
+    // NOTE: This assumes 'live_shares' is a subcollection name used consistently.
+    try {
+      const liveSharesSnap = await db.collectionGroup("live_shares").where("userId", "==", userId).get();
+      const batch = db.batch();
+      let liveShareCount = 0;
+      liveSharesSnap.forEach(doc => {
+        batch.delete(doc.ref);
+        liveShareCount++;
+      });
+      if (liveShareCount > 0) {
+        await batch.commit();
+        console.log(`Deleted ${liveShareCount} live location shares for ${userId}`);
+      }
+    } catch (indexError) {
+      console.log("Could not clean live_shares (likely missing index). They will expire naturally.");
+    }
+  } catch (e: any) {
+    console.log(`Error cleaning live shares for ${userId}:`, e.message);
   }
 
   console.log(`Cleanup complete for ${userId}. Deleted/updated ${deleteCount} docs.`);
@@ -844,6 +881,94 @@ export const deleteMyAccount = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError("internal", "Failed to delete account. Please try again.");
   }
 });
+
+// ==================== MESSAGE MEDIA DELETION ====================
+
+/**
+ * Delete media from Storage when a message is deleted for everyone.
+ * Triggers when 'deletedForEveryoneAt' is set on a message.
+ */
+export const deleteMessageMedia = onDocumentUpdated(
+  { document: "chats/{chatId}/messages/{messageId}", database: "default" },
+  async (event) => {
+    if (!event.data) return;
+
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+
+    // Only trigger if deletedForEveryoneAt was just set
+    if (before.deletedForEveryoneAt || !after.deletedForEveryoneAt) return;
+
+    console.log(`Message ${event.params.messageId} deleted for everyone. Cleaning up media...`);
+
+    const mediaUrl = after.mediaUrl;
+    if (!mediaUrl) {
+      console.log("No media URL to delete.");
+      return;
+    }
+
+    try {
+      // Extract path from Firebase Storage URL
+      // Format: https://firebasestorage.googleapis.com/v0/b/BUCKET/o/PATH%2FFILE?...
+      const urlMatch = mediaUrl.match(/o\/([^?]+)/);
+      if (!urlMatch) {
+        console.log("Could not extract path from URL:", mediaUrl);
+        return;
+      }
+
+      const filePath = decodeURIComponent(urlMatch[1]);
+      console.log("Deleting file at path:", filePath);
+
+      await admin.storage().bucket().file(filePath).delete();
+      console.log(`Successfully deleted media: ${filePath}`);
+    } catch (error: any) {
+      // File might already be deleted or path is invalid
+      if (error.code === 404) {
+        console.log("File already deleted or not found.");
+      } else {
+        console.error("Error deleting media:", error);
+      }
+    }
+  }
+);
+
+// ==================== SHARE LINK GENERATION ====================
+
+/**
+ * Generate a shareable deep link for a trip.
+ * Returns a URL that can be shared to other apps.
+ */
+export const generateShareLink = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "You must be logged in to generate share links.");
+  }
+
+  const { tripId, tripTitle } = data;
+
+  if (!tripId) {
+    throw new functions.https.HttpsError("invalid-argument", "Trip ID is required.");
+  }
+
+  // Verify trip exists
+  const tripDoc = await db.collection("trips").doc(tripId).get();
+  if (!tripDoc.exists) {
+    throw new functions.https.HttpsError("not-found", "Trip not found.");
+  }
+
+  // Generate deep link (can be enhanced with Firebase Dynamic Links later)
+  const webLink = `https://tripzi.app/trip/${tripId}`;
+  const appLink = `tripzi://trip/${tripId}`;
+
+  return {
+    webLink,
+    appLink,
+    title: tripTitle || tripDoc.data()?.title || "Check out this trip!",
+    message: `🗺️ Check out this amazing trip on Tripzi!\n\n${webLink}`,
+  };
+});
+
+// NOTE: spotifySearch function has been moved to future implementation.
+// See implementation_plan.md for Spotify API integration when ready.
 
 // NOTE: importJsonToFirestore and setupCarousel have been removed to reduce quota usage.
 // If needed again, they can be restored from git history.

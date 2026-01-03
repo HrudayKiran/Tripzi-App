@@ -29,7 +29,7 @@ const SettingsScreen = ({ navigation }) => {
                     setPushEnabled(isEnabled);
                 }
             } catch (error) {
-                console.log('Error loading settings:', error);
+
             }
         };
         loadSettings();
@@ -56,7 +56,8 @@ const SettingsScreen = ({ navigation }) => {
                 });
             }
         } catch (error) {
-            console.log('Error updating settings:', error);
+            // Error updating settings
+
         }
     };
 
@@ -74,9 +75,9 @@ const SettingsScreen = ({ navigation }) => {
                             // Use the callable Cloud Function (no reauthentication needed!)
                             // Region must match where the function is deployed (us-central1 for v1)
                             const deleteMyAccount = functions().httpsCallable('deleteMyAccount');
-                            console.log('Calling deleteMyAccount function...');
+
                             const result = await deleteMyAccount();
-                            console.log('deleteMyAccount result:', result);
+
 
                             // Sign out locally after successful deletion
                             await auth().signOut();

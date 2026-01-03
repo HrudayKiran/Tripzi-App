@@ -44,7 +44,7 @@ export function usePermissions(): UsePermissionsReturn {
     }, []);
 
     const requestAllPermissions = async () => {
-        console.log('Requesting all app permissions...');
+
 
         // Request notification permission first (most important)
         const notifResult = await requestNotificationPermission();
@@ -56,17 +56,13 @@ export function usePermissions(): UsePermissionsReturn {
         const camResult = await requestCameraPermission();
         const mediaResult = await requestMediaLibraryPermission();
 
-        console.log('Permission results:', {
-            notifications: notifResult,
-            location: locResult,
-            camera: camResult,
-            mediaLibrary: mediaResult,
-        });
+
+
     };
 
     const requestNotificationPermission = async (): Promise<boolean> => {
         try {
-            console.log('Requesting notification permission...');
+
 
             // For Firebase Cloud Messaging
             const messaging = getMessaging();
@@ -76,61 +72,61 @@ export function usePermissions(): UsePermissionsReturn {
                 authStatus === AuthorizationStatus.PROVISIONAL;
 
             if (enabled) {
-                console.log('FCM notification permission granted');
+
                 setPermissions(prev => ({ ...prev, notifications: true }));
                 return true;
             } else {
-                console.log('FCM notification permission denied');
+
                 setPermissions(prev => ({ ...prev, notifications: false }));
                 return false;
             }
         } catch (error) {
-            console.log('Notification permission error:', error);
+
             return false;
         }
     };
 
     const requestLocationPermission = async (): Promise<boolean> => {
         try {
-            console.log('Requesting location permission...');
+
             const { status } = await Location.requestForegroundPermissionsAsync();
             const granted = status === 'granted';
 
-            console.log('Location permission:', granted ? 'granted' : 'denied');
+
             setPermissions(prev => ({ ...prev, location: granted }));
             return granted;
         } catch (error) {
-            console.log('Location permission error:', error);
+
             return false;
         }
     };
 
     const requestCameraPermission = async (): Promise<boolean> => {
         try {
-            console.log('Requesting camera permission...');
+
             const { status } = await ImagePicker.requestCameraPermissionsAsync();
             const granted = status === 'granted';
 
-            console.log('Camera permission:', granted ? 'granted' : 'denied');
+
             setPermissions(prev => ({ ...prev, camera: granted }));
             return granted;
         } catch (error) {
-            console.log('Camera permission error:', error);
+
             return false;
         }
     };
 
     const requestMediaLibraryPermission = async (): Promise<boolean> => {
         try {
-            console.log('Requesting media library permission...');
+
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             const granted = status === 'granted';
 
-            console.log('Media library permission:', granted ? 'granted' : 'denied');
+
             setPermissions(prev => ({ ...prev, mediaLibrary: granted }));
             return granted;
         } catch (error) {
-            console.log('Media library permission error:', error);
+
             return false;
         }
     };

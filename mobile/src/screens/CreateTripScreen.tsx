@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
+import { Video, ResizeMode } from 'expo-av';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 import auth from '@react-native-firebase/auth';
@@ -65,6 +66,8 @@ const CreateTripScreen = ({ navigation }) => {
     // Step 1: Basic Info
     const [title, setTitle] = useState('');
     const [images, setImages] = useState<string[]>([]);
+    const [video, setVideo] = useState<string | null>(null);
+    const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null);
 
     // Step 2: Location & Dates
     const [fromLocation, setFromLocation] = useState('');
@@ -114,8 +117,38 @@ const CreateTripScreen = ({ navigation }) => {
         }
     };
 
+    const pickVideo = async () => {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+            Alert.alert('Permission needed', 'Please grant gallery permissions.');
+            return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+            allowsMultipleSelection: false,
+            quality: 1,
+        });
+
+        if (!result.canceled && result.assets[0]) {
+            const asset = result.assets[0];
+            // Check file size if possible (approx limit verification)
+            // 50MB ~ 50 * 1024 * 1024 bytes
+            if (asset.fileSize && asset.fileSize > 50 * 1024 * 1024) {
+                Alert.alert('File too large', 'Please select a video under 50MB.');
+                return;
+            }
+            setVideo(asset.uri);
+            // In a real app we'd generate a thumbnail, for now we can rely on video component or placeholder
+        }
+    };
+
     const removeImage = (index: number) => {
         setImages(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const removeVideo = () => {
+        setVideo(null);
     };
 
     const toggleSelection = (id: string, list: string[], setList: (val: string[]) => void) => {
@@ -200,21 +233,38 @@ const CreateTripScreen = ({ navigation }) => {
             // Upload images to Firebase Storage first
             let uploadedImageUrls: string[] = [];
             if (images.length > 0) {
-                console.log('Uploading', images.length, 'images to Firebase Storage...');
+
+
                 for (let i = 0; i < images.length; i++) {
                     const imageUri = images[i];
                     const filename = `trips/${currentUser.uid}/${Date.now()}_${i}.jpg`;
                     const reference = storage().ref(filename);
 
                     try {
-                        await reference.putFile(imageUri);
+                        await reference.putFile(imageUri, { contentType: 'image/jpeg' });
                         const downloadUrl = await reference.getDownloadURL();
                         uploadedImageUrls.push(downloadUrl);
-                        console.log(`Image ${i + 1} uploaded:`, downloadUrl.substring(0, 50) + '...');
+
                     } catch (uploadError) {
-                        console.log('Image upload error:', uploadError);
+
                         // Continue with other images
                     }
+                }
+            }
+
+            // Upload Video if exists
+            let uploadedVideoUrl = null;
+            if (video) {
+                const filename = `trip_videos/${currentUser.uid}/${Date.now()}.mp4`;
+                const reference = storage().ref(filename);
+
+                // Required for generic file uploads if needed, but putFile handles it
+                try {
+                    await reference.putFile(video, { contentType: 'video/mp4' });
+                    uploadedVideoUrl = await reference.getDownloadURL();
+                } catch (videoError: any) {
+                    console.log('Video upload failed:', videoError);
+                    // Non-critical, just don't attach video
                 }
             }
 
@@ -253,11 +303,12 @@ const CreateTripScreen = ({ navigation }) => {
                 location: toLocation,
                 tripType: tripTypes[0] || 'Adventure',
                 coverImage: finalImages[0],
+                video: uploadedVideoUrl,
             };
 
             // Create trip
             const tripRef = await firestore().collection('trips').add(tripData);
-            console.log('Trip created with ID:', tripRef.id);
+
 
             // Create group chat for the trip
             try {
@@ -286,407 +337,468 @@ const CreateTripScreen = ({ navigation }) => {
 
     const progress = step / totalSteps;
 
-    const renderStepIndicator = () => (
-        <View style={styles.stepIndicator}>
-            {[1, 2, 3, 4, 5].map((s) => (
-                <View key={s} style={styles.stepRow}>
-                    <View style={[styles.stepDot, { backgroundColor: s <= step ? colors.primary : colors.border }]}>
-                        {s < step ? (
-                            <Ionicons name="checkmark" size={14} color="#fff" />
-                        ) : (
-                            <Text style={[styles.stepNumber, { color: s <= step ? '#fff' : colors.textSecondary }]}>{s}</Text>
-                        )}
-                    </View>
-                    {s < 5 && <View style={[styles.stepLine, { backgroundColor: s < step ? colors.primary : colors.border }]} />}
+    const renderHeader = () => (
+        <View style={styles.header}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                <Ionicons name="arrow-back" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <View style={styles.progressContainer}>
+                <View style={styles.progressBar}>
+                    <LinearGradient
+                        colors={[colors.primary, '#A78BFA']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={[styles.progressFill, { width: `${(step / totalSteps) * 100}%` }]}
+                    />
                 </View>
-            ))}
+                <Text style={[styles.stepText, { color: colors.textSecondary }]}>
+                    Step {step} of {totalSteps}
+                </Text>
+            </View>
         </View>
     );
 
+    const renderEmpty = () => null;
+
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.headerButton, { backgroundColor: colors.card }]}>
-                    <Ionicons name="close" size={24} color={colors.text} />
-                </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: colors.text }]}>Create Trip</Text>
-                <View style={{ width: 40 }} />
-            </View>
+        <View style={{ flex: 1 }}>
+            <LinearGradient
+                colors={[colors.background, colors.card]}
+                style={StyleSheet.absoluteFill}
+            />
+            <SafeAreaView style={styles.container}>
+                {renderHeader()}
 
-            {renderStepIndicator()}
+                <ScrollView
+                    contentContainerStyle={styles.content}
+                    showsVerticalScrollIndicator={false}
+                >
+                    {/* Step 1: Basic Info */}
+                    {step === 1 && (
+                        <Animatable.View animation="fadeInRight" style={styles.stepContent}>
+                            <Text style={[styles.stepTitle, { color: colors.text }]}>Let's Start! 🚀</Text>
+                            <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Give your trip an exciting title</Text>
 
-            <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                {/* Step 1: Basic Info */}
-                {step === 1 && (
-                    <Animatable.View animation="fadeInRight" style={styles.stepContent}>
-                        <Text style={[styles.stepTitle, { color: colors.text }]}>Let's Start! 🚀</Text>
-                        <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Give your trip an exciting title</Text>
+                            <Text style={[styles.label, { color: colors.text }]}>Trip Title <Text style={styles.required}>*</Text></Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.title ? '#EF4444' : colors.border }]}
+                                placeholder="e.g., Mystical Ladakh Adventure"
+                                placeholderTextColor={colors.textSecondary}
+                                value={title}
+                                onChangeText={setTitle}
+                            />
+                            {errors.title && <Text style={styles.errorText}>{errors.title}</Text>}
 
-                        <Text style={[styles.label, { color: colors.text }]}>Trip Title <Text style={styles.required}>*</Text></Text>
-                        <TextInput
-                            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.title ? '#EF4444' : colors.border }]}
-                            placeholder="e.g., Mystical Ladakh Adventure"
-                            placeholderTextColor={colors.textSecondary}
-                            value={title}
-                            onChangeText={setTitle}
-                        />
-                        {errors.title && <Text style={styles.errorText}>{errors.title}</Text>}
+                            <Text style={[styles.label, { color: colors.text }]}>Trip Images (Optional - Max 5)</Text>
+                            <View style={styles.imagesContainer}>
+                                {images.map((uri, index) => (
+                                    <View key={index} style={styles.imageWrapper}>
+                                        <Image source={{ uri }} style={styles.tripImage} />
+                                        <TouchableOpacity style={styles.removeImage} onPress={() => removeImage(index)}>
+                                            <Ionicons name="close-circle" size={24} color="#EF4444" />
+                                        </TouchableOpacity>
+                                    </View>
+                                ))}
+                                {images.length < 5 && (
+                                    <TouchableOpacity style={[styles.addImageButton, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={pickImages}>
+                                        <Ionicons name="add" size={32} color={colors.primary} />
+                                        <Text style={[styles.addImageText, { color: colors.textSecondary }]}>Add</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
 
-                        <Text style={[styles.label, { color: colors.text }]}>Trip Images (Optional - Max 5)</Text>
-                        <View style={styles.imagesContainer}>
-                            {images.map((uri, index) => (
-                                <View key={index} style={styles.imageWrapper}>
-                                    <Image source={{ uri }} style={styles.tripImage} />
-                                    <TouchableOpacity style={styles.removeImage} onPress={() => removeImage(index)}>
-                                        <Ionicons name="close-circle" size={24} color="#EF4444" />
+                            <Text style={[styles.label, { color: colors.text, marginTop: SPACING.xl }]}>Trip Video (Optional - Max 50MB)</Text>
+                            <View style={styles.imagesContainer}>
+                                {video ? (
+                                    <View style={styles.imageWrapper}>
+                                        <Video
+                                            source={{ uri: video }}
+                                            style={styles.tripImage}
+                                            useNativeControls={false}
+                                            resizeMode={ResizeMode.COVER}
+                                            isLooping={false} // Don't loop preview
+                                            shouldPlay={false}
+                                        />
+                                        <View style={[styles.tripImage, { position: 'absolute', backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' }]}>
+                                            <Ionicons name="play-circle" size={30} color="#fff" />
+                                        </View>
+                                        <TouchableOpacity style={styles.removeImage} onPress={removeVideo}>
+                                            <Ionicons name="close-circle" size={24} color="#EF4444" />
+                                        </TouchableOpacity>
+                                    </View>
+                                ) : (
+                                    <TouchableOpacity style={[styles.addImageButton, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={pickVideo}>
+                                        <Ionicons name="videocam" size={32} color={colors.primary} />
+                                        <Text style={[styles.addImageText, { color: colors.textSecondary }]}>Add Video</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        </Animatable.View>
+                    )}
+
+                    {/* Step 2: Location & Dates */}
+                    {step === 2 && (
+                        <Animatable.View animation="fadeInRight" style={styles.stepContent}>
+                            <Text style={[styles.stepTitle, { color: colors.text }]}>Where & When? 📍</Text>
+                            <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Set your journey details</Text>
+
+                            <Text style={[styles.label, { color: colors.text }]}>Starting From <Text style={styles.required}>*</Text></Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.fromLocation ? '#EF4444' : colors.border }]}
+                                placeholder="e.g., Bangalore, Karnataka"
+                                placeholderTextColor={colors.textSecondary}
+                                value={fromLocation}
+                                onChangeText={setFromLocation}
+                            />
+                            {errors.fromLocation && <Text style={styles.errorText}>{errors.fromLocation}</Text>}
+
+                            <Text style={[styles.label, { color: colors.text }]}>Destination <Text style={styles.required}>*</Text></Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.toLocation ? '#EF4444' : colors.border }]}
+                                placeholder="e.g., Leh, Ladakh"
+                                placeholderTextColor={colors.textSecondary}
+                                value={toLocation}
+                                onChangeText={(text) => {
+                                    setToLocation(text);
+                                    setMapsLink(generateMapsLink(text));
+                                }}
+                            />
+                            {errors.toLocation && <Text style={styles.errorText}>{errors.toLocation}</Text>}
+                            {toLocation.length > 3 && (
+                                <Text style={[styles.mapsLink, { color: colors.primary }]}>📍 Maps link will be auto-generated</Text>
+                            )}
+
+                            <View style={styles.dateRow}>
+                                <View style={styles.dateField}>
+                                    <Text style={[styles.label, { color: colors.text }]}>From Date <Text style={styles.required}>*</Text></Text>
+                                    <TouchableOpacity
+                                        style={[styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
+                                        onPress={() => setShowDateModal('from')}
+                                    >
+                                        <Ionicons name="calendar" size={20} color={colors.primary} />
+                                        <Text style={[styles.dateText, { color: colors.text }]}>{formatDate(fromDate)}</Text>
                                     </TouchableOpacity>
                                 </View>
-                            ))}
-                            {images.length < 5 && (
-                                <TouchableOpacity style={[styles.addImageButton, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={pickImages}>
-                                    <Ionicons name="add" size={32} color={colors.primary} />
-                                    <Text style={[styles.addImageText, { color: colors.textSecondary }]}>Add</Text>
-                                </TouchableOpacity>
-                            )}
-                        </View>
-                    </Animatable.View>
-                )}
-
-                {/* Step 2: Location & Dates */}
-                {step === 2 && (
-                    <Animatable.View animation="fadeInRight" style={styles.stepContent}>
-                        <Text style={[styles.stepTitle, { color: colors.text }]}>Where & When? 📍</Text>
-                        <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Set your journey details</Text>
-
-                        <Text style={[styles.label, { color: colors.text }]}>Starting From <Text style={styles.required}>*</Text></Text>
-                        <TextInput
-                            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.fromLocation ? '#EF4444' : colors.border }]}
-                            placeholder="e.g., Bangalore, Karnataka"
-                            placeholderTextColor={colors.textSecondary}
-                            value={fromLocation}
-                            onChangeText={setFromLocation}
-                        />
-                        {errors.fromLocation && <Text style={styles.errorText}>{errors.fromLocation}</Text>}
-
-                        <Text style={[styles.label, { color: colors.text }]}>Destination <Text style={styles.required}>*</Text></Text>
-                        <TextInput
-                            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.toLocation ? '#EF4444' : colors.border }]}
-                            placeholder="e.g., Leh, Ladakh"
-                            placeholderTextColor={colors.textSecondary}
-                            value={toLocation}
-                            onChangeText={(text) => {
-                                setToLocation(text);
-                                setMapsLink(generateMapsLink(text));
-                            }}
-                        />
-                        {errors.toLocation && <Text style={styles.errorText}>{errors.toLocation}</Text>}
-                        {toLocation.length > 3 && (
-                            <Text style={[styles.mapsLink, { color: colors.primary }]}>📍 Maps link will be auto-generated</Text>
-                        )}
-
-                        <View style={styles.dateRow}>
-                            <View style={styles.dateField}>
-                                <Text style={[styles.label, { color: colors.text }]}>From Date <Text style={styles.required}>*</Text></Text>
-                                <TouchableOpacity
-                                    style={[styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
-                                    onPress={() => setShowDateModal('from')}
-                                >
-                                    <Ionicons name="calendar" size={20} color={colors.primary} />
-                                    <Text style={[styles.dateText, { color: colors.text }]}>{formatDate(fromDate)}</Text>
-                                </TouchableOpacity>
+                                <View style={styles.dateField}>
+                                    <Text style={[styles.label, { color: colors.text }]}>To Date <Text style={styles.required}>*</Text></Text>
+                                    <TouchableOpacity
+                                        style={[styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
+                                        onPress={() => setShowDateModal('to')}
+                                    >
+                                        <Ionicons name="calendar" size={20} color={colors.primary} />
+                                        <Text style={[styles.dateText, { color: colors.text }]}>{formatDate(toDate)}</Text>
+                                    </TouchableOpacity>
+                                </View>
                             </View>
-                            <View style={styles.dateField}>
-                                <Text style={[styles.label, { color: colors.text }]}>To Date <Text style={styles.required}>*</Text></Text>
-                                <TouchableOpacity
-                                    style={[styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
-                                    onPress={() => setShowDateModal('to')}
-                                >
-                                    <Ionicons name="calendar" size={20} color={colors.primary} />
-                                    <Text style={[styles.dateText, { color: colors.text }]}>{formatDate(toDate)}</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                        <Text style={[styles.durationText, { color: colors.primary }]}>Duration: {getDuration()}</Text>
-                    </Animatable.View>
-                )}
+                            <Text style={[styles.durationText, { color: colors.primary }]}>Duration: {getDuration()}</Text>
+                        </Animatable.View>
+                    )}
 
-                {/* Date Selection Modal */}
-                <Modal visible={showDateModal !== null} transparent animationType="fade">
-                    <View style={styles.dateModalOverlay}>
-                        <View style={[styles.dateModalContent, { backgroundColor: colors.background }]}>
-                            <View style={styles.dateModalHeader}>
-                                <Text style={[styles.dateModalTitle, { color: colors.text }]}>
-                                    Select {showDateModal === 'from' ? 'Start' : 'End'} Date
-                                </Text>
-                                <TouchableOpacity onPress={() => setShowDateModal(null)}>
-                                    <Ionicons name="close" size={24} color={colors.text} />
-                                </TouchableOpacity>
-                            </View>
-
-                            <ScrollView style={styles.dateList} showsVerticalScrollIndicator={false}>
-                                {Array.from({ length: 60 }, (_, i) => {
-                                    const date = new Date();
-                                    date.setDate(date.getDate() + i);
-                                    const isSelected = showDateModal === 'from'
-                                        ? date.toDateString() === fromDate.toDateString()
-                                        : date.toDateString() === toDate.toDateString();
-                                    const isDisabled = showDateModal === 'to' && date.getTime() < fromDate.getTime();
-
-                                    return (
-                                        <TouchableOpacity
-                                            key={i}
-                                            style={[
-                                                styles.dateOption,
-                                                { backgroundColor: isSelected ? colors.primary : colors.card },
-                                                isDisabled && { opacity: 0.5 }
-                                            ]}
-                                            onPress={() => {
-                                                if (isDisabled) return;
-                                                if (showDateModal === 'from') {
-                                                    setFromDate(date);
-                                                    if (date.getTime() > toDate.getTime()) setToDate(new Date(date.getTime() + 24 * 60 * 60 * 1000));
-                                                } else {
-                                                    setToDate(date);
-                                                }
-                                                setShowDateModal(null);
-                                            }}
-                                            disabled={isDisabled}
-                                        >
-                                            <Text style={[
-                                                styles.dateOptionDay,
-                                                { color: isSelected ? '#fff' : colors.text }
-                                            ]}>
-                                                {date.toLocaleDateString('en-IN', { weekday: 'short' })}
-                                            </Text>
-                                            <Text style={[
-                                                styles.dateOptionDate,
-                                                { color: isSelected ? '#fff' : colors.text }
-                                            ]}>
-                                                {date.getDate()}
-                                            </Text>
-                                            <Text style={[
-                                                styles.dateOptionMonth,
-                                                { color: isSelected ? '#fff' : colors.textSecondary }
-                                            ]}>
-                                                {date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                            </ScrollView>
-                        </View>
-                    </View>
-                </Modal>
-
-                {/* Step 3: Trip Details */}
-                {step === 3 && (
-                    <Animatable.View animation="fadeInRight" style={styles.stepContent}>
-                        <Text style={[styles.stepTitle, { color: colors.text }]}>Trip Style 🎯</Text>
-                        <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>What kind of adventure is this?</Text>
-
-                        <Text style={[styles.label, { color: colors.text }]}>Trip Type <Text style={styles.required}>*</Text></Text>
-                        <View style={styles.chipGrid}>
-                            {TRIP_TYPES.map((type) => (
-                                <TouchableOpacity
-                                    key={type.id}
-                                    style={[styles.chip, { backgroundColor: tripTypes.includes(type.id) ? type.color : colors.card, borderColor: type.color }]}
-                                    onPress={() => toggleSelection(type.id, tripTypes, setTripTypes)}
-                                >
-                                    <Ionicons name={type.icon as any} size={18} color={tripTypes.includes(type.id) ? '#fff' : type.color} />
-                                    <Text style={[styles.chipText, { color: tripTypes.includes(type.id) ? '#fff' : colors.text }]}>{type.label}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                        {errors.tripTypes && <Text style={styles.errorText}>{errors.tripTypes}</Text>}
-
-                        <Text style={[styles.label, { color: colors.text }]}>Transport Mode <Text style={styles.required}>*</Text></Text>
-                        <View style={styles.chipGrid}>
-                            {TRANSPORT_MODES.map((mode) => (
-                                <TouchableOpacity
-                                    key={mode.id}
-                                    style={[styles.chip, { backgroundColor: transportModes.includes(mode.id) ? colors.primary : colors.card, borderColor: colors.primary }]}
-                                    onPress={() => toggleSelection(mode.id, transportModes, setTransportModes)}
-                                >
-                                    <Ionicons name={mode.icon as any} size={18} color={transportModes.includes(mode.id) ? '#fff' : colors.primary} />
-                                    <Text style={[styles.chipText, { color: transportModes.includes(mode.id) ? '#fff' : colors.text }]}>{mode.label}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                        {errors.transportModes && <Text style={styles.errorText}>{errors.transportModes}</Text>}
-
-                        <Text style={[styles.label, { color: colors.text }]}>Cost Per Person (₹) <Text style={styles.required}>*</Text></Text>
-                        <TextInput
-                            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.costPerPerson ? '#EF4444' : colors.border }]}
-                            placeholder="e.g., 5000"
-                            placeholderTextColor={colors.textSecondary}
-                            value={costPerPerson}
-                            onChangeText={setCostPerPerson}
-                            keyboardType="numeric"
-                        />
-                        {errors.costPerPerson && <Text style={styles.errorText}>{errors.costPerPerson}</Text>}
-                    </Animatable.View>
-                )}
-
-                {/* Step 4: Accommodation & Group */}
-                {step === 4 && (
-                    <Animatable.View animation="fadeInRight" style={styles.stepContent}>
-                        <Text style={[styles.stepTitle, { color: colors.text }]}>Stay & Group 🏕️</Text>
-                        <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Where will you stay and who can join?</Text>
-
-                        <Text style={[styles.label, { color: colors.text }]}>Accommodation Type <Text style={styles.required}>*</Text></Text>
-                        <View style={styles.chipGrid}>
-                            {ACCOMMODATION_TYPES.map((type) => (
-                                <TouchableOpacity
-                                    key={type.id}
-                                    style={[styles.chip, { backgroundColor: accommodationType === type.id ? '#10B981' : colors.card, borderColor: '#10B981' }]}
-                                    onPress={() => setAccommodationType(type.id)}
-                                >
-                                    <Ionicons name={type.icon as any} size={18} color={accommodationType === type.id ? '#fff' : '#10B981'} />
-                                    <Text style={[styles.chipText, { color: accommodationType === type.id ? '#fff' : colors.text }]}>{type.label}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                        {errors.accommodationType && <Text style={styles.errorText}>{errors.accommodationType}</Text>}
-
-                        {accommodationType && accommodationType !== 'none' && (
-                            <>
-                                <Text style={[styles.label, { color: colors.text }]}>Booking Status</Text>
-                                <View style={styles.radioGroup}>
-                                    {BOOKING_STATUS.map((status) => (
-                                        <TouchableOpacity
-                                            key={status.id}
-                                            style={styles.radioItem}
-                                            onPress={() => setBookingStatus(status.id)}
-                                        >
-                                            <View style={[styles.radio, { borderColor: colors.primary }]}>
-                                                {bookingStatus === status.id && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
-                                            </View>
-                                            <Text style={[styles.radioText, { color: colors.text }]}>{status.label}</Text>
-                                        </TouchableOpacity>
-                                    ))}
+                    {/* Date Selection Modal */}
+                    <Modal visible={showDateModal !== null} transparent animationType="fade">
+                        <View style={styles.dateModalOverlay}>
+                            <View style={[styles.dateModalContent, { backgroundColor: colors.background }]}>
+                                <View style={styles.dateModalHeader}>
+                                    <Text style={[styles.dateModalTitle, { color: colors.text }]}>
+                                        Select {showDateModal === 'from' ? 'Start' : 'End'} Date
+                                    </Text>
+                                    <TouchableOpacity onPress={() => setShowDateModal(null)}>
+                                        <Ionicons name="close" size={24} color={colors.text} />
+                                    </TouchableOpacity>
                                 </View>
 
-                                <Text style={[styles.label, { color: colors.text }]}>Accommodation Days</Text>
-                                <TextInput
-                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                                    placeholder="e.g., 3"
-                                    placeholderTextColor={colors.textSecondary}
-                                    value={accommodationDays}
-                                    onChangeText={setAccommodationDays}
-                                    keyboardType="numeric"
-                                />
-                            </>
-                        )}
+                                <ScrollView style={styles.dateList} showsVerticalScrollIndicator={false}>
+                                    {Array.from({ length: 60 }, (_, i) => {
+                                        const date = new Date();
+                                        date.setDate(date.getDate() + i);
+                                        const isSelected = showDateModal === 'from'
+                                            ? date.toDateString() === fromDate.toDateString()
+                                            : date.toDateString() === toDate.toDateString();
+                                        const isDisabled = showDateModal === 'to' && date.getTime() < fromDate.getTime();
 
-                        <Text style={[styles.label, { color: colors.text }]}>Max Travelers <Text style={styles.required}>*</Text></Text>
-                        <TextInput
-                            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.maxTravelers ? '#EF4444' : colors.border }]}
-                            placeholder="e.g., 5"
-                            placeholderTextColor={colors.textSecondary}
-                            value={maxTravelers}
-                            onChangeText={setMaxTravelers}
-                            keyboardType="numeric"
-                        />
-                        {errors.maxTravelers && <Text style={styles.errorText}>{errors.maxTravelers}</Text>}
-
-                        <Text style={[styles.label, { color: colors.text }]}>Who Can Join? <Text style={styles.required}>*</Text></Text>
-                        <View style={styles.chipGrid}>
-                            {GENDER_PREFERENCES.map((pref) => (
-                                <TouchableOpacity
-                                    key={pref.id}
-                                    style={[styles.chip, { backgroundColor: genderPreference === pref.id ? '#8B5CF6' : colors.card, borderColor: '#8B5CF6' }]}
-                                    onPress={() => setGenderPreference(pref.id)}
-                                >
-                                    <Ionicons name={pref.icon as any} size={18} color={genderPreference === pref.id ? '#fff' : '#8B5CF6'} />
-                                    <Text style={[styles.chipText, { color: genderPreference === pref.id ? '#fff' : colors.text }]}>{pref.label}</Text>
-                                </TouchableOpacity>
-                            ))}
+                                        return (
+                                            <TouchableOpacity
+                                                key={i}
+                                                style={[
+                                                    styles.dateOption,
+                                                    { backgroundColor: isSelected ? colors.primary : colors.card },
+                                                    isDisabled && { opacity: 0.5 }
+                                                ]}
+                                                onPress={() => {
+                                                    if (isDisabled) return;
+                                                    if (showDateModal === 'from') {
+                                                        setFromDate(date);
+                                                        if (date.getTime() > toDate.getTime()) setToDate(new Date(date.getTime() + 24 * 60 * 60 * 1000));
+                                                    } else {
+                                                        setToDate(date);
+                                                    }
+                                                    setShowDateModal(null);
+                                                }}
+                                                disabled={isDisabled}
+                                            >
+                                                <Text style={[
+                                                    styles.dateOptionDay,
+                                                    { color: isSelected ? '#fff' : colors.text }
+                                                ]}>
+                                                    {date.toLocaleDateString('en-IN', { weekday: 'short' })}
+                                                </Text>
+                                                <Text style={[
+                                                    styles.dateOptionDate,
+                                                    { color: isSelected ? '#fff' : colors.text }
+                                                ]}>
+                                                    {date.getDate()}
+                                                </Text>
+                                                <Text style={[
+                                                    styles.dateOptionMonth,
+                                                    { color: isSelected ? '#fff' : colors.textSecondary }
+                                                ]}>
+                                                    {date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </ScrollView>
+                            </View>
                         </View>
-                    </Animatable.View>
-                )}
+                    </Modal>
 
-                {/* Step 5: Description */}
-                {step === 5 && (
-                    <Animatable.View animation="fadeInRight" style={styles.stepContent}>
-                        <Text style={[styles.stepTitle, { color: colors.text }]}>Final Details ✨</Text>
-                        <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Help travelers know more about this trip</Text>
+                    {/* Step 3: Trip Details */}
+                    {step === 3 && (
+                        <Animatable.View animation="fadeInRight" style={styles.stepContent}>
+                            <Text style={[styles.stepTitle, { color: colors.text }]}>Trip Style 🎯</Text>
+                            <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>What kind of adventure is this?</Text>
 
-                        <Text style={[styles.label, { color: colors.text }]}>Trip Description <Text style={styles.required}>*</Text></Text>
-                        <TextInput
-                            style={[styles.textArea, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.description ? '#EF4444' : colors.border }]}
-                            placeholder="Describe your trip in detail - what to expect, daily itinerary, activities planned..."
-                            placeholderTextColor={colors.textSecondary}
-                            value={description}
-                            onChangeText={setDescription}
-                            multiline
-                            numberOfLines={6}
-                            textAlignVertical="top"
-                        />
-                        {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
+                            <Text style={[styles.label, { color: colors.text }]}>Trip Type <Text style={styles.required}>*</Text></Text>
+                            <View style={styles.chipGrid}>
+                                {TRIP_TYPES.map((type) => (
+                                    <TouchableOpacity
+                                        key={type.id}
+                                        style={[styles.chip, { backgroundColor: tripTypes.includes(type.id) ? type.color : colors.card, borderColor: type.color }]}
+                                        onPress={() => toggleSelection(type.id, tripTypes, setTripTypes)}
+                                    >
+                                        <Ionicons name={type.icon as any} size={18} color={tripTypes.includes(type.id) ? '#fff' : type.color} />
+                                        <Text style={[styles.chipText, { color: tripTypes.includes(type.id) ? '#fff' : colors.text }]}>{type.label}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                            {errors.tripTypes && <Text style={styles.errorText}>{errors.tripTypes}</Text>}
 
-                        <Text style={[styles.label, { color: colors.text }]}>Mandatory Items to Bring</Text>
-                        <TextInput
-                            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                            placeholder="e.g., ID proof, warm clothes, medicines"
-                            placeholderTextColor={colors.textSecondary}
-                            value={mandatoryItems}
-                            onChangeText={setMandatoryItems}
-                        />
-                        <Text style={[styles.hint, { color: colors.textSecondary }]}>Separate items with commas</Text>
+                            <Text style={[styles.label, { color: colors.text }]}>Transport Mode <Text style={styles.required}>*</Text></Text>
+                            <View style={styles.chipGrid}>
+                                {TRANSPORT_MODES.map((mode) => (
+                                    <TouchableOpacity
+                                        key={mode.id}
+                                        style={[styles.chip, { backgroundColor: transportModes.includes(mode.id) ? colors.primary : colors.card, borderColor: colors.primary }]}
+                                        onPress={() => toggleSelection(mode.id, transportModes, setTransportModes)}
+                                    >
+                                        <Ionicons name={mode.icon as any} size={18} color={transportModes.includes(mode.id) ? '#fff' : colors.primary} />
+                                        <Text style={[styles.chipText, { color: transportModes.includes(mode.id) ? '#fff' : colors.text }]}>{mode.label}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                            {errors.transportModes && <Text style={styles.errorText}>{errors.transportModes}</Text>}
 
-                        <Text style={[styles.label, { color: colors.text }]}>Places to Visit</Text>
-                        <TextInput
-                            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                            placeholder="e.g., Pangong Lake, Nubra Valley, Khardung La"
-                            placeholderTextColor={colors.textSecondary}
-                            value={placesToVisit}
-                            onChangeText={setPlacesToVisit}
-                        />
-                        <Text style={[styles.hint, { color: colors.textSecondary }]}>Separate places with commas</Text>
-                    </Animatable.View>
-                )}
+                            <Text style={[styles.label, { color: colors.text }]}>Cost Per Person (₹) <Text style={styles.required}>*</Text></Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.costPerPerson ? '#EF4444' : colors.border }]}
+                                placeholder="e.g., 5000"
+                                placeholderTextColor={colors.textSecondary}
+                                value={costPerPerson}
+                                onChangeText={setCostPerPerson}
+                                keyboardType="numeric"
+                            />
+                            {errors.costPerPerson && <Text style={styles.errorText}>{errors.costPerPerson}</Text>}
+                        </Animatable.View>
+                    )}
 
-                <View style={{ height: 120 }} />
-            </ScrollView>
+                    {/* Step 4: Accommodation & Group */}
+                    {step === 4 && (
+                        <Animatable.View animation="fadeInRight" style={styles.stepContent}>
+                            <Text style={[styles.stepTitle, { color: colors.text }]}>Stay & Group 🏕️</Text>
+                            <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Where will you stay and who can join?</Text>
 
-            {/* Bottom Actions */}
-            <View style={[styles.bottomActions, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
-                {step > 1 && (
-                    <TouchableOpacity style={[styles.backButton, { borderColor: colors.primary }]} onPress={handleBack}>
-                        <Ionicons name="arrow-back" size={20} color={colors.primary} />
-                        <Text style={[styles.backButtonText, { color: colors.primary }]}>Back</Text>
+                            <Text style={[styles.label, { color: colors.text }]}>Accommodation Type <Text style={styles.required}>*</Text></Text>
+                            <View style={styles.chipGrid}>
+                                {ACCOMMODATION_TYPES.map((type) => (
+                                    <TouchableOpacity
+                                        key={type.id}
+                                        style={[styles.chip, { backgroundColor: accommodationType === type.id ? '#10B981' : colors.card, borderColor: '#10B981' }]}
+                                        onPress={() => setAccommodationType(type.id)}
+                                    >
+                                        <Ionicons name={type.icon as any} size={18} color={accommodationType === type.id ? '#fff' : '#10B981'} />
+                                        <Text style={[styles.chipText, { color: accommodationType === type.id ? '#fff' : colors.text }]}>{type.label}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                            {errors.accommodationType && <Text style={styles.errorText}>{errors.accommodationType}</Text>}
+
+                            {accommodationType && accommodationType !== 'none' && (
+                                <>
+                                    <Text style={[styles.label, { color: colors.text }]}>Booking Status</Text>
+                                    <View style={styles.radioGroup}>
+                                        {BOOKING_STATUS.map((status) => (
+                                            <TouchableOpacity
+                                                key={status.id}
+                                                style={styles.radioItem}
+                                                onPress={() => setBookingStatus(status.id)}
+                                            >
+                                                <View style={[styles.radio, { borderColor: colors.primary }]}>
+                                                    {bookingStatus === status.id && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
+                                                </View>
+                                                <Text style={[styles.radioText, { color: colors.text }]}>{status.label}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+
+                                    <Text style={[styles.label, { color: colors.text }]}>Accommodation Days</Text>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                                        placeholder="e.g., 3"
+                                        placeholderTextColor={colors.textSecondary}
+                                        value={accommodationDays}
+                                        onChangeText={setAccommodationDays}
+                                        keyboardType="numeric"
+                                    />
+                                </>
+                            )}
+
+                            <Text style={[styles.label, { color: colors.text }]}>Max Travelers <Text style={styles.required}>*</Text></Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.maxTravelers ? '#EF4444' : colors.border }]}
+                                placeholder="e.g., 5"
+                                placeholderTextColor={colors.textSecondary}
+                                value={maxTravelers}
+                                onChangeText={setMaxTravelers}
+                                keyboardType="numeric"
+                            />
+                            {errors.maxTravelers && <Text style={styles.errorText}>{errors.maxTravelers}</Text>}
+
+                            <Text style={[styles.label, { color: colors.text }]}>Who Can Join? <Text style={styles.required}>*</Text></Text>
+                            <View style={styles.chipGrid}>
+                                {GENDER_PREFERENCES.map((pref) => (
+                                    <TouchableOpacity
+                                        key={pref.id}
+                                        style={[styles.chip, { backgroundColor: genderPreference === pref.id ? '#8B5CF6' : colors.card, borderColor: '#8B5CF6' }]}
+                                        onPress={() => setGenderPreference(pref.id)}
+                                    >
+                                        <Ionicons name={pref.icon as any} size={18} color={genderPreference === pref.id ? '#fff' : '#8B5CF6'} />
+                                        <Text style={[styles.chipText, { color: genderPreference === pref.id ? '#fff' : colors.text }]}>{pref.label}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </Animatable.View>
+                    )}
+
+                    {/* Step 5: Description */}
+                    {step === 5 && (
+                        <Animatable.View animation="fadeInRight" style={styles.stepContent}>
+                            <Text style={[styles.stepTitle, { color: colors.text }]}>Final Details ✨</Text>
+                            <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Help travelers know more about this trip</Text>
+
+                            <Text style={[styles.label, { color: colors.text }]}>Trip Description <Text style={styles.required}>*</Text></Text>
+                            <TextInput
+                                style={[styles.textArea, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.description ? '#EF4444' : colors.border }]}
+                                placeholder="Describe your trip in detail - what to expect, daily itinerary, activities planned..."
+                                placeholderTextColor={colors.textSecondary}
+                                value={description}
+                                onChangeText={setDescription}
+                                multiline
+                                numberOfLines={6}
+                                textAlignVertical="top"
+                            />
+                            {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
+
+                            <Text style={[styles.label, { color: colors.text }]}>Mandatory Items to Bring</Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                                placeholder="e.g., ID proof, warm clothes, medicines"
+                                placeholderTextColor={colors.textSecondary}
+                                value={mandatoryItems}
+                                onChangeText={setMandatoryItems}
+                            />
+                            <Text style={[styles.hint, { color: colors.textSecondary }]}>Separate items with commas</Text>
+
+                            <Text style={[styles.label, { color: colors.text }]}>Places to Visit</Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                                placeholder="e.g., Pangong Lake, Nubra Valley, Khardung La"
+                                placeholderTextColor={colors.textSecondary}
+                                value={placesToVisit}
+                                onChangeText={setPlacesToVisit}
+                            />
+                            <Text style={[styles.hint, { color: colors.textSecondary }]}>Separate places with commas</Text>
+                        </Animatable.View>
+                    )}
+
+                    <View style={{ height: 120 }} />
+                </ScrollView>
+
+                {/* Bottom Actions */}
+                <View style={styles.footer}>
+                    {step > 1 && (
+                        <TouchableOpacity
+                            style={[styles.navButton, { borderColor: colors.border, borderWidth: 1 }]}
+                            onPress={() => setStep(step - 1)}
+                        >
+                            <Text style={[styles.navButtonText, { color: colors.text }]}>Back</Text>
+                        </TouchableOpacity>
+                    )}
+
+                    <TouchableOpacity
+                        style={[styles.navButton, styles.nextButton]}
+                        onPress={step === totalSteps ? handlePostTrip : handleNext}
+                        disabled={isPosting}
+                    >
+                        <LinearGradient
+                            colors={[colors.primary, '#7C3AED']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={styles.gradientButton}
+                        >
+                            {isPosting ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <>
+                                    <Text style={styles.nextButtonText}>
+                                        {step === totalSteps ? 'Post Trip' : 'Next'}
+                                    </Text>
+                                    {step < totalSteps && <Ionicons name="arrow-forward" size={20} color="#fff" />}
+                                </>
+                            )}
+                        </LinearGradient>
                     </TouchableOpacity>
-                )}
-                <TouchableOpacity style={styles.nextButton} onPress={step === totalSteps ? handlePostTrip : handleNext}>
-                    <LinearGradient colors={['#8B5CF6', '#EC4899']} style={styles.nextGradient}>
-                        <Text style={styles.nextButtonText}>{step === totalSteps ? 'Post Trip 🚀' : 'Next'}</Text>
-                        {step < totalSteps && <Ionicons name="arrow-forward" size={20} color="#fff" />}
-                    </LinearGradient>
-                </TouchableOpacity>
-            </View>
+                </View>
+            </SafeAreaView>
 
-            {/* KYC Blocking Modal */}
+            {/* Modals */}
             <KycBlockingModal
                 visible={showKycModal}
                 onClose={() => setShowKycModal(false)}
-                action="create a trip"
+                status={kycStatus}
             />
-        </SafeAreaView>
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: SPACING.lg,
+        paddingBottom: SPACING.md,
+    },
     container: { flex: 1 },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md },
-    headerButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-    headerTitle: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold },
-    stepIndicator: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACING.xl, marginBottom: SPACING.lg },
-    stepRow: { flexDirection: 'row', alignItems: 'center' },
-    stepDot: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-    stepNumber: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold },
-    stepLine: { width: 30, height: 3, marginHorizontal: 4 },
-    scrollView: { flex: 1 },
+    content: { padding: SPACING.lg, paddingBottom: 100 },
+    backButton: { padding: SPACING.sm, marginRight: SPACING.sm },
+    progressContainer: { flex: 1, gap: 4 },
+    progressBar: {
+        height: 6,
+        backgroundColor: 'rgba(0,0,0,0.05)',
+        borderRadius: 3,
+        overflow: 'hidden',
+    },
+    progressFill: { height: '100%', borderRadius: 3 },
+    stepText: { fontSize: 10, fontWeight: FONT_WEIGHT.medium },
     stepContent: { paddingHorizontal: SPACING.xl },
     stepTitle: { fontSize: FONT_SIZE.xxl, fontWeight: FONT_WEIGHT.bold, marginBottom: SPACING.xs },
     stepSubtitle: { fontSize: FONT_SIZE.sm, marginBottom: SPACING.xl },
@@ -716,11 +828,45 @@ const styles = StyleSheet.create({
     radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, justifyContent: 'center', alignItems: 'center' },
     radioInner: { width: 12, height: 12, borderRadius: 6 },
     radioText: { fontSize: FONT_SIZE.sm },
-    bottomActions: { flexDirection: 'row', padding: SPACING.lg, gap: SPACING.md, borderTopWidth: 1 },
-    backButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.lg, borderWidth: 2, gap: SPACING.xs },
-    backButtonText: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
-    nextButton: { flex: 1 },
-    nextGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: SPACING.md, borderRadius: BORDER_RADIUS.lg, gap: SPACING.xs },
+    footer: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        flexDirection: 'row',
+        padding: SPACING.lg,
+        backgroundColor: 'transparent',
+        gap: SPACING.md,
+    },
+    navButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: SPACING.md,
+        borderRadius: BORDER_RADIUS.xl,
+        gap: SPACING.sm,
+        // elevation: 2,
+    },
+    navButtonText: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
+    nextButton: {
+        paddingVertical: 0, // Reset for gradient container
+        overflow: 'hidden',
+        borderWidth: 0,
+        elevation: 5,
+        shadowColor: '#7C3AED',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+    },
+    gradientButton: {
+        flex: 1,
+        width: '100%',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: SPACING.md,
+    },
     nextButtonText: { color: '#fff', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
     dateModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
     dateModalContent: { width: '85%', maxHeight: '70%', borderRadius: BORDER_RADIUS.xl, padding: SPACING.lg },

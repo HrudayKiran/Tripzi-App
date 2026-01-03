@@ -59,7 +59,7 @@ export function useChats(): UseChatsReturn {
             return;
         }
 
-        console.log('📱 [CHATS] Setting up chats listener for:', currentUser.uid);
+
 
         const unsubscribe = firestore()
             .collection('chats')
@@ -72,7 +72,7 @@ export function useChats(): UseChatsReturn {
                         ...doc.data(),
                     })) as Chat[];
 
-                    console.log('📱 [CHATS] Loaded', chatsList.length, 'chats');
+
                     setChats(chatsList);
                     setLoading(false);
                     setError(null);
@@ -115,7 +115,7 @@ export function useChats(): UseChatsReturn {
             };
 
             const chatRef = await firestore().collection('chats').add(chatData);
-            console.log('📱 [CHATS] Created new chat:', chatRef.id);
+
             return chatRef.id;
         },
         [currentUser]
@@ -134,7 +134,7 @@ export function useChats(): UseChatsReturn {
             );
 
             if (existingChat) {
-                console.log('📱 [CHATS] Found existing chat:', existingChat.id);
+
                 return existingChat.id;
             }
 
@@ -151,7 +151,7 @@ export function useChats(): UseChatsReturn {
             });
 
             if (foundChat) {
-                console.log('📱 [CHATS] Found existing chat in Firestore:', foundChat.id);
+
                 return foundChat.id;
             }
 

@@ -247,7 +247,8 @@ const MessagesScreen = ({ navigation }) => {
 
             setSearchResults(users);
         } catch (error) {
-            console.log('User search error:', error);
+            // Search error
+
             setSearchResults([]); // No dummy data
         }
     };

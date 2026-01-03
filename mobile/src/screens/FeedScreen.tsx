@@ -61,7 +61,8 @@ const FeedScreen = ({ navigation }) => {
 
                 setSearchedUsers(matchedUsers);
             } catch (error) {
-                console.log('User search error:', error);
+                // Search error
+
                 setSearchedUsers([]);
             } finally {
                 setSearchingUsers(false);

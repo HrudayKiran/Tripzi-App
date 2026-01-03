@@ -19,9 +19,36 @@ service firebase.storage {
       return request.resource.contentType.matches('image/.*');
     }
     
-    // Validate file size (max 10MB)
+    // Validate video file
+    function isVideo() {
+      return request.resource.contentType.matches('video/.*');
+    }
+    
+    // Validate audio file
+    function isAudio() {
+      return request.resource.contentType.matches('audio/.*');
+    }
+    
+    // Combined media check
+    function isMediaFile() {
+      return isImage() || isVideo() || isAudio();
+    }
+    
+    // Validate file size (max 10MB for images/audio)
     function isValidSize() {
       return request.resource.size < 10 * 1024 * 1024;
+    }
+    
+    // Validate video size (max 100MB)
+    function isValidVideoSize() {
+      return request.resource.size < 100 * 1024 * 1024;
+    }
+    
+    // Check appropriate size based on file type
+    function isValidMediaSize() {
+      return (isImage() && isValidSize()) || 
+             (isAudio() && isValidSize()) ||
+             (isVideo() && isValidVideoSize());
     }
     
     // ==================== PROFILE IMAGES ====================
@@ -34,45 +61,55 @@ service firebase.storage {
       allow write: if isOwner(userId) && isImage() && isValidSize();
     }
     
-    // ==================== TRIP IMAGES ====================
+    // ==================== TRIP MEDIA (Images & Videos) ====================
     
     match /trips/{userId}/{allPaths=**} {
-      // Anyone authenticated can read trip images
+      // Anyone authenticated can read trip media
       allow read: if isAuthenticated();
       
-      // Only the user can upload/delete their trip images
-      allow write: if isOwner(userId) && isImage() && isValidSize();
+      // Only the user can upload/delete their trip media (images or videos)
+      allow write: if isOwner(userId) && isMediaFile() && isValidMediaSize();
+    }
+
+    // ==================== TRIP VIDEOS ====================
+    
+    match /trip_videos/{userId}/{allPaths=**} {
+      // Anyone authenticated can read trip videos
+      allow read: if isAuthenticated();
+      
+      // Only the user can upload/delete their trip videos
+      allow write: if isOwner(userId) && isVideo() && isValidVideoSize();
     }
     
-    // ==================== STORY IMAGES ====================
+    // ==================== STORY MEDIA (Images & Videos) ====================
     
     match /stories/{userId}/{allPaths=**} {
       // Anyone authenticated can read stories
       allow read: if isAuthenticated();
       
-      // Only the user can upload/delete their stories
-      allow write: if isOwner(userId) && isImage() && isValidSize();
+      // Only the user can upload/delete their stories (images or videos)
+      allow write: if isOwner(userId) && isMediaFile() && isValidMediaSize();
     }
     
     // ==================== KYC DOCUMENTS ====================
     
     match /kyc/{userId}/{allPaths=**} {
       // Only the user and admins can read KYC documents
-      // (Admin check would require custom claims or Firestore lookup)
       allow read: if isOwner(userId);
       
       // Only the user can upload their KYC documents
       allow write: if isOwner(userId) && isValidSize();
     }
     
-    // ==================== CHAT IMAGES ====================
+    // ==================== CHAT MEDIA (Images, Videos, Voice) ====================
     
     match /chats/{chatId}/{allPaths=**} {
-      // Participants can read chat images (simplified - anyone authenticated)
+      // Participants can read chat media (simplified - anyone authenticated)
       allow read: if isAuthenticated();
       
-      // Authenticated users can upload to chats
-      allow write: if isAuthenticated() && isImage() && isValidSize();
+      // Authenticated users can upload media to chats (images, videos, voice)
+      allow write: if isAuthenticated() && isMediaFile() && isValidMediaSize();
     }
   }
 }
+

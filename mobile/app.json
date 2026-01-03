@@ -58,7 +58,9 @@
         {
           "android": {
             "usesCleartextTraffic": true,
-            "minSdkVersion": 24
+            "minSdkVersion": 24,
+            "enableProguardInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
           }
         }
       ],
@@ -94,8 +96,7 @@
         {
           "microphonePermission": "Allow Tripzi to access your microphone for voice messages."
         }
-      ],
-      "@react-native-firebase/app-check"
+      ]
     ]
   }
 }

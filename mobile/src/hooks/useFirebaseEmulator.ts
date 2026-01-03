@@ -50,22 +50,22 @@ export const connectToEmulators = (config: Partial<EmulatorConfig> = {}) => {
     try {
         // Firestore emulator
         firestore().useEmulator(finalConfig.firestore.host, finalConfig.firestore.port);
-        console.log('✅ Connected to Firestore emulator');
+
 
         // Functions emulator
         functions().useEmulator(finalConfig.functions.host, finalConfig.functions.port);
-        console.log('✅ Connected to Functions emulator');
+
 
         // Storage emulator
         storage().useEmulator(finalConfig.storage.host, finalConfig.storage.port);
-        console.log('✅ Connected to Storage emulator');
+
 
         // Auth emulator (optional - uncomment if needed)
         // auth().useEmulator(`http://${finalConfig.auth.host}:${finalConfig.auth.port}`);
-        // console.log('✅ Connected to Auth emulator');
+        //
 
         emulatorsConnected = true;
-        console.log('🔥 Firebase emulators connected!');
+
     } catch (error) {
         console.warn('Failed to connect to Firebase emulators:', error);
     }

@@ -34,7 +34,8 @@ const UsernameSetupScreen = ({ navigation }) => {
 
             setIsAvailable(snapshot.empty);
         } catch (error) {
-            console.log('Check error:', error);
+            // Error checking username
+
             setIsAvailable(true); // Assume available if can't check
         }
         setIsChecking(false);
@@ -65,7 +66,8 @@ const UsernameSetupScreen = ({ navigation }) => {
 
             navigation.replace('App');
         } catch (error) {
-            console.log('Save error:', error);
+            // Error saving username
+
             // Navigate anyway - will retry later
             navigation.replace('App');
         }

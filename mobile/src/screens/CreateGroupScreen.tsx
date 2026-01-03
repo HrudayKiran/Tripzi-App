@@ -36,7 +36,7 @@ const CreateGroupScreen = ({ navigation }) => {
     // Listen for auth state changes
     useEffect(() => {
         const unsubscribe = auth().onAuthStateChanged((user) => {
-            console.log('👥 [GROUP AUTH] Auth state changed:', user?.uid || 'null');
+
             setCurrentUser(user);
         });
         return () => unsubscribe();
@@ -59,15 +59,15 @@ const CreateGroupScreen = ({ navigation }) => {
 
     const loadFollowing = async () => {
         if (!currentUser) {
-            console.log('👥 [GROUP] No current user');
+
             return;
         }
         try {
-            console.log('👥 [GROUP] Loading following for:', currentUser.uid);
+
             const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
             const userData = userDoc.data();
             const followingIds = userData?.following || [];
-            console.log('👥 [GROUP] Following IDs:', followingIds.length, followingIds);
+
 
             if (followingIds.length > 0) {
                 const users = await Promise.all(
@@ -80,10 +80,10 @@ const CreateGroupScreen = ({ navigation }) => {
                     })
                 );
                 const validUsers = users.filter(Boolean) as User[];
-                console.log('👥 [GROUP] Loaded following users:', validUsers.length);
+
                 setFollowing(validUsers);
             } else {
-                console.log('👥 [GROUP] No following users found');
+
             }
         } catch (error) {
             console.error('👥 [GROUP] Failed to load following:', error);

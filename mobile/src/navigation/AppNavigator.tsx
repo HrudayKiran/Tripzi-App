@@ -118,7 +118,7 @@ const AppNavigator = () => {
                 try {
                     const userDoc = await firestore().collection('users').doc(userState.uid).get();
                     if (!userDoc.exists) {
-                        console.log('Ghost session detected (User missing in DB). Signing out...');
+
                         await auth().signOut();
                         // setUser(null) will trigger via the next onAuthStateChanged update
                     }

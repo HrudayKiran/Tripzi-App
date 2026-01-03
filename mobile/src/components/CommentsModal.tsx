@@ -71,7 +71,8 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
                 setComments(commentsData);
             },
             (error) => {
-                console.log('Comments listener error:', error);
+                // Listener error
+
                 setComments([]);
             }
         );
@@ -244,8 +245,8 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
         <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
             <KeyboardAvoidingView
                 style={{ flex: 1 }}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
             >
                 <View style={styles.overlay}>
                     <TouchableOpacity style={styles.backdrop} onPress={onClose} />

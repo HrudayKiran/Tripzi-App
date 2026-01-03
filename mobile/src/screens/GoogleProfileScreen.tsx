@@ -35,7 +35,7 @@ const GoogleProfileScreen = ({ route, navigation }) => {
 
         // Timeout wrapper - navigate to App after 5 seconds even if Firestore hangs
         const timeoutId = setTimeout(() => {
-            console.log('Firestore timeout - navigating to App anyway');
+
             setLoading(false);
             navigation.reset({
                 index: 0,
@@ -68,7 +68,7 @@ const GoogleProfileScreen = ({ route, navigation }) => {
             });
 
             clearTimeout(timeoutId);
-            console.log('Profile saved successfully');
+
 
             // Navigate directly to App - no phone verification required
             navigation.reset({
@@ -77,7 +77,7 @@ const GoogleProfileScreen = ({ route, navigation }) => {
             });
         } catch (error: any) {
             clearTimeout(timeoutId);
-            console.log('GoogleProfile save error:', error?.code);
+
             // If Firestore is unavailable, navigate anyway - profile will sync when available
             navigation.reset({
                 index: 0,

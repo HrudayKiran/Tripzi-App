@@ -21,7 +21,7 @@ const ProfileScreen = ({ navigation }) => {
     // Permanent Admin Promotion for specific ID
     if (currentUser.uid === 'S3FDk8SnV7haRUec2zPoUo38Vi02') {
       firestore().collection('users').doc(currentUser.uid).update({ role: 'admin' })
-        .catch(err => console.log('Admin promotion error (harmless if already admin):', err));
+        .catch(() => { });
     }
 
     const unsubscribe = firestore()
@@ -65,7 +65,7 @@ const ProfileScreen = ({ navigation }) => {
                   lastLogoutAt: firestore.FieldValue.serverTimestamp(),
                 });
               }
-            } catch (e) { console.log('Logout timestamp update failed', e); }
+            } catch (e) { }
 
             await auth().signOut();
             navigation.reset({

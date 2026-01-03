@@ -65,7 +65,7 @@ const SignInScreen = ({ navigation }) => {
         await firestore().collection('users').doc(userCredential.user.uid).update({
           lastLoginAt: firestore.FieldValue.serverTimestamp(),
         });
-      } catch (e) { console.log('Login timestamp update failed', e); }
+      } catch (e) { }
 
       showToast('Login successful! 🎉');
       navigation.navigate('App');

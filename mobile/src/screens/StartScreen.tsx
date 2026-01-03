@@ -47,17 +47,41 @@ const StartScreen = ({ navigation }) => {
 
       // Check if user exists in Firestore
       let isExistingUser = false;
-      const userDoc = await firestore().collection('users').doc(userCredential.user.uid).get();
+      // Force fetch from server
+      const userDoc = await firestore().collection('users').doc(userCredential.user.uid).get({ source: 'server' });
       isExistingUser = userDoc.exists;
 
-      // Update timestamps
       if (isExistingUser) {
-        await firestore().collection('users').doc(userCredential.user.uid).update({
-          lastLoginAt: firestore.FieldValue.serverTimestamp(),
+        try {
+          await firestore().collection('users').doc(userCredential.user.uid).update({
+            lastLoginAt: firestore.FieldValue.serverTimestamp(),
+          });
+        } catch (e: any) {
+          console.log('[AUTH] Update failed, treating as new user:', e);
+          isExistingUser = false;
+        }
+      }
+
+      if (!isExistingUser) {
+        // Fallback: Create user profile if Cloud Function didn't do it / failed
+        const { uid, email, displayName, photoURL } = userCredential.user;
+        const username = email ? email.split('@')[0] : `user_${uid.substring(0, 5)}`;
+
+        await firestore().collection('users').doc(uid).set({
+          userId: uid,
+          email: email,
+          displayName: displayName || '',
+          photoURL: photoURL || null,
+          emailVerified: true,
+          createdAt: firestore.FieldValue.serverTimestamp(),
+          updatedAt: firestore.FieldValue.serverTimestamp(),
+          followers: [],
+          following: [],
+          kycStatus: 'none',
+          bio: '',
+          username: username,
+          searchKeywords: [username.toLowerCase(), (displayName || '').toLowerCase()],
         });
-        console.log('📱 [AUTH] Google Login existing user:', userCredential.user.uid);
-      } else {
-        console.log('📱 [AUTH] Google Sign-Up new user:', userCredential.user.uid);
       }
 
     } catch (error: any) {

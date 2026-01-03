@@ -20,15 +20,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { Audio } from 'expo-av';
+import { Audio, Video, ResizeMode } from 'expo-av';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
 import { useChatMessages, Message, ReplyTo } from '../hooks/useChatMessages';
 import { useChats } from '../hooks/useChats';
+import LocationPickerModal from '../components/LocationPickerModal';
+import LiveLocationMapModal from '../components/LiveLocationMapModal';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
-import { format, isToday, isYesterday, isSameDay, differenceInMinutes } from 'date-fns';
+import { format, isToday, isYesterday, isSameDay, differenceInMinutes, addMinutes } from 'date-fns';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -72,9 +74,19 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
 
     // Image viewer state
     const [viewingImage, setViewingImage] = useState<string | null>(null);
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [previewVideo, setPreviewVideo] = useState<string | null>(null);
 
     // Location state
     const [gettingLocation, setGettingLocation] = useState(false);
+    const [showLocationOptions, setShowLocationOptions] = useState(false);
+    const [showMapPicker, setShowMapPicker] = useState(false);
+
+    // Live Location state
+    const [isSharingLive, setIsSharingLive] = useState(false);
+    const [showLiveMap, setShowLiveMap] = useState(false);
+    const locationSubscription = useRef<Location.LocationSubscription | null>(null);
+    const [activeSharersCount, setActiveSharersCount] = useState(0);
 
     // Voice note state
     const [recording, setRecording] = useState<any>(null);
@@ -147,6 +159,46 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         return () => unsubscribe();
     }, [chatId, currentUser]);
 
+    // Check for active live sharers
+    useEffect(() => {
+        if (!chatId) return;
+        const unsubscribe = firestore()
+            .collection('chats')
+            .doc(chatId)
+            .collection('live_shares')
+            .where('isActive', '==', true)
+            .where('validUntil', '>', firestore.Timestamp.now())
+            .onSnapshot(snapshot => {
+                setActiveSharersCount(snapshot.size);
+
+                // Check if I am sharing
+                if (currentUser) {
+                    const myShare = snapshot.docs.find(doc => doc.id === currentUser.uid);
+                    if (myShare && !isSharingLive) {
+                        // Resume sharing if app restarted but share is valid
+                        // For simplicity, we just set UI state to true, 
+                        // re-enabling the watcher requires user action or more complex background restoration
+                        setIsSharingLive(true);
+                        startLiveLocationHeaderResume();
+                    } else if (!myShare && isSharingLive) {
+                        setIsSharingLive(false);
+                        stopLiveSharing(false); // Stop watcher if remote says invalid
+                    }
+                }
+            });
+        return () => unsubscribe();
+    }, [chatId, currentUser]);
+
+    const startLiveLocationHeaderResume = async () => {
+        // Silently resume watcher if permissions allow
+        try {
+            const { status } = await Location.getForegroundPermissionsAsync();
+            if (status === 'granted' && !locationSubscription.current) {
+                startLocationWatcher();
+            }
+        } catch (e) { }
+    };
+
     // Update typing status
     const updateTypingStatus = useCallback((isTyping: boolean) => {
         if (!chatId || !currentUser) return;
@@ -216,6 +268,88 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     };
 
     // Pick and send image
+    const pickVideo = async () => {
+        setShowAttachmentPicker(false);
+        try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission needed', 'Please grant gallery permissions.');
+                return;
+            }
+            // Launch picker
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+                allowsEditing: false,
+                quality: 1,
+            });
+
+            if (!result.canceled && result.assets[0]) {
+                const asset = result.assets[0];
+                // 50MB limit check
+                if (asset.fileSize && asset.fileSize > 50 * 1024 * 1024) {
+                    Alert.alert('File too large', 'Please select a video under 50MB.');
+                    return;
+                }
+                setPreviewVideo(asset.uri);
+            }
+        } catch (error) {
+            console.error('Video picker error:', error);
+            Alert.alert('Error', 'Failed to pick video.');
+        }
+    };
+
+    const sendVideoMessage = async (videoUri: string) => {
+        if (!currentUser || !chatId) return;
+        setUploading(true);
+
+        try {
+            const filename = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.mp4`;
+            const storageRef = storage().ref(`chats/${chatId}/videos/${filename}`);
+            await storageRef.putFile(videoUri);
+            const downloadUrl = await storageRef.getDownloadURL();
+
+            const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
+            const userData = userDoc.data();
+
+            await firestore()
+                .collection('chats')
+                .doc(chatId)
+                .collection('messages')
+                .add({
+                    senderId: currentUser.uid,
+                    senderName: userData?.displayName || currentUser.displayName || 'User',
+                    type: 'video',
+                    mediaUrl: downloadUrl,
+                    status: 'sent',
+                    readBy: {},
+                    deliveredTo: [],
+                    deletedFor: [],
+                    createdAt: firestore.FieldValue.serverTimestamp(),
+                });
+
+            await firestore()
+                .collection('chats')
+                .doc(chatId)
+                .update({
+                    lastMessage: {
+                        text: '🎥 Video',
+                        senderId: currentUser.uid,
+                        senderName: userData?.displayName || currentUser.displayName || 'User',
+                        timestamp: firestore.FieldValue.serverTimestamp(),
+                        type: 'video',
+                    },
+                    updatedAt: firestore.FieldValue.serverTimestamp(),
+                    [`unreadCount.${currentUser.uid}`]: 0,
+                });
+
+        } catch (error) {
+            console.error('Failed to send video:', error);
+            Alert.alert('Error', 'Failed to send video.');
+        } finally {
+            setUploading(false);
+        }
+    };
+
     const pickImage = async (useCamera: boolean = false) => {
         setShowAttachmentPicker(false);
 
@@ -242,7 +376,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 });
 
             if (!result.canceled && result.assets[0]) {
-                await sendImageMessage(result.assets[0].uri);
+                setPreviewImage(result.assets[0].uri);
             }
         } catch (error) {
             console.error('Image picker error:', error);
@@ -302,36 +436,55 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     };
 
     // Location sharing
-    const sendLocation = async () => {
+    const sendLocation = async (pickedLocation?: { latitude: number; longitude: number; address?: string }) => {
         setShowAttachmentPicker(false);
         setGettingLocation(true);
 
         try {
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') {
-                Alert.alert('Permission needed', 'Please enable location access.');
-                setGettingLocation(false);
-                return;
+            let locationData;
+
+            if (pickedLocation) {
+                locationData = {
+                    coords: {
+                        latitude: pickedLocation.latitude,
+                        longitude: pickedLocation.longitude
+                    },
+                    address: pickedLocation.address
+                };
+            } else {
+                const { status } = await Location.requestForegroundPermissionsAsync();
+                if (status !== 'granted') {
+                    Alert.alert('Permission needed', 'Please enable location access.');
+                    setGettingLocation(false);
+                    return;
+                }
+
+                const location = await Location.getCurrentPositionAsync({
+                    accuracy: Location.Accuracy.Balanced,
+                });
+
+                locationData = {
+                    coords: location.coords,
+                    address: ''
+                };
             }
 
-            const location = await Location.getCurrentPositionAsync({
-                accuracy: Location.Accuracy.Balanced,
-            });
-
-            // Get address from coordinates
-            let address = '';
-            try {
-                const [addressResult] = await Location.reverseGeocodeAsync({
-                    latitude: location.coords.latitude,
-                    longitude: location.coords.longitude,
-                });
-                if (addressResult) {
-                    address = [addressResult.street, addressResult.city, addressResult.country]
-                        .filter(Boolean)
-                        .join(', ');
+            // Get address if not provided
+            let address = locationData.address || '';
+            if (!address) {
+                try {
+                    const [addressResult] = await Location.reverseGeocodeAsync({
+                        latitude: locationData.coords.latitude,
+                        longitude: locationData.coords.longitude,
+                    });
+                    if (addressResult) {
+                        address = [addressResult.street, addressResult.city, addressResult.country]
+                            .filter(Boolean)
+                            .join(', ');
+                    }
+                } catch (e) {
+                    // Geocoding failed
                 }
-            } catch (e) {
-                console.log('Geocoding failed:', e);
             }
 
             if (!currentUser || !chatId) return;
@@ -348,8 +501,8 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     senderName: userData?.displayName || currentUser.displayName || 'User',
                     type: 'location',
                     location: {
-                        latitude: location.coords.latitude,
-                        longitude: location.coords.longitude,
+                        latitude: locationData.coords.latitude,
+                        longitude: locationData.coords.longitude,
                         address: address,
                     },
                     status: 'sent',
@@ -374,12 +527,121 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     [`unreadCount.${currentUser.uid}`]: 0,
                 });
 
-            console.log('📍 Location sent successfully');
+
         } catch (error) {
             console.error('Failed to send location:', error);
             Alert.alert('Error', 'Failed to get location.');
         } finally {
             setGettingLocation(false);
+        }
+    };
+
+    // Live Location Logic
+    const startLiveSharing = (durationMinutes: number) => {
+        Alert.alert(
+            'Share Live Location',
+            `Share your live location for ${durationMinutes} minutes?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Start Sharing', onPress: async () => {
+                        try {
+                            const { status } = await Location.requestForegroundPermissionsAsync();
+                            if (status !== 'granted') return;
+
+                            setIsSharingLive(true);
+
+                            // Create/Update share doc
+                            const userDoc = await firestore().collection('users').doc(currentUser?.uid).get();
+                            const userData = userDoc.data();
+
+                            await firestore()
+                                .collection('chats')
+                                .doc(chatId)
+                                .collection('live_shares')
+                                .doc(currentUser?.uid)
+                                .set({
+                                    isActive: true,
+                                    validUntil: firestore.Timestamp.fromDate(addMinutes(new Date(), durationMinutes)),
+                                    timestamp: firestore.FieldValue.serverTimestamp(),
+                                    displayName: userData?.displayName || currentUser?.displayName || 'User',
+                                    photoURL: userData?.photoURL || userData?.image || currentUser?.photoURL || null,
+                                    latitude: 0, // Placeholder
+                                    longitude: 0 // Placeholder
+                                }, { merge: true });
+
+                            // Send system message
+                            await firestore()
+                                .collection('chats')
+                                .doc(chatId)
+                                .collection('messages')
+                                .add({
+                                    senderId: currentUser?.uid,
+                                    senderName: 'System',
+                                    type: 'system',
+                                    text: `${userData?.displayName || 'User'} started sharing live location.`,
+                                    createdAt: firestore.FieldValue.serverTimestamp(),
+                                });
+
+                            startLocationWatcher();
+
+                        } catch (error) {
+                            console.error("Live share error", error);
+                            setIsSharingLive(false);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const startLocationWatcher = async () => {
+        if (locationSubscription.current) return;
+
+        try {
+            const sub = await Location.watchPositionAsync({
+                accuracy: Location.Accuracy.Balanced,
+                timeInterval: 10000, // 10 seconds
+                distanceInterval: 20, // 20 meters
+            }, async (loc) => {
+                // Update Firestore
+                if (currentUser && chatId) {
+                    await firestore()
+                        .collection('chats')
+                        .doc(chatId)
+                        .collection('live_shares')
+                        .doc(currentUser.uid)
+                        .update({
+                            latitude: loc.coords.latitude,
+                            longitude: loc.coords.longitude,
+                            heading: loc.coords.heading,
+                            timestamp: firestore.FieldValue.serverTimestamp(),
+                        })
+                        .catch(err => console.log("Loc update failed", err));
+                }
+            });
+            locationSubscription.current = sub;
+        } catch (e) {
+            console.error("Watcher failed", e);
+        }
+    };
+
+    const stopLiveSharing = async (updateDoc = true) => {
+        if (locationSubscription.current) {
+            locationSubscription.current.remove();
+            locationSubscription.current = null;
+        }
+        setIsSharingLive(false);
+
+        if (updateDoc && currentUser && chatId) {
+            await firestore()
+                .collection('chats')
+                .doc(chatId)
+                .collection('live_shares')
+                .doc(currentUser.uid)
+                .update({
+                    isActive: false
+                }).catch(() => { });
         }
     };
 
@@ -498,7 +760,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     [`unreadCount.${currentUser.uid}`]: 0,
                 });
 
-            console.log('🎤 Voice message sent');
+
         } catch (error) {
             console.error('Failed to send voice message:', error);
             Alert.alert('Error', 'Failed to send voice message.');
@@ -951,12 +1213,51 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                                 </TouchableOpacity>
                             )}
 
-                            {/* Text message */}
-                            {item.text && item.type === 'text' && (
-                                <Text style={[styles.messageText, { color: isOwn ? '#fff' : colors.text }]}>
-                                    {item.text}
-                                </Text>
+                            {/* Trip Share message */}
+                            {item.type === 'trip_share' && (
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        if ((item as any).tripId) {
+                                            navigation.navigate('TripDetails' as never, { tripId: (item as any).tripId } as never);
+                                        }
+                                    }}
+                                    style={styles.tripShareContainer}
+                                >
+                                    {(item as any).tripImage && (
+                                        <Image
+                                            source={{ uri: (item as any).tripImage }}
+                                            style={styles.tripShareImage}
+                                            resizeMode="cover"
+                                        />
+                                    )}
+                                    <View style={styles.tripShareInfo}>
+                                        <Text style={[styles.tripShareLabel, { color: isOwn ? 'rgba(255,255,255,0.8)' : colors.primary }]}>
+                                            🗺️ Shared Trip
+                                        </Text>
+                                        <Text style={[styles.tripShareTitle, { color: isOwn ? '#fff' : colors.text }]} numberOfLines={2}>
+                                            {(item as any).tripTitle || 'Trip'}
+                                        </Text>
+                                        <Text style={[styles.tripShareTap, { color: isOwn ? 'rgba(255,255,255,0.6)' : colors.primary }]}>
+                                            Tap to view trip
+                                        </Text>
+                                    </View>
+                                </TouchableOpacity>
                             )}
+
+                            {/* Video message */}
+                            {item.type === 'video' && item.mediaUrl && (
+                                <View style={styles.videoContainer}>
+                                    <Video
+                                        style={styles.messageVideo}
+                                        source={{ uri: item.mediaUrl }}
+                                        useNativeControls
+                                        resizeMode={ResizeMode.COVER}
+                                        isLooping={false}
+                                    />
+                                </View>
+                            )}
+
+
 
                             {/* Timestamp and status */}
                             <View style={styles.messageFooter}>
@@ -1024,6 +1325,30 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 </TouchableOpacity>
             </View>
 
+            {/* Live Location Banner */}
+            {activeSharersCount > 0 && (
+                <TouchableOpacity
+                    style={[styles.liveBanner, { backgroundColor: colors.primary }]}
+                    onPress={() => setShowLiveMap(true)}
+                >
+                    <Ionicons name="navigate-circle" size={20} color="#fff" />
+                    <Text style={styles.liveBannerText}>
+                        {activeSharersCount} {activeSharersCount === 1 ? 'person is' : 'people are'} sharing live location
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color="#fff" />
+                </TouchableOpacity>
+            )}
+
+            {/* My Live Status */}
+            {isSharingLive && (
+                <View style={[styles.myLiveBar, { backgroundColor: '#DC2626' }]}>
+                    <Text style={styles.myLiveText}>You are sharing live location</Text>
+                    <TouchableOpacity onPress={() => stopLiveSharing(true)}>
+                        <Text style={styles.stopLiveText}>STOP</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
             {/* Uploading/Getting Location indicator */}
             {(uploading || gettingLocation) && (
                 <View style={[styles.uploadingBar, { backgroundColor: colors.primary }]}>
@@ -1048,8 +1373,8 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             {/* Messages */}
             <KeyboardAvoidingView
                 style={styles.messagesContainer}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 60}
             >
                 <FlatList
                     ref={flatListRef}
@@ -1203,6 +1528,13 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                                 <Text style={[styles.attachmentLabel, { color: colors.text }]}>Camera</Text>
                             </TouchableOpacity>
 
+                            <TouchableOpacity style={styles.attachmentOption} onPress={() => pickVideo()}>
+                                <View style={[styles.attachmentIcon, { backgroundColor: '#F59E0B' }]}>
+                                    <Ionicons name="videocam" size={28} color="#fff" />
+                                </View>
+                                <Text style={[styles.attachmentLabel, { color: colors.text }]}>Video</Text>
+                            </TouchableOpacity>
+
                             <TouchableOpacity style={styles.attachmentOption} onPress={() => pickImage(false)}>
                                 <View style={[styles.attachmentIcon, { backgroundColor: '#EC4899' }]}>
                                     <Ionicons name="images" size={28} color="#fff" />
@@ -1210,7 +1542,10 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                                 <Text style={[styles.attachmentLabel, { color: colors.text }]}>Gallery</Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity style={styles.attachmentOption} onPress={sendLocation}>
+                            <TouchableOpacity style={styles.attachmentOption} onPress={() => {
+                                setShowAttachmentPicker(false);
+                                setShowLocationOptions(true);
+                            }}>
                                 <View style={[styles.attachmentIcon, { backgroundColor: '#10B981' }]}>
                                     <Ionicons name="location" size={28} color="#fff" />
                                 </View>
@@ -1220,6 +1555,77 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     </View>
                 </Pressable>
             </Modal>
+
+            {/* Location Options Modal */}
+            <Modal visible={showLocationOptions} transparent animationType="fade">
+                <Pressable style={styles.attachmentOverlay} onPress={() => setShowLocationOptions(false)}>
+                    <View style={[styles.attachmentPicker, { backgroundColor: colors.card }]}>
+                        <Text style={[styles.attachmentTitle, { color: colors.text }]}>Share Location</Text>
+
+                        <TouchableOpacity style={styles.locationOption} onPress={() => {
+                            setShowLocationOptions(false);
+                            sendLocation();
+                        }}>
+                            <View style={[styles.locationOptionIcon, { backgroundColor: '#3B82F6' }]}>
+                                <Ionicons name="navigate" size={24} color="#fff" />
+                            </View>
+                            <View style={styles.locationOptionInfo}>
+                                <Text style={[styles.locationOptionTitle, { color: colors.text }]}>Current Location</Text>
+                                <Text style={[styles.locationOptionSubtitle, { color: colors.textSecondary }]}>Share your accurate position</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.locationOption} onPress={() => {
+                            setShowLocationOptions(false);
+                            setShowMapPicker(true);
+                        }}>
+                            <View style={[styles.locationOptionIcon, { backgroundColor: '#F59E0B' }]}>
+                                <Ionicons name="map" size={24} color="#fff" />
+                            </View>
+                            <View style={styles.locationOptionInfo}>
+                                <Text style={[styles.locationOptionTitle, { color: colors.text }]}>Pick on Map</Text>
+                                <Text style={[styles.locationOptionSubtitle, { color: colors.textSecondary }]}>Select a location on map</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.locationOption} onPress={() => {
+                            setShowLocationOptions(false);
+                            Alert.alert('Share Live Location', 'Select duration', [
+                                { text: '15 Mins', onPress: () => startLiveSharing(15) },
+                                { text: '1 Hour', onPress: () => startLiveSharing(60) },
+                                { text: '8 Hours', onPress: () => startLiveSharing(480) },
+                                { text: 'Cancel', style: 'cancel' }
+                            ]);
+                        }}>
+                            <View style={[styles.locationOptionIcon, { backgroundColor: '#10B981' }]}>
+                                <Ionicons name="radio" size={24} color="#fff" />
+                            </View>
+                            <View style={styles.locationOptionInfo}>
+                                <Text style={[styles.locationOptionTitle, { color: colors.text }]}>Live Location</Text>
+                                <Text style={[styles.locationOptionSubtitle, { color: colors.textSecondary }]}>Share real-time movement</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
+                </Pressable>
+            </Modal>
+
+            {/* Map Picker Modal */}
+            <LocationPickerModal
+                visible={showMapPicker}
+                onClose={() => setShowMapPicker(false)}
+                onSelectLocation={(loc) => sendLocation(loc)}
+            />
+
+            {/* Live Map Modal */}
+            <LiveLocationMapModal
+                visible={showLiveMap}
+                onClose={() => setShowLiveMap(false)}
+                chatId={chatId}
+                currentUser={currentUser}
+            />
 
             {/* Edit Message Modal */}
             <Modal visible={!!editingMessage} transparent animationType="fade">
@@ -1260,7 +1666,69 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     {viewingImage && <Image source={{ uri: viewingImage }} style={styles.fullImage} resizeMode="contain" />}
                 </View>
             </Modal>
-        </SafeAreaView>
+
+            {/* Image Preview Modal (Before Send) */}
+            <Modal visible={!!previewImage} transparent animationType="slide">
+                <View style={[styles.imageViewerModal, { backgroundColor: '#000' }]}>
+                    <Image source={{ uri: previewImage || '' }} style={styles.fullImage} resizeMode="contain" />
+
+                    <View style={styles.previewActions}>
+                        <TouchableOpacity
+                            style={[styles.previewButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+                            onPress={() => setPreviewImage(null)}
+                        >
+                            <Text style={styles.previewButtonText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.previewButton, { backgroundColor: colors.primary }]}
+                            onPress={() => {
+                                if (previewImage) {
+                                    sendImageMessage(previewImage);
+                                    setPreviewImage(null);
+                                }
+                            }}
+                        >
+                            <Text style={[styles.previewButtonText, { fontWeight: 'bold' }]}>Send</Text>
+                            <Ionicons name="send" size={16} color="#fff" style={{ marginLeft: 6 }} />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Video Preview Modal (Before Send) */}
+            <Modal visible={!!previewVideo} transparent animationType="slide">
+                <View style={[styles.imageViewerModal, { backgroundColor: '#000' }]}>
+                    <Video
+                        source={{ uri: previewVideo || '' }}
+                        style={styles.fullImage}
+                        resizeMode={ResizeMode.CONTAIN}
+                        useNativeControls
+                        isLooping
+                    />
+
+                    <View style={styles.previewActions}>
+                        <TouchableOpacity
+                            style={[styles.previewButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+                            onPress={() => setPreviewVideo(null)}
+                        >
+                            <Text style={styles.previewButtonText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.previewButton, { backgroundColor: colors.primary }]}
+                            onPress={() => {
+                                if (previewVideo) {
+                                    sendVideoMessage(previewVideo);
+                                    setPreviewVideo(null);
+                                }
+                            }}
+                        >
+                            <Text style={[styles.previewButtonText, { fontWeight: 'bold' }]}>Send</Text>
+                            <Ionicons name="send" size={16} color="#fff" style={{ marginLeft: 6 }} />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+        </SafeAreaView >
     );
 };
 
@@ -1356,6 +1824,10 @@ const styles = StyleSheet.create({
     imageViewerModal: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
     imageViewerClose: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: SPACING.md },
     fullImage: { width: '100%', height: '80%' },
+
+    previewActions: { position: 'absolute', bottom: 40, flexDirection: 'row', width: '100%', justifyContent: 'space-around', paddingHorizontal: 20 },
+    previewButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 30, borderRadius: 30 },
+    previewButtonText: { color: '#fff', fontSize: 16 },
     // Dropdown menu styles
     dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' },
     dropdownMenu: { position: 'absolute', top: 60, right: 16, minWidth: 150, borderRadius: BORDER_RADIUS.lg, paddingVertical: SPACING.sm, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4 },
@@ -1366,6 +1838,26 @@ const styles = StyleSheet.create({
     selectionBarText: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
     selectionBarActions: { flexDirection: 'row', gap: SPACING.md },
     selectionBarButton: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.md },
+    // Trip Share message styles
+    tripShareContainer: { borderRadius: BORDER_RADIUS.md, overflow: 'hidden', marginTop: SPACING.xs },
+    tripShareImage: { width: 200, height: 120, borderRadius: BORDER_RADIUS.md },
+    tripShareInfo: { paddingTop: SPACING.sm },
+    tripShareLabel: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.semibold, marginBottom: 2 },
+    tripShareTitle: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold, marginBottom: 4 },
+
+    tripShareTap: { fontSize: FONT_SIZE.xs },
+    locationOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },
+    locationOptionIcon: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.md },
+    locationOptionInfo: { flex: 1 },
+    locationOptionTitle: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
+    locationOptionSubtitle: { fontSize: FONT_SIZE.xs, marginTop: 2 },
+    videoContainer: { overflow: 'hidden', borderRadius: BORDER_RADIUS.md },
+    messageVideo: { width: SCREEN_WIDTH * 0.6, height: SCREEN_WIDTH * 0.6, borderRadius: BORDER_RADIUS.md },
+    liveBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 16, gap: 8 },
+    liveBannerText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
+    myLiveBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 16 },
+    myLiveText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
+    stopLiveText: { color: '#fff', fontSize: 12, fontWeight: 'bold', textDecorationLine: 'underline' },
 });
 
 export default ChatScreen;

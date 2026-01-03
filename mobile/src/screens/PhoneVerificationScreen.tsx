@@ -33,7 +33,7 @@ const PhoneVerificationScreen = ({ route, navigation }) => {
     useEffect(() => {
         // In production, this would trigger Firebase Phone Auth
         // For now, we'll use a mock OTP: 123456
-        console.log('📱 OTP sent to:', phoneNumber);
+
         Alert.alert('OTP Sent', `A verification code has been sent to +91 ${phoneNumber}\n\nFor testing, use: 123456`);
     }, []);
 
@@ -85,7 +85,8 @@ const PhoneVerificationScreen = ({ route, navigation }) => {
                 inputRefs.current[0]?.focus();
             }
         } catch (error: any) {
-            console.log('Verification error:', error);
+            // Verification error
+
             Alert.alert('Error', 'Failed to verify. Please try again.');
         } finally {
             setLoading(false);

@@ -57,7 +57,7 @@ const StoriesScreen = ({ navigation, route }) => {
     // Listen for auth state changes
     React.useEffect(() => {
         const unsubscribe = auth().onAuthStateChanged((user) => {
-            console.log('📸 [STORY AUTH] Auth state changed:', user?.uid || 'null');
+
             setCurrentUser(user);
         });
         return () => unsubscribe();

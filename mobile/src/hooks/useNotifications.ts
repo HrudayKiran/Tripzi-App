@@ -58,10 +58,10 @@ export function useNotifications(): UseNotificationsReturn {
 
     useEffect(() => {
         const userId = auth().currentUser?.uid;
-        console.log('🔔 [NOTIF] useNotifications - userId:', userId);
+
 
         if (!userId) {
-            console.log('🔔 [NOTIF] No user logged in, skipping notifications');
+
             setLoading(false);
             setNotifications([]);
             return;
@@ -69,7 +69,7 @@ export function useNotifications(): UseNotificationsReturn {
 
         setLoading(true);
         setError(null);
-        console.log('🔔 [NOTIF] Subscribing to notifications collection...');
+
 
         const unsubscribe = firestore()
             .collection('notifications')
@@ -77,7 +77,7 @@ export function useNotifications(): UseNotificationsReturn {
             .limit(50)
             .onSnapshot(
                 (snapshot) => {
-                    console.log('🔔 [NOTIF] Received snapshot, docs count:', snapshot.docs.length);
+
                     const notifs = snapshot.docs.map((doc) => {
                         const data = doc.data();
                         return {
@@ -104,7 +104,7 @@ export function useNotifications(): UseNotificationsReturn {
                     setNotifications(notifs);
                     setUnreadCount(notifs.filter((n) => !n.read).length);
                     setLoading(false);
-                    console.log('🔔 [NOTIF] Loaded', notifs.length, 'notifications,', notifs.filter((n) => !n.read).length, 'unread');
+
                 },
                 (err) => {
                     console.error('🔔 [NOTIF] ❌ Listener error:', err);
