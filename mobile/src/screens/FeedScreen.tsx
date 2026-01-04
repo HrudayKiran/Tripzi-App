@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Modal, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Modal, Dimensions, Animated, NativeSyntheticEvent, NativeScrollEvent, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import TripCard from '../components/TripCard';
 import DefaultAvatar from '../components/DefaultAvatar';
@@ -12,6 +12,7 @@ import FilterModal, { FilterOptions } from '../components/FilterModal';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 
 import firestore from '@react-native-firebase/firestore';
+import AppLogo from '../components/AppLogo';
 
 const { width, height } = Dimensions.get('window');
 
@@ -28,7 +29,47 @@ const FeedScreen = ({ navigation }) => {
     const [hasNotifications, setHasNotifications] = useState(true);
     const [searchedUsers, setSearchedUsers] = useState<any[]>([]);
     const [searchingUsers, setSearchingUsers] = useState(false);
+    const [visibleItems, setVisibleItems] = useState<string[]>([]);
     const searchTimeout = useRef<NodeJS.Timeout | null>(null);
+
+    // Viewability config for auto-play videos
+    const viewabilityConfig = useRef({
+        itemVisiblePercentThreshold: 50,
+    }).current;
+
+    const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
+        const visibleIds = viewableItems.map((item: any) => item.key);
+        setVisibleItems(visibleIds);
+    }, []);
+
+    // Sticky header animation
+    const scrollY = useRef(new Animated.Value(0)).current;
+    const lastScrollY = useRef(0);
+    const headerTranslateY = useRef(new Animated.Value(0)).current;
+    const HEADER_HEIGHT = 60 + insets.top;
+
+    const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+        const currentScrollY = event.nativeEvent.contentOffset.y;
+        const direction = currentScrollY > lastScrollY.current ? 'down' : 'up';
+
+        if (direction === 'down' && currentScrollY > HEADER_HEIGHT) {
+            // Hide header
+            Animated.timing(headerTranslateY, {
+                toValue: -HEADER_HEIGHT,
+                duration: 200,
+                useNativeDriver: true,
+            }).start();
+        } else if (direction === 'up') {
+            // Show header
+            Animated.timing(headerTranslateY, {
+                toValue: 0,
+                duration: 200,
+                useNativeDriver: true,
+            }).start();
+        }
+
+        lastScrollY.current = currentScrollY;
+    }, [HEADER_HEIGHT, headerTranslateY]);
 
     // Search users when query changes
     useEffect(() => {
@@ -118,6 +159,22 @@ const FeedScreen = ({ navigation }) => {
                     trip.genderPreference === filters.genderPreference || trip.genderPreference === 'anyone'
                 );
             }
+            if (filters.sortBy) {
+                switch (filters.sortBy) {
+                    case 'newest':
+                        result.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+                        break;
+                    case 'oldest':
+                        result.sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0));
+                        break;
+                    case 'lowestCost':
+                        result.sort((a, b) => (a.cost || 0) - (b.cost || 0));
+                        break;
+                    case 'highestCost':
+                        result.sort((a, b) => (b.cost || 0) - (a.cost || 0));
+                        break;
+                }
+            }
         }
 
         return result;
@@ -140,11 +197,21 @@ const FeedScreen = ({ navigation }) => {
 
     const hasActiveFilters = filters !== null || searchQuery !== '';
 
-    // Header component that scrolls with content
-    const ListHeader = () => (
-        <View style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}>
+    // Sticky header - now rendered outside FlatList
+    const renderStickyHeader = () => (
+        <Animated.View
+            style={[
+                styles.stickyHeader,
+                {
+                    paddingTop: insets.top,
+                    backgroundColor: colors.background,
+                    transform: [{ translateY: headerTranslateY }],
+                    height: HEADER_HEIGHT,
+                }
+            ]}
+        >
             <View style={styles.headerRow}>
-                <Image source={require('../../assets/icon.png')} style={styles.headerIcon} />
+                <AppLogo size={28} showDot={false} />
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Tripzi</Text>
             </View>
             <View style={styles.headerActions}>
@@ -171,13 +238,18 @@ const FeedScreen = ({ navigation }) => {
                     {hasNotifications && <View style={[styles.notificationDot, { backgroundColor: colors.error }]} />}
                 </TouchableOpacity>
             </View>
-        </View>
+        </Animated.View>
     );
 
-    // SearchModal has been inlined in the return statement to prevent re-mounting
+    // Spacer for FlatList to account for sticky header
+    const ListHeaderSpacer = () => (
+        <View style={{ height: HEADER_HEIGHT }} />
+    );
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
+            {/* Sticky Header */}
+            {renderStickyHeader()}
             {loading ? (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color={colors.primary} />
@@ -187,8 +259,9 @@ const FeedScreen = ({ navigation }) => {
                 </View>
             ) : filteredTrips.length === 0 ? (
                 <FlatList
+                    key="empty-list"
                     data={[]}
-                    ListHeaderComponent={ListHeader}
+                    ListHeaderComponent={ListHeaderSpacer}
                     ListEmptyComponent={
                         <Animatable.View animation="fadeIn" style={styles.emptyContainer}>
                             <View style={[styles.emptyIcon, { backgroundColor: colors.primaryLight }]}>
@@ -220,16 +293,26 @@ const FeedScreen = ({ navigation }) => {
                 />
             ) : (
                 <FlatList
+                    key="content-list"
                     data={filteredTrips}
                     keyExtractor={(item) => item.id}
-                    ListHeaderComponent={ListHeader}
+                    ListHeaderComponent={ListHeaderSpacer}
                     renderItem={({ item }) => (
                         <TripCard
                             trip={item}
                             onPress={() => navigation.navigate('TripDetails', { tripId: item.id })}
+                            isVisible={visibleItems.includes(item.id)}
                         />
                     )}
                     showsVerticalScrollIndicator={false}
+                    onViewableItemsChanged={onViewableItemsChanged}
+                    viewabilityConfig={viewabilityConfig}
+                    onScroll={handleScroll}
+                    scrollEventThrottle={16}
+                    initialNumToRender={4}
+                    maxToRenderPerBatch={4}
+                    windowSize={5}
+                    removeClippedSubviews={Platform.OS === 'android'}
                     refreshControl={
                         <RefreshControl
                             refreshing={refreshing}
@@ -360,6 +443,23 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: SPACING.lg,
         paddingBottom: SPACING.sm,
+    },
+    stickyHeader: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 100,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: SPACING.lg,
+        paddingBottom: SPACING.sm,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 5,
     },
     headerRow: {
         flexDirection: 'row',

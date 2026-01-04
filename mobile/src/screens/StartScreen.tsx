@@ -1,13 +1,17 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ToastAndroid, Platform, Image } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ToastAndroid, Platform, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import AppLogo from '../components/AppLogo';
+
+const { width } = Dimensions.get('window');
 
 const StartScreen = ({ navigation }) => {
   const { colors } = useTheme();
@@ -28,12 +32,9 @@ const StartScreen = ({ navigation }) => {
     });
   }, []);
 
-  // Unified Google Auth Handler
   const handleGoogleAuth = async () => {
     try {
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-
-      // Always sign out first to force account picker
       try { await GoogleSignin.signOut(); } catch (e) { }
 
       const signInResult = await GoogleSignin.signIn();
@@ -41,237 +42,247 @@ const StartScreen = ({ navigation }) => {
 
       if (!idToken) throw new Error('No idToken received');
 
-      // Use React Native Firebase auth
       const googleCredential = auth.GoogleAuthProvider.credential(idToken);
       const userCredential = await auth().signInWithCredential(googleCredential);
 
-      // Check if user exists in Firestore
-      let isExistingUser = false;
-      // Force fetch from server
-      const userDoc = await firestore().collection('users').doc(userCredential.user.uid).get({ source: 'server' });
-      isExistingUser = userDoc.exists;
-
-      if (isExistingUser) {
-        try {
-          await firestore().collection('users').doc(userCredential.user.uid).update({
-            lastLoginAt: firestore.FieldValue.serverTimestamp(),
-          });
-        } catch (e: any) {
-          console.log('[AUTH] Update failed, treating as new user:', e);
-          isExistingUser = false;
-        }
-      }
-
-      if (!isExistingUser) {
-        // Fallback: Create user profile if Cloud Function didn't do it / failed
+      // Simple user sync logic (simplified for UI focus)
+      const userDoc = await firestore().collection('users').doc(userCredential.user.uid).get();
+      if (!userDoc.exists) {
         const { uid, email, displayName, photoURL } = userCredential.user;
         const username = email ? email.split('@')[0] : `user_${uid.substring(0, 5)}`;
-
         await firestore().collection('users').doc(uid).set({
-          userId: uid,
-          email: email,
-          displayName: displayName || '',
-          photoURL: photoURL || null,
-          emailVerified: true,
+          userId: uid, email, displayName, photoURL, username,
           createdAt: firestore.FieldValue.serverTimestamp(),
-          updatedAt: firestore.FieldValue.serverTimestamp(),
-          followers: [],
-          following: [],
-          kycStatus: 'none',
-          bio: '',
-          username: username,
-          searchKeywords: [username.toLowerCase(), (displayName || '').toLowerCase()],
+          role: 'user', kycStatus: 'none', followers: [], following: [],
         });
       }
 
+      // Explicit navigation to ensure UI update
+      navigation.reset({ index: 0, routes: [{ name: 'App' }] });
     } catch (error: any) {
-      console.error('📱 [AUTH] Google auth error:', error);
       if (error?.code !== statusCodes.SIGN_IN_CANCELLED) {
-        showToast('Google Sign-In failed. Please try again.');
-        Alert.alert('Sign Up Failed', error.message || 'Could not sign up');
+        Alert.alert('Google Sign-In Failed', error.message);
       }
     }
   };
 
-
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
-      <View style={styles.container}>
-        <Animatable.View animation="fadeInUp" duration={500} style={styles.content}>
-          {/* Logo */}
-          <View style={styles.logoContainer}>
-            <Image source={require('../../assets/icon.png')} style={styles.logoImage} />
-          </View>
+    <View style={styles.container}>
+      {/* Full Screen Gradient Background */}
+      <LinearGradient
+        colors={['#9d74f7', '#895af6', '#6d28d9']}
+        locations={[0, 0.4, 1]}
+        style={StyleSheet.absoluteFillObject}
+      />
 
-          {/* Welcome Text */}
-          <Text style={[styles.welcome, { color: colors.text }]}>Welcome to Tripzi</Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Explore the world, not alone
-          </Text>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.content}>
+          {/* Animated Logo Section */}
+          <Animatable.View
+            animation="fadeInDown"
+            duration={1000}
+            delay={300}
+            style={styles.logoSection}
+          >
+            <AppLogo size={120} showDot={true} showGlow={true} />
+            <View style={styles.textContainer}>
+              <Text style={styles.appName}>Tripzi</Text>
+              <Text style={styles.tagline}>CONNECT. PLAN. TRAVEL.</Text>
+            </View>
+          </Animatable.View>
 
-          {/* Buttons */}
-          <View style={styles.buttonsContainer}>
+          {/* Buttons Section - Glassmorphism Style */}
+          <Animatable.View
+            animation="fadeInUp"
+            duration={1000}
+            delay={600}
+            style={styles.buttonSection}
+          >
+            {/* Email Sign In */}
             <TouchableOpacity
-              style={[styles.emailButton, { backgroundColor: colors.primary }]}
+              style={styles.glassButtonPrimary}
               onPress={() => navigation.navigate('SignIn')}
               activeOpacity={0.8}
             >
-              <Ionicons name="mail-outline" size={20} color="#fff" />
-              <Text style={styles.emailButtonText}>Sign in with Email</Text>
+              <Ionicons name="mail" size={20} color="#6d28d9" style={{ opacity: 0.9 }} />
+              <Text style={styles.primaryButtonText}>Sign In with Email</Text>
             </TouchableOpacity>
 
-            {/* Google Continue Button */}
+            {/* Google Sign In */}
             <TouchableOpacity
-              style={[styles.googleButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+              style={styles.glassButtonSecondary}
               onPress={handleGoogleAuth}
               activeOpacity={0.8}
             >
-              <Text style={styles.googleIcon}>G</Text>
-              <Text style={[styles.googleButtonText, { color: colors.text }]}>Continue with Google</Text>
+              <View style={styles.googleIconContainer}>
+                <Text style={styles.googleG}>G</Text>
+              </View>
+              <Text style={styles.secondaryButtonText}>Continue with Google</Text>
             </TouchableOpacity>
 
-            <View style={styles.dividerContainer}>
-              <View style={[styles.divider, { backgroundColor: colors.border }]} />
-              <Text style={[styles.dividerText, { color: colors.textSecondary }]}>or</Text>
-              <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            <View style={styles.dividerBox}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
             </View>
 
+            {/* Create Account */}
             <TouchableOpacity
-              style={[styles.createButton, { borderColor: colors.primary }]}
+              style={styles.glassButtonOutline}
               onPress={() => navigation.navigate('SignUp')}
-              activeOpacity={0.8}
+              activeOpacity={0.7}
             >
-              <Text style={[styles.createButtonText, { color: colors.primary }]}>Create New Account via Email</Text>
+              <Text style={styles.outlineButtonText}>Create New Account</Text>
             </TouchableOpacity>
-          </View>
-        </Animatable.View>
 
-        {/* Terms */}
-        <Animatable.Text
-          animation="fadeIn"
-          delay={300}
-          style={[styles.terms, { color: colors.textSecondary }]}
-        >
-          By continuing, you agree to our{' '}
-          <Text style={{ color: colors.primary }} onPress={() => navigation.navigate('Terms')}>
-            Terms of Service
-          </Text>{' '}
-          and{' '}
-          <Text style={{ color: colors.primary }} onPress={() => navigation.navigate('PrivacyPolicy')}>
-            Privacy Policy
-          </Text>
-        </Animatable.Text>
-      </View>
-    </SafeAreaView>
+            {/* Terms Links */}
+            <Text style={styles.termsText}>
+              By continuing, you agree to our{' '}
+              <Text style={styles.linkText} onPress={() => navigation.navigate('Terms')}>Terms</Text> and{' '}
+              <Text style={styles.linkText} onPress={() => navigation.navigate('PrivacyPolicy')}>Privacy Policy</Text>.
+            </Text>
+          </Animatable.View>
+        </View>
+      </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   safeArea: {
     flex: 1,
   },
-  container: {
-    flex: 1,
-    paddingHorizontal: SPACING.xxl,
-    justifyContent: 'space-between',
-    paddingBottom: SPACING.xxl,
-  },
   content: {
     flex: 1,
+    paddingHorizontal: SPACING.xl,
+    justifyContent: 'space-between',
+    paddingVertical: SPACING.xxl,
+  },
+  logoSection: {
+    flex: 1,
     justifyContent: 'center',
-  },
-  logoContainer: {
     alignItems: 'center',
-    marginBottom: SPACING.xxl,
+    gap: 24,
   },
-  logoImage: {
-    width: 80,
-    height: 80,
-    borderRadius: BORDER_RADIUS.xl,
-  },
-  welcome: {
-    fontSize: FONT_SIZE.xxxl,
-    fontWeight: FONT_WEIGHT.bold,
-    textAlign: 'center',
-    marginBottom: SPACING.md,
-  },
-  subtitle: {
-    fontSize: FONT_SIZE.md,
-    textAlign: 'center',
-    marginBottom: SPACING.xxxl,
-    lineHeight: 24,
-  },
-  buttonsContainer: {
-    gap: SPACING.lg,
-  },
-  emailButton: {
-    flexDirection: 'row',
+  textContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.lg,
-    borderRadius: BORDER_RADIUS.md,
-    gap: SPACING.md,
+    marginTop: 24,
   },
-  emailButtonText: {
+  appName: {
+    fontSize: 48,
+    fontWeight: '800',
     color: '#fff',
-    fontSize: FONT_SIZE.md,
-    fontWeight: FONT_WEIGHT.bold,
+    letterSpacing: -1,
+    textShadowColor: 'rgba(0,0,0,0.2)',
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 8,
   },
-  googleButton: {
+  tagline: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.9)',
+    letterSpacing: 4,
+    textTransform: 'uppercase',
+    marginTop: 8,
+  },
+  buttonSection: {
+    gap: 16,
+    width: '100%',
+    paddingBottom: 24,
+  },
+  glassButtonPrimary: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SPACING.lg,
-    borderRadius: BORDER_RADIUS.md,
-    borderWidth: 1,
-    gap: SPACING.md,
+    backgroundColor: '#fff',
+    paddingVertical: 18,
+    borderRadius: 16,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  googleIcon: {
-    fontSize: FONT_SIZE.xl,
-    fontWeight: FONT_WEIGHT.bold,
-    color: '#4285F4',
+  primaryButtonText: {
+    color: '#6d28d9',
+    fontSize: 16,
+    fontWeight: '700',
   },
-  googleButtonText: {
-    fontSize: FONT_SIZE.md,
-    fontWeight: FONT_WEIGHT.semibold,
-  },
-  dividerContainer: {
+  glassButtonSecondary: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: SPACING.sm,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingVertical: 18,
+    borderRadius: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
   },
-  divider: {
+  secondaryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  googleIconContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleG: {
+    color: '#6d28d9',
+    fontWeight: '900',
+    fontSize: 16,
+  },
+  dividerBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 8,
+    paddingHorizontal: 16,
+  },
+  dividerLine: {
     flex: 1,
     height: 1,
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   dividerText: {
-    marginHorizontal: SPACING.lg,
-    fontSize: FONT_SIZE.sm,
+    color: 'rgba(255,255,255,0.6)',
+    marginHorizontal: 16,
+    fontSize: 12,
+    fontWeight: '600',
   },
-  createButton: {
-    paddingVertical: SPACING.lg,
-    borderRadius: BORDER_RADIUS.md,
-    borderWidth: 2,
-    alignItems: 'center',
-  },
-  createButtonText: {
-    fontSize: FONT_SIZE.md,
-    fontWeight: FONT_WEIGHT.bold,
-  },
-  googleSignUpButton: {
-    flexDirection: 'row',
+  glassButtonOutline: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SPACING.lg,
-    borderRadius: BORDER_RADIUS.md,
-    borderWidth: 1,
-    gap: SPACING.md,
-    marginTop: SPACING.sm,
+    paddingVertical: 16,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: 'transparent',
   },
-  terms: {
-    fontSize: FONT_SIZE.xs,
+  outlineButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  termsText: {
     textAlign: 'center',
-    lineHeight: 18,
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 11,
+    marginTop: 16,
+    lineHeight: 16,
+  },
+  linkText: {
+    color: '#fff',
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 });
 

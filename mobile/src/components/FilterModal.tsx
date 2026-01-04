@@ -40,11 +40,33 @@ const BUDGET_OPTIONS = [
 ];
 
 const TRAVELERS_OPTIONS = [
-    { id: 2, label: '1-2' },
-    { id: 5, label: '3-5' },
-    { id: 10, label: '6-10' },
     { id: 20, label: '10-20' },
     { id: 50, label: '20+' },
+];
+
+const TRIP_TYPES = [
+    { id: 'adventure', label: 'Adventure', icon: 'compass-outline' },
+    { id: 'trekking', label: 'Trekking', icon: 'footsteps-outline' },
+    { id: 'bike_ride', label: 'Bike Ride', icon: 'bicycle-outline' },
+    { id: 'road_trip', label: 'Road Trip', icon: 'car-outline' },
+    { id: 'camping', label: 'Camping', icon: 'bonfire-outline' },
+    { id: 'sightseeing', label: 'Sightseeing', icon: 'camera-outline' },
+    { id: 'beach', label: 'Beach', icon: 'water-outline' },
+    { id: 'pilgrimage', label: 'Pilgrimage', icon: 'rose-outline' },
+];
+
+const TRANSPORT_MODES = [
+    { id: 'train', label: 'Train', icon: 'train-outline' },
+    { id: 'bus', label: 'Bus', icon: 'bus-outline' },
+    { id: 'car', label: 'Car', icon: 'car-sport-outline' },
+    { id: 'flight', label: 'Flight', icon: 'airplane-outline' },
+    { id: 'bike', label: 'Bike', icon: 'bicycle-outline' },
+];
+
+const GENDER_PREFERENCES = [
+    { id: 'anyone', label: 'Anyone', icon: 'people-outline' },
+    { id: 'male', label: 'Male Only', icon: 'man-outline' },
+    { id: 'female', label: 'Female Only', icon: 'woman-outline' },
 ];
 
 const FilterModal = ({ visible, onClose, onApply }: FilterModalProps) => {
@@ -53,6 +75,9 @@ const FilterModal = ({ visible, onClose, onApply }: FilterModalProps) => {
     const [destination, setDestination] = useState('');
     const [maxCost, setMaxCost] = useState(500000);
     const [maxTravelers, setMaxTravelers] = useState(50);
+    const [tripType, setTripType] = useState<string | undefined>(undefined);
+    const [transportMode, setTransportMode] = useState<string | undefined>(undefined);
+    const [genderPreference, setGenderPreference] = useState<string | undefined>(undefined);
     const slideAnim = useRef(new Animated.Value(width)).current;
 
     useEffect(() => {
@@ -78,6 +103,9 @@ const FilterModal = ({ visible, onClose, onApply }: FilterModalProps) => {
         setDestination('');
         setMaxCost(500000);
         setMaxTravelers(50);
+        setTripType(undefined);
+        setTransportMode(undefined);
+        setGenderPreference(undefined);
     };
 
     const handleApply = () => {
@@ -86,7 +114,10 @@ const FilterModal = ({ visible, onClose, onApply }: FilterModalProps) => {
             maxCost,
             maxTravelers,
             minDays: 1,
-            destination
+            destination,
+            tripType,
+            transportMode,
+            genderPreference,
         });
         onClose();
     };
@@ -211,6 +242,102 @@ const FilterModal = ({ visible, onClose, onApply }: FilterModalProps) => {
                                             <Text style={[
                                                 styles.optionChipText,
                                                 { color: maxTravelers === option.id ? '#fff' : colors.text }
+                                            ]}>
+                                                {option.label}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+
+                            {/* Trip Type */}
+                            <View style={styles.section}>
+                                <View style={styles.sectionHeader}>
+                                    <Ionicons name="compass-outline" size={20} color={colors.primary} />
+                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Trip Type</Text>
+                                </View>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollOptions}>
+                                    {TRIP_TYPES.map((option) => (
+                                        <TouchableOpacity
+                                            key={option.id}
+                                            style={[
+                                                styles.optionChip,
+                                                {
+                                                    backgroundColor: tripType === option.id ? colors.primary : colors.card,
+                                                    borderColor: tripType === option.id ? colors.primary : colors.border,
+                                                }
+                                            ]}
+                                            onPress={() => setTripType(tripType === option.id ? undefined : option.id)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Ionicons name={option.icon as any} size={16} color={tripType === option.id ? '#fff' : colors.text} style={{ marginRight: 6 }} />
+                                            <Text style={[
+                                                styles.optionChipText,
+                                                { color: tripType === option.id ? '#fff' : colors.text }
+                                            ]}>
+                                                {option.label}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+
+                            {/* Transport Mode */}
+                            <View style={styles.section}>
+                                <View style={styles.sectionHeader}>
+                                    <Ionicons name="train-outline" size={20} color="#8B5CF6" />
+                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Transport Mode</Text>
+                                </View>
+                                <View style={styles.optionsRow}>
+                                    {TRANSPORT_MODES.map((option) => (
+                                        <TouchableOpacity
+                                            key={option.id}
+                                            style={[
+                                                styles.optionChip,
+                                                {
+                                                    backgroundColor: transportMode === option.id ? '#8B5CF6' : colors.card,
+                                                    borderColor: transportMode === option.id ? '#8B5CF6' : colors.border,
+                                                }
+                                            ]}
+                                            onPress={() => setTransportMode(transportMode === option.id ? undefined : option.id)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Ionicons name={option.icon as any} size={16} color={transportMode === option.id ? '#fff' : colors.text} style={{ marginRight: 6 }} />
+                                            <Text style={[
+                                                styles.optionChipText,
+                                                { color: transportMode === option.id ? '#fff' : colors.text }
+                                            ]}>
+                                                {option.label}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+
+                            {/* Gender Preference */}
+                            <View style={styles.section}>
+                                <View style={styles.sectionHeader}>
+                                    <Ionicons name="people-circle-outline" size={20} color="#EF4444" />
+                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Who can join?</Text>
+                                </View>
+                                <View style={styles.optionsRow}>
+                                    {GENDER_PREFERENCES.map((option) => (
+                                        <TouchableOpacity
+                                            key={option.id}
+                                            style={[
+                                                styles.optionChip,
+                                                {
+                                                    backgroundColor: genderPreference === option.id ? '#EF4444' : colors.card,
+                                                    borderColor: genderPreference === option.id ? '#EF4444' : colors.border,
+                                                }
+                                            ]}
+                                            onPress={() => setGenderPreference(genderPreference === option.id ? undefined : option.id)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Ionicons name={option.icon as any} size={16} color={genderPreference === option.id ? '#fff' : colors.text} style={{ marginRight: 6 }} />
+                                            <Text style={[
+                                                styles.optionChipText,
+                                                { color: genderPreference === option.id ? '#fff' : colors.text }
                                             ]}>
                                                 {option.label}
                                             </Text>

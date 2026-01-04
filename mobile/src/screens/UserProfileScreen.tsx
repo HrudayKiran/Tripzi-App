@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, ActivityIndicator, Modal, TextInput, FlatList, Dimensions, Alert, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -61,9 +61,13 @@ const UserProfileScreen = ({ route, navigation }) => {
 
     const isOwnProfile = userId === currentUser?.uid;
 
+    // Reload data when screen comes into focus (e.g., after creating a trip)
     useEffect(() => {
-        loadUserData();
-    }, [userId]);
+        const unsubscribe = navigation.addListener('focus', () => {
+            loadUserData();
+        });
+        return unsubscribe;
+    }, [navigation, userId]);
 
     const loadUserData = async () => {
         if (!userId) {

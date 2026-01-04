@@ -1,10 +1,11 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, ToastAndroid } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 
@@ -28,7 +29,7 @@ const SignUpScreen = ({ navigation }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
-  const [touched, setTouched] = useState<{ [key: string]: boolean }>({});
+  const [focusedField, setFocusedField] = useState<string | null>(null);
   const { colors } = useTheme();
 
   const showToast = (message: string) => {
@@ -42,339 +43,179 @@ const SignUpScreen = ({ navigation }) => {
   };
 
   const validatePhoneNumber = (phone: string) => {
-    // Indian phone number validation (10 digits)
     const cleaned = phone.replace(/\D/g, '');
     return cleaned.length === 10;
   };
 
-  const handleFieldChange = useCallback((field: string, value: string) => {
-    switch (field) {
-      case 'email': setEmail(value); break;
-      case 'fullName': setFullName(value); break;
-      case 'phoneNumber': setPhoneNumber(value); break;
-      case 'password': setPassword(value); break;
-      case 'confirmPassword': setConfirmPassword(value); break;
-    }
-  }, []);
-
-  const handleBlur = useCallback((field: string, value: string) => {
-    setTouched(prev => ({ ...prev, [field]: true }));
-
-    const newErrors = { ...errors };
-    switch (field) {
-      case 'email':
-        if (!value) newErrors.email = 'Email is required';
-        else if (!/\S+@\S+\.\S+/.test(value)) newErrors.email = 'Invalid email format';
-        else delete newErrors.email;
-        break;
-      case 'fullName':
-        if (!value) newErrors.fullName = 'Full name is required';
-        else if (value.length < 2) newErrors.fullName = 'Name too short';
-        else delete newErrors.fullName;
-        break;
-      case 'phoneNumber':
-        if (value && !validatePhoneNumber(value)) newErrors.phoneNumber = 'Enter valid 10-digit number';
-        else delete newErrors.phoneNumber;
-        break;
-      case 'password':
-        if (!value) newErrors.password = 'Password is required';
-        else if (value.length < 6) newErrors.password = 'Min 6 characters';
-        else delete newErrors.password;
-        break;
-      case 'confirmPassword':
-        if (!value) newErrors.confirmPassword = 'Confirm password is required';
-        else if (value !== password) newErrors.confirmPassword = 'Passwords do not match';
-        else delete newErrors.confirmPassword;
-        break;
-    }
-    setErrors(newErrors);
-  }, [errors, password]);
-
   const handleSignUp = async () => {
     const newErrors: Errors = {};
-
-    if (!email) newErrors.email = 'Email is required';
-    else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = 'Invalid email format';
-
-    if (!fullName) newErrors.fullName = 'Full name is required';
-
-    if (phoneNumber && !validatePhoneNumber(phoneNumber)) {
-      newErrors.phoneNumber = 'Enter valid 10-digit number';
-    }
-
-    if (!password) newErrors.password = 'Password is required';
-    else if (password.length < 6) newErrors.password = 'Min 6 characters';
-
-    if (!confirmPassword) newErrors.confirmPassword = 'Confirm password is required';
-    else if (confirmPassword !== password) newErrors.confirmPassword = 'Passwords do not match';
-
+    if (!email) newErrors.email = 'Required';
+    else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = 'Invalid format';
+    if (!fullName) newErrors.fullName = 'Required';
+    if (phoneNumber && !validatePhoneNumber(phoneNumber)) newErrors.phoneNumber = 'Invalid number';
+    if (!password) newErrors.password = 'Required';
+    else if (password.length < 6) newErrors.password = 'Min 6 chars';
+    if (confirmPassword !== password) newErrors.confirmPassword = 'Mismatch';
     if (!agreedToTerms) newErrors.terms = 'Required';
 
     setErrors(newErrors);
-    setTouched({ email: true, fullName: true, password: true, confirmPassword: true, phoneNumber: true });
-
     if (Object.keys(newErrors).length > 0) return;
 
     setLoading(true);
     try {
       const userCredential = await auth().createUserWithEmailAndPassword(email, password);
       const { user } = userCredential;
-
       await user.updateProfile({ displayName: fullName });
 
-      // Save to Firestore using React Native Firebase with timeout fallback
-      // Create user profile in Firestore
       try {
-        await firestore().collection('users').doc(userCredential.user.uid).set({
-          userId: userCredential.user.uid,
-          email: email,
-          displayName: fullName,
+        await firestore().collection('users').doc(user.uid).set({
+          userId: user.uid, email, displayName: fullName,
           username: fullName.toLowerCase().replace(/\s+/g, '') + Math.floor(Math.random() * 1000),
           phoneNumber: phoneNumber || null,
-          photoURL: null,
-          bio: '',
-          role: 'user',
-          kycStatus: 'pending',
-          followers: [],
-          following: [],
-          rating: 0,
-          pushNotifications: true,
-          emailVerified: false,
-          phoneVerified: false,
+          role: 'user', kycStatus: 'pending', followers: [], following: [], rating: 0,
           createdAt: firestore.FieldValue.serverTimestamp(),
           lastLoginAt: firestore.FieldValue.serverTimestamp(),
         });
-      } catch (firestoreError: any) {
-        console.error('Firestore sync error:', firestoreError);
-        Alert.alert('Account Created', 'Your account was created but profile setup failed. Please check your internet.');
-      }
+      } catch (e) { console.error(e); }
 
-      showToast('Successfully Created Account! 🎉');
-      // Reset navigation stack and go to App
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'App' }],
-      });
+      showToast('Account Created! 🎉');
+      navigation.reset({ index: 0, routes: [{ name: 'App' }] });
     } catch (error: any) {
-      let errorMessage = 'Failed to create account';
-      if (error?.code === 'auth/email-already-in-use') {
-        errorMessage = 'Email is already registered';
-      } else if (error?.code === 'auth/invalid-email') {
-        errorMessage = 'Invalid email address';
-      } else if (error?.code === 'auth/weak-password') {
-        errorMessage = 'Password is too weak';
-      } else if (error?.code === 'auth/network-request-failed') {
-        errorMessage = 'Please check your internet connection and try again.';
-      } else if (error?.message) {
-        errorMessage = error.message;
-      }
-      Alert.alert('Sign Up Failed', errorMessage);
+      if (error.code === 'auth/email-already-in-use') Alert.alert('Error', 'Email already used');
+      else Alert.alert('Error', error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const renderInput = (
-    icon: string,
-    placeholder: string,
-    value: string,
-    field: string,
-    options?: {
-      keyboardType?: 'default' | 'email-address' | 'phone-pad';
-      secureTextEntry?: boolean;
-      showToggle?: boolean;
-      isSecure?: boolean;
-      onToggle?: () => void;
-    }
-  ) => {
-    const hasError = errors[field] && touched[field];
+  const renderInput = (icon: any, placeholder: string, value: string, setValue: any, fieldName: string, options: any = {}) => {
+    const isFocused = focusedField === fieldName;
+    const hasError = errors[fieldName as keyof Errors];
+
     return (
-      <View>
-        <View style={[
-          styles.inputContainer,
-          {
-            backgroundColor: colors.inputBackground,
-            borderColor: hasError ? '#EF4444' : 'transparent',
-            borderWidth: hasError ? 1 : 0
-          }
-        ]}>
-          <Ionicons name={icon as any} size={20} color={hasError ? '#EF4444' : colors.textSecondary} />
+      <View style={styles.inputWrapper}>
+        <Text style={[styles.label, { color: colors.text }]}>
+          {fieldName === 'fullName' ? 'Full Name' :
+            fieldName === 'phoneNumber' ? 'Phone (Optional)' :
+              fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/([A-Z])/g, ' $1')}
+        </Text>
+        <Animatable.View
+          transition={['borderColor']}
+          style={[
+            styles.inputContainer,
+            {
+              backgroundColor: colors.inputBackground,
+              borderColor: hasError ? '#EF4444' : (isFocused ? '#8B5CF6' : 'transparent'),
+              borderWidth: 1.5,
+              transform: [{ scale: isFocused ? 1.02 : 1 }]
+            }
+          ]}
+        >
+          <Ionicons name={icon} size={20} color={isFocused ? '#8B5CF6' : colors.textSecondary} />
           <TextInput
             style={[styles.input, { color: colors.text }]}
             placeholder={placeholder}
             placeholderTextColor={colors.textSecondary}
             value={value}
-            onChangeText={(text) => handleFieldChange(field, text)}
-            onBlur={() => handleBlur(field, value)}
-            secureTextEntry={options?.secureTextEntry}
-            keyboardType={options?.keyboardType || 'default'}
-            autoCapitalize={options?.keyboardType === 'email-address' ? 'none' : 'words'}
-            autoCorrect={false}
+            onChangeText={(text) => { setValue(text); if (errors[fieldName as keyof Errors]) setErrors(prev => ({ ...prev, [fieldName]: undefined })); }}
+            onFocus={() => setFocusedField(fieldName)}
+            onBlur={() => setFocusedField(null)}
+            {...options}
           />
-          {options?.showToggle && (
-            <TouchableOpacity onPress={options.onToggle} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name={options.isSecure ? "eye-outline" : "eye-off-outline"} size={20} color={colors.textSecondary} />
+          {options.toggleSecure && (
+            <TouchableOpacity onPress={options.toggleSecure}>
+              <Ionicons name={options.secureTextEntry ? "eye-off-outline" : "eye-outline"} size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           )}
-        </View>
-        {hasError && <Text style={styles.errorText}>{errors[field]}</Text>}
+        </Animatable.View>
+        {hasError && <Text style={styles.errorText}>{hasError}</Text>}
       </View>
     );
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
-      >
-        <ScrollView
-          style={styles.container}
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-              activeOpacity={0.7}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="chevron-back" size={28} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-
-          <Animatable.View animation="fadeInUp" duration={500}>
-            {/* Title */}
-            <Text style={[styles.title, { color: colors.text }]}>
-              Create Your Account
-            </Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Connect with thousands of travellers to explore the world, not alone
-            </Text>
-
-            {/* Form */}
-            <View style={styles.form}>
-              <Text style={[styles.label, { color: colors.text }]}>
-                Email Address <Text style={styles.required}>*</Text>
-              </Text>
-              {renderInput('mail-outline', 'hello@example.com', email, 'email', { keyboardType: 'email-address' })}
-
-              <Text style={[styles.label, { color: colors.text }]}>
-                Full Name <Text style={styles.required}>*</Text>
-              </Text>
-              {renderInput('person-outline', 'Your full name', fullName, 'fullName')}
-
-              <Text style={[styles.label, { color: colors.text }]}>
-                Phone Number <Text style={[styles.optional, { color: colors.textSecondary }]}>(Optional)</Text>
-              </Text>
-              {renderInput('call-outline', '9876543210', phoneNumber, 'phoneNumber', { keyboardType: 'phone-pad' })}
-
-              <Text style={[styles.label, { color: colors.text }]}>
-                Password <Text style={styles.required}>*</Text>
-              </Text>
-              {renderInput('lock-closed-outline', 'Create a password', password, 'password', {
-                secureTextEntry: !showPassword,
-                showToggle: true,
-                isSecure: !showPassword,
-                onToggle: () => setShowPassword(!showPassword),
-              })}
-
-              <Text style={[styles.label, { color: colors.text }]}>
-                Confirm Password <Text style={styles.required}>*</Text>
-              </Text>
-              {renderInput('lock-closed-outline', 'Confirm your password', confirmPassword, 'confirmPassword', {
-                secureTextEntry: !showConfirmPassword,
-                showToggle: true,
-                isSecure: !showConfirmPassword,
-                onToggle: () => setShowConfirmPassword(!showConfirmPassword),
-              })}
-
-              {/* Terms Checkbox */}
-              <TouchableOpacity
-                style={styles.termsContainer}
-                onPress={() => setAgreedToTerms(!agreedToTerms)}
-                activeOpacity={0.7}
-              >
-                <View style={[
-                  styles.checkbox,
-                  { borderColor: errors.terms ? '#EF4444' : colors.primary, backgroundColor: agreedToTerms ? colors.primary : 'transparent' }
-                ]}>
-                  {agreedToTerms && <Ionicons name="checkmark" size={16} color="#fff" />}
-                </View>
-                <Text style={[styles.termsText, { color: colors.textSecondary }]}>
-                  I agree to the{' '}
-                  <Text style={{ color: colors.primary }} onPress={() => navigation.navigate('Terms')}>
-                    Terms of Service
-                  </Text>
-                  {' '}and{' '}
-                  <Text style={{ color: colors.primary }} onPress={() => navigation.navigate('PrivacyPolicy')}>
-                    Privacy Policy
-                  </Text>
-                  {' '}<Text style={styles.required}>*</Text>
-                </Text>
-              </TouchableOpacity>
-              {errors.terms && <Text style={[styles.errorText, { marginTop: -SPACING.sm }]}>Please agree to terms</Text>}
-
-              {/* Sign Up Button */}
-              <TouchableOpacity
-                style={[styles.signUpButton, { backgroundColor: colors.primary }]}
-                onPress={handleSignUp}
-                disabled={loading}
-                activeOpacity={0.8}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.signUpButtonText}>Create Account</Text>
-                )}
-              </TouchableOpacity>
-
-              {/* Sign In Link */}
-              <View style={styles.signInContainer}>
-                <Text style={[styles.signInText, { color: colors.textSecondary }]}>
-                  Already have an account?{' '}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => navigation.navigate('SignIn')}
-                  hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
-                >
-                  <Text style={[styles.signInLink, { color: colors.primary }]}>Sign In</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+    <View style={styles.container}>
+      <LinearGradient colors={['#9d74f7', '#6d28d9']} style={StyleSheet.absoluteFillObject} />
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton} onPress={() => navigation.goBack()}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Animatable.View animation="fadeInLeft" duration={800} style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>Create{'\n'}Account</Text>
+            <Text style={styles.headerSubtitle}>Join thousands of travelers</Text>
           </Animatable.View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        </View>
+
+        {/* Bottom Sheet */}
+        <Animatable.View animation="fadeInUpBig" duration={800} style={[styles.bottomSheet, { backgroundColor: colors.background }]}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.formContent}>
+
+              {renderInput('mail-outline', 'hello@example.com', email, setEmail, 'email', { keyboardType: 'email-address', autoCapitalize: 'none' })}
+              {renderInput('person-outline', 'Your Full Name', fullName, setFullName, 'fullName')}
+              {renderInput('call-outline', '9876543210', phoneNumber, setPhoneNumber, 'phoneNumber', { keyboardType: 'phone-pad' })}
+
+              {renderInput('lock-closed-outline', 'Create password', password, setPassword, 'password', {
+                secureTextEntry: !showPassword, toggleSecure: () => setShowPassword(!showPassword)
+              })}
+              {renderInput('lock-closed-outline', 'Confirm password', confirmPassword, setConfirmPassword, 'confirmPassword', {
+                secureTextEntry: !showConfirmPassword, toggleSecure: () => setShowConfirmPassword(!showConfirmPassword)
+              })}
+
+              {/* Terms */}
+              <TouchableOpacity style={styles.termsContainer} onPress={() => setAgreedToTerms(!agreedToTerms)}>
+                <View style={[styles.checkbox, { backgroundColor: agreedToTerms ? '#8B5CF6' : 'transparent', borderColor: errors.terms ? '#EF4444' : '#8B5CF6' }]}>
+                  {agreedToTerms && <Ionicons name="checkmark" size={14} color="#fff" />}
+                </View>
+                <Text style={styles.termsText}>I agree to the <Text style={styles.linkText}>Terms</Text> & <Text style={styles.linkText}>Privacy Policy</Text></Text>
+              </TouchableOpacity>
+              {errors.terms && <Text style={styles.errorText}>Please agree to terms</Text>}
+
+              <TouchableOpacity style={styles.signUpButton} onPress={handleSignUp} disabled={loading}>
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create Account</Text>}
+              </TouchableOpacity>
+
+              <View style={styles.footer}>
+                <Text style={styles.footerText}>Already have an account? </Text>
+                <TouchableOpacity onPress={() => navigation.navigate('SignIn')}><Text style={styles.linkText}>Sign In</Text></TouchableOpacity>
+              </View>
+
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </Animatable.View>
+      </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
   container: { flex: 1 },
-  contentContainer: { paddingBottom: SPACING.xxxl },
-  header: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
-  backButton: { width: TOUCH_TARGET.min, height: TOUCH_TARGET.min, justifyContent: 'center', alignItems: 'center', marginLeft: -SPACING.sm },
-  title: { fontSize: FONT_SIZE.xxxl, fontWeight: FONT_WEIGHT.bold, marginHorizontal: SPACING.xl, marginBottom: SPACING.sm },
-  subtitle: { fontSize: FONT_SIZE.sm, marginHorizontal: SPACING.xl, marginBottom: SPACING.xl, lineHeight: 22 },
-  form: { paddingHorizontal: SPACING.xl },
-  label: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold, marginBottom: SPACING.sm, marginTop: SPACING.md },
-  required: { color: '#EF4444', fontSize: FONT_SIZE.sm },
-  optional: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.regular },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.md, gap: SPACING.md },
-  input: { flex: 1, fontSize: FONT_SIZE.md },
-  errorText: { color: '#EF4444', fontSize: FONT_SIZE.xs, marginTop: SPACING.xs, marginLeft: SPACING.sm },
-  termsContainer: { flexDirection: 'row', alignItems: 'flex-start', marginTop: SPACING.xl, gap: SPACING.md },
-  checkbox: { width: 24, height: 24, borderRadius: BORDER_RADIUS.sm, borderWidth: 2, justifyContent: 'center', alignItems: 'center' },
-  termsText: { flex: 1, fontSize: FONT_SIZE.sm, lineHeight: 20 },
-  signUpButton: { paddingVertical: SPACING.lg, borderRadius: BORDER_RADIUS.md, alignItems: 'center', marginTop: SPACING.xl },
-  signUpButtonText: { color: '#fff', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
-  signInContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.xl },
-  signInText: { fontSize: FONT_SIZE.sm },
-  signInLink: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
+  safeArea: { flex: 1 },
+  header: { height: '25%', paddingHorizontal: 24, paddingTop: 16 },
+  backButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  headerTextContainer: { gap: 4 },
+  headerTitle: { fontSize: 36, fontWeight: '800', color: '#fff', lineHeight: 42 },
+  headerSubtitle: { fontSize: 16, color: 'rgba(255,255,255,0.8)' },
+  bottomSheet: { flex: 1, borderTopLeftRadius: 32, borderTopRightRadius: 32, paddingHorizontal: 24, paddingTop: 32 },
+  formContent: { gap: 16, paddingBottom: 40 },
+  inputWrapper: { gap: 6 },
+  label: { fontSize: 13, fontWeight: '600', marginLeft: 4 },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 14, gap: 12 },
+  input: { flex: 1, fontSize: 15 },
+  errorText: { color: '#EF4444', fontSize: 11, marginLeft: 4 },
+  termsContainer: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 },
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, justifyContent: 'center', alignItems: 'center' },
+  termsText: { fontSize: 13, color: '#666' },
+  linkText: { color: '#8B5CF6', fontWeight: '700' },
+  signUpButton: { backgroundColor: '#8B5CF6', paddingVertical: 16, borderRadius: 16, alignItems: 'center', marginTop: 12, shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  buttonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 16 },
+  footerText: { fontSize: 14, color: '#666' },
 });
 
 export default SignUpScreen;

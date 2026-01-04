@@ -2,26 +2,26 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { NetworkProvider } from '../contexts/NetworkContext';
 import { navigationRef } from './RootNavigation';
 import OfflineBanner from '../components/OfflineBanner';
 import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
 
 import usePushNotifications from '../hooks/usePushNotifications';
 import usePermissions from '../hooks/usePermissions';
 
-import SplashScreen from '../screens/SplashScreen';
+import LaunchScreen from '../screens/LaunchScreen';
+import WelcomeScreen from '../screens/WelcomeScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
 import StartScreen from '../screens/StartScreen';
 import SignInScreen from '../screens/SignInScreen';
 import SignUpScreen from '../screens/SignUpScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import FeedScreen from '../screens/FeedScreen';
-import ReelsScreen from '../screens/ReelsScreen';
+import MomentsScreen from '../screens/MomentsScreen';
 import MyTripsScreen from '../screens/MyTripsScreen';
 import MessagesScreen from '../screens/MessagesScreen';
 import MessageScreen from '../screens/MessageScreen';
@@ -54,7 +54,7 @@ const Tab = createBottomTabNavigator();
 const AppTabs = () => {
     const { colors } = useTheme();
     usePushNotifications();
-    usePermissions(); // Request all permissions on app start
+    usePermissions();
     return (
         <Tab.Navigator
             screenOptions={{
@@ -81,10 +81,10 @@ const AppTabs = () => {
                 }}
             />
             <Tab.Screen
-                name="Reels"
-                component={ReelsScreen}
+                name="Moments"
+                component={MomentsScreen}
                 options={{
-                    tabBarIcon: ({ color, size }) => <Ionicons name="play-circle-outline" size={size} color={color} />,
+                    tabBarIcon: ({ color, size }) => <Ionicons name="film-outline" size={size} color={color} />,
                 }}
             />
             <Tab.Screen
@@ -106,56 +106,54 @@ const AppTabs = () => {
 };
 
 const AppNavigator = () => {
+    const [initialRoute, setInitialRoute] = React.useState<string | null>(null);
     const [user, setUser] = React.useState(auth().currentUser);
-    const [initializing, setInitializing] = React.useState(true);
 
     React.useEffect(() => {
-        const subscriber = auth().onAuthStateChanged(async (userState) => {
+        // Check auth state IMMEDIATELY on mount
+        const currentUser = auth().currentUser;
+
+        if (currentUser) {
+            // User is logged in → Skip LaunchScreen, go directly to App
+            setInitialRoute('App');
+        } else {
+            // User is NOT logged in → Show LaunchScreen flow
+            setInitialRoute('Launch');
+        }
+
+        // Also listen for auth changes during runtime
+        const unsubscribe = auth().onAuthStateChanged((userState) => {
             setUser(userState);
 
-            // Ghost Session Check: If we have an auth user, verify they exist in Firestore
-            if (userState) {
-                try {
-                    const userDoc = await firestore().collection('users').doc(userState.uid).get();
-                    if (!userDoc.exists) {
-
-                        await auth().signOut();
-                        // setUser(null) will trigger via the next onAuthStateChanged update
-                    }
-                } catch (e) {
-                    console.error('Error checking user existence:', e);
-                }
+            // Handle runtime logout
+            if (!userState && navigationRef.current) {
+                navigationRef.current.reset({
+                    index: 1,
+                    routes: [{ name: 'Welcome' }, { name: 'Start' }],
+                });
             }
-
-            if (initializing) setInitializing(false);
         });
-        return subscriber; // unsubscribe on unmount
+
+        return unsubscribe;
     }, []);
 
-    // Effect to handle navigation based on auth state
-    React.useEffect(() => {
-        if (initializing) return;
-
-        if (user && navigationRef.current) {
-            // User is logged in -> Go to App (Skip Splash/Start)
-            navigationRef.current.reset({
-                index: 0,
-                routes: [{ name: 'App' }],
-            });
-        } else if (!user && navigationRef.current) {
-            // User is logged out -> Go to Splash (Restores Splash Screen flow)
-            navigationRef.current.reset({
-                index: 0,
-                routes: [{ name: 'Splash' }],
-            });
-        }
-    }, [user, initializing]);
+    // Show nothing (or a minimal splash) until we determine the initial route
+    if (!initialRoute) {
+        return (
+            <ThemeProvider>
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#895af6" />
+                </View>
+            </ThemeProvider>
+        );
+    }
 
     return (
         <ThemeProvider>
             <NetworkProvider>
                 <NavigationContainer ref={navigationRef}>
                     <Stack.Navigator
+                        initialRouteName={initialRoute}
                         screenOptions={{
                             headerShown: false,
                             cardStyleInterpolator: ({ current, layouts }) => ({
@@ -173,17 +171,23 @@ const AppNavigator = () => {
                             gestureEnabled: false,
                         }}
                     >
-                        <Stack.Screen name="Splash" component={SplashScreen} />
+                        {/* Auth Flow Screens */}
+                        <Stack.Screen name="Launch" component={LaunchScreen} />
+                        <Stack.Screen name="Welcome" component={WelcomeScreen} />
                         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                         <Stack.Screen name="Start" component={StartScreen} />
                         <Stack.Screen name="SignIn" component={SignInScreen} />
                         <Stack.Screen name="SignUp" component={SignUpScreen} />
                         <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+
+                        {/* Main App */}
                         <Stack.Screen
                             name="App"
                             component={AppTabs}
                             options={{ gestureEnabled: false }}
                         />
+
+                        {/* Other Screens */}
                         <Stack.Screen name="MyTrips" component={MyTripsScreen} />
                         <Stack.Screen name="CreateTrip" component={CreateTripScreen} />
                         <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
@@ -213,5 +217,14 @@ const AppNavigator = () => {
         </ThemeProvider>
     );
 };
+
+const styles = StyleSheet.create({
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#000', // Dark background for instant feel
+    },
+});
 
 export default AppNavigator;

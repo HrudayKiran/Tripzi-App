@@ -129,6 +129,70 @@ async function createNotification(data: {
   });
 }
 
+// ==================== KYC NOTIFICATION FUNCTION ====================
+
+/**
+ * Send push and in-app notification when user KYC status changes to 'verified'.
+ */
+export const onKycStatusChange = onDocumentUpdated(
+  { document: "users/{userId}", database: "default" },
+  async (event) => {
+    if (!event.data) return;
+
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+    const userId = event.params.userId;
+
+    // Check if kycStatus changed to 'verified'
+    if (before?.kycStatus !== 'verified' && after?.kycStatus === 'verified') {
+      console.log(`KYC approved for user ${userId}`);
+
+      // Send push notification
+      await sendPushToUser(userId, {
+        title: '🎉 KYC Approved!',
+        body: 'Your identity has been verified. You now have full access to Tripzi!',
+        data: { type: 'kyc_approved', userId },
+      });
+
+      // Create in-app notification
+      await createNotification({
+        recipientId: userId,
+        type: 'kyc_approved',
+        title: 'KYC Verification Complete',
+        message: 'Your identity has been verified successfully! You now have full access to all features.',
+        entityType: 'user',
+        entityId: userId,
+        deepLinkRoute: 'Profile',
+        deepLinkParams: { userId },
+      });
+
+      console.log(`KYC notification sent to user ${userId}`);
+    }
+
+    // Handle KYC rejection
+    if (before?.kycStatus !== 'rejected' && after?.kycStatus === 'rejected') {
+      console.log(`KYC rejected for user ${userId}`);
+
+      await sendPushToUser(userId, {
+        title: '❌ KYC Review Required',
+        body: 'Your identity verification needs attention. Please check and resubmit.',
+        data: { type: 'kyc_rejected', userId },
+      });
+
+      await createNotification({
+        recipientId: userId,
+        type: 'kyc_rejected',
+        title: 'KYC Verification Issue',
+        message: 'Your identity verification was not approved. Please check the requirements and try again.',
+        entityType: 'user',
+        entityId: userId,
+        deepLinkRoute: 'KYC',
+        deepLinkParams: { userId },
+      });
+    }
+  }
+);
+
 // ==================== TRIP FUNCTIONS ====================
 
 /**
@@ -972,3 +1036,126 @@ export const generateShareLink = functions.https.onCall(async (data, context) =>
 
 // NOTE: importJsonToFirestore and setupCarousel have been removed to reduce quota usage.
 // If needed again, they can be restored from git history.
+
+// ==================== STORAGE CLEANUP FUNCTIONS ====================
+
+/**
+ * Callable function to clean up orphaned/duplicate trip media in Storage.
+ * This removes files that are not referenced in any Firestore trip documents.
+ */
+export const cleanupOrphanedTripMedia = functions.https.onCall(async (data, context) => {
+  // Allow admin bypass with secret key for console testing
+  const ADMIN_KEY = "tripzi-cleanup-2026";
+
+  // Either authenticated OR using admin key
+  if (!context.auth && data.adminKey !== ADMIN_KEY) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be logged in or provide adminKey.");
+  }
+
+  // Require userId to be passed explicitly when using admin key
+  if (!data.userId) {
+    throw new functions.https.HttpsError("invalid-argument", "userId is required.");
+  }
+
+  const userId = data.userId;
+  const bucketName = "tripzi-app.firebasestorage.app";
+  const bucket = admin.storage().bucket(bucketName);
+
+  let deletedCount = 0;
+  const errors: string[] = [];
+
+  try {
+    // Get all trips for this user to know which images are valid
+    const tripsSnapshot = await db.collection("trips").where("userId", "==", userId).get();
+
+    const validImageUrls = new Set<string>();
+    const validVideoUrls = new Set<string>();
+
+    tripsSnapshot.forEach(doc => {
+      const tripData = doc.data();
+      // Add all image URLs
+      if (tripData.images && Array.isArray(tripData.images)) {
+        tripData.images.forEach((url: string) => validImageUrls.add(url));
+      }
+      if (tripData.coverImage) validImageUrls.add(tripData.coverImage);
+      // Add video URL
+      if (tripData.video) validVideoUrls.add(tripData.video);
+    });
+
+    console.log(`Found ${validImageUrls.size} valid image URLs and ${validVideoUrls.size} valid video URLs for user ${userId}`);
+
+    // List all files in trips/{userId}/ and trip_videos/{userId}/
+    const [tripFiles] = await bucket.getFiles({ prefix: `trips/${userId}/` });
+    const [videoFiles] = await bucket.getFiles({ prefix: `trip_videos/${userId}/` });
+
+    // Check each trip image file
+    for (const file of tripFiles) {
+      try {
+        // Check if this file's URL is in our valid set (using partial match)
+
+        // Check if this file's URL is in our valid set (using partial match since signed URLs differ)
+        const isReferenced = Array.from(validImageUrls).some(validUrl =>
+          validUrl.includes(encodeURIComponent(file.name)) || file.name.includes(validUrl.split('/').pop()?.split('?')[0] || '')
+        );
+
+        if (!isReferenced) {
+          await file.delete();
+          deletedCount++;
+          console.log(`Deleted orphaned image: ${file.name}`);
+        }
+      } catch (e: any) {
+        errors.push(`Error processing ${file.name}: ${e.message}`);
+      }
+    }
+
+    // Check each video file
+    for (const file of videoFiles) {
+      try {
+        const isReferenced = Array.from(validVideoUrls).some(validUrl =>
+          validUrl.includes(encodeURIComponent(file.name)) || file.name.includes(validUrl.split('/').pop()?.split('?')[0] || '')
+        );
+
+        if (!isReferenced) {
+          await file.delete();
+          deletedCount++;
+          console.log(`Deleted orphaned video: ${file.name}`);
+        }
+      } catch (e: any) {
+        errors.push(`Error processing ${file.name}: ${e.message}`);
+      }
+    }
+
+    return {
+      success: true,
+      deletedCount,
+      errors: errors.length > 0 ? errors : undefined,
+      message: `Cleaned up ${deletedCount} orphaned files for user ${userId}`,
+    };
+  } catch (error: any) {
+    console.error("Cleanup error:", error);
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * Admin-only function to clean up ALL orphaned media across all users.
+ * Use with caution - this scans the entire storage bucket.
+ */
+export const adminCleanupAllOrphanedMedia = functions.https.onCall(async (data, context) => {
+  // Only allow admins
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be logged in.");
+  }
+
+  // Check if user is admin
+  const userDoc = await db.collection("users").doc(context.auth.uid).get();
+  if (!userDoc.exists || userDoc.data()?.role !== "admin") {
+    throw new functions.https.HttpsError("permission-denied", "Admin access required.");
+  }
+
+  // This would be a heavy operation - for now, return guidance
+  return {
+    message: "For large-scale cleanup, please use the Firebase Console Storage browser or run cleanupOrphanedTripMedia per-user.",
+    hint: "You can iterate through users collection and call cleanupOrphanedTripMedia for each.",
+  };
+});

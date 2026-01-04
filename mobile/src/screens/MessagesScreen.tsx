@@ -8,6 +8,7 @@ import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
+import AppLogo from '../components/AppLogo';
 
 const { width, height } = Dimensions.get('window');
 
@@ -322,13 +323,14 @@ const MessagesScreen = ({ navigation }) => {
             >
                 {/* Avatar with online indicator */}
                 <View style={styles.avatarContainer}>
-                    <Image
-                        source={item.isGroupChat
-                            ? require('../../assets/icon.png')
-                            : { uri: item.otherUser?.photoURL || undefined }
-                        }
-                        style={styles.avatar}
-                    />
+                    {item.isGroupChat ? (
+                        <AppLogo size={50} showDot={false} style={{ marginRight: SPACING.md }} />
+                    ) : (
+                        <Image
+                            source={{ uri: item.otherUser?.photoURL || undefined }}
+                            style={styles.avatar}
+                        />
+                    )}
                     {item.otherUser?.isOnline && <View style={styles.onlineIndicator} />}
                 </View>
 

@@ -7,6 +7,7 @@ import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import CustomToggle from '../components/CustomToggle';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import AppLogo from '../components/AppLogo';
 import { useFocusEffect } from '@react-navigation/native';
 
 const MyTripsScreen = ({ navigation }) => {
@@ -148,7 +149,7 @@ const MyTripsScreen = ({ navigation }) => {
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
       <View style={[styles.emptyIcon, { backgroundColor: colors.card }]}>
-        <Image source={require('../../assets/icon.png')} style={styles.emptyIconImage} />
+        <AppLogo size={60} showDot={false} />
       </View>
       <Text style={[styles.emptyTitle, { color: colors.text }]}>No {activeTab} Trips</Text>
       <Text style={[styles.emptyText, { color: colors.textSecondary }]}>

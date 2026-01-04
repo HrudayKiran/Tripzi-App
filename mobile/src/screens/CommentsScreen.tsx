@@ -1,15 +1,20 @@
-
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TextInput, FlatList, TouchableOpacity, Image, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, FlatList, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
+import { useTheme } from '../contexts/ThemeContext';
+import DefaultAvatar from '../components/DefaultAvatar';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
 
 const CommentsScreen = ({ route, navigation }) => {
   const { tripId } = route.params;
-  const [comments, setComments] = useState([]);
+  const { colors } = useTheme();
+  const [comments, setComments] = useState<any[]>([]);
   const [commentText, setCommentText] = useState('');
   const [loading, setLoading] = useState(true);
+  const [posting, setPosting] = useState(false);
   const currentUser = auth().currentUser;
 
   useEffect(() => {
@@ -22,10 +27,12 @@ const CommentsScreen = ({ route, navigation }) => {
         const promises = querySnapshot.docs.map(async (doc) => {
           const comment = { id: doc.id, ...doc.data() };
           if (comment.userId) {
-            const userDoc = await firestore().collection('users').doc(comment.userId).get();
-            if (userDoc.exists) {
-              comment.user = userDoc.data();
-            }
+            try {
+              const userDoc = await firestore().collection('users').doc(comment.userId).get();
+              if (userDoc.exists) {
+                comment.user = userDoc.data();
+              }
+            } catch { }
           }
           return comment;
         });
@@ -40,6 +47,7 @@ const CommentsScreen = ({ route, navigation }) => {
   const handleAddComment = async () => {
     if (!commentText.trim() || !currentUser) return;
 
+    setPosting(true);
     try {
       await firestore()
         .collection('trips')
@@ -50,126 +58,210 @@ const CommentsScreen = ({ route, navigation }) => {
           userId: currentUser.uid,
           createdAt: firestore.FieldValue.serverTimestamp(),
         });
+
+      // Also update the comment count on the trip document
+      await firestore().collection('trips').doc(tripId).update({
+        commentsCount: firestore.FieldValue.increment(1),
+      });
+
       setCommentText('');
     } catch (error) {
       console.error('Error adding comment: ', error);
+    } finally {
+      setPosting(false);
     }
   };
 
-  const renderComment = ({ item }) => (
-    <View style={styles.commentContainer}>
-      <Image style={styles.userImage} source={{ uri: item.user?.photoURL }} />
-      <View style={styles.commentTextContainer}>
-        <Text style={styles.userName}>{item.user?.displayName}</Text>
-        <Text>{item.text}</Text>
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return '';
+    try {
+      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+      return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    } catch {
+      return '';
+    }
+  };
+
+  const renderComment = ({ item }: { item: any }) => (
+    <View style={[styles.commentContainer, { backgroundColor: colors.card }]}>
+      <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { userId: item.userId })}>
+        <DefaultAvatar uri={item.user?.photoURL} size={40} />
+      </TouchableOpacity>
+      <View style={styles.commentContent}>
+        <View style={styles.commentHeader}>
+          <Text style={[styles.userName, { color: colors.text }]}>{item.user?.displayName || 'User'}</Text>
+          <Text style={[styles.commentDate, { color: colors.textSecondary }]}>{formatDate(item.createdAt)}</Text>
+        </View>
+        <Text style={[styles.commentText, { color: colors.text }]}>{item.text}</Text>
       </View>
     </View>
   );
 
   if (loading) {
-    return <ActivityIndicator size="large" color="#8A2BE2" style={{ flex: 1, justifyContent: 'center' }} />;
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 8 }}>
-          <Ionicons name="arrow-back" size={28} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Comments</Text>
-      </View>
-      <FlatList
-        data={comments}
-        renderItem={renderComment}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.commentsList}
-      />
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Add a comment..."
-          value={commentText}
-          onChangeText={setCommentText}
-        />
-        <TouchableOpacity style={styles.sendButton} onPress={handleAddComment}>
-          <Text style={styles.sendButtonText}>Send</Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        {/* Header */}
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.title, { color: colors.text }]}>Comments ({comments.length})</Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        {/* Comments List */}
+        {comments.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="chatbubble-outline" size={60} color={colors.textSecondary} />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No Comments Yet</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>Be the first to share your thoughts!</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={comments}
+            renderItem={renderComment}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.commentsList}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          />
+        )}
+
+        {/* Input Area */}
+        <View style={[styles.inputContainer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+          <DefaultAvatar uri={currentUser?.photoURL} size={36} />
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text }]}
+            placeholder="Add a comment..."
+            placeholderTextColor={colors.textSecondary}
+            value={commentText}
+            onChangeText={setCommentText}
+            multiline
+            maxLength={500}
+          />
+          <TouchableOpacity
+            style={[styles.sendButton, { backgroundColor: colors.primary, opacity: posting || !commentText.trim() ? 0.5 : 1 }]}
+            onPress={handleAddComment}
+            disabled={posting || !commentText.trim()}
+          >
+            {posting ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Ionicons name="send" size={18} color="#fff" />
+            )}
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 50,
-    paddingBottom: 20,
-    paddingHorizontal: 15,
-    backgroundColor: '#fff',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginLeft: 10,
+    fontSize: FONT_SIZE.lg,
+    fontWeight: FONT_WEIGHT.bold,
   },
   commentsList: {
-    padding: 15,
+    padding: SPACING.lg,
+    gap: SPACING.md,
   },
   commentContainer: {
     flexDirection: 'row',
-    marginBottom: 15,
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.lg,
+    gap: SPACING.md,
   },
-  userImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
-  },
-  commentTextContainer: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 15,
-    padding: 10,
+  commentContent: {
     flex: 1,
   },
+  commentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   userName: {
-    fontWeight: 'bold',
-    marginBottom: 5,
+    fontWeight: FONT_WEIGHT.semibold,
+    fontSize: FONT_SIZE.sm,
+  },
+  commentDate: {
+    fontSize: FONT_SIZE.xs,
+  },
+  commentText: {
+    fontSize: FONT_SIZE.md,
+    lineHeight: 20,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.xl,
+  },
+  emptyTitle: {
+    fontSize: FONT_SIZE.lg,
+    fontWeight: FONT_WEIGHT.bold,
+    marginTop: SPACING.lg,
+  },
+  emptySubtitle: {
+    fontSize: FONT_SIZE.sm,
+    marginTop: SPACING.sm,
+    textAlign: 'center',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
+    padding: SPACING.md,
+    gap: SPACING.sm,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
   },
   input: {
     flex: 1,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    marginRight: 10,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    fontSize: FONT_SIZE.md,
+    maxHeight: 100,
   },
   sendButton: {
-    backgroundColor: '#8A2BE2',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+    width: 40,
+    height: 40,
     borderRadius: 20,
-  },
-  sendButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

@@ -7,9 +7,9 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#8B5CF6"
+      "image": "./assets/splash-gradient.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#9d74f7"
     },
     "extra": {
       "eas": {

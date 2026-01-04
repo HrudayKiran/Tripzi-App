@@ -5,6 +5,7 @@ import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 
@@ -15,6 +16,7 @@ const SignInScreen = ({ navigation }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [touched, setTouched] = useState<{ email?: boolean; password?: boolean }>({});
+  const [focusedField, setFocusedField] = useState<string | null>(null);
   const { colors } = useTheme();
 
   const showToast = (message: string) => {
@@ -25,236 +27,241 @@ const SignInScreen = ({ navigation }) => {
     }
   };
 
-  const validateField = (field: string, value: string) => {
-    const newErrors = { ...errors };
-
-    if (field === 'email') {
-      if (!value) newErrors.email = 'Email is required';
-      else if (!/\S+@\S+\.\S+/.test(value)) newErrors.email = 'Invalid email format';
-      else delete newErrors.email;
-    }
-
-    if (field === 'password') {
-      if (!value) newErrors.password = 'Password is required';
-      else if (value.length < 6) newErrors.password = 'Min 6 characters';
-      else delete newErrors.password;
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
   const handleSignIn = async () => {
-    // Validate all fields
-    setTouched({ email: true, password: true });
-    const newErrors: { email?: string; password?: string } = {};
-
-    if (!email) newErrors.email = 'Email is required';
-    else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = 'Invalid email format';
-
-    if (!password) newErrors.password = 'Password is required';
-
-    setErrors(newErrors);
-    if (Object.keys(newErrors).length > 0) return;
-
+    if (!email || !password) {
+      setErrors({ email: !email ? 'Required' : undefined, password: !password ? 'Required' : undefined });
+      return;
+    }
     setLoading(true);
     try {
       const userCredential = await auth().signInWithEmailAndPassword(email, password);
-      // Update lastLoginAt
       try {
         await firestore().collection('users').doc(userCredential.user.uid).update({
           lastLoginAt: firestore.FieldValue.serverTimestamp(),
         });
       } catch (e) { }
-
-      showToast('Login successful! 🎉');
-      navigation.navigate('App');
+      showToast('Welcome back! 🎉');
+      navigation.reset({ index: 0, routes: [{ name: 'App' }] });
     } catch (error: any) {
-      // Error handled silently
-
-      if (error?.code === 'auth/invalid-email' || error?.code === 'auth/user-not-found') {
-        setErrors({ email: 'Email not found or invalid' });
-      } else if (error?.code === 'auth/wrong-password' || error?.code === 'auth/invalid-credential') {
-        setErrors({ password: 'Password is incorrect' });
-      } else if (error?.code === 'auth/too-many-requests') {
-        Alert.alert('Too Many Attempts', 'Please try again later.');
-      } else if (error?.code === 'auth/network-request-failed') {
-        Alert.alert('Network Error', 'Please check your internet connection and try again.');
-      } else {
-        Alert.alert('Sign In Failed', 'Please check your credentials and try again.');
-      }
+      Alert.alert('Login Failed', error.message);
     } finally {
       setLoading(false);
     }
   };
 
+  const renderInput = (icon: any, placeholder: string, value: string, setValue: any, fieldName: string, isSecure = false, toggleSecure = undefined) => {
+    const isFocused = focusedField === fieldName;
+    const hasError = errors[fieldName as keyof typeof errors];
+
+    return (
+      <View style={styles.inputWrapper}>
+        <Text style={[styles.label, { color: colors.text }]}>{fieldName === 'email' ? 'Email Address' : 'Password'}</Text>
+        <Animatable.View
+          transition={['borderColor']}
+          style={[
+            styles.inputContainer,
+            {
+              backgroundColor: colors.inputBackground,
+              borderColor: hasError ? '#EF4444' : (isFocused ? '#8B5CF6' : 'transparent'),
+              borderWidth: 1.5,
+              transform: [{ scale: isFocused ? 1.02 : 1 }]
+            }
+          ]}
+        >
+          <Ionicons name={icon} size={20} color={isFocused ? '#8B5CF6' : colors.textSecondary} />
+          <TextInput
+            style={[styles.input, { color: colors.text }]}
+            placeholder={placeholder}
+            placeholderTextColor={colors.textSecondary}
+            value={value}
+            onChangeText={(text) => {
+              setValue(text);
+              if (errors[fieldName as keyof typeof errors]) setErrors(prev => ({ ...prev, [fieldName]: undefined }));
+            }}
+            onFocus={() => setFocusedField(fieldName)}
+            onBlur={() => setFocusedField(null)}
+            secureTextEntry={isSecure}
+            autoCapitalize="none"
+          />
+          {toggleSecure && (
+            <TouchableOpacity onPress={toggleSecure}>
+              <Ionicons name={isSecure ? "eye-off-outline" : "eye-outline"} size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </Animatable.View>
+        {hasError && <Text style={styles.errorText}>{hasError}</Text>}
+      </View>
+    );
+  };
+
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
-      >
-        {/* Header with Back Button */}
+    <View style={styles.container}>
+      <LinearGradient
+        colors={['#9d74f7', '#6d28d9']}
+        style={StyleSheet.absoluteFillObject}
+      />
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        {/* Header Section */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => navigation.goBack()}
-            activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Ionicons name="chevron-back" size={28} color={colors.text} />
+            <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
+          <Animatable.View animation="fadeInLeft" duration={800} style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>Welcome{'\n'}Back</Text>
+            <Text style={styles.headerSubtitle}>Sign in to continue your journey</Text>
+          </Animatable.View>
         </View>
 
-        <Animatable.View animation="fadeInUp" duration={500} style={styles.content}>
-          <Text style={[styles.title, { color: colors.text }]}>Welcome Back</Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Sign in to continue your journey
-          </Text>
+        {/* Bottom Sheet Form */}
+        <Animatable.View
+          animation="fadeInUpBig"
+          duration={800}
+          style={[styles.bottomSheet, { backgroundColor: colors.background }]}
+        >
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+            <View style={styles.formContent}>
 
-          <View style={styles.form}>
-            {/* Email Input */}
-            <View>
-              <Text style={[styles.label, { color: colors.text }]}>
-                Email <Text style={styles.required}>*</Text>
-              </Text>
-              <View style={[
-                styles.inputContainer,
-                { backgroundColor: colors.inputBackground },
-                errors.email && touched.email && { borderColor: '#EF4444', borderWidth: 1 }
-              ]}>
-                <Ionicons name="mail-outline" size={20} color={errors.email && touched.email ? '#EF4444' : colors.textSecondary} />
-                <TextInput
-                  style={[styles.input, { color: colors.text }]}
-                  placeholder="Enter your email"
-                  placeholderTextColor={colors.textSecondary}
-                  value={email}
-                  onChangeText={(text) => {
-                    setEmail(text);
-                    if (touched.email) validateField('email', text);
-                  }}
-                  onBlur={() => {
-                    setTouched(prev => ({ ...prev, email: true }));
-                    validateField('email', email);
-                  }}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-              </View>
-              {errors.email && touched.email && (
-                <Text style={styles.errorText}>{errors.email}</Text>
-              )}
-            </View>
+              {renderInput('mail-outline', 'hello@example.com', email, setEmail, 'email')}
+              {renderInput('lock-closed-outline', 'Enter password', password, setPassword, 'password', !showPassword, () => setShowPassword(!showPassword))}
 
-            {/* Password Input */}
-            <View>
-              <Text style={[styles.label, { color: colors.text }]}>
-                Password <Text style={styles.required}>*</Text>
-              </Text>
-              <View style={[
-                styles.inputContainer,
-                { backgroundColor: colors.inputBackground },
-                errors.password && touched.password && { borderColor: '#EF4444', borderWidth: 1 }
-              ]}>
-                <Ionicons name="lock-closed-outline" size={20} color={errors.password && touched.password ? '#EF4444' : colors.textSecondary} />
-                <TextInput
-                  style={[styles.input, { color: colors.text }]}
-                  placeholder="Enter your password"
-                  placeholderTextColor={colors.textSecondary}
-                  value={password}
-                  onChangeText={(text) => {
-                    setPassword(text);
-                    if (touched.password) validateField('password', text);
-                  }}
-                  onBlur={() => {
-                    setTouched(prev => ({ ...prev, password: true }));
-                    validateField('password', password);
-                  }}
-                  secureTextEntry={!showPassword}
-                />
-                <TouchableOpacity
-                  onPress={() => setShowPassword(!showPassword)}
-                  style={styles.eyeButton}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <Ionicons
-                    name={showPassword ? "eye-off-outline" : "eye-outline"}
-                    size={20}
-                    color={colors.textSecondary}
-                  />
+              <TouchableOpacity
+                style={styles.forgotButton}
+                onPress={() => navigation.navigate('ForgotPassword')}
+              >
+                <Text style={styles.forgotText}>Forgot Password?</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.signInButton}
+                onPress={handleSignIn}
+                activeOpacity={0.8}
+                disabled={loading}
+              >
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.signInButtonText}>Sign In</Text>}
+              </TouchableOpacity>
+
+              <View style={styles.footer}>
+                <Text style={[styles.footerText, { color: colors.textSecondary }]}>Don't have an account? </Text>
+                <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
+                  <Text style={styles.signUpLink}>Sign Up</Text>
                 </TouchableOpacity>
               </View>
-              {errors.password && touched.password && (
-                <Text style={styles.errorText}>{errors.password}</Text>
-              )}
+
             </View>
-
-            {/* Forgot Password */}
-            <TouchableOpacity
-              onPress={() => navigation.navigate('ForgotPassword')}
-              style={styles.forgotButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Text style={[styles.forgotPassword, { color: colors.primary }]}>
-                Forgot Password?
-              </Text>
-            </TouchableOpacity>
-
-            {/* Sign In Button */}
-            <TouchableOpacity
-              style={[styles.signInButton, { backgroundColor: colors.primary }]}
-              onPress={handleSignIn}
-              disabled={loading}
-              activeOpacity={0.8}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.signInButtonText}>Sign In</Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Footer */}
-            <View style={styles.footer}>
-              <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-                Don't have an account?{' '}
-              </Text>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('SignUp')}
-                hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
-              >
-                <Text style={[styles.signUpText, { color: colors.primary }]}>Sign Up</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          </KeyboardAvoidingView>
         </Animatable.View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
   container: { flex: 1 },
-  header: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
-  backButton: { width: TOUCH_TARGET.min, height: TOUCH_TARGET.min, justifyContent: 'center', alignItems: 'center', marginLeft: -SPACING.sm },
-  content: { flex: 1, paddingHorizontal: SPACING.xxl, justifyContent: 'center' },
-  title: { fontSize: FONT_SIZE.title, fontWeight: FONT_WEIGHT.bold, marginBottom: SPACING.sm },
-  subtitle: { fontSize: FONT_SIZE.md, marginBottom: SPACING.xxxl },
-  form: { gap: SPACING.md },
-  label: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold, marginBottom: SPACING.sm },
-  required: { color: '#EF4444' },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.md, gap: SPACING.md },
-  input: { flex: 1, fontSize: FONT_SIZE.md, paddingVertical: SPACING.sm },
-  eyeButton: { padding: SPACING.xs },
-  errorText: { color: '#EF4444', fontSize: FONT_SIZE.xs, marginTop: SPACING.xs, marginLeft: SPACING.sm },
-  forgotButton: { alignSelf: 'flex-end' },
-  forgotPassword: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold },
-  signInButton: { paddingVertical: SPACING.lg, borderRadius: BORDER_RADIUS.md, alignItems: 'center', marginTop: SPACING.sm },
-  signInButtonText: { color: '#fff', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
-  footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: SPACING.lg },
-  footerText: { fontSize: FONT_SIZE.sm },
-  signUpText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
+  safeArea: { flex: 1 },
+  header: {
+    height: '30%',
+    paddingHorizontal: 24,
+    paddingTop: 16,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  headerTextContainer: {
+    gap: 8,
+  },
+  headerTitle: {
+    fontSize: 40,
+    fontWeight: '800',
+    color: '#fff',
+    lineHeight: 48,
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  bottomSheet: {
+    flex: 1,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 24,
+    paddingTop: 40,
+  },
+  formContent: {
+    gap: 20,
+  },
+  inputWrapper: {
+    gap: 8,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 16,
+    gap: 12,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 12,
+    marginLeft: 4,
+  },
+  forgotButton: {
+    alignSelf: 'flex-end',
+  },
+  forgotText: {
+    color: '#8B5CF6',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  signInButton: {
+    backgroundColor: '#8B5CF6',
+    paddingVertical: 18,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginTop: 12,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  signInButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 24,
+  },
+  footerText: {
+    fontSize: 14,
+  },
+  signUpLink: {
+    color: '#8B5CF6',
+    fontWeight: '700',
+    fontSize: 14,
+  },
 });
 
 export default SignInScreen;
