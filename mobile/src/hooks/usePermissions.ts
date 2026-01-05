@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Platform, Alert, Linking } from 'react-native';
+import { Platform, Alert, Linking, PermissionsAndroid } from 'react-native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { getMessaging, requestPermission, AuthorizationStatus } from '@react-native-firebase/messaging';
@@ -62,71 +62,71 @@ export function usePermissions(): UsePermissionsReturn {
 
     const requestNotificationPermission = async (): Promise<boolean> => {
         try {
-
-
-            // For Firebase Cloud Messaging
-            const messaging = getMessaging();
-            const authStatus = await requestPermission(messaging);
-            const enabled =
-                authStatus === AuthorizationStatus.AUTHORIZED ||
-                authStatus === AuthorizationStatus.PROVISIONAL;
-
-            if (enabled) {
-
-                setPermissions(prev => ({ ...prev, notifications: true }));
-                return true;
+            if (Platform.OS === 'android' && Platform.Version >= 33) {
+                const granted = await PermissionsAndroid.request(
+                    PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+                );
+                if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+                    setPermissions(prev => ({ ...prev, notifications: true }));
+                    return true;
+                } else {
+                    setPermissions(prev => ({ ...prev, notifications: false }));
+                    return false;
+                }
             } else {
+                // For Firebase Cloud Messaging (Android < 13 or iOS)
+                const messaging = getMessaging();
+                const authStatus = await requestPermission(messaging);
+                const enabled =
+                    authStatus === AuthorizationStatus.AUTHORIZED ||
+                    authStatus === AuthorizationStatus.PROVISIONAL;
 
-                setPermissions(prev => ({ ...prev, notifications: false }));
-                return false;
+                if (enabled) {
+                    setPermissions(prev => ({ ...prev, notifications: true }));
+                    return true;
+                } else {
+                    setPermissions(prev => ({ ...prev, notifications: false }));
+                    return false;
+                }
             }
         } catch (error) {
-
+            console.warn('Notification permission error:', error);
             return false;
         }
     };
 
     const requestLocationPermission = async (): Promise<boolean> => {
         try {
-
             const { status } = await Location.requestForegroundPermissionsAsync();
             const granted = status === 'granted';
-
-
             setPermissions(prev => ({ ...prev, location: granted }));
             return granted;
         } catch (error) {
-
+            console.warn('Location permission error:', error);
             return false;
         }
     };
 
     const requestCameraPermission = async (): Promise<boolean> => {
         try {
-
             const { status } = await ImagePicker.requestCameraPermissionsAsync();
             const granted = status === 'granted';
-
-
             setPermissions(prev => ({ ...prev, camera: granted }));
             return granted;
         } catch (error) {
-
+            console.warn('Camera permission error:', error);
             return false;
         }
     };
 
     const requestMediaLibraryPermission = async (): Promise<boolean> => {
         try {
-
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             const granted = status === 'granted';
-
-
             setPermissions(prev => ({ ...prev, mediaLibrary: granted }));
             return granted;
         } catch (error) {
-
+            console.warn('Media Library permission error:', error);
             return false;
         }
     };

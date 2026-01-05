@@ -13,6 +13,7 @@ import DefaultAvatar from './DefaultAvatar';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
 import { DEFAULT_TRIP_IMAGE, isValidImageUrl } from '../constants/defaults';
 import { Video, ResizeMode } from 'expo-av';
+import NotificationService from '../utils/notificationService';
 
 const { width } = Dimensions.get('window');
 
@@ -58,12 +59,13 @@ const TripCard = memo(({ trip, onPress, isVisible = false }: TripCardProps) => {
 
     // Detect aspect ratio of first media item
     useEffect(() => {
-        const firstMedia = trip.video || trip.images?.[0] || trip.coverImage || trip.image;
+        const videoSrc = trip.video || trip.videoUrl;
+        const firstMedia = videoSrc || trip.images?.[0] || trip.coverImage || trip.image;
         if (!firstMedia) return;
 
         // If it's a video (and current item is video), we rely on onLoad.
         // But if it's an image, we can pre-fetch.
-        if (!trip.video && isValidImageUrl(firstMedia)) {
+        if (!videoSrc && isValidImageUrl(firstMedia)) {
             Image.getSize(firstMedia, (w, h) => {
                 if (w && h) {
                     setMediaAspectRatio(w / h);
@@ -72,18 +74,19 @@ const TripCard = memo(({ trip, onPress, isVisible = false }: TripCardProps) => {
                 // Fallback or ignore
             });
         }
-    }, [trip.video, trip.images, trip.coverImage, trip.image]);
+    }, [trip.video, trip.videoUrl, trip.images, trip.coverImage, trip.image]);
 
     // Auto-play video when card becomes visible
     useEffect(() => {
-        if (trip.video) {
+        const videoSrc = trip.video || trip.videoUrl;
+        if (videoSrc) {
             if (isVisible) {
                 setIsPlaying(true);
             } else {
                 setIsPlaying(false);
             }
         }
-    }, [isVisible, trip.video]);
+    }, [isVisible, trip.video, trip.videoUrl]);
 
     // Initialize join state from props (no real-time listener to avoid re-render conflicts)
     useEffect(() => {
@@ -221,6 +224,10 @@ const TripCard = memo(({ trip, onPress, isVisible = false }: TripCardProps) => {
                 // Follow
                 await userRef.update({ followers: firestore.FieldValue.arrayUnion(currentUser.uid) });
                 await currentUserRef.update({ following: firestore.FieldValue.arrayUnion(trip.userId) });
+
+                // Send notification to the user being followed
+                const followerName = currentUser.displayName || 'Someone';
+                await NotificationService.onFollow(currentUser.uid, followerName, trip.userId);
             }
         } catch {
             // Revert on error
@@ -235,6 +242,9 @@ const TripCard = memo(({ trip, onPress, isVisible = false }: TripCardProps) => {
         }
 
         try {
+            const userName = currentUser.displayName || 'A traveler';
+            const tripTitle = trip.title || 'a trip';
+
             if (hasJoined) {
                 // Leave trip - instant toggle
                 await firestore().collection('trips').doc(trip.id).update({
@@ -242,6 +252,11 @@ const TripCard = memo(({ trip, onPress, isVisible = false }: TripCardProps) => {
                     currentTravelers: firestore.FieldValue.increment(-1),
                 });
                 setHasJoined(false);
+
+                // Send leave notification to trip owner
+                if (trip.userId && trip.userId !== currentUser.uid) {
+                    await NotificationService.onLeaveTrip(currentUser.uid, userName, trip.id, trip.userId, tripTitle);
+                }
             } else {
                 // Check spots first
                 const spotsLeft = (trip.maxTravelers || 8) - (trip.participants?.length || trip.currentTravelers || 1);
@@ -255,6 +270,11 @@ const TripCard = memo(({ trip, onPress, isVisible = false }: TripCardProps) => {
                     currentTravelers: firestore.FieldValue.increment(1),
                 });
                 setHasJoined(true);
+
+                // Send join notification to trip owner
+                if (trip.userId && trip.userId !== currentUser.uid) {
+                    await NotificationService.onJoinTrip(currentUser.uid, userName, trip.id, trip.userId, tripTitle);
+                }
             }
         } catch {
             // Keep previous state on error
@@ -320,10 +340,11 @@ const TripCard = memo(({ trip, onPress, isVisible = false }: TripCardProps) => {
                 <View>
                     <View style={[styles.imageContainer, { aspectRatio: mediaAspectRatio }]}>
                         {(() => {
-                            let hasVideo = !!trip.video;
+                            const videoSrc = trip.video || trip.videoUrl;
+                            let hasVideo = !!videoSrc;
                             // Construct media array: Video first, then images
                             const images = hasVideo
-                                ? [trip.video, ...(trip.images || [])]
+                                ? [videoSrc, ...(trip.images || [])]
                                 : (trip.images?.length > 0 ? trip.images : [trip.coverImage || trip.image || DEFAULT_TRIP_IMAGE]);
 
                             return (
@@ -366,7 +387,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false }: TripCardProps) => {
                                                             isLooping
                                                             shouldPlay={isPlaying && activeImageIndex === index}
                                                             isMuted={isMuted}
-                                                            onLoad={(status) => {
+                                                            onLoad={(status: any) => {
                                                                 if (status.isLoaded && status.naturalSize) {
                                                                     setMediaAspectRatio(status.naturalSize.width / status.naturalSize.height);
                                                                 }
@@ -411,9 +432,10 @@ const TripCard = memo(({ trip, onPress, isVisible = false }: TripCardProps) => {
                     {/* Media Footer: Dots Only */}
                     <View style={styles.mediaFooter}>
                         {(() => {
-                            let hasVideo = !!trip.video;
+                            const videoSrc = trip.video || trip.videoUrl;
+                            let hasVideo = !!videoSrc;
                             const images = hasVideo
-                                ? [trip.video, ...(trip.images || [])]
+                                ? [videoSrc, ...(trip.images || [])]
                                 : (trip.images?.length > 0 ? trip.images : [trip.coverImage || trip.image || DEFAULT_TRIP_IMAGE]);
 
                             if (images.length <= 1) return <View style={{ height: 6 }} />;

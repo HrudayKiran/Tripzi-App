@@ -83,6 +83,13 @@ export function useChatMessages(chatId: string | undefined): UseChatMessagesRetu
             .limit(PAGE_SIZE)
             .onSnapshot(
                 (snapshot) => {
+                    // Guard against null snapshot
+                    if (!snapshot) {
+                        setMessages([]);
+                        setLoading(false);
+                        return;
+                    }
+
                     const messagesList: Message[] = snapshot.docs
                         .map((doc) => ({
                             id: doc.id,

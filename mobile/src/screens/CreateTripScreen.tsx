@@ -141,9 +141,9 @@ const CreateTripScreen = ({ navigation }) => {
             setVideo(asset.uri);
             // Store the MIME type for upload
             if (asset.mimeType) {
-                console.log('Video MIME type:', asset.mimeType);
+
             }
-            console.log('Video selected:', asset.uri);
+
         }
     };
 
@@ -264,11 +264,11 @@ const CreateTripScreen = ({ navigation }) => {
 
                 // Required for generic file uploads if needed, but putFile handles it
                 try {
-                    console.log('Uploading video from:', video);
-                    console.log('To path:', filename);
+
+
                     await reference.putFile(video, { contentType: 'video/mp4' });
                     uploadedVideoUrl = await reference.getDownloadURL();
-                    console.log('Video uploaded successfully:', uploadedVideoUrl);
+
                 } catch (videoError: any) {
                     console.error('Video upload failed:', videoError);
                     console.error('Video error code:', videoError?.code);

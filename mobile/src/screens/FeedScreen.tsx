@@ -29,17 +29,22 @@ const FeedScreen = ({ navigation }) => {
     const [hasNotifications, setHasNotifications] = useState(true);
     const [searchedUsers, setSearchedUsers] = useState<any[]>([]);
     const [searchingUsers, setSearchingUsers] = useState(false);
-    const [visibleItems, setVisibleItems] = useState<string[]>([]);
+    const [focusedTripId, setFocusedTripId] = useState<string | null>(null);
     const searchTimeout = useRef<NodeJS.Timeout | null>(null);
 
-    // Viewability config for auto-play videos
+    // Viewability config for auto-play videos - stricter threshold
     const viewabilityConfig = useRef({
-        itemVisiblePercentThreshold: 50,
+        itemVisiblePercentThreshold: 60, // Require 60% visibility
+        minimumViewTime: 300, // Wait 300ms before considering valid
     }).current;
 
     const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
-        const visibleIds = viewableItems.map((item: any) => item.key);
-        setVisibleItems(visibleIds);
+        if (viewableItems && viewableItems.length > 0) {
+            // Play the first fully visible item (or the one closest to top)
+            setFocusedTripId(viewableItems[0].key);
+        } else {
+            setFocusedTripId(null);
+        }
     }, []);
 
     // Sticky header animation
@@ -301,7 +306,7 @@ const FeedScreen = ({ navigation }) => {
                         <TripCard
                             trip={item}
                             onPress={() => navigation.navigate('TripDetails', { tripId: item.id })}
-                            isVisible={visibleItems.includes(item.id)}
+                            isVisible={focusedTripId === item.id}
                         />
                     )}
                     showsVerticalScrollIndicator={false}

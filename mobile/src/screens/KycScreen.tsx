@@ -11,6 +11,7 @@ import storage from '@react-native-firebase/storage';
 import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import { validateAadhaar, formatAadhaar, maskAadhaar } from '../utils/aadhaarValidator';
 
 const KycScreen = ({ navigation }) => {
   const { colors } = useTheme();
@@ -21,10 +22,6 @@ const KycScreen = ({ navigation }) => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [errors, setErrors] = useState<{ aadhaar?: string; aadhaarImage?: string; userImage?: string; dob?: string }>({});
-
-  const validateAadhaar = (number: string) => {
-    return /^\d{12}$/.test(number);
-  };
 
   const calculateAge = (dob: Date): number => {
     const today = new Date();
@@ -81,10 +78,14 @@ const KycScreen = ({ navigation }) => {
   const handleSubmitKyc = async () => {
     const newErrors: typeof errors = {};
 
+    // Validate Aadhaar using Verhoeff algorithm
     if (!aadhaarNumber) {
       newErrors.aadhaar = 'Aadhaar number is required';
-    } else if (!validateAadhaar(aadhaarNumber)) {
-      newErrors.aadhaar = 'Enter valid 12-digit Aadhaar number';
+    } else {
+      const aadhaarValidation = validateAadhaar(aadhaarNumber);
+      if (!aadhaarValidation.valid) {
+        newErrors.aadhaar = aadhaarValidation.error || 'Invalid Aadhaar number';
+      }
     }
 
     if (!dateOfBirth) {

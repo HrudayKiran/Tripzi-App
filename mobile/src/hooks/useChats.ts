@@ -67,6 +67,13 @@ export function useChats(): UseChatsReturn {
             .orderBy('updatedAt', 'desc')
             .onSnapshot(
                 (snapshot) => {
+                    // Guard against null snapshot
+                    if (!snapshot) {
+                        setChats([]);
+                        setLoading(false);
+                        return;
+                    }
+
                     const chatsList: Chat[] = snapshot.docs.map((doc) => ({
                         id: doc.id,
                         ...doc.data(),

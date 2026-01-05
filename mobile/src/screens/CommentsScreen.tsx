@@ -7,6 +7,7 @@ import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import DefaultAvatar from '../components/DefaultAvatar';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import NotificationService from '../utils/notificationService';
 
 const CommentsScreen = ({ route, navigation }) => {
   const { tripId } = route.params;
@@ -63,6 +64,15 @@ const CommentsScreen = ({ route, navigation }) => {
       await firestore().collection('trips').doc(tripId).update({
         commentsCount: firestore.FieldValue.increment(1),
       });
+
+      // Send notification to trip owner
+      const tripDoc = await firestore().collection('trips').doc(tripId).get();
+      const tripData = tripDoc.data();
+      if (tripData?.userId && tripData.userId !== currentUser.uid) {
+        const commenterName = currentUser.displayName || 'Someone';
+        const tripTitle = tripData.title || 'your trip';
+        await NotificationService.onComment(currentUser.uid, commenterName, tripId, tripData.userId, tripTitle);
+      }
 
       setCommentText('');
     } catch (error) {

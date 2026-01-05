@@ -9,6 +9,9 @@ import { useTheme } from '../contexts/ThemeContext';
 import CustomToggle from '../components/CustomToggle';
 import DefaultAvatar from '../components/DefaultAvatar';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import NotificationService from '../utils/notificationService';
+import ReportTripModal from '../components/ReportTripModal';
+import { pickAndUploadImage } from '../utils/imageUpload';
 
 const { width } = Dimensions.get('window');
 
@@ -64,6 +67,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
   const [hasRated, setHasRated] = useState(false);
 
   // Edit/Delete states
+  const [showReportModal, setShowReportModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editFromLocation, setEditFromLocation] = useState('');
@@ -80,6 +84,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
   const [editFromDate, setEditFromDate] = useState(new Date());
   const [editToDate, setEditToDate] = useState(new Date());
   const [editAccommodationDays, setEditAccommodationDays] = useState('');
+  const [editImages, setEditImages] = useState<string[]>([]);
   const [showDateModal, setShowDateModal] = useState<'from' | 'to' | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -201,7 +206,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
         // Update existing rating
         const existingRating = existingRatings.find(r => r.userId === user.uid);
         if (existingRating) {
-          await firestore().collection('ratings').doc(existingRating.id).update({
+          await firestore().collection('trips').doc(tripId).collection('ratings').doc(existingRating.id).update({
             rating: userRating,
             feedback: userFeedback.trim(),
             updatedAt: firestore.FieldValue.serverTimestamp(),
@@ -209,8 +214,15 @@ const TripDetailsScreen = ({ route, navigation }) => {
         }
       } else {
         // Create new rating
-        await firestore().collection('ratings').add(ratingData);
+        await firestore().collection('trips').doc(tripId).collection('ratings').add(ratingData);
         setHasRated(true);
+
+        // Send notification to trip owner (only for new ratings, not updates)
+        if (trip?.userId && trip.userId !== user.uid) {
+          const raterName = user.displayName || 'Someone';
+          const tripTitle = trip?.title || 'your trip';
+          await NotificationService.onTripRating(user.uid, raterName, tripId, trip.userId, tripTitle, userRating);
+        }
       }
 
       Alert.alert('Thank You! ⭐', 'Your rating has been submitted.');
@@ -234,6 +246,9 @@ const TripDetailsScreen = ({ route, navigation }) => {
     }
 
     try {
+      const userName = user.displayName || 'A traveler';
+      const tripTitle = trip?.title || 'a trip';
+
       if (isJoined) {
         // Leave trip - instant toggle
         await firestore().collection('trips').doc(tripId).update({
@@ -241,6 +256,11 @@ const TripDetailsScreen = ({ route, navigation }) => {
           currentTravelers: firestore.FieldValue.increment(-1),
         });
         setIsJoined(false);
+
+        // Send leave notification to trip owner
+        if (trip?.userId && trip.userId !== user.uid) {
+          await NotificationService.onLeaveTrip(user.uid, userName, tripId, trip.userId, tripTitle);
+        }
       } else {
         // Join trip - instant toggle
         await firestore().collection('trips').doc(tripId).update({
@@ -248,6 +268,11 @@ const TripDetailsScreen = ({ route, navigation }) => {
           currentTravelers: firestore.FieldValue.increment(1),
         });
         setIsJoined(true);
+
+        // Send join notification to trip owner
+        if (trip?.userId && trip.userId !== user.uid) {
+          await NotificationService.onJoinTrip(user.uid, userName, tripId, trip.userId, tripTitle);
+        }
       }
     } catch (error) {
       // Error handled silently
@@ -318,6 +343,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
     setEditFromDate(fromDateValue);
     setEditToDate(toDateValue);
     setEditAccommodationDays(trip?.accommodationDays?.toString() || '');
+    setEditImages(trip?.images || []);
     setShowEditModal(true);
   };
 
@@ -375,6 +401,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
         duration: getEditDuration(),
         accommodationDays: editAccommodationDays ? parseInt(editAccommodationDays) : null,
         mapsLink: generateMapsLink(editLocation),
+        images: editImages, // Update images
       });
       setShowEditModal(false);
       Alert.alert('Success', 'Trip updated successfully!');
@@ -386,24 +413,89 @@ const TripDetailsScreen = ({ route, navigation }) => {
     }
   };
 
+  const handleAddImage = async () => {
+    try {
+      if (!trip?.userId) return;
+
+      const result = await pickAndUploadImage({
+        folder: 'trips',
+        userId: trip.userId,
+        subfolder: tripId,
+        quality: 0.8,
+      });
+
+      if (result.success && result.url) {
+        setEditImages(prev => [...prev, result.url!]);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to upload image');
+    }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setEditImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Soft Cancel - Marks as cancelled
+  const handleCancelTrip = () => {
+    Alert.alert(
+      'Cancel Trip',
+      'Are you sure you want to cancel this trip? Participants will be notified, but the trip page will remain visible as Cancelled.',
+      [
+        { text: 'No, Keep it', style: 'cancel' },
+        {
+          text: 'Yes, Cancel Trip',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              // Notify participants
+              const participants = trip?.participants || [];
+              const hostName = user?.displayName || 'The host';
+              const tripTitle = trip?.title || 'A trip';
+
+              for (const participantId of participants) {
+                if (participantId !== user?.uid) {
+                  await NotificationService.onTripCancelled(participantId, tripId, tripTitle, hostName);
+                }
+              }
+
+              // Update status
+              await firestore().collection('trips').doc(tripId).update({
+                status: 'cancelled',
+                isCancelled: true // Legacy support
+              });
+              Alert.alert('Cancelled', 'Trip has been marked as cancelled.');
+              navigation.goBack();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to cancel trip.');
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Hard Delete - Removes document
   const handleDeleteTrip = () => {
     Alert.alert(
       'Delete Trip',
-      'Are you sure you want to delete this trip? This action cannot be undone.',
+      'Are you sure you want to PERMANENTLY delete this trip? This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'Delete Permanently',
           style: 'destructive',
           onPress: async () => {
             setDeleting(true);
             try {
               await firestore().collection('trips').doc(tripId).delete();
-              Alert.alert('Deleted', 'Trip has been deleted.');
+              Alert.alert('Deleted', 'Trip deleted successfully.');
               navigation.goBack();
             } catch (error: any) {
-              // Error handled silently
-              Alert.alert('Error', 'Failed to delete trip. Please try again.');
+              Alert.alert('Error', 'Failed to delete trip.');
             } finally {
               setDeleting(false);
             }
@@ -454,7 +546,14 @@ const TripDetailsScreen = ({ route, navigation }) => {
             <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
               {trip.title || 'Trip Details'}
             </Text>
-            <View style={{ width: 44 }} />
+            {!isOwner && (
+              <TouchableOpacity
+                style={[styles.headerButton, { backgroundColor: colors.card }]}
+                onPress={() => setShowReportModal(true)}
+              >
+                <Ionicons name="flag-outline" size={24} color={colors.text} />
+              </TouchableOpacity>
+            )}
           </View>
         </SafeAreaView>
 
@@ -540,14 +639,16 @@ const TripDetailsScreen = ({ route, navigation }) => {
                   onPress={handleDeleteTrip}
                   disabled={deleting}
                 >
-                  {deleting ? (
-                    <ActivityIndicator size="small" color="#EF4444" />
-                  ) : (
-                    <>
-                      <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                      <Text style={[styles.actionBtnText, { color: '#EF4444' }]}>Delete</Text>
-                    </>
-                  )}
+                  <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                  <Text style={[styles.actionBtnText, { color: '#EF4444' }]}>Delete</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: '#FEE2E2' }]}
+                  onPress={handleCancelTrip}
+                  disabled={deleting}
+                >
+                  <Ionicons name="close-circle-outline" size={20} color="#EF4444" />
+                  <Text style={[styles.actionBtnText, { color: '#EF4444' }]}>Cancel Trip</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -862,6 +963,33 @@ const TripDetailsScreen = ({ route, navigation }) => {
                   placeholderTextColor={colors.textSecondary}
                 />
 
+                <Text style={[styles.editLabel, { color: colors.text }]}>Trip Images</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.md }}>
+                  <TouchableOpacity
+                    style={{
+                      width: 80, height: 80, borderRadius: 8, backgroundColor: colors.inputBackground,
+                      justifyContent: 'center', alignItems: 'center', marginRight: SPACING.sm
+                    }}
+                    onPress={handleAddImage}
+                  >
+                    <Ionicons name="add" size={32} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                  {editImages.map((img, idx) => (
+                    <View key={idx} style={{ marginRight: SPACING.sm, position: 'relative' }}>
+                      <Image source={{ uri: img }} style={{ width: 80, height: 80, borderRadius: 8 }} />
+                      <TouchableOpacity
+                        style={{
+                          position: 'absolute', top: -4, right: -4, backgroundColor: 'rgba(0,0,0,0.5)',
+                          borderRadius: 10, width: 20, height: 20, justifyContent: 'center', alignItems: 'center'
+                        }}
+                        onPress={() => handleRemoveImage(idx)}
+                      >
+                        <Ionicons name="close" size={14} color="#fff" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+
                 <Text style={[styles.editLabel, { color: colors.text }]}>Starting From</Text>
                 <TextInput
                   style={[styles.editInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
@@ -1025,6 +1153,8 @@ const TripDetailsScreen = ({ route, navigation }) => {
                 </View>
 
                 <View style={{ height: SPACING.xl }} />
+
+                <View style={{ height: SPACING.xl }} />
               </ScrollView>
 
               <View style={styles.editActions}>
@@ -1111,6 +1241,12 @@ const TripDetailsScreen = ({ route, navigation }) => {
           </View>
         </View>
       </Modal>
+      {/* Report Trip Modal */}
+      <ReportTripModal
+        visible={showReportModal}
+        trip={trip}
+        onClose={() => setShowReportModal(false)}
+      />
     </View >
   );
 };

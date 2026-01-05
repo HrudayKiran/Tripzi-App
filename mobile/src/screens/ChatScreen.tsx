@@ -144,6 +144,12 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             .collection('chats')
             .doc(chatId)
             .onSnapshot((doc) => {
+                // Guard against null doc
+                if (!doc || !doc.exists) {
+                    setOtherUserTyping(false);
+                    return;
+                }
+
                 const data = doc.data();
                 if (data?.typing) {
                     const typingUsers = Object.entries(data.typing)
@@ -169,6 +175,12 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             .where('isActive', '==', true)
             .where('validUntil', '>', firestore.Timestamp.now())
             .onSnapshot(snapshot => {
+                // Guard against null snapshot
+                if (!snapshot) {
+                    setActiveSharersCount(0);
+                    return;
+                }
+
                 setActiveSharersCount(snapshot.size);
 
                 // Check if I am sharing
@@ -595,6 +607,16 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         );
     };
 
+    // Auto-cleanup watcher when screen unmounts or user stops sharing
+    useEffect(() => {
+        return () => {
+            if (locationSubscription.current) {
+                locationSubscription.current.remove();
+                locationSubscription.current = null;
+            }
+        };
+    }, []);
+
     const startLocationWatcher = async () => {
         if (locationSubscription.current) return;
 
@@ -617,7 +639,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                             heading: loc.coords.heading,
                             timestamp: firestore.FieldValue.serverTimestamp(),
                         })
-                        .catch(err => console.log("Loc update failed", err));
+                        .catch((err) => { });
                 }
             });
             locationSubscription.current = sub;

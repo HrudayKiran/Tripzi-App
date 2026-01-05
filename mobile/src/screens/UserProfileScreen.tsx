@@ -13,6 +13,7 @@ import FollowersModal from '../components/FollowersModal';
 import TripCard from '../components/TripCard';
 import ProfilePictureViewer from '../components/ProfilePictureViewer';
 import { pickAndUploadImage } from '../utils/imageUpload';
+import NotificationService from '../utils/notificationService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -69,6 +70,34 @@ const UserProfileScreen = ({ route, navigation }) => {
         return unsubscribe;
     }, [navigation, userId]);
 
+    // Real-time trips listener
+    useEffect(() => {
+        if (!userId) return;
+
+        const unsubscribe = firestore()
+            .collection('trips')
+            .where('userId', '==', userId)
+            .onSnapshot((snapshot) => {
+                if (snapshot) {
+                    const tripsData = snapshot.docs.map(doc => ({ // Sort manually if needed, or rely on query order
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+                    // Client-side sort by createdAt desc
+                    tripsData.sort((a, b) => {
+                        const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+                        const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+                        return bTime - aTime;
+                    });
+                    setTrips(tripsData);
+                }
+            }, (error) => {
+                console.warn("Trip listener error:", error);
+            });
+
+        return () => unsubscribe();
+    }, [userId]);
+
     const loadUserData = async () => {
         if (!userId) {
             setLoading(false);
@@ -89,15 +118,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                     setIsFollowing(true);
                 }
 
-                // Load trips
-                try {
-                    const tripsSnapshot = await firestore()
-                        .collection('trips')
-                        .where('userId', '==', userId)
-                        .get();
-
-                    setTrips(tripsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), user: userData })));
-                } catch (e) { }
+                // Trips are now handled by useEffect subscription
 
                 // Load followers/following
                 if (userData.followers?.length > 0) {
@@ -314,12 +335,29 @@ const UserProfileScreen = ({ route, navigation }) => {
     };
 
     const handleDeleteTrip = (tripId) => {
-        Alert.alert('Delete Trip', 'Are you sure?', [
+        Alert.alert('Delete Trip', 'Are you sure? All participants will be notified.', [
             { text: 'Cancel', style: 'cancel' },
             {
                 text: 'Delete', style: 'destructive',
                 onPress: async () => {
                     try {
+                        // Fetch trip data to get participants
+                        const tripDoc = await firestore().collection('trips').doc(tripId).get();
+                        const tripData = tripDoc.data();
+
+                        if (tripData) {
+                            const participants = tripData.participants || [];
+                            const hostName = currentUser?.displayName || 'The host';
+                            const tripTitle = tripData.title || 'A trip';
+
+                            // Notify all participants (except the owner)
+                            for (const participantId of participants) {
+                                if (participantId !== currentUser?.uid) {
+                                    await NotificationService.onTripCancelled(participantId, tripId, tripTitle, hostName);
+                                }
+                            }
+                        }
+
                         await firestore().collection('trips').doc(tripId).delete();
                     } catch (e) { }
                     setTrips(prev => prev.filter(t => t.id !== tripId));
@@ -452,12 +490,13 @@ const UserProfileScreen = ({ route, navigation }) => {
         </TouchableOpacity>
     );
 
+    // Content Rendering
     const renderTripGrid = () => (
         <View style={styles.postsContainer}>
             {trips.map((trip) => (
                 <TripCard
                     key={trip.id}
-                    trip={trip}
+                    trip={{ ...trip, user: user || trip.user }}
                     onPress={() => navigation.navigate('TripDetails', { tripId: trip.id })}
                 />
             ))}
@@ -489,123 +528,116 @@ const UserProfileScreen = ({ route, navigation }) => {
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
             <ScrollView showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>
-                {/* Header */}
-                <LinearGradient colors={['#8B5CF6', '#EC4899', '#F59E0B']} style={styles.gradientHeader}>
+                {/* Header - No Gradient */}
+                <View style={[styles.gradientHeader, { backgroundColor: colors.background }]}>
                     <View style={styles.headerRow}>
-                        <TouchableOpacity style={styles.headerButton} onPress={() => navigation.goBack()}>
-                            <Ionicons name="arrow-back" size={24} color="#fff" />
+                        <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={() => navigation.goBack()}>
+                            <Ionicons name="arrow-back" size={24} color={colors.text} />
                         </TouchableOpacity>
                         {isOwnProfile && (
-                            <TouchableOpacity style={styles.headerButton} onPress={() => setShowEditModal(true)}>
-                                <Ionicons name="create-outline" size={24} color="#fff" />
-                            </TouchableOpacity>
+                            <View style={{ flexDirection: 'row', gap: 12 }}>
+                                <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={() => navigation.navigate('CreateTrip')}>
+                                    <Ionicons name="add" size={24} color={colors.text} />
+                                </TouchableOpacity>
+                                <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={() => setShowEditModal(true)}>
+                                    <Ionicons name="create-outline" size={24} color={colors.text} />
+                                </TouchableOpacity>
+                            </View>
                         )}
                     </View>
-                </LinearGradient>
+                </View>
 
-                {/* Profile Card - Instagram Layout */}
-                <Animatable.View animation="fadeInUp" delay={100} style={[styles.profileCard, { backgroundColor: colors.card }]}>
-                    {/* Top Row: Avatar + Stats */}
-                    <View style={styles.profileTopRow}>
-                        <TouchableOpacity onPress={isOwnProfile ? pickProfileImage : () => setShowFullImage(true)} style={styles.avatarWrapper}>
-                            <LinearGradient colors={['#8B5CF6', '#EC4899']} style={styles.avatarGradient}>
-                                <Image style={styles.avatar} source={{ uri: profileImage || user.photoURL || undefined }} />
-                            </LinearGradient>
-                            {isOwnProfile && (
-                                <View style={[styles.editAvatarBadge, { backgroundColor: colors.primary }]}>
-                                    <Ionicons name="camera" size={14} color="#fff" />
-                                </View>
-                            )}
+                <View style={[styles.profileContent, { backgroundColor: colors.background, marginTop: 0 }]}>
+                    {/* Top Section: Avatar & Stats */}
+                    <View style={styles.topSection}>
+                        <TouchableOpacity onPress={() => setShowFullImage(true)} style={styles.avatarContainer}>
+                            <View style={[styles.avatarBorder, { backgroundColor: colors.background }]}>
+                                <Image source={{ uri: profileImage || user.photoURL || 'https://via.placeholder.com/150' }} style={styles.avatar} />
+                            </View>
                         </TouchableOpacity>
 
-                        {/* Stats on Right */}
-                        <View style={styles.statsRow}>
-                            <TouchableOpacity style={styles.statItem}>
-                                <Text style={[styles.statNumber, { color: colors.primary }]}>{trips.length}</Text>
-                                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Posts</Text>
-                            </TouchableOpacity>
+                        {/* Stats - Now to the right of avatar, cleaner look */}
+                        <View style={styles.statsContainer}>
+                            <View style={styles.statItem}>
+                                <Text style={[styles.statValue, { color: colors.text }]}>{trips.length}</Text>
+                                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Trips</Text>
+                            </View>
+                            <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
                             <TouchableOpacity style={styles.statItem} onPress={() => setShowFollowersModal(true)}>
-                                <Text style={[styles.statNumber, { color: '#10B981' }]}>{user.followers?.length || 0}</Text>
+                                <Text style={[styles.statValue, { color: colors.text }]}>{user.followers?.length || 0}</Text>
                                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Followers</Text>
                             </TouchableOpacity>
+                            <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
                             <TouchableOpacity style={styles.statItem} onPress={() => setShowFollowingModal(true)}>
-                                <Text style={[styles.statNumber, { color: '#F59E0B' }]}>{user.following?.length || 0}</Text>
+                                <Text style={[styles.statValue, { color: colors.text }]}>{user.following?.length || 0}</Text>
                                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Following</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
 
-                    {/* Name, Username, Bio below */}
-                    <View style={styles.profileInfoSection}>
-                        <Text style={[styles.userName, { color: colors.text }]}>{user.displayName}</Text>
-                        {user.username && <Text style={[styles.username, { color: colors.primary }]}>@{user.username}</Text>}
-                        {user.bio ? <Text style={[styles.bio, { color: colors.textSecondary }]}>{user.bio}</Text> : null}
-
-                        {/* Badges Row */}
-                        <View style={styles.badgesRow}>
+                    {/* Check if verified or has rating */}
+                    <View style={styles.nameSection}>
+                        <View style={styles.nameRow}>
+                            <Text style={[styles.displayName, { color: colors.text }]}>{user.displayName}</Text>
                             {user.kycStatus === 'verified' && (
-                                <View style={styles.kycBadge}>
-                                    <Ionicons name="shield-checkmark" size={14} color="#10B981" />
-                                    <Text style={styles.kycBadgeText}>Verified</Text>
-                                </View>
-                            )}
-                            {hostRating && (
-                                <View style={styles.hostRatingBadge}>
-                                    <Ionicons name="star" size={14} color="#F59E0B" />
-                                    <Text style={styles.hostRatingText}>
-                                        {hostRating.average} ({hostRating.count} {hostRating.count === 1 ? 'review' : 'reviews'})
-                                    </Text>
-                                </View>
+                                <Ionicons name="checkmark-circle" size={20} color="#3B82F6" style={{ marginLeft: 4 }} />
                             )}
                         </View>
+                        {user.username && <Text style={[styles.displayUsername, { color: colors.textSecondary }]}>@{user.username}</Text>}
+
+                        {/* Rating Badge - Now prominent below name/username */}
+                        {hostRating && (
+                            <View style={styles.ratingContainer}>
+                                <View style={styles.ratingBadge}>
+                                    <Ionicons name="star" size={14} color="#F59E0B" />
+                                    <Text style={styles.ratingScore}>{hostRating.average}</Text>
+                                </View>
+                                <Text style={[styles.ratingCount, { color: colors.textSecondary }]}>({hostRating.count} reviews)</Text>
+                            </View>
+                        )}
+
+                        {user.bio ? (
+                            <Text style={[styles.bioText, { color: colors.text }]}>{user.bio}</Text>
+                        ) : null}
                     </View>
 
-                    {/* Actions - Only show for other users */}
+                    {/* Action Buttons */}
                     {!isOwnProfile && (
-                        <View style={styles.actionButtons}>
+                        <View style={styles.actionButtonsContainer}>
                             <TouchableOpacity
-                                style={[styles.followButton, { backgroundColor: isFollowing ? 'transparent' : colors.primary, borderColor: colors.primary }]}
+                                style={[styles.primaryBtn, { backgroundColor: isFollowing ? colors.card : colors.primary, borderColor: isFollowing ? colors.border : 'transparent', borderWidth: isFollowing ? 1 : 0 }]}
                                 onPress={handleFollow}
                             >
-                                <Text style={[styles.followButtonText, { color: isFollowing ? colors.primary : '#fff' }]}>
-                                    {isFollowing ? 'Unfollow' : 'Follow'}
+                                <Text style={[styles.primaryBtnText, { color: isFollowing ? colors.text : '#fff' }]}>
+                                    {isFollowing ? 'Following' : 'Follow'}
                                 </Text>
                             </TouchableOpacity>
-                            <TouchableOpacity style={[styles.messageButton, { borderColor: colors.primary }]} onPress={handleMessage}>
-                                <Ionicons name="chatbubble" size={18} color={colors.primary} />
-                                <Text style={[styles.messageButtonText, { color: colors.primary }]}>Message</Text>
+                            <TouchableOpacity style={[styles.secondaryBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={handleMessage}>
+                                <Text style={[styles.secondaryBtnText, { color: colors.text }]}>Message</Text>
                             </TouchableOpacity>
                         </View>
                     )}
-                </Animatable.View>
+                </View>
 
-                {/* Posts */}
-                <Animatable.View animation="fadeInUp" delay={300} style={styles.postsSection}>
-                    <View style={styles.postsSectionHeader}>
-                        <Text style={[styles.sectionTitle, { color: colors.text }]}>{isOwnProfile ? 'My Posts' : 'Posts'}</Text>
-                        {isOwnProfile && (
-                            <TouchableOpacity
-                                style={[styles.addPostButton, { backgroundColor: colors.primary }]}
-                                onPress={() => navigation.navigate('CreateTrip')}
-                            >
-                                <Ionicons name="add" size={20} color="#fff" />
-                            </TouchableOpacity>
-                        )}
+                {/* Posts Section */}
+                <View style={styles.contentSection}>
+                    <View style={styles.tabsHeader}>
+                        <View style={[styles.activeTab, { borderBottomColor: colors.text }]}>
+                            <Ionicons name="grid-outline" size={20} color={colors.text} />
+                        </View>
                     </View>
+
                     {trips.length === 0 ? (
-                        <View style={styles.emptyPosts}>
-                            <Ionicons name="airplane-outline" size={48} color={colors.textSecondary} />
-                            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No posts yet</Text>
-                            {isOwnProfile && (
-                                <TouchableOpacity style={[styles.createButton, { backgroundColor: colors.primary }]} onPress={() => navigation.navigate('CreateTrip')}>
-                                    <Text style={styles.createButtonText}>Create First Post</Text>
-                                </TouchableOpacity>
-                            )}
+                        <View style={styles.emptyState}>
+                            <View style={[styles.emptyIconCircle, { backgroundColor: colors.card }]}>
+                                <Ionicons name="camera-outline" size={40} color={colors.textSecondary} />
+                            </View>
+                            <Text style={[styles.emptyTitle, { color: colors.text }]}>No Posts Yet</Text>
                         </View>
                     ) : (
                         renderTripGrid()
                     )}
-                </Animatable.View>
+                </View>
                 <View style={{ height: 100 }} />
             </ScrollView>
 
@@ -754,79 +786,64 @@ const styles = StyleSheet.create({
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: SPACING.xxl },
     notFoundText: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold, marginTop: SPACING.lg },
     backBtn: { padding: SPACING.lg },
-    gradientHeader: { height: 120, paddingTop: SPACING.lg, paddingHorizontal: SPACING.lg },
+    // Standard Header - no fixed height, no large padding
+    gradientHeader: { paddingTop: SPACING.lg, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xs },
     headerRow: { flexDirection: 'row', justifyContent: 'space-between' },
     headerButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-    profileCard: { marginTop: -50, marginHorizontal: SPACING.lg, padding: SPACING.lg, borderRadius: BORDER_RADIUS.xl, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 8 },
-    profileTopRow: { flexDirection: 'row', alignItems: 'center', width: '100%' },
-    avatarWrapper: { marginRight: SPACING.lg },
-    avatarGradient: { width: 90, height: 90, borderRadius: 45, padding: 3, justifyContent: 'center', alignItems: 'center' },
-    avatar: { width: 84, height: 84, borderRadius: 42, backgroundColor: '#fff' },
-    editAvatarBadge: { position: 'absolute', bottom: 2, right: 2, width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-    statsRow: { flex: 1, flexDirection: 'row', justifyContent: 'space-around' },
-    statItem: { alignItems: 'center' },
-    statNumber: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold },
-    statLabel: { fontSize: FONT_SIZE.xs },
-    profileInfoSection: { width: '100%', paddingTop: SPACING.md },
-    userName: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
-    username: { fontSize: FONT_SIZE.sm, marginTop: 2 },
-    bio: { fontSize: FONT_SIZE.sm, marginTop: SPACING.xs },
-    badgesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs, marginTop: SPACING.sm },
-    kycBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#D1FAE5', paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.lg, gap: 4 },
-    kycBadgeText: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold, color: '#10B981' },
-    hostRatingBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.lg, gap: 4 },
-    hostRatingText: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold, color: '#D97706' },
-    actionButtons: { flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.lg, width: '100%' },
+
+    // Profile Content - stacked immediately below
+    profileContent: { flex: 1, marginTop: 0, paddingTop: SPACING.sm, paddingHorizontal: 20 },
+    topSection: { flexDirection: 'row', alignItems: 'center' },
+    avatarContainer: { position: 'relative' },
+    avatarBorder: { padding: 4, borderRadius: 52, elevation: 0, shadowOpacity: 0 }, // Removed shadow for cleaner look
+    avatar: { width: 80, height: 80, borderRadius: 40 }, // Slightly smaller or standard size
+    editIconBadge: { position: 'absolute', bottom: 0, right: 0, width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#fff' },
+
+    statsContainer: { flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', marginLeft: 20 },
+    statItem: { alignItems: 'center', padding: 8 },
+    statDivider: { width: 1, height: 30 },
+    statValue: { fontSize: 20, fontWeight: '700' },
+    statLabel: { fontSize: 13, marginTop: 2 },
+
+    nameSection: { marginTop: 16 },
+    nameRow: { flexDirection: 'row', alignItems: 'center' },
+    displayName: { fontSize: 24, fontWeight: '700', letterSpacing: -0.5 },
+    displayUsername: { fontSize: 14, marginTop: 2 },
+
+    ratingContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 8, backgroundColor: 'rgba(245, 158, 11, 0.1)', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+    ratingBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    ratingScore: { fontSize: 14, fontWeight: '700', color: '#B45309' },
+    ratingCount: { fontSize: 13, marginLeft: 6 },
+
+    bioText: { marginTop: 12, fontSize: 15, lineHeight: 22 },
+
+    actionButtonsContainer: { flexDirection: 'row', gap: 12, marginTop: 24 },
+    primaryBtn: { flex: 1, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+    primaryBtnText: { fontSize: 15, fontWeight: '600' },
+    secondaryBtn: { flex: 1, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
+    secondaryBtnText: { fontSize: 15, fontWeight: '600' },
+
+    contentSection: { marginTop: 24, paddingBottom: 40 },
+    tabsHeader: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f0f0f0', marginBottom: 16 },
+    activeTab: { paddingBottom: 12, borderBottomWidth: 2, width: 60, alignItems: 'center' },
+
+    emptyState: { alignItems: 'center', marginTop: 40 },
+    emptyIconCircle: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+    emptyTitle: { fontSize: 16, fontWeight: '600' },
+
+    // Keep existing modal styles
     fullImageModal: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' },
     fullImage: { width: '90%', height: '70%' },
     closeFullImage: { position: 'absolute', top: 50, right: 20, padding: SPACING.sm },
-    followButton: { flex: 1, paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.lg, alignItems: 'center', borderWidth: 2 },
-    followButtonText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
-    messageButton: { flex: 1, flexDirection: 'row', paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.lg, alignItems: 'center', justifyContent: 'center', borderWidth: 2, gap: SPACING.xs },
-    messageButtonText: {
-        fontSize: FONT_SIZE.sm,
-        fontWeight: FONT_WEIGHT.bold,
-        marginLeft: SPACING.xs,
-    },
-    editProfileButton: {
-        marginHorizontal: SPACING.xl,
-        paddingVertical: SPACING.sm,
-        borderRadius: BORDER_RADIUS.md,
-        borderWidth: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginTop: SPACING.md,
-        marginBottom: SPACING.sm,
-    },
-    editProfileButtonText: {
-        fontSize: FONT_SIZE.sm,
-        fontWeight: FONT_WEIGHT.bold,
-    },
-    storiesSection: { marginTop: SPACING.lg },
-    sectionTitle: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, marginHorizontal: SPACING.lg, marginBottom: SPACING.md },
-    storiesList: { paddingHorizontal: SPACING.lg },
-    storyItem: { alignItems: 'center', marginRight: SPACING.md },
-    storyGradient: { width: 72, height: 72, borderRadius: 36, padding: 3, justifyContent: 'center', alignItems: 'center' },
-    addStoryGradient: { width: 72, height: 72, borderRadius: 36, justifyContent: 'center', alignItems: 'center' },
-    storyImage: { width: 66, height: 66, borderRadius: 33, backgroundColor: '#fff' },
-    storyTitle: { fontSize: FONT_SIZE.xs, marginTop: SPACING.xs, maxWidth: 70 },
-    postsSection: { marginTop: SPACING.lg, marginHorizontal: SPACING.lg },
-    postsSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md },
+
+    editProfileButton: { marginHorizontal: SPACING.xl, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginTop: SPACING.md, marginBottom: SPACING.sm },
+    editProfileButtonText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
+
+    postsSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md, marginHorizontal: 20 },
+    postsContainer: { marginTop: 0 },
     addPostButton: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-    postsContainer: { marginTop: SPACING.md },
-    tripCard: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, borderRadius: BORDER_RADIUS.lg, marginBottom: SPACING.md },
-    tripContent: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-    tripImage: { width: 60, height: 60, borderRadius: BORDER_RADIUS.md },
-    tripInfo: { flex: 1, marginLeft: SPACING.md },
-    tripTitle: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
-    tripLocation: { fontSize: FONT_SIZE.sm, marginTop: 2 },
-    tripActions: { flexDirection: 'row', gap: SPACING.sm },
-    tripAction: { padding: SPACING.sm },
-    emptyPosts: { alignItems: 'center', paddingVertical: SPACING.xxxl },
-    emptyText: { fontSize: FONT_SIZE.sm, marginTop: SPACING.md },
-    createButton: { marginTop: SPACING.lg, paddingHorizontal: SPACING.xxl, paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.lg },
-    createButtonText: { color: '#fff', fontWeight: FONT_WEIGHT.bold },
-    // Story Modal
+
+    // Story Modal and others
     storyModalContainer: { flex: 1, backgroundColor: '#000' },
     storyCloseArea: { flex: 1 },
     storyProgressBar: { height: 3, backgroundColor: 'rgba(255,255,255,0.3)', marginHorizontal: SPACING.md, marginTop: SPACING.xl, borderRadius: 2 },
@@ -836,7 +853,7 @@ const styles = StyleSheet.create({
     storyUserName: { flex: 1, color: '#fff', fontWeight: FONT_WEIGHT.bold },
     storyFullImage: { flex: 1, width: '100%' },
     storyCaption: { color: '#fff', fontSize: FONT_SIZE.md, textAlign: 'center', padding: SPACING.lg },
-    // Modals
+
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
     modalContent: { borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, padding: SPACING.xl },
     listModalContent: { height: '70%', borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, padding: SPACING.xl },
@@ -859,11 +876,18 @@ const styles = StyleSheet.create({
     userItemUsername: { fontSize: FONT_SIZE.sm },
     emptyList: { alignItems: 'center', paddingVertical: SPACING.xxxl },
     emptyListText: { fontSize: FONT_SIZE.sm, marginTop: SPACING.md },
-
     postsGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -1 },
     gridItem: { width: '33.333%', aspectRatio: 1, padding: 1 },
     gridImage: { width: '100%', height: '100%', borderRadius: 2 },
+    videoIconOverlay: { position: 'absolute', top: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12, padding: 4 },
     gridEditButton: { position: 'absolute', top: 6, right: 6, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12, width: 24, height: 24, justifyContent: 'center', alignItems: 'center' },
+
+    // Restored Story Styles
+    storyItem: { alignItems: 'center', marginRight: SPACING.md },
+    addStoryGradient: { width: 72, height: 72, borderRadius: 36, justifyContent: 'center', alignItems: 'center' },
+    storyTitle: { fontSize: FONT_SIZE.xs, marginTop: SPACING.xs, maxWidth: 70 },
+    storyGradient: { width: 72, height: 72, borderRadius: 36, padding: 3, justifyContent: 'center', alignItems: 'center' },
+    storyImage: { width: 66, height: 66, borderRadius: 33, backgroundColor: '#fff' },
 });
 
 export default UserProfileScreen;

@@ -159,5 +159,34 @@ service cloud.firestore {
       allow create: if isAuthenticated(); // Anyone can report
       allow read, update, delete: if isAdmin(); // Only admins can manage reports
     }
+
+    // ==================== FEEDBACK / SUGGESTIONS / BUGS ====================
+
+    match /suggestions/{suggestionId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /bugs/{bugId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /feature_requests/{requestId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // ==================== NOTIFICATIONS (With Subcollection Pattern) ====================
+
+    // Alternative pattern: notifications/{userId}/items/{notificationId}
+    match /notifications/{userId}/items/{notificationId} {
+      allow read: if isOwner(userId);
+      allow create: if false; // Only Cloud Functions
+      allow update, delete: if isOwner(userId);
+    }
   }
 }

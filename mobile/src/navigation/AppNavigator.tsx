@@ -23,8 +23,7 @@ import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import FeedScreen from '../screens/FeedScreen';
 import MomentsScreen from '../screens/MomentsScreen';
 import MyTripsScreen from '../screens/MyTripsScreen';
-import MessagesScreen from '../screens/MessagesScreen';
-import MessageScreen from '../screens/MessageScreen';
+
 import ChatsListScreen from '../screens/ChatsListScreen';
 import ChatScreen from '../screens/ChatScreen';
 import CreateTripScreen from '../screens/CreateTripScreen';
@@ -148,10 +147,37 @@ const AppNavigator = () => {
         );
     }
 
+    const linking = {
+        prefixes: ['tripzi://', 'https://tripzi.com'],
+        config: {
+            screens: {
+                // Auth
+                SignIn: 'signin',
+                SignUp: 'signup',
+
+                // Deep link into TripeDetails directly
+                TripDetails: 'trip/:tripId',
+
+                // Profile
+                UserProfile: 'user/:userId',
+
+                // Fallback to App tabs
+                App: {
+                    screens: {
+                        Home: 'feed',
+                        Moments: 'moments',
+                        Messages: 'messages',
+                        Profile: 'profile',
+                    }
+                }
+            }
+        }
+    };
+
     return (
         <ThemeProvider>
             <NetworkProvider>
-                <NavigationContainer ref={navigationRef}>
+                <NavigationContainer ref={navigationRef} linking={linking}>
                     <Stack.Navigator
                         initialRouteName={initialRoute}
                         screenOptions={{
@@ -191,7 +217,7 @@ const AppNavigator = () => {
                         <Stack.Screen name="MyTrips" component={MyTripsScreen} />
                         <Stack.Screen name="CreateTrip" component={CreateTripScreen} />
                         <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
-                        <Stack.Screen name="Message" component={MessageScreen} />
+
                         <Stack.Screen name="Chat" component={ChatScreen} />
                         <Stack.Screen name="Comments" component={CommentsScreen} />
                         <Stack.Screen name="Map" component={MapScreen} />

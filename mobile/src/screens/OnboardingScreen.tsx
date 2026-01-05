@@ -2,22 +2,23 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import Logo from '../components/Logo';
+import AppLogo from '../components/AppLogo';
 
 const OnboardingScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
-      <Image 
+      <Image
         source={{ uri: 'https://i.imgur.com/your-image-url.jpg' }} // Replace with your image URL
         style={styles.carouselImage}
       />
       <View style={styles.logoContainer}>
-        <Logo />
+        <AppLogo size={60} showDot={true} showGlow={false} />
       </View>
       <Text style={styles.subtitle}>
         Explore the world, <Text style={styles.notAlone}>not alone.</Text>
       </Text>
       <Text style={styles.joinJourney}>JOIN THE JOURNEY</Text>
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.nextButton}
         onPress={() => navigation.navigate('Start')}
       >

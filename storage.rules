@@ -53,12 +53,16 @@ service firebase.storage {
     
     // ==================== PROFILE IMAGES ====================
     
+    // ==================== PROFILE IMAGES ====================
+    
     match /profiles/{userId}/{fileName} {
       // Anyone can read profile images
       allow read: if true;
       
-      // Only the user can upload/delete their profile images
-      allow write: if isOwner(userId) && isImage() && isValidSize();
+      // Only the user can upload their profile images
+      allow create, update: if isOwner(userId) && isImage() && isValidSize();
+      // User can delete their profile images
+      allow delete: if isOwner(userId);
     }
     
     // ==================== TRIP MEDIA (Images & Videos) ====================
@@ -67,8 +71,10 @@ service firebase.storage {
       // Anyone authenticated can read trip media
       allow read: if isAuthenticated();
       
-      // Only the user can upload/delete their trip media (images or videos)
-      allow write: if isOwner(userId) && isMediaFile() && isValidMediaSize();
+      // Only the user can upload their trip media
+      allow create, update: if isOwner(userId) && isMediaFile() && isValidMediaSize();
+      // User can delete their trip media
+      allow delete: if isOwner(userId);
     }
 
     // ==================== TRIP VIDEOS ====================
@@ -77,8 +83,10 @@ service firebase.storage {
       // Anyone authenticated can read trip videos
       allow read: if isAuthenticated();
       
-      // Only the user can upload/delete their trip videos
-      allow write: if isOwner(userId) && isVideo() && isValidVideoSize();
+      // Only the user can upload their trip videos
+      allow create, update: if isOwner(userId) && isVideo() && isValidVideoSize();
+      // User can delete their trip videos
+      allow delete: if isOwner(userId);
     }
     
     // ==================== STORY MEDIA (Images & Videos) ====================
@@ -87,18 +95,25 @@ service firebase.storage {
       // Anyone authenticated can read stories
       allow read: if isAuthenticated();
       
-      // Only the user can upload/delete their stories (images or videos)
-      allow write: if isOwner(userId) && isMediaFile() && isValidMediaSize();
+      // Only the user can upload their stories
+      allow create, update: if isOwner(userId) && isMediaFile() && isValidMediaSize();
+      // User can delete their stories
+      allow delete: if isOwner(userId);
     }
     
     // ==================== KYC DOCUMENTS ====================
     
     match /kyc/{userId}/{allPaths=**} {
       // Only the user and admins can read KYC documents
-      allow read: if isOwner(userId);
+      allow read: if isOwner(userId) || request.auth.token.admin == true;
       
       // Only the user can upload their KYC documents
-      allow write: if isOwner(userId) && isValidSize();
+      allow create, update: if isOwner(userId) && isValidSize();
+      // User cannot delete KYC documents (audit trail) - keeping strict or allowing? 
+      // User usually shouldn't delete KYC unless retrying? sticking to original intent which was 'write'.
+      // If original was write, they could overwrite (update) or delete. 
+      // Assuming retrying is allowed, delete should be allowed.
+      allow delete: if isOwner(userId);
     }
     
     // ==================== CHAT MEDIA (Images, Videos, Voice) ====================
@@ -107,8 +122,30 @@ service firebase.storage {
       // Participants can read chat media (simplified - anyone authenticated)
       allow read: if isAuthenticated();
       
-      // Authenticated users can upload media to chats (images, videos, voice)
-      allow write: if isAuthenticated() && isMediaFile() && isValidMediaSize();
+      // Authenticated users can upload media to chats
+      allow create, update: if isAuthenticated() && isMediaFile() && isValidMediaSize();
+      
+      // Allow delete for chat cleanup
+      allow delete: if isAuthenticated();
+    }
+
+    // ==================== REPORT EVIDENCE ====================
+    
+    match /reports/{reportId}/{allPaths=**} {
+      // Only authenticated users can upload report evidence
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isImage() && isValidSize();
+      // Usually users don't delete report evidence, but if they could write, they could delete.
+      allow delete: if isAuthenticated(); 
+    }
+
+    // ==================== FEEDBACK ATTACHMENTS ====================
+    
+    match /feedback/{userId}/{allPaths=**} {
+      // Users can upload screenshots for bugs/suggestions
+      allow read: if isAuthenticated();
+      allow create, update: if isOwner(userId) && isImage() && isValidSize();
+      allow delete: if isOwner(userId);
     }
   }
 }

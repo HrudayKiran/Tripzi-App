@@ -1,4 +1,5 @@
 import { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } from "firebase-functions/v2/firestore";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 
 // Use 'functions' for v1 triggers (Auth)
 // Use 'functions' for v1 triggers (Auth)
@@ -412,6 +413,58 @@ export const onMessageCreated = onDocumentCreated(
     }
   });
 
+// ==================== CHAT CLEANUP ====================
+
+/**
+ * Clean up messages subcollection and chat media when a chat is deleted.
+ */
+export const onChatDeleted = onDocumentDeleted(
+  { document: "chats/{chatId}", database: "default" },
+  async (event) => {
+    if (!event.data) return;
+
+    const chatId = event.params.chatId;
+    console.log(`Chat ${chatId} deleted, cleaning up messages and media...`);
+
+    try {
+      // 1. Delete all messages in the subcollection
+      const messagesSnapshot = await db.collection("chats").doc(chatId).collection("messages").get();
+
+      if (!messagesSnapshot.empty) {
+        const batch = db.batch();
+        let count = 0;
+
+        for (const doc of messagesSnapshot.docs) {
+          batch.delete(doc.ref);
+          count++;
+
+          // Firestore batch limit is 500
+          if (count >= 450) {
+            await batch.commit();
+            count = 0;
+          }
+        }
+
+        if (count > 0) {
+          await batch.commit();
+        }
+
+        console.log(`Deleted ${messagesSnapshot.size} messages from chat ${chatId}`);
+      }
+
+      // 2. Delete chat media from Storage
+      const storage = admin.storage().bucket();
+      const [files] = await storage.getFiles({ prefix: `chats/${chatId}/` });
+
+      if (files.length > 0) {
+        await Promise.all(files.map(file => file.delete()));
+        console.log(`Deleted ${files.length} media files from chat ${chatId}`);
+      }
+    } catch (error) {
+      console.error(`Error cleaning up chat ${chatId}:`, error);
+    }
+  });
+
 
 // ==================== KYC NOTIFICATIONS ====================
 
@@ -463,12 +516,12 @@ export const onKycUpdated = onDocumentUpdated(
     });
   });
 
-// ==================== TRIP JOIN NOTIFICATIONS ====================
+// ==================== TRIP JOIN/LEAVE NOTIFICATIONS ====================
 
 /**
- * Send notification when someone joins a trip.
+ * Send notification when someone joins OR leaves a trip.
  */
-export const onTripJoin = onDocumentUpdated(
+export const onTripParticipantChange = onDocumentUpdated(
   { document: "trips/{tripId}", database: "default" },
   async (event) => {
     if (!event.data) return;
@@ -480,26 +533,28 @@ export const onTripJoin = onDocumentUpdated(
     const beforeParticipants = before.participants || [];
     const afterParticipants = after.participants || [];
 
-    // Check if a new participant was added
+    // Check if a new participant was added (JOIN)
     const newParticipants = afterParticipants.filter(
       (uid: string) => !beforeParticipants.includes(uid)
     );
 
-    if (newParticipants.length === 0) return;
+    // Check if a participant was removed (LEAVE)
+    const leftParticipants = beforeParticipants.filter(
+      (uid: string) => !afterParticipants.includes(uid)
+    );
 
+    // Handle JOINs
     for (const newUserId of newParticipants) {
-      // Don't notify the trip owner if they're "joining" their own trip
       if (newUserId === after.userId) continue;
 
       const joinerDoc = await db.collection("users").doc(newUserId).get();
       const joiner = joinerDoc.data() || {};
 
-      // Notify trip owner
       await createNotification({
         recipientId: after.userId,
         type: "trip_join",
         title: "New Trip Member! 🎒",
-        message: `${joiner.displayName || "Someone"} joined your trip to ${after.destination}`,
+        message: `${joiner.displayName || "Someone"} joined your trip "${after.title || after.destination}"`,
         entityId: tripId,
         entityType: "trip",
         actorId: newUserId,
@@ -511,69 +566,89 @@ export const onTripJoin = onDocumentUpdated(
 
       await sendPushToUser(after.userId, {
         title: "New Trip Member! 🎒",
-        body: `${joiner.displayName || "Someone"} joined your trip to ${after.destination}`,
+        body: `${joiner.displayName || "Someone"} joined your trip "${after.title || after.destination}"`,
+        data: { route: "TripDetails", tripId },
+      });
+    }
+
+    // Handle LEAVEs
+    for (const leftUserId of leftParticipants) {
+      if (leftUserId === after.userId) continue;
+
+      const leaverDoc = await db.collection("users").doc(leftUserId).get();
+      const leaver = leaverDoc.data() || {};
+
+      await createNotification({
+        recipientId: after.userId,
+        type: "trip_leave",
+        title: "Traveler Left 👋",
+        message: `${leaver.displayName || "Someone"} left your trip "${after.title || after.destination}"`,
+        entityId: tripId,
+        entityType: "trip",
+        actorId: leftUserId,
+        actorName: leaver.displayName,
+        actorPhotoUrl: leaver.photoURL,
+        deepLinkRoute: "TripDetails",
+        deepLinkParams: { tripId },
+      });
+
+      await sendPushToUser(after.userId, {
+        title: "Traveler Left 👋",
+        body: `${leaver.displayName || "Someone"} left your trip "${after.title || after.destination}"`,
         data: { route: "TripDetails", tripId },
       });
     }
   });
 
-// ==================== RATING NOTIFICATIONS & AGGREGATION ====================
+// ==================== TRIP CANCELLED NOTIFICATION ====================
 
 /**
- * 1. Notify host when rated.
- * 2. Update host's average rating field.
+ * Notify all participants when a trip is deleted/cancelled.
  */
-export const onRatingCreated = onDocumentCreated(
-  { document: "ratings/{ratingId}", database: "default" },
+export const onTripDeleted = onDocumentDeleted(
+  { document: "trips/{tripId}", database: "default" },
   async (event) => {
     if (!event.data) return;
 
-    const rating = event.data.data();
-    // rating: { tripId, hostId, userId, rating, feedback, ... }
+    const tripData = event.data.data();
+    const tripId = event.params.tripId;
+    const participants = tripData.participants || [];
+    const tripTitle = tripData.title || tripData.destination || "A trip";
+    const hostId = tripData.userId;
 
-    if (!rating.hostId || !rating.rating) return;
+    // Get host name
+    let hostName = "The host";
+    if (hostId) {
+      const hostDoc = await db.collection("users").doc(hostId).get();
+      hostName = hostDoc.data()?.displayName || "The host";
+    }
 
-    // A. AGGREGATION: Update User's Average Rating
-    const ratingsSnapshot = await db.collection("ratings")
-      .where("hostId", "==", rating.hostId)
-      .get();
+    // Notify all participants (except the owner who deleted it)
+    for (const participantId of participants) {
+      if (participantId === hostId) continue;
 
-    let total = 0;
-    ratingsSnapshot.forEach(doc => {
-      total += (doc.data().rating || 0);
-    });
+      await createNotification({
+        recipientId: participantId,
+        type: "trip_cancelled",
+        title: "Trip Cancelled ⚠️",
+        message: `"${tripTitle}" by ${hostName} has been cancelled`,
+        entityId: tripId,
+        entityType: "trip",
+        deepLinkRoute: "Feed",
+        deepLinkParams: {},
+      });
 
-    const count = ratingsSnapshot.size;
-    const average = count > 0 ? Number((total / count).toFixed(1)) : 0;
+      await sendPushToUser(participantId, {
+        title: "Trip Cancelled ⚠️",
+        body: `"${tripTitle}" by ${hostName} has been cancelled`,
+        data: { route: "Feed" },
+      });
+    }
 
-    await db.collection("users").doc(rating.hostId).update({
-      rating: average
-    });
-
-    // B. NOTIFICATION: Notify Host
-    const raterDoc = await db.collection("users").doc(rating.userId).get();
-    const rater = raterDoc.data() || {};
-
-    await createNotification({
-      recipientId: rating.hostId,
-      type: "rating",
-      title: "New Rating! ⭐",
-      message: `${rater.displayName || "Someone"} gave you ${rating.rating} stars!`,
-      entityId: rating.tripId,
-      entityType: "trip",
-      actorId: rating.userId,
-      actorName: rater.displayName,
-      actorPhotoUrl: rater.photoURL,
-      deepLinkRoute: "TripDetails", // Or Profile
-      deepLinkParams: { tripId: rating.tripId },
-    });
-
-    await sendPushToUser(rating.hostId, {
-      title: "New Rating! ⭐",
-      body: `You received a ${rating.rating}-star rating from ${rater.displayName || "Someone"}.`,
-      data: { route: "UserProfile", userId: rating.hostId }, // Go to own profile to see stats
-    });
+    console.log(`Trip ${tripId} cancelled, notified ${participants.length - 1} participants`);
   });
+
+
 
 // ==================== FOLLOW NOTIFICATION ====================
 
@@ -664,6 +739,96 @@ export const onUserCreated = onDocumentCreated(
       entityType: undefined,
       deepLinkRoute: "KycScreen",
       deepLinkParams: {},
+    });
+
+    // Send push notification (delayed slightly to allow FCM token registration)
+    setTimeout(async () => {
+      await sendPushToUser(userId, {
+        title: "Welcome to Tripzi! 🌍",
+        body: "Complete your KYC to start creating and joining trips!",
+        data: { route: "KycScreen" },
+      });
+    }, 5000);
+  });
+
+// ==================== REPORT NOTIFICATIONS ====================
+
+/**
+ * Notify admins when a new report is submitted.
+ */
+export const onReportCreated = onDocumentCreated(
+  { document: "reports/{reportId}", database: "default" },
+  async (event) => {
+    if (!event.data) return;
+
+    const report = event.data.data();
+    const reportId = event.params.reportId;
+    const reporterDoc = await db.collection("users").doc(report.reporterId).get();
+    const reporter = reporterDoc.data() || {};
+
+    // Get all admins
+    const adminsSnapshot = await db.collection("users").where("role", "==", "admin").get();
+
+    for (const adminDoc of adminsSnapshot.docs) {
+      await createNotification({
+        recipientId: adminDoc.id,
+        type: "report",
+        title: "🚨 New Report",
+        message: `${reporter.displayName || "Someone"} reported ${report.type || "content"}`,
+        entityId: reportId,
+        entityType: "report",
+        actorId: report.reporterId,
+        actorName: reporter.displayName,
+        actorPhotoUrl: reporter.photoURL,
+        deepLinkRoute: "AdminDashboard",
+        deepLinkParams: {},
+      });
+
+      await sendPushToUser(adminDoc.id, {
+        title: "🚨 New Report",
+        body: `${reporter.displayName || "Someone"} reported ${report.type || "content"}`,
+        data: { route: "AdminDashboard" },
+      });
+    }
+  });
+
+/**
+ * Notify reporter when their report status changes.
+ */
+export const onReportUpdated = onDocumentUpdated(
+  { document: "reports/{reportId}", database: "default" },
+  async (event) => {
+    if (!event.data) return;
+
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+
+    // Only trigger if status changed
+    if (before.status === after.status) return;
+
+    const statusMessages: { [key: string]: string } = {
+      investigating: "Your report is being investigated by our team.",
+      resolved: "Your report has been resolved. Thank you for helping keep Tripzi safe!",
+      dismissed: "Your report was reviewed but no action was taken at this time.",
+    };
+
+    const message = statusMessages[after.status] || `Your report status changed to: ${after.status}`;
+
+    await createNotification({
+      recipientId: after.reporterId,
+      type: "report_update",
+      title: `Report ${after.status.charAt(0).toUpperCase() + after.status.slice(1)}`,
+      message,
+      entityId: event.params.reportId,
+      entityType: "report",
+      deepLinkRoute: "Profile",
+      deepLinkParams: {},
+    });
+
+    await sendPushToUser(after.reporterId, {
+      title: `Report ${after.status.charAt(0).toUpperCase() + after.status.slice(1)}`,
+      body: message,
+      data: { route: "Profile" },
     });
   });
 
@@ -1158,4 +1323,225 @@ export const adminCleanupAllOrphanedMedia = functions.https.onCall(async (data, 
     message: "For large-scale cleanup, please use the Firebase Console Storage browser or run cleanupOrphanedTripMedia per-user.",
     hint: "You can iterate through users collection and call cleanupOrphanedTripMedia for each.",
   };
+});
+
+// ==================== RATE LIMITING (Security) ====================
+
+const rateLimiter = new Map<string, number[]>();
+const MAX_REQUESTS = 10;
+const WINDOW_MS = 60000; // 1 minute
+
+/**
+ * Helper to check rate limits for callable functions.
+ * Throws an error if limit exceeded.
+ */
+export const checkRateLimit = (uid: string) => {
+  const now = Date.now();
+  const userRequests = rateLimiter.get(uid) || [];
+  const recentRequests = userRequests.filter(t => now - t < WINDOW_MS);
+
+  if (recentRequests.length >= MAX_REQUESTS) {
+    throw new functions.https.HttpsError('resource-exhausted', 'Rate limit exceeded. Please try again later.');
+  }
+
+  recentRequests.push(now);
+  rateLimiter.set(uid, recentRequests);
+};
+
+// ==================== HOST RATING IMPACT ====================
+
+/**
+ * Cloud Function to handle impact on host when a report is resolved.
+ * Can apply warnings, rating penalties, or suspensions.
+ */
+export const onReportResolved = onDocumentUpdated(
+  { document: "reports/{reportId}", database: "default" },
+  async (event) => {
+    if (!event.data) return;
+
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+
+    // Only process when status changes to resolved
+    if (before.status === 'resolved' || after.status !== 'resolved') return;
+
+    const resolution = after.resolution;
+    const hostId = after.reportedUserId;
+    if (!hostId) return;
+
+    console.log(`Processing resolution '${resolution}' for host ${hostId}`);
+
+    try {
+      switch (resolution) {
+        case 'warning':
+          // Increment warning count
+          await db.collection('users').doc(hostId).update({
+            warningCount: admin.firestore.FieldValue.increment(1)
+          });
+          console.log(`Applied warning to host ${hostId}`);
+          break;
+
+        case 'rating_penalty':
+          // Reduce organizer rating by 0.5
+          const userDoc = await db.collection('users').doc(hostId).get();
+          const currentRating = userDoc.data()?.organizerRating?.averageRating || 0;
+          await db.collection('users').doc(hostId).update({
+            'organizerRating.averageRating': Math.max(0, currentRating - 0.5)
+          });
+          console.log(`Applied rating penalty to host ${hostId}`);
+          break;
+
+        case 'suspend':
+          // Suspend user account
+          await db.collection('users').doc(hostId).update({
+            suspended: true,
+            suspendedUntil: admin.firestore.Timestamp.fromDate(
+              new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+            )
+          });
+          console.log(`Suspended host ${hostId}`);
+          break;
+      }
+    } catch (error) {
+      console.error('Error applying resolution impact:', error);
+    }
+  }
+);
+
+// ==================== RATING AGGREGATION ====================
+
+/**
+ * Trigger when a new rating is added to a trip.
+ * Recalculates trip average and organizer's overall rating.
+ */
+export const onRatingCreated = onDocumentCreated(
+  { document: "trips/{tripId}/ratings/{ratingId}", database: "default" },
+  async (event) => {
+    if (!event.data) return;
+    const { tripId } = event.params;
+
+    console.log(`Processing new rating for trip ${tripId}`);
+
+    try {
+      // 1. Recalculate trip average
+      const ratingsSnapshot = await db.collection(`trips/${tripId}/ratings`).get();
+      const ratings = ratingsSnapshot.docs.map(d => d.data());
+
+      if (ratings.length === 0) return;
+
+      const avgRating = ratings.reduce((sum, r) => sum + (r.rating || 0), 0) / ratings.length;
+
+      // Breakdown
+      const breakdown: any = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+      ratings.forEach(r => {
+        const rounded = Math.round(r.rating || 0);
+        if (breakdown[rounded] !== undefined) breakdown[rounded]++;
+      });
+
+      // Update trip
+      await db.collection('trips').doc(tripId).update({
+        ratingsData: {
+          averageRating: Math.round(avgRating * 10) / 10,
+          totalRatings: ratings.length,
+          breakdown
+        }
+      });
+
+      // 2. Update organizer profile average
+      const tripDoc = await db.collection('trips').doc(tripId).get();
+      const organizerId = tripDoc.data()?.userId;
+      if (!organizerId) return;
+
+      const allOrganizerTrips = await db.collection('trips').where('userId', '==', organizerId).get();
+      let totalSum = 0;
+      let totalCount = 0;
+
+      allOrganizerTrips.docs.forEach(t => {
+        const data = t.data();
+        if (data.ratingsData?.averageRating) {
+          const tripAvg = data.ratingsData.averageRating || 0;
+          const tripCount = data.ratingsData.totalRatings || 0;
+
+          if (tripCount > 0) {
+            // Weighted by number of ratings
+            totalSum += tripAvg * tripCount;
+            totalCount += tripCount;
+          }
+        }
+      });
+
+      const userAvg = totalCount > 0 ? totalSum / totalCount : 0;
+
+      // Determine badge
+      let badge = 'New';
+      if (userAvg >= 4.8 && totalCount > 10) badge = 'Outstanding';
+      else if (userAvg >= 4.5 && totalCount > 5) badge = 'Highly Rated';
+      else if (userAvg >= 4.0 && totalCount > 5) badge = 'Well Rated';
+      else if (userAvg >= 3.0 && totalCount > 0) badge = 'Rated';
+
+      await db.collection('users').doc(organizerId).update({
+        organizerRating: {
+          averageRating: Math.round(userAvg * 10) / 10,
+          totalRatings: totalCount,
+          badge
+        }
+      });
+
+      console.log(`Updated ratings for trip ${tripId} and organizer ${organizerId}`);
+
+      // 3. Send Notification to Host (Merged from old logic)
+      const newRating = event.data.data();
+      if (newRating && organizerId && newRating.userId && organizerId !== newRating.userId) {
+        const raterDoc = await db.collection("users").doc(newRating.userId).get();
+        const rater = raterDoc.data() || {};
+
+        await createNotification({
+          recipientId: organizerId,
+          type: "rating",
+          title: "New Rating! ⭐",
+          message: `${rater.displayName || "Someone"} gave you ${newRating.rating} stars!`,
+          entityId: tripId,
+          entityType: "trip",
+          actorId: newRating.userId,
+          actorName: rater.displayName,
+          actorPhotoUrl: rater.photoURL,
+          deepLinkRoute: "TripDetails",
+          deepLinkParams: { tripId },
+        });
+
+        await sendPushToUser(organizerId, {
+          title: "New Rating! ⭐",
+          body: `You received a ${newRating.rating}-star rating from ${rater.displayName || "Someone"}.`,
+          data: { route: "UserProfile", userId: organizerId },
+        });
+      }
+
+    } catch (error) {
+      console.error('Error in onRatingCreated:', error);
+    }
+  }
+);
+
+// ==================== ADMIN UTILS ====================
+
+/**
+ * Utility to make a user an admin.
+ * Sets the 'admin' role in Firestore and 'admin' custom claim for Auth.
+ */
+export const makeAdmin = onCall(async (request) => {
+  // This function should be secured in production!
+  // For now, it allows anyone to promote themselves or others during development.
+  // In production, restrict this to existing admins or deploy once then remove.
+
+  const { email } = request.data;
+  if (!email) throw new HttpsError('invalid-argument', 'Email required');
+
+  try {
+    const userRec = await admin.auth().getUserByEmail(email);
+    await admin.auth().setCustomUserClaims(userRec.uid, { admin: true });
+    await db.collection('users').doc(userRec.uid).update({ role: 'admin' });
+    return { success: true, message: `User ${email} is now an admin` };
+  } catch (e: any) {
+    throw new HttpsError('internal', e.message || 'Error making admin');
+  }
 });

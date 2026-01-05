@@ -175,29 +175,18 @@ const ProfileScreen = ({ navigation }) => {
           />
         </Animatable.View>
 
-        {/* Menu Items */}
+        {/* General Section */}
         <Animatable.View animation="fadeInUp" delay={150} duration={400} style={styles.menuSection}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>GENERAL</Text>
-
-
 
           <MenuItem
             icon="shield-checkmark-outline"
             iconColor="#10B981"
             iconBg="#D1FAE5"
             text="KYC Status"
-            badge={user?.kycStatus === 'verified' ? 'Verified' : 'Pending'}
+            badge={user?.kycStatus === 'verified' ? 'Verified' : user?.kycStatus === 'pending' ? 'Pending' : 'Required'}
             onPress={() => navigation.navigate('KYC')}
           />
-          {user?.kycStatus !== 'verified' && (
-            <MenuItem
-              icon="checkmark-circle-outline"
-              iconColor="#8B5CF6"
-              iconBg="#EDE9FE"
-              text="Quick Verify (Testing)"
-              onPress={verifyMyKyc}
-            />
-          )}
           <MenuItem
             icon="document-text-outline"
             iconColor="#8B5CF6"
@@ -242,7 +231,6 @@ const ProfileScreen = ({ navigation }) => {
             iconBg="#FEE2E2"
             text="Log Out"
             onPress={handleLogout}
-
             isDestructive
           />
         </Animatable.View>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import NotificationService from '../utils/notificationService';
 
 const useTripLike = (trip) => {
   const [isLiked, setIsLiked] = useState(false);
@@ -33,6 +34,13 @@ const useTripLike = (trip) => {
         await tripRef.update({
           likes: firestore.FieldValue.arrayUnion(currentUser.uid),
         });
+
+        // Send like notification to trip owner (only when liking, not unliking)
+        if (trip.userId && trip.userId !== currentUser.uid) {
+          const likerName = currentUser.displayName || 'Someone';
+          const tripTitle = trip.title || 'your trip';
+          await NotificationService.onLike(currentUser.uid, likerName, trip.id, trip.userId, tripTitle);
+        }
       } else {
         await tripRef.update({
           likes: firestore.FieldValue.arrayRemove(currentUser.uid),
