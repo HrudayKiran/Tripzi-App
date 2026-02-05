@@ -109,23 +109,74 @@ const AppNavigator = () => {
     const [user, setUser] = React.useState(auth().currentUser);
 
     React.useEffect(() => {
-        // Check auth state IMMEDIATELY on mount
-        const currentUser = auth().currentUser;
+        // Check auth state AND Firestore profile on mount
+        const checkAuthAndProfile = async () => {
+            const currentUser = auth().currentUser;
 
-        if (currentUser) {
-            // User is logged in → Skip LaunchScreen, go directly to App
-            setInitialRoute('App');
-        } else {
-            // User is NOT logged in → Show LaunchScreen flow
-            setInitialRoute('Launch');
-        }
+            if (currentUser) {
+                // User is authenticated - but do they have a Firestore profile?
+                try {
+                    const firestore = require('@react-native-firebase/firestore').default;
+                    const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
+
+                    // Handle both Firebase API versions (exists as property or function)
+                    const docExists = typeof userDoc.exists === 'function' ? userDoc.exists() : userDoc.exists;
+
+                    if (docExists) {
+                        // User has both Auth AND Firestore profile → Go to App
+                        setInitialRoute('App');
+                    } else {
+                        // User has Auth but NO Firestore profile → Sign them out, show auth flow
+                        await auth().signOut();
+                        setInitialRoute('Launch');
+                    }
+                } catch (error) {
+                    // Error checking profile → Sign out and show auth flow
+                    await auth().signOut();
+                    setInitialRoute('Launch');
+                }
+            } else {
+                // User is NOT logged in → Show LaunchScreen flow
+                setInitialRoute('Launch');
+            }
+        };
+
+        checkAuthAndProfile();
 
         // Also listen for auth changes during runtime
-        const unsubscribe = auth().onAuthStateChanged((userState) => {
+        const unsubscribe = auth().onAuthStateChanged(async (userState) => {
+            console.log('[AppNavigator] onAuthStateChanged fired. User:', userState?.uid || 'null');
             setUser(userState);
+
+            // If user just signed in, verify they have a Firestore profile
+            if (userState && navigationRef.current) {
+                try {
+                    console.log('[AppNavigator] Checking Firestore for user profile...');
+                    const firestore = require('@react-native-firebase/firestore').default;
+                    const userDoc = await firestore().collection('users').doc(userState.uid).get();
+
+                    // Handle both Firebase API versions (exists as property or function)
+                    const docExists = typeof userDoc.exists === 'function' ? userDoc.exists() : userDoc.exists;
+                    console.log('[AppNavigator] Firestore check result. Exists:', docExists);
+
+                    if (!docExists) {
+                        // User has no Firestore profile - sign them out
+                        console.log('[AppNavigator] User has NO profile, signing out...');
+                        await auth().signOut();
+                        return;
+                    }
+                    console.log('[AppNavigator] User HAS profile, allowing navigation');
+                } catch (error: any) {
+                    // Error checking - sign out to be safe
+                    console.log('[AppNavigator] Firestore error:', error.message);
+                    await auth().signOut();
+                    return;
+                }
+            }
 
             // Handle runtime logout
             if (!userState && navigationRef.current) {
+                console.log('[AppNavigator] User logged out, resetting to Welcome');
                 navigationRef.current.reset({
                     index: 1,
                     routes: [{ name: 'Welcome' }, { name: 'Start' }],

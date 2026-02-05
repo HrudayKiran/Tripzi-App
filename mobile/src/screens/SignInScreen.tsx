@@ -35,6 +35,21 @@ const SignInScreen = ({ navigation }) => {
     setLoading(true);
     try {
       const userCredential = await auth().signInWithEmailAndPassword(email, password);
+
+      // Check if user exists in Firestore
+      const userDoc = await firestore().collection('users').doc(userCredential.user.uid).get();
+      if (!userDoc.exists) {
+        // User not found in Firestore - sign out and show error
+        await auth().signOut();
+        Alert.alert(
+          'Account Not Found',
+          'No account found with this email. Please sign up to create a new account.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      // Update last login
       try {
         await firestore().collection('users').doc(userCredential.user.uid).update({
           lastLoginAt: firestore.FieldValue.serverTimestamp(),
@@ -43,7 +58,18 @@ const SignInScreen = ({ navigation }) => {
       showToast('Welcome back! 🎉');
       navigation.reset({ index: 0, routes: [{ name: 'App' }] });
     } catch (error: any) {
-      Alert.alert('Login Failed', error.message);
+      // Handle specific Firebase Auth errors
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+        Alert.alert(
+          'Account Not Found',
+          'No account found with this email. Please sign up to create a new account.',
+          [{ text: 'OK' }]
+        );
+      } else if (error.code === 'auth/wrong-password') {
+        Alert.alert('Login Failed', 'Incorrect password. Please try again.');
+      } else {
+        Alert.alert('Login Failed', error.message);
+      }
     } finally {
       setLoading(false);
     }

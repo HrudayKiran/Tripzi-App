@@ -8,16 +8,19 @@ import * as functions from "firebase-functions/v1";
 import { setGlobalOptions } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 
+import { getFirestore } from "firebase-admin/firestore";
+
 // Set global options for all v2 functions
 setGlobalOptions({ region: "asia-south1" });
 
-// Initialize Firebase Admin with explicit project settings
-const app = admin.initializeApp({
-  projectId: "tripzi-app",
-});
+// Initialize Firebase Admin (relies on environment variables)
+admin.initializeApp();
 
-// Use the default database
-const db = admin.firestore(app);
+// Explicitly use the (default) database as requested
+// This avoids the ambiguity where "default" might be interpreted as a database named "default"
+const db = getFirestore(admin.app(), '(default)');
+
+// Note: Explicit settings removed to allow auto-configuration
 db.settings({
   ignoreUndefinedProperties: true,
 });
@@ -833,47 +836,63 @@ export const onReportUpdated = onDocumentUpdated(
   });
 
 
-
 // ==================== AUTH TRIGGERS (v1) ====================
 
-/**
- * Automatically create user document in Firestore when a new user is created in Auth.
- * This handles both app sign-ups and manual console creation.
- */
-export const createProfileOnAuth = functions.auth.user().onCreate(async (user: functions.auth.UserRecord) => {
-  if (!user) return;
-
-  const userRef = db.collection("users").doc(user.uid);
-  const userDoc = await userRef.get();
-
-  if (!userDoc.exists) {
-    // Fetch fresh user data to get the latest displayName (in case client updated it quickly)
-    let freshUser = user;
-    try {
-      freshUser = await admin.auth().getUser(user.uid);
-    } catch (e) {
-      console.log("Error fetching fresh user data, using event data:", e);
-    }
-
-    await userRef.set({
-      userId: user.uid,
-      email: user.email,
-      displayName: freshUser.displayName || user.displayName || "",
-      photoURL: freshUser.photoURL || user.photoURL || null,
-      emailVerified: user.emailVerified || false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      followers: [],
-      following: [],
-      kycStatus: "none",
-      bio: "",
-      username: user.email ? user.email.split("@")[0] : `user_${user.uid.substring(0, 5)}`,
-    });
-    console.log(`Created Firestore profile for new Auth user: ${user.uid}`);
-  }
-});
-
+// NOTE: createProfileOnAuth has been removed - profiles are created explicitly during sign-up flow
 // NOTE: cleanupOnAuthDelete has been removed - use cleanupAccountOnAuthDelete instead
+
+/**
+ * Scheduled function to clean up orphaned Firebase Auth users.
+ * Deletes Auth users who don't have a corresponding Firestore profile.
+ * This handles users who clicked "Continue with Google" but never completed sign-up.
+ * Runs every hour to keep Auth records clean.
+ */
+export const cleanupOrphanedAuthUsers = functions.pubsub
+  .schedule("every 1 hours")
+  .onRun(async () => {
+    console.log("Starting orphaned Auth user cleanup...");
+    let deletedCount = 0;
+    let checkedCount = 0;
+    let nextPageToken: string | undefined;
+
+    try {
+      do {
+        // List users in batches (max 1000 per request)
+        const listResult = await admin.auth().listUsers(1000, nextPageToken);
+
+        for (const user of listResult.users) {
+          checkedCount++;
+
+          // Skip users created in the last 5 minutes (give them time to complete sign-up)
+          const createdAt = new Date(user.metadata.creationTime).getTime();
+          const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+          if (createdAt > fiveMinutesAgo) {
+            console.log(`Skipping recent user ${user.uid} - created less than 5 minutes ago`);
+            continue;
+          }
+
+          // Check if user has a Firestore profile
+          const userDoc = await db.collection("users").doc(user.uid).get();
+
+          if (!userDoc.exists) {
+            // User has Auth but no Firestore profile - delete them
+            console.log(`Deleting orphaned Auth user: ${user.uid} (${user.email || 'no email'})`);
+            await admin.auth().deleteUser(user.uid);
+            deletedCount++;
+          }
+        }
+
+        nextPageToken = listResult.pageToken;
+      } while (nextPageToken);
+
+      console.log(`Cleanup complete. Checked: ${checkedCount}, Deleted: ${deletedCount}`);
+      return { checked: checkedCount, deleted: deletedCount };
+    } catch (error) {
+      console.error("Error during orphaned user cleanup:", error);
+      throw error;
+    }
+  });
+
 
 // ==================== CLEANUP HELPERS ====================
 
