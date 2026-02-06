@@ -22,6 +22,7 @@ import SignUpScreen from '../screens/SignUpScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import FeedScreen from '../screens/FeedScreen';
 import MomentsScreen from '../screens/MomentsScreen';
+import SearchScreen from '../screens/SearchScreen';
 import MyTripsScreen from '../screens/MyTripsScreen';
 
 import ChatsListScreen from '../screens/ChatsListScreen';
@@ -80,10 +81,10 @@ const AppTabs = () => {
                 }}
             />
             <Tab.Screen
-                name="Moments"
-                component={MomentsScreen}
+                name="Search"
+                component={SearchScreen}
                 options={{
-                    tabBarIcon: ({ color, size }) => <Ionicons name="film-outline" size={size} color={color} />,
+                    tabBarIcon: ({ color, size }) => <Ionicons name="search-outline" size={size} color={color} />,
                 }}
             />
             <Tab.Screen
@@ -153,15 +154,30 @@ const AppNavigator = () => {
                 try {
                     console.log('[AppNavigator] Checking Firestore for user profile...');
                     const firestore = require('@react-native-firebase/firestore').default;
-                    const userDoc = await firestore().collection('users').doc(userState.uid).get();
 
-                    // Handle both Firebase API versions (exists as property or function)
-                    const docExists = typeof userDoc.exists === 'function' ? userDoc.exists() : userDoc.exists;
-                    console.log('[AppNavigator] Firestore check result. Exists:', docExists);
+                    // Retry logic to handle race condition during sign-up
+                    // The Firestore document might not exist immediately after creation
+                    let docExists = false;
+                    const maxRetries = 3;
+                    const retryDelay = 1000; // 1 second
+
+                    for (let attempt = 0; attempt < maxRetries; attempt++) {
+                        const userDoc = await firestore().collection('users').doc(userState.uid).get();
+                        docExists = typeof userDoc.exists === 'function' ? userDoc.exists() : userDoc.exists;
+                        console.log(`[AppNavigator] Firestore check attempt ${attempt + 1}. Exists:`, docExists);
+
+                        if (docExists) break;
+
+                        // Wait before retrying (but not after the last attempt)
+                        if (attempt < maxRetries - 1) {
+                            console.log('[AppNavigator] Doc not found, waiting before retry...');
+                            await new Promise(resolve => setTimeout(resolve, retryDelay));
+                        }
+                    }
 
                     if (!docExists) {
-                        // User has no Firestore profile - sign them out
-                        console.log('[AppNavigator] User has NO profile, signing out...');
+                        // User has no Firestore profile after retries - sign them out
+                        console.log('[AppNavigator] User has NO profile after retries, signing out...');
                         await auth().signOut();
                         return;
                     }
@@ -276,6 +292,7 @@ const AppNavigator = () => {
                         <Stack.Screen name="GroupInfo" component={GroupInfoScreen} />
                         <Stack.Screen name="Stories" component={StoriesScreen} />
                         <Stack.Screen name="KYC" component={KycScreen} />
+                        <Stack.Screen name="KycScreen" component={KycScreen} />
                         <Stack.Screen name="Terms" component={TermsScreen} />
                         <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
                         <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />

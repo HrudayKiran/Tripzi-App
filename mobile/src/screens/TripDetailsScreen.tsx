@@ -12,6 +12,7 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/consta
 import NotificationService from '../utils/notificationService';
 import ReportTripModal from '../components/ReportTripModal';
 import { pickAndUploadImage } from '../utils/imageUpload';
+import { useKycGate } from '../hooks/useKycGate';
 
 const { width } = Dimensions.get('window');
 
@@ -58,6 +59,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const { tripId } = route.params;
   const user = auth().currentUser;
+  const { isAgeVerified, kycStatus } = useKycGate();
 
   // Rating states
   const [userRating, setUserRating] = useState(0);
@@ -242,6 +244,16 @@ const TripDetailsScreen = ({ route, navigation }) => {
   const handleJoinToggle = async () => {
     if (!user) {
       Alert.alert('Sign In Required', 'Please sign in to join trips.');
+      return;
+    }
+
+    // Check age verification for joining
+    if (!isJoined && !isAgeVerified) {
+      Alert.alert(
+        'Age Verification Required',
+        'You must complete age verification (18+) before joining trips. Go to Profile → Verify Age to get started.',
+        [{ text: 'OK' }]
+      );
       return;
     }
 

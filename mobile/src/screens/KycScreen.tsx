@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Image, ScrollView, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
@@ -11,17 +11,14 @@ import storage from '@react-native-firebase/storage';
 import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
-import { validateAadhaar, formatAadhaar, maskAadhaar } from '../utils/aadhaarValidator';
 
 const KycScreen = ({ navigation }) => {
   const { colors } = useTheme();
-  const [aadhaarNumber, setAadhaarNumber] = useState('');
-  const [aadhaarImage, setAadhaarImage] = useState<string | null>(null);
   const [userImage, setUserImage] = useState<string | null>(null);
   const [dateOfBirth, setDateOfBirth] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [errors, setErrors] = useState<{ aadhaar?: string; aadhaarImage?: string; userImage?: string; dob?: string }>({});
+  const [errors, setErrors] = useState<{ userImage?: string; dob?: string }>({});
 
   const calculateAge = (dob: Date): number => {
     const today = new Date();
@@ -49,7 +46,7 @@ const KycScreen = ({ navigation }) => {
     }
   };
 
-  const pickImage = async (setImage: (uri: string) => void, type: string) => {
+  const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission needed', 'Please grant camera roll permissions.');
@@ -58,14 +55,14 @@ const KycScreen = ({ navigation }) => {
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
-      aspect: type === 'aadhaar' ? [16, 10] : [1, 1],
+      allowsEditing: true,
+      aspect: [1, 1],
       quality: 0.8,
     });
 
     if (!result.canceled && result.assets[0]) {
-      setImage(result.assets[0].uri);
-      setErrors(prev => ({ ...prev, [type === 'aadhaar' ? 'aadhaarImage' : 'userImage']: undefined }));
+      setUserImage(result.assets[0].uri);
+      setErrors(prev => ({ ...prev, userImage: undefined }));
     }
   };
 
@@ -78,24 +75,10 @@ const KycScreen = ({ navigation }) => {
   const handleSubmitKyc = async () => {
     const newErrors: typeof errors = {};
 
-    // Validate Aadhaar using Verhoeff algorithm
-    if (!aadhaarNumber) {
-      newErrors.aadhaar = 'Aadhaar number is required';
-    } else {
-      const aadhaarValidation = validateAadhaar(aadhaarNumber);
-      if (!aadhaarValidation.valid) {
-        newErrors.aadhaar = aadhaarValidation.error || 'Invalid Aadhaar number';
-      }
-    }
-
     if (!dateOfBirth) {
       newErrors.dob = 'Date of birth is required';
     } else if (calculateAge(dateOfBirth) < 18) {
       newErrors.dob = 'You must be at least 18 years old';
-    }
-
-    if (!aadhaarImage) {
-      newErrors.aadhaarImage = 'Aadhaar card image is required';
     }
 
     if (!userImage) {
@@ -111,11 +94,7 @@ const KycScreen = ({ navigation }) => {
     const currentUser = auth().currentUser;
 
     try {
-      // Upload images to Firebase Storage
-      const aadhaarImageUrl = await uploadImageToStorage(
-        aadhaarImage!,
-        `kyc/${currentUser!.uid}/aadhaar_${Date.now()}.jpg`
-      );
+      // Upload passport photo to Firebase Storage
       const selfieImageUrl = await uploadImageToStorage(
         userImage!,
         `kyc/${currentUser!.uid}/selfie_${Date.now()}.jpg`
@@ -127,8 +106,6 @@ const KycScreen = ({ navigation }) => {
         status: 'pending',
         dateOfBirth: firestore.Timestamp.fromDate(dateOfBirth!),
         ageVerified: calculateAge(dateOfBirth!) >= 18,
-        aadhaarNumber: aadhaarNumber, // Consider hashing in production
-        aadhaarImageUrl,
         selfieImageUrl,
         submittedAt: firestore.FieldValue.serverTimestamp(),
         reviewedAt: null,
@@ -136,9 +113,10 @@ const KycScreen = ({ navigation }) => {
         rejectionReason: null,
       });
 
-      // Update user's kycStatus
+      // Update user's kycStatus and store DOB
       await firestore().collection('users').doc(currentUser!.uid).update({
         kycStatus: 'pending',
+        dateOfBirth: firestore.Timestamp.fromDate(dateOfBirth!),
       });
 
       setUploading(false);
@@ -160,7 +138,7 @@ const KycScreen = ({ navigation }) => {
           <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, { backgroundColor: colors.card }]}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>KYC Verification</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Age Verification</Text>
           <View style={{ width: 40 }} />
         </View>
 
@@ -169,31 +147,25 @@ const KycScreen = ({ navigation }) => {
           <LinearGradient colors={['#8B5CF6', '#EC4899']} style={styles.iconGradient}>
             <Ionicons name="shield-checkmark" size={28} color="#fff" />
           </LinearGradient>
-          <Text style={[styles.infoTitle, { color: colors.text }]}>Why KYC?</Text>
+          <Text style={[styles.infoTitle, { color: colors.text }]}>Why Verify?</Text>
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-            KYC verification helps us maintain a safe community. Verified users get a verification badge and can create & join trips.
+            Age verification helps us maintain a safe community. Verified users (18+) can create & join trips, and get a verification badge.
           </Text>
         </Animatable.View>
 
         {/* Instructions */}
         <Animatable.View animation="fadeInUp" delay={100} style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>📋 Instructions</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>📋 Simple 2-Step Verification</Text>
           <View style={[styles.instructionCard, { backgroundColor: colors.card }]}>
             <View style={styles.instructionItem}>
               <View style={[styles.stepNumber, { backgroundColor: colors.primaryLight }]}>
                 <Text style={[styles.stepText, { color: colors.primary }]}>1</Text>
               </View>
-              <Text style={[styles.instructionText, { color: colors.text }]}>Enter your 12-digit Aadhaar number</Text>
+              <Text style={[styles.instructionText, { color: colors.text }]}>Enter your date of birth</Text>
             </View>
             <View style={styles.instructionItem}>
               <View style={[styles.stepNumber, { backgroundColor: colors.primaryLight }]}>
                 <Text style={[styles.stepText, { color: colors.primary }]}>2</Text>
-              </View>
-              <Text style={[styles.instructionText, { color: colors.text }]}>Upload a clear photo of your Aadhaar card (front side)</Text>
-            </View>
-            <View style={styles.instructionItem}>
-              <View style={[styles.stepNumber, { backgroundColor: colors.primaryLight }]}>
-                <Text style={[styles.stepText, { color: colors.primary }]}>3</Text>
               </View>
               <Text style={[styles.instructionText, { color: colors.text }]}>Upload a passport-size photo (face clearly visible)</Text>
             </View>
@@ -202,29 +174,6 @@ const KycScreen = ({ navigation }) => {
 
         {/* Form */}
         <Animatable.View animation="fadeInUp" delay={200} style={styles.section}>
-          {/* Aadhaar Number */}
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: colors.text }]}>
-              Aadhaar Number <Text style={styles.required}>*</Text>
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.aadhaar ? '#EF4444' : colors.border }
-              ]}
-              placeholder="Enter 12-digit Aadhaar number"
-              placeholderTextColor={colors.textSecondary}
-              value={aadhaarNumber}
-              onChangeText={(text) => {
-                setAadhaarNumber(text);
-                setErrors(prev => ({ ...prev, aadhaar: null }));
-              }}
-              keyboardType="numeric"
-              maxLength={12}
-            />
-            {errors.aadhaar && <Text style={styles.errorText}>{errors.aadhaar}</Text>}
-          </View>
-
           {/* Date of Birth */}
           <View style={styles.inputGroup}>
             <Text style={[styles.label, { color: colors.text }]}>
@@ -262,31 +211,6 @@ const KycScreen = ({ navigation }) => {
             />
           )}
 
-          {/* Aadhaar Image */}
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: colors.text }]}>
-              Aadhaar Card Photo <Text style={styles.required}>*</Text>
-            </Text>
-            <TouchableOpacity
-              style={[
-                styles.imagePicker,
-                { backgroundColor: colors.card, borderColor: errors.aadhaarImage ? '#EF4444' : colors.border }
-              ]}
-              onPress={() => pickImage(setAadhaarImage, 'aadhaar')}
-            >
-              {aadhaarImage ? (
-                <Image source={{ uri: aadhaarImage }} style={styles.previewImage} />
-              ) : (
-                <View style={styles.uploadPlaceholder}>
-                  <Ionicons name="card-outline" size={40} color={colors.primary} />
-                  <Text style={[styles.uploadText, { color: colors.text }]}>Upload Aadhaar Card</Text>
-                  <Text style={[styles.uploadHint, { color: colors.textSecondary }]}>Tap to select image</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            {errors.aadhaarImage && <Text style={styles.errorText}>{errors.aadhaarImage}</Text>}
-          </View>
-
           {/* Passport Photo */}
           <View style={styles.inputGroup}>
             <Text style={[styles.label, { color: colors.text }]}>
@@ -297,7 +221,7 @@ const KycScreen = ({ navigation }) => {
                 styles.imagePicker,
                 { backgroundColor: colors.card, borderColor: errors.userImage ? '#EF4444' : colors.border }
               ]}
-              onPress={() => pickImage(setUserImage, 'user')}
+              onPress={pickImage}
             >
               {userImage ? (
                 <Image source={{ uri: userImage }} style={styles.previewImage} />
@@ -355,7 +279,6 @@ const styles = StyleSheet.create({
   inputGroup: { marginTop: SPACING.lg },
   label: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold, marginBottom: SPACING.sm },
   required: { color: '#EF4444' },
-  input: { padding: SPACING.md, borderRadius: BORDER_RADIUS.md, borderWidth: 1, fontSize: FONT_SIZE.md },
   errorText: { color: '#EF4444', fontSize: FONT_SIZE.xs, marginTop: SPACING.xs },
   imagePicker: { borderWidth: 1, borderStyle: 'dashed', borderRadius: BORDER_RADIUS.lg, padding: SPACING.lg, alignItems: 'center', minHeight: 140 },
   uploadPlaceholder: { alignItems: 'center', gap: SPACING.xs },
@@ -365,7 +288,6 @@ const styles = StyleSheet.create({
   submitContainer: { marginTop: SPACING.xl },
   submitButton: { flexDirection: 'row', padding: SPACING.lg, borderRadius: BORDER_RADIUS.lg, alignItems: 'center', justifyContent: 'center', gap: SPACING.sm },
   submitButtonText: { color: '#fff', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
-  // DOB Picker styles
   datePickerButton: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, padding: SPACING.md, borderRadius: BORDER_RADIUS.md, borderWidth: 1 },
   dateText: { flex: 1, fontSize: FONT_SIZE.md },
   ageVerifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.xs },

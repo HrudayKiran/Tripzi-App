@@ -58,7 +58,7 @@ const GENDER_PREFERENCES = [
 
 const CreateTripScreen = ({ navigation }) => {
     const { colors } = useTheme();
-    const { isKycVerified, kycStatus, isLoading: isKycLoading } = useKycGate();
+    const { isAgeVerified, kycStatus, isLoading: isKycLoading } = useKycGate();
     const [showKycModal, setShowKycModal] = useState(false);
     const [step, setStep] = useState(1);
     const totalSteps = 5;
@@ -225,8 +225,8 @@ const CreateTripScreen = ({ navigation }) => {
             return;
         }
 
-        // Check KYC status using the hook (already loaded)
-        if (!isKycVerified && kycStatus !== 'loading') {
+        // Check age verification status using the hook (already loaded)
+        if (!isAgeVerified && kycStatus !== 'loading') {
             setShowKycModal(true);
             return;
         }

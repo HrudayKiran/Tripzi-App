@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Animated, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
+import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 import { useNotifications, AppNotification, NotificationType } from '../hooks/useNotifications';
@@ -49,7 +50,7 @@ const getTimeAgo = (date: Date): string => {
     return `${Math.floor(seconds / 86400)}d ago`;
 };
 
-// Notification Item Component
+// Notification Item Component with Swipe-to-Delete
 const NotificationItem = ({
     notification,
     onPress,
@@ -62,37 +63,56 @@ const NotificationItem = ({
     colors: any;
 }) => {
     const { icon, color } = getNotificationStyle(notification.type);
+    const swipeableRef = useRef<Swipeable>(null);
+
+    const renderRightActions = () => (
+        <TouchableOpacity
+            style={styles.deleteAction}
+            onPress={() => {
+                swipeableRef.current?.close();
+                onDelete();
+            }}
+        >
+            <Ionicons name="trash-outline" size={24} color="#fff" />
+            <Text style={styles.deleteText}>Delete</Text>
+        </TouchableOpacity>
+    );
 
     return (
-        <TouchableOpacity
-            style={[
-                styles.notificationItem,
-                { backgroundColor: colors.card },
-                !notification.read && { borderLeftWidth: 3, borderLeftColor: color }
-            ]}
-            onPress={onPress}
-            onLongPress={onDelete}
-            activeOpacity={0.7}
-            delayLongPress={500}
+        <Swipeable
+            ref={swipeableRef}
+            renderRightActions={renderRightActions}
+            rightThreshold={40}
+            overshootRight={false}
         >
-            <View style={[styles.notificationIcon, { backgroundColor: `${color}20` }]}>
-                <Ionicons name={icon as any} size={20} color={color} />
-            </View>
-            <View style={styles.notificationContent}>
-                <Text style={[styles.notificationTitle, { color: colors.text }]}>
-                    {notification.title}
-                </Text>
-                <Text style={[styles.notificationMessage, { color: colors.textSecondary }]} numberOfLines={2}>
-                    {notification.message}
-                </Text>
-                <Text style={[styles.notificationTime, { color: colors.textSecondary }]}>
-                    {getTimeAgo(notification.createdAt)}
-                </Text>
-            </View>
-            {!notification.read && (
-                <View style={[styles.unreadDot, { backgroundColor: color }]} />
-            )}
-        </TouchableOpacity>
+            <TouchableOpacity
+                style={[
+                    styles.notificationItem,
+                    { backgroundColor: colors.card },
+                    !notification.read && { borderLeftWidth: 3, borderLeftColor: color }
+                ]}
+                onPress={onPress}
+                activeOpacity={0.7}
+            >
+                <View style={[styles.notificationIcon, { backgroundColor: `${color}20` }]}>
+                    <Ionicons name={icon as any} size={20} color={color} />
+                </View>
+                <View style={styles.notificationContent}>
+                    <Text style={[styles.notificationTitle, { color: colors.text }]}>
+                        {notification.title}
+                    </Text>
+                    <Text style={[styles.notificationMessage, { color: colors.textSecondary }]} numberOfLines={2}>
+                        {notification.message}
+                    </Text>
+                    <Text style={[styles.notificationTime, { color: colors.textSecondary }]}>
+                        {getTimeAgo(notification.createdAt)}
+                    </Text>
+                </View>
+                {!notification.read && (
+                    <View style={[styles.unreadDot, { backgroundColor: color }]} />
+                )}
+            </TouchableOpacity>
+        </Swipeable>
     );
 };
 
@@ -154,96 +174,98 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
 
     return (
         <Modal visible={visible} transparent={true} onRequestClose={onClose} animationType="none">
-            <View style={styles.modalOverlay}>
-                <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
-                <Animated.View
-                    style={[
-                        styles.modalContainer,
-                        { backgroundColor: colors.background },
-                        { transform: [{ translateX: slideAnim }] }
-                    ]}
-                >
-                    <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-                        {/* Header */}
-                        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                            <View style={styles.headerLeft}>
-                                <View style={[styles.headerIcon, { backgroundColor: colors.primaryLight }]}>
-                                    <Ionicons name="notifications" size={20} color={colors.primary} />
-                                </View>
-                                <Text style={[styles.title, { color: colors.text }]}>Notifications</Text>
-                                {unreadCount > 0 && (
-                                    <View style={styles.badge}>
-                                        <Text style={styles.badgeText}>{unreadCount}</Text>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+                <View style={styles.modalOverlay}>
+                    <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
+                    <Animated.View
+                        style={[
+                            styles.modalContainer,
+                            { backgroundColor: colors.background },
+                            { transform: [{ translateX: slideAnim }] }
+                        ]}
+                    >
+                        <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+                            {/* Header */}
+                            <View style={[styles.header, { borderBottomColor: colors.border }]}>
+                                <View style={styles.headerLeft}>
+                                    <View style={[styles.headerIcon, { backgroundColor: colors.primaryLight }]}>
+                                        <Ionicons name="notifications" size={20} color={colors.primary} />
                                     </View>
-                                )}
-                            </View>
-                            <TouchableOpacity
-                                onPress={onClose}
-                                style={styles.closeButton}
-                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                            >
-                                <Ionicons name="close" size={24} color={colors.text} />
-                            </TouchableOpacity>
-                        </View>
-
-                        {loading ? (
-                            <View style={styles.loadingContainer}>
-                                <ActivityIndicator size="large" color={colors.primary} />
-                            </View>
-                        ) : notifications.length > 0 ? (
-                            <>
-                                {/* Action buttons */}
-                                <View style={styles.actionRow}>
-                                    <Text style={[styles.hintText, { color: colors.textSecondary }]}>
-                                        Long press to delete
-                                    </Text>
+                                    <Text style={[styles.title, { color: colors.text }]}>Notifications</Text>
                                     {unreadCount > 0 && (
-                                        <TouchableOpacity
-                                            style={styles.markAllButton}
-                                            onPress={markAllAsRead}
-                                            activeOpacity={0.7}
-                                        >
-                                            <Ionicons name="checkmark-done" size={16} color={colors.primary} />
-                                            <Text style={[styles.markAllText, { color: colors.primary }]}>
-                                                Mark all read
-                                            </Text>
-                                        </TouchableOpacity>
+                                        <View style={styles.badge}>
+                                            <Text style={styles.badgeText}>{unreadCount}</Text>
+                                        </View>
                                     )}
                                 </View>
-
-                                {/* Notifications List */}
-                                <FlatList
-                                    data={notifications}
-                                    keyExtractor={(item) => item.id}
-                                    contentContainerStyle={styles.content}
-                                    showsVerticalScrollIndicator={false}
-                                    renderItem={({ item, index }) => (
-                                        <Animatable.View animation="fadeInRight" delay={index * 30}>
-                                            <NotificationItem
-                                                notification={item}
-                                                onPress={() => handleNotificationPress(item)}
-                                                onDelete={() => handleDeleteNotification(item.id)}
-                                                colors={colors}
-                                            />
-                                        </Animatable.View>
-                                    )}
-                                />
-                            </>
-                        ) : (
-                            /* Empty State */
-                            <View style={styles.emptyState}>
-                                <View style={[styles.emptyIcon, { backgroundColor: colors.primaryLight }]}>
-                                    <Ionicons name="notifications-off-outline" size={48} color={colors.primary} />
-                                </View>
-                                <Text style={[styles.emptyTitle, { color: colors.text }]}>All caught up!</Text>
-                                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                                    You have no new notifications
-                                </Text>
+                                <TouchableOpacity
+                                    onPress={onClose}
+                                    style={styles.closeButton}
+                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                >
+                                    <Ionicons name="close" size={24} color={colors.text} />
+                                </TouchableOpacity>
                             </View>
-                        )}
-                    </SafeAreaView>
-                </Animated.View>
-            </View>
+
+                            {loading ? (
+                                <View style={styles.loadingContainer}>
+                                    <ActivityIndicator size="large" color={colors.primary} />
+                                </View>
+                            ) : notifications.length > 0 ? (
+                                <>
+                                    {/* Action buttons */}
+                                    <View style={styles.actionRow}>
+                                        <Text style={[styles.hintText, { color: colors.textSecondary }]}>
+                                            Swipe left to delete
+                                        </Text>
+                                        {unreadCount > 0 && (
+                                            <TouchableOpacity
+                                                style={styles.markAllButton}
+                                                onPress={markAllAsRead}
+                                                activeOpacity={0.7}
+                                            >
+                                                <Ionicons name="checkmark-done" size={16} color={colors.primary} />
+                                                <Text style={[styles.markAllText, { color: colors.primary }]}>
+                                                    Mark all read
+                                                </Text>
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
+
+                                    {/* Notifications List */}
+                                    <FlatList
+                                        data={notifications}
+                                        keyExtractor={(item) => item.id}
+                                        contentContainerStyle={styles.content}
+                                        showsVerticalScrollIndicator={false}
+                                        renderItem={({ item, index }) => (
+                                            <Animatable.View animation="fadeInRight" delay={index * 30}>
+                                                <NotificationItem
+                                                    notification={item}
+                                                    onPress={() => handleNotificationPress(item)}
+                                                    onDelete={() => handleDeleteNotification(item.id)}
+                                                    colors={colors}
+                                                />
+                                            </Animatable.View>
+                                        )}
+                                    />
+                                </>
+                            ) : (
+                                /* Empty State */
+                                <View style={styles.emptyState}>
+                                    <View style={[styles.emptyIcon, { backgroundColor: colors.primaryLight }]}>
+                                        <Ionicons name="notifications-off-outline" size={48} color={colors.primary} />
+                                    </View>
+                                    <Text style={[styles.emptyTitle, { color: colors.text }]}>All caught up!</Text>
+                                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                                        You have no new notifications
+                                    </Text>
+                                </View>
+                            )}
+                        </SafeAreaView>
+                    </Animated.View>
+                </View>
+            </GestureHandlerRootView>
         </Modal>
     );
 };
@@ -276,6 +298,8 @@ const styles = StyleSheet.create({
     emptyIcon: { width: 100, height: 100, borderRadius: 50, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.xl },
     emptyTitle: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold, marginBottom: SPACING.sm },
     emptyText: { fontSize: FONT_SIZE.sm, textAlign: 'center' },
+    deleteAction: { backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', width: 80, marginBottom: SPACING.sm, borderRadius: BORDER_RADIUS.md },
+    deleteText: { color: '#fff', fontSize: FONT_SIZE.xs, marginTop: SPACING.xs },
 });
 
 export default NotificationsModal;

@@ -8,19 +8,16 @@ import * as functions from "firebase-functions/v1";
 import { setGlobalOptions } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 
-import { getFirestore } from "firebase-admin/firestore";
-
 // Set global options for all v2 functions
 setGlobalOptions({ region: "asia-south1" });
 
-// Initialize Firebase Admin (relies on environment variables)
+// Initialize Firebase Admin
 admin.initializeApp();
 
-// Explicitly use the (default) database as requested
-// This avoids the ambiguity where "default" might be interpreted as a database named "default"
-const db = getFirestore(admin.app(), '(default)');
+// Use standard Firestore initialization (SDK auto-resolves to default database)
+const db = admin.firestore();
 
-// Note: Explicit settings removed to allow auto-configuration
+// Configure Firestore settings
 db.settings({
   ignoreUndefinedProperties: true,
 });
@@ -139,7 +136,7 @@ async function createNotification(data: {
  * Send push and in-app notification when user KYC status changes to 'verified'.
  */
 export const onKycStatusChange = onDocumentUpdated(
-  { document: "users/{userId}", database: "default" },
+  { document: "users/{userId}", database: "(default)" },
   async (event) => {
     if (!event.data) return;
 
@@ -203,7 +200,7 @@ export const onKycStatusChange = onDocumentUpdated(
  * Create group chat when trip reaches max travelers.
  */
 export const createGroupChatOnTripFull = onDocumentUpdated(
-  { document: "trips/{tripId}", database: "default" },
+  { document: "trips/{tripId}", database: "(default)" },
   async (event) => {
     if (!event.data) return;
 
@@ -258,7 +255,7 @@ export const createGroupChatOnTripFull = onDocumentUpdated(
  * Send notification when someone likes a trip/post.
  */
 export const onLikeCreated = onDocumentCreated(
-  { document: "likes/{likeId}", database: "default" },
+  { document: "likes/{likeId}", database: "(default)" },
   async (event) => {
     if (!event.data) return;
 
@@ -304,7 +301,7 @@ export const onLikeCreated = onDocumentCreated(
  * Listens to subcollection: trips/{tripId}/comments/{commentId}
  */
 export const onCommentCreated = onDocumentCreated(
-  { document: "trips/{tripId}/comments/{commentId}", database: "default" },
+  { document: "trips/{tripId}/comments/{commentId}", database: "(default)" },
   async (event) => {
     if (!event.data) return;
 
@@ -355,7 +352,7 @@ export const onCommentCreated = onDocumentCreated(
  * Send notification when a new message is received.
  */
 export const onMessageCreated = onDocumentCreated(
-  { document: "chats/{chatId}/messages/{messageId}", database: "default" },
+  { document: "chats/{chatId}/messages/{messageId}", database: "(default)" },
   async (event) => {
     if (!event.data) return;
 
@@ -422,7 +419,7 @@ export const onMessageCreated = onDocumentCreated(
  * Clean up messages subcollection and chat media when a chat is deleted.
  */
 export const onChatDeleted = onDocumentDeleted(
-  { document: "chats/{chatId}", database: "default" },
+  { document: "chats/{chatId}", database: "(default)" },
   async (event) => {
     if (!event.data) return;
 
@@ -475,7 +472,7 @@ export const onChatDeleted = onDocumentDeleted(
  * Send notification when KYC status changes (approved/rejected).
  */
 export const onKycUpdated = onDocumentUpdated(
-  { document: "kyc/{kycId}", database: "default" },
+  { document: "kyc/{kycId}", database: "(default)" },
   async (event) => {
     if (!event.data) return;
 
@@ -525,7 +522,7 @@ export const onKycUpdated = onDocumentUpdated(
  * Send notification when someone joins OR leaves a trip.
  */
 export const onTripParticipantChange = onDocumentUpdated(
-  { document: "trips/{tripId}", database: "default" },
+  { document: "trips/{tripId}", database: "(default)" },
   async (event) => {
     if (!event.data) return;
 
@@ -609,7 +606,7 @@ export const onTripParticipantChange = onDocumentUpdated(
  * Notify all participants when a trip is deleted/cancelled.
  */
 export const onTripDeleted = onDocumentDeleted(
-  { document: "trips/{tripId}", database: "default" },
+  { document: "trips/{tripId}", database: "(default)" },
   async (event) => {
     if (!event.data) return;
 
@@ -659,7 +656,7 @@ export const onTripDeleted = onDocumentDeleted(
  * Detect when 'followers' array changes => Send Notification.
  */
 export const onUserFollowed = onDocumentUpdated(
-  { document: "users/{userId}", database: "default" },
+  { document: "users/{userId}", database: "(default)" },
   async (event) => {
     if (!event.data) return;
 
@@ -711,7 +708,7 @@ export const onUserFollowed = onDocumentUpdated(
  * We will fully implement it but Commented OUT the heavy loop.
  */
 export const onStoryCreated = onDocumentCreated(
-  { document: "stories/{storyId}", database: "default" },
+  { document: "stories/{storyId}", database: "(default)" },
   async (event) => {
     // Placeholder for Story Notifications
     // Requires Fetching all followers -> Sending msg.
@@ -726,7 +723,7 @@ export const onStoryCreated = onDocumentCreated(
  * Create welcome/KYC reminder notification for new users.
  */
 export const onUserCreated = onDocumentCreated(
-  { document: "users/{userId}", database: "default" },
+  { document: "users/{userId}", database: "(default)" },
   async (event) => {
     if (!event.data) return;
 
@@ -760,7 +757,7 @@ export const onUserCreated = onDocumentCreated(
  * Notify admins when a new report is submitted.
  */
 export const onReportCreated = onDocumentCreated(
-  { document: "reports/{reportId}", database: "default" },
+  { document: "reports/{reportId}", database: "(default)" },
   async (event) => {
     if (!event.data) return;
 
@@ -799,7 +796,7 @@ export const onReportCreated = onDocumentCreated(
  * Notify reporter when their report status changes.
  */
 export const onReportUpdated = onDocumentUpdated(
-  { document: "reports/{reportId}", database: "default" },
+  { document: "reports/{reportId}", database: "(default)" },
   async (event) => {
     if (!event.data) return;
 
@@ -1059,7 +1056,7 @@ async function cleanupUserData(userId: string) {
  * This cleans up: trips, chats, storage files, push_tokens, etc.
  */
 export const onUserDeleted = onDocumentDeleted(
-  { document: "users/{userId}", database: "default" },
+  { document: "users/{userId}", database: "(default)" },
   async (event) => {
     if (!event.data) return;
     const userId = event.params.userId;
@@ -1137,7 +1134,7 @@ export const deleteMyAccount = functions.https.onCall(async (data, context) => {
  * Triggers when 'deletedForEveryoneAt' is set on a message.
  */
 export const deleteMessageMedia = onDocumentUpdated(
-  { document: "chats/{chatId}/messages/{messageId}", database: "default" },
+  { document: "chats/{chatId}/messages/{messageId}", database: "(default)" },
   async (event) => {
     if (!event.data) return;
 
@@ -1374,7 +1371,7 @@ export const checkRateLimit = (uid: string) => {
  * Can apply warnings, rating penalties, or suspensions.
  */
 export const onReportResolved = onDocumentUpdated(
-  { document: "reports/{reportId}", database: "default" },
+  { document: "reports/{reportId}", database: "(default)" },
   async (event) => {
     if (!event.data) return;
 
@@ -1434,7 +1431,7 @@ export const onReportResolved = onDocumentUpdated(
  * Recalculates trip average and organizer's overall rating.
  */
 export const onRatingCreated = onDocumentCreated(
-  { document: "trips/{tripId}/ratings/{ratingId}", database: "default" },
+  { document: "trips/{tripId}/ratings/{ratingId}", database: "(default)" },
   async (event) => {
     if (!event.data) return;
     const { tripId } = event.params;
