@@ -114,8 +114,10 @@ service cloud.firestore {
     // ==================== NOTIFICATIONS ====================
     
     match /notifications/{notificationId} {
-      allow read: if isAuthenticated() && resource.data.recipientId == request.auth.uid;
-      allow create: if false; // Only Cloud Functions
+      // Allow read only if user is recipient (works with where clause)
+      allow read: if isAuthenticated() && 
+        (request.auth.uid == resource.data.recipientId || isAdmin());
+      allow create: if isAdmin(); // Only admins/Cloud Functions can create
       allow update, delete: if isAuthenticated() && resource.data.recipientId == request.auth.uid;
     }
     

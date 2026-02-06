@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, FlatList, TextInput, Animated, Dimensions, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, FlatList, TextInput, Animated, Dimensions, StatusBar, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
@@ -20,6 +20,18 @@ const FollowersModal = ({ visible, onClose, title, users, onUserPress }: Followe
     const { colors, isDarkMode } = useTheme();
     const [searchQuery, setSearchQuery] = useState('');
     const slideAnim = useRef(new Animated.Value(width)).current;
+
+    // Handle Android back gesture/button
+    useEffect(() => {
+        if (!visible) return;
+
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+            onClose();
+            return true; // Prevent default back behavior
+        });
+
+        return () => backHandler.remove();
+    }, [visible, onClose]);
 
     useEffect(() => {
         if (visible) {

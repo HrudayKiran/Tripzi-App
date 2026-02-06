@@ -60,6 +60,7 @@ const AppTabs = () => {
             screenOptions={{
                 headerShown: false,
                 tabBarShowLabel: true,
+                tabBarHideOnKeyboard: true,
                 tabBarStyle: {
                     backgroundColor: colors.card,
                     borderTopColor: colors.border,

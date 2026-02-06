@@ -51,6 +51,9 @@ const UserProfileScreen = ({ route, navigation }) => {
     const [currentTrip, setCurrentTrip] = useState(null);
     const [editName, setEditName] = useState('');
     const [editBio, setEditBio] = useState('');
+    const [editUsername, setEditUsername] = useState('');
+    const [usernameError, setUsernameError] = useState('');
+    const [checkingUsername, setCheckingUsername] = useState(false);
     const [editTripTitle, setEditTripTitle] = useState('');
     const [editTripLocation, setEditTripLocation] = useState('');
     const [profileImage, setProfileImage] = useState(null);
@@ -61,6 +64,19 @@ const UserProfileScreen = ({ route, navigation }) => {
     const storyProgress = useRef(new Animated.Value(0)).current;
 
     const isOwnProfile = userId === currentUser?.uid;
+
+    // Default Avatar Component (Instagram-style)
+    const DefaultAvatar = ({ name, size = 80 }: { name: string; size?: number }) => {
+        const initial = (name || 'U').charAt(0).toUpperCase();
+        return (
+            <LinearGradient
+                colors={['#8B5CF6', '#EC4899', '#F59E0B']}
+                style={[styles.defaultAvatar, { width: size, height: size, borderRadius: size / 2 }]}
+            >
+                <Text style={[styles.defaultAvatarText, { fontSize: size * 0.4 }]}>{initial}</Text>
+            </LinearGradient>
+        );
+    };
 
     // Reload data when screen comes into focus (e.g., after creating a trip)
     useEffect(() => {
@@ -112,6 +128,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                 setUser(userData);
                 setEditName(userData.displayName || '');
                 setEditBio(userData.bio || '');
+                setEditUsername(userData.username || '');
                 setProfileImage(userData.photoURL);
 
                 if (userData.followers?.includes(currentUser?.uid)) {
@@ -292,14 +309,46 @@ const UserProfileScreen = ({ route, navigation }) => {
 
     const handleSaveProfile = async () => {
         if (!currentUser) return;
+
+        // Check if username changed and validate uniqueness
+        if (editUsername && editUsername !== user?.username) {
+            setCheckingUsername(true);
+            setUsernameError('');
+
+            try {
+                // Check if username is already taken
+                const usernameQuery = await firestore()
+                    .collection('users')
+                    .where('username', '==', editUsername.toLowerCase())
+                    .get();
+
+                const isTaken = usernameQuery.docs.some(doc => doc.id !== currentUser.uid);
+
+                if (isTaken) {
+                    setUsernameError('Username already taken. Try a different one.');
+                    setCheckingUsername(false);
+                    return;
+                }
+            } catch (error) {
+                console.warn('Error checking username:', error);
+            }
+            setCheckingUsername(false);
+        }
+
         try {
-            await firestore().collection('users').doc(currentUser.uid).update({
+            const updateData: any = {
                 displayName: editName,
                 bio: editBio,
                 photoURL: profileImage,
-            });
+            };
 
-            setUser(prev => ({ ...prev, displayName: editName, bio: editBio, photoURL: profileImage }));
+            if (editUsername) {
+                updateData.username = editUsername.toLowerCase();
+            }
+
+            await firestore().collection('users').doc(currentUser.uid).update(updateData);
+
+            setUser(prev => ({ ...prev, displayName: editName, bio: editBio, photoURL: profileImage, username: editUsername.toLowerCase() }));
             setShowEditModal(false);
             Alert.alert('Success! ✨', 'Profile updated!');
         } catch (error) {
@@ -550,18 +599,22 @@ const UserProfileScreen = ({ route, navigation }) => {
                 <View style={[styles.profileContent, { backgroundColor: colors.background, marginTop: 0 }]}>
                     {/* Top Section: Avatar & Stats */}
                     <View style={styles.topSection}>
-                        <TouchableOpacity onPress={() => setShowFullImage(true)} style={styles.avatarContainer}>
+                        <TouchableOpacity onPress={() => (profileImage || user.photoURL) ? setShowFullImage(true) : null} style={styles.avatarContainer}>
                             <View style={[styles.avatarBorder, { backgroundColor: colors.background }]}>
-                                <Image source={{ uri: profileImage || user.photoURL || 'https://via.placeholder.com/150' }} style={styles.avatar} />
+                                {profileImage || user.photoURL ? (
+                                    <Image source={{ uri: profileImage || user.photoURL }} style={styles.avatar} />
+                                ) : (
+                                    <DefaultAvatar name={user.displayName || 'U'} size={80} />
+                                )}
                             </View>
                         </TouchableOpacity>
 
                         {/* Stats - Now to the right of avatar, cleaner look */}
                         <View style={styles.statsContainer}>
-                            <View style={styles.statItem}>
+                            <TouchableOpacity style={styles.statItem} onPress={() => isOwnProfile && navigation.navigate('MyTrips', { initialTab: 'completed' })}>
                                 <Text style={[styles.statValue, { color: colors.text }]}>{trips.length}</Text>
                                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Trips</Text>
-                            </View>
+                            </TouchableOpacity>
                             <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
                             <TouchableOpacity style={styles.statItem} onPress={() => setShowFollowersModal(true)}>
                                 <Text style={[styles.statValue, { color: colors.text }]}>{user.followers?.length || 0}</Text>
@@ -665,15 +718,20 @@ const UserProfileScreen = ({ route, navigation }) => {
                 </View>
             </Modal>
 
-            {/* Edit Profile Modal */}
-            <Modal visible={showEditModal} transparent animationType="slide">
-                <View style={styles.modalOverlay}>
-                    <Animatable.View animation="slideInUp" style={[styles.modalContent, { backgroundColor: colors.background }]}>
-                        <View style={styles.modalHeader}>
-                            <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Profile</Text>
-                            <TouchableOpacity onPress={() => setShowEditModal(false)}><Ionicons name="close" size={24} color={colors.text} /></TouchableOpacity>
-                        </View>
+            {/* Edit Profile Modal - Fullscreen */}
+            <Modal visible={showEditModal} animationType="slide">
+                <SafeAreaView style={[styles.fullscreenModal, { backgroundColor: colors.background }]} edges={['top']}>
+                    <View style={styles.modalHeader}>
+                        <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Profile</Text>
+                        <TouchableOpacity onPress={() => setShowEditModal(false)}><Ionicons name="close" size={24} color={colors.text} /></TouchableOpacity>
+                    </View>
 
+                    <ScrollView
+                        style={styles.editScrollView}
+                        contentContainerStyle={styles.editScrollContent}
+                        keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator={false}
+                    >
                         <TouchableOpacity style={styles.editAvatarSection} onPress={pickProfileImage}>
                             <LinearGradient colors={['#8B5CF6', '#EC4899']} style={styles.editAvatarGradient}>
                                 <Image source={{ uri: profileImage || user?.photoURL }} style={styles.editAvatar} />
@@ -690,6 +748,25 @@ const UserProfileScreen = ({ route, navigation }) => {
                             placeholderTextColor={colors.textSecondary}
                         />
 
+                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Username</Text>
+                        <TextInput
+                            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: usernameError ? '#EF4444' : colors.border }]}
+                            value={editUsername}
+                            onChangeText={(text) => {
+                                setEditUsername(text.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase());
+                                setUsernameError('');
+                            }}
+                            placeholder="username"
+                            placeholderTextColor={colors.textSecondary}
+                            autoCapitalize="none"
+                            maxLength={20}
+                        />
+                        {usernameError ? (
+                            <Text style={styles.errorText}>{usernameError}</Text>
+                        ) : (
+                            <Text style={[styles.usernameHint, { color: colors.textSecondary }]}>Letters, numbers, underscores only</Text>
+                        )}
+
                         <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Bio</Text>
                         <TextInput
                             style={[styles.input, styles.bioInput, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
@@ -702,13 +779,13 @@ const UserProfileScreen = ({ route, navigation }) => {
                         />
                         <Text style={[styles.charCount, { color: colors.textSecondary }]}>{editBio.length}/150</Text>
 
-                        <TouchableOpacity onPress={handleSaveProfile}>
+                        <TouchableOpacity onPress={handleSaveProfile} style={{ marginBottom: 40 }}>
                             <LinearGradient colors={['#8B5CF6', '#EC4899']} style={styles.saveButton}>
                                 <Text style={styles.saveButtonText}>Save Changes</Text>
                             </LinearGradient>
                         </TouchableOpacity>
-                    </Animatable.View>
-                </View>
+                    </ScrollView>
+                </SafeAreaView>
             </Modal>
 
             {/* Edit Trip Modal */}
@@ -888,6 +965,19 @@ const styles = StyleSheet.create({
     storyTitle: { fontSize: FONT_SIZE.xs, marginTop: SPACING.xs, maxWidth: 70 },
     storyGradient: { width: 72, height: 72, borderRadius: 36, padding: 3, justifyContent: 'center', alignItems: 'center' },
     storyImage: { width: 66, height: 66, borderRadius: 33, backgroundColor: '#fff' },
+
+    // Default Avatar styles
+    defaultAvatar: { justifyContent: 'center', alignItems: 'center' },
+    defaultAvatarText: { color: '#fff', fontWeight: FONT_WEIGHT.bold },
+
+    // Username validation styles
+    errorText: { color: '#EF4444', fontSize: FONT_SIZE.xs, marginTop: SPACING.xs },
+    usernameHint: { fontSize: FONT_SIZE.xs, marginTop: SPACING.xs },
+
+    // Fullscreen edit modal styles
+    fullscreenModal: { flex: 1 },
+    editScrollView: { flex: 1 },
+    editScrollContent: { padding: SPACING.lg },
 });
 
 export default UserProfileScreen;

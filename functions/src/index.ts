@@ -144,8 +144,8 @@ export const onKycStatusChange = onDocumentUpdated(
     const after = event.data.after.data();
     const userId = event.params.userId;
 
-    // Check if kycStatus changed to 'verified'
-    if (before?.kycStatus !== 'verified' && after?.kycStatus === 'verified') {
+    // Check if kycStatus changed to 'approved' (the status set by admin)
+    if (before?.kycStatus !== 'approved' && after?.kycStatus === 'approved') {
       console.log(`KYC approved for user ${userId}`);
 
       // Send push notification
@@ -1561,3 +1561,4 @@ export const makeAdmin = onCall(async (request) => {
     throw new HttpsError('internal', e.message || 'Error making admin');
   }
 });
+

@@ -59,22 +59,13 @@ const usePushNotifications = () => {
         );
 
         // Handle notification when app is in foreground
+        // Don't show Alert - the in-app notifications modal handles this
+        // Just log for debugging
         unsubscribeOnMessage = onMessage(messaging,
           async (remoteMessage) => {
-            const title = remoteMessage.notification?.title || 'New Notification';
-            const body = remoteMessage.notification?.body || '';
-
-            Alert.alert(title, body, [
-              { text: 'Dismiss', style: 'cancel' },
-              {
-                text: 'View',
-                onPress: () => {
-                  if (remoteMessage.data) {
-                    handleNotificationNavigation(remoteMessage.data as NotificationData);
-                  }
-                },
-              },
-            ]);
+            console.log('[PUSH] Foreground notification received:', remoteMessage.notification?.title);
+            // In-app notifications are handled by useNotifications hook via Firestore listener
+            // No alert needed - prevents modal spam
           }
         );
 
@@ -119,28 +110,28 @@ const usePushNotifications = () => {
 
     const getAndSaveToken = async (user: any, freshToken?: string) => {
       try {
-
+        console.log('[PUSH] getAndSaveToken called for user:', user.uid);
         const messaging = getMessaging();
         const token = freshToken || await getToken(messaging);
 
         if (!token) {
-
+          console.log('[PUSH] No token received from FCM');
           return;
         }
 
-
+        console.log('[PUSH] Token received:', token.substring(0, 20) + '...');
 
         await saveTokenToFirestore(user, token);
 
       } catch (error: any) {
-
+        console.error('[PUSH] Error getting token:', error.message);
       }
     };
 
     const saveTokenToFirestore = async (user: any, token: string) => {
       try {
         const deviceId = getDeviceId();
-
+        console.log('[PUSH] Saving token for user:', user.uid, 'device:', deviceId);
 
         const db = getFirestore();
         const tokenRef = doc(db, 'push_tokens', user.uid);
@@ -155,9 +146,9 @@ const usePushNotifications = () => {
           }
         }, { merge: true });
 
-
+        console.log('[PUSH] Token saved successfully to push_tokens/' + user.uid);
       } catch (error: any) {
-
+        console.error('[PUSH] Error saving token:', error.message);
       }
     };
 

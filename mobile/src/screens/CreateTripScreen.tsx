@@ -66,8 +66,7 @@ const CreateTripScreen = ({ navigation }) => {
     // Step 1: Basic Info
     const [title, setTitle] = useState('');
     const [images, setImages] = useState<string[]>([]);
-    const [video, setVideo] = useState<string | null>(null);
-    const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null);
+    const [autoAddImages, setAutoAddImages] = useState(false);
 
     // Step 2: Location & Dates
     const [fromLocation, setFromLocation] = useState('');
@@ -349,7 +348,7 @@ const CreateTripScreen = ({ navigation }) => {
 
     const renderHeader = () => (
         <View style={styles.header}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <TouchableOpacity onPress={() => step > 1 ? handleBack() : navigation.goBack()} style={styles.backButton}>
                 <Ionicons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>
             <View style={styles.progressContainer}>
@@ -417,31 +416,18 @@ const CreateTripScreen = ({ navigation }) => {
                                 )}
                             </View>
 
-                            <Text style={[styles.label, { color: colors.text, marginTop: SPACING.xl }]}>Trip Video (Optional - Max 50MB)</Text>
-                            <View style={styles.imagesContainer}>
-                                {video ? (
-                                    <View style={styles.imageWrapper}>
-                                        <Video
-                                            source={{ uri: video }}
-                                            style={styles.tripImage}
-                                            useNativeControls={false}
-                                            resizeMode={ResizeMode.COVER}
-                                            isLooping={false} // Don't loop preview
-                                            shouldPlay={false}
-                                        />
-                                        <View style={[styles.tripImage, { position: 'absolute', backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' }]}>
-                                            <Ionicons name="play-circle" size={30} color="#fff" />
-                                        </View>
-                                        <TouchableOpacity style={styles.removeImage} onPress={removeVideo}>
-                                            <Ionicons name="close-circle" size={24} color="#EF4444" />
-                                        </TouchableOpacity>
-                                    </View>
-                                ) : (
-                                    <TouchableOpacity style={[styles.addImageButton, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={pickVideo}>
-                                        <Ionicons name="videocam" size={32} color={colors.primary} />
-                                        <Text style={[styles.addImageText, { color: colors.textSecondary }]}>Add Video</Text>
-                                    </TouchableOpacity>
-                                )}
+                            {/* Auto-add images toggle */}
+                            <View style={styles.autoImageToggle}>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.label, { color: colors.text, marginBottom: 4 }]}>Auto-add images from internet</Text>
+                                    <Text style={[styles.hintText, { color: colors.textSecondary }]}>If no images uploaded, auto-fetch based on destination</Text>
+                                </View>
+                                <TouchableOpacity
+                                    style={[styles.toggleButton, autoAddImages && styles.toggleButtonActive]}
+                                    onPress={() => setAutoAddImages(!autoAddImages)}
+                                >
+                                    <View style={[styles.toggleCircle, autoAddImages && styles.toggleCircleActive]} />
+                                </TouchableOpacity>
                             </View>
                         </Animatable.View>
                     )}
@@ -887,6 +873,14 @@ const styles = StyleSheet.create({
     dateOptionDay: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold, width: 40 },
     dateOptionDate: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold, width: 40 },
     dateOptionMonth: { fontSize: FONT_SIZE.sm, flex: 1 },
+
+    // Auto-image toggle styles
+    autoImageToggle: { flexDirection: 'row', alignItems: 'center', marginTop: SPACING.xl, padding: SPACING.md, borderRadius: BORDER_RADIUS.md, backgroundColor: 'rgba(139, 92, 246, 0.1)' },
+    hintText: { fontSize: FONT_SIZE.xs },
+    toggleButton: { width: 50, height: 28, borderRadius: 14, backgroundColor: '#E5E7EB', justifyContent: 'center', paddingHorizontal: 2 },
+    toggleButtonActive: { backgroundColor: '#8B5CF6' },
+    toggleCircle: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#fff', elevation: 2 },
+    toggleCircleActive: { alignSelf: 'flex-end' },
 });
 
 export default CreateTripScreen;
