@@ -28,7 +28,7 @@ interface SearchUser {
     displayName: string;
     username?: string;
     photoURL?: string;
-    kycStatus?: string;
+    ageVerified?: boolean;
 }
 
 const ChatsListScreen = ({ navigation }) => {
@@ -182,7 +182,7 @@ const ChatsListScreen = ({ navigation }) => {
                         displayName: doc.data().displayName || 'User',
                         username: doc.data().username,
                         photoURL: doc.data().photoURL,
-                        kycStatus: doc.data().kycStatus,
+                        ageVerified: doc.data().ageVerified,
                     });
                 }
             });
@@ -349,7 +349,7 @@ const ChatsListScreen = ({ navigation }) => {
                     <Text style={[styles.searchUserName, { color: colors.text }]}>
                         {item.displayName}
                     </Text>
-                    {item.kycStatus === 'verified' && (
+                    {item.ageVerified === true && (
                         <Ionicons name="shield-checkmark" size={14} color="#10B981" style={{ marginLeft: 4 }} />
                     )}
                 </View>

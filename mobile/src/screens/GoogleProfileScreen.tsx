@@ -55,7 +55,7 @@ const GoogleProfileScreen = ({ route, navigation }) => {
                 photoURL: user.photoURL || null,
                 bio: '',
                 role: 'user',
-                kycStatus: 'pending',
+                ageVerified: false,
                 followers: [],
                 following: [],
                 rating: 0,

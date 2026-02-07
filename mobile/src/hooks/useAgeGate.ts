@@ -2,14 +2,11 @@ import { useState, useEffect } from 'react';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 
-export type KycStatus = 'loading' | 'none' | 'pending' | 'approved' | 'verified' | 'rejected';
-
-interface UseKycGateReturn {
-    kycStatus: KycStatus;
-    isKycVerified: boolean;
+interface UseAgeGateReturn {
     isAgeVerified: boolean;
     isLoading: boolean;
     dateOfBirth: Date | null;
+    age: number | null;
 }
 
 /**
@@ -26,21 +23,21 @@ const calculateAge = (dob: Date): number => {
 };
 
 /**
- * Hook to check user's KYC verification status and age in real-time.
- * Returns current status, age verification, and booleans for easy conditional rendering.
+ * Hook to check user's age verification status in real-time.
+ * For v1.0.0: Simple age verification (18+ required)
+ * Returns whether user is age verified and loading state.
  */
-export function useKycGate(): UseKycGateReturn {
-    const [kycStatus, setKycStatus] = useState<KycStatus>('loading');
+export function useAgeGate(): UseAgeGateReturn {
     const [isLoading, setIsLoading] = useState(true);
     const [dateOfBirth, setDateOfBirth] = useState<Date | null>(null);
     const [isAgeVerified, setIsAgeVerified] = useState(false);
+    const [age, setAge] = useState<number | null>(null);
 
     useEffect(() => {
         const userId = auth().currentUser?.uid;
         if (!userId) {
-            setKycStatus('none');
-            setIsLoading(false);
             setIsAgeVerified(false);
+            setIsLoading(false);
             return;
         }
 
@@ -50,26 +47,33 @@ export function useKycGate(): UseKycGateReturn {
             .onSnapshot(
                 (doc) => {
                     const data = doc.data();
-                    const status = (data?.kycStatus as KycStatus) || 'none';
-                    setKycStatus(status);
 
-                    // Check date of birth for age verification
-                    if (data?.dateOfBirth) {
+                    // Check ageVerified boolean first (new field)
+                    if (data?.ageVerified === true) {
+                        setIsAgeVerified(true);
+                        if (data?.dateOfBirth) {
+                            const dob = data.dateOfBirth.toDate ? data.dateOfBirth.toDate() : new Date(data.dateOfBirth);
+                            setDateOfBirth(dob);
+                            setAge(calculateAge(dob));
+                        }
+                    }
+                    // Fallback: Check dateOfBirth and calculate age
+                    else if (data?.dateOfBirth) {
                         const dob = data.dateOfBirth.toDate ? data.dateOfBirth.toDate() : new Date(data.dateOfBirth);
                         setDateOfBirth(dob);
-                        const age = calculateAge(dob);
-                        // Age verified if 18+ AND KYC approved/verified
-                        setIsAgeVerified(age >= 18 && (status === 'approved' || status === 'verified'));
+                        const calculatedAge = calculateAge(dob);
+                        setAge(calculatedAge);
+                        setIsAgeVerified(calculatedAge >= 18);
                     } else {
                         setDateOfBirth(null);
+                        setAge(null);
                         setIsAgeVerified(false);
                     }
 
                     setIsLoading(false);
                 },
                 (error) => {
-                    console.error('KYC status listener error:', error);
-                    setKycStatus('none');
+                    console.error('Age verification listener error:', error);
                     setIsAgeVerified(false);
                     setIsLoading(false);
                 }
@@ -79,12 +83,11 @@ export function useKycGate(): UseKycGateReturn {
     }, []);
 
     return {
-        kycStatus,
-        isKycVerified: kycStatus === 'approved' || kycStatus === 'verified',
         isAgeVerified,
         isLoading,
         dateOfBirth,
+        age,
     };
 }
 
-export default useKycGate;
+export default useAgeGate;

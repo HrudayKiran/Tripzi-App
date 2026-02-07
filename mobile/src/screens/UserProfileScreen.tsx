@@ -14,6 +14,8 @@ import TripCard from '../components/TripCard';
 import ProfilePictureViewer from '../components/ProfilePictureViewer';
 import { pickAndUploadImage } from '../utils/imageUpload';
 import NotificationService from '../utils/notificationService';
+import { useAgeGate } from '../hooks/useAgeGate';
+import AgeVerificationModal from '../components/AgeVerificationModal';
 
 const { width, height } = Dimensions.get('window');
 
@@ -24,7 +26,7 @@ const FALLBACK_USER = {
     username: 'traveler',
     photoURL: 'https://randomuser.me/api/portraits/men/32.jpg',
     bio: 'Passionate traveler | 50+ trips 🏔️',
-    kycStatus: 'verified',
+    ageVerified: true,
     followers: [],
     following: [],
 };
@@ -61,9 +63,20 @@ const UserProfileScreen = ({ route, navigation }) => {
     const [following, setFollowing] = useState([]);
     const [hostRating, setHostRating] = useState<{ average: number; count: number } | null>(null);
     const [showFullImage, setShowFullImage] = useState(false);
+    const [showAgeModal, setShowAgeModal] = useState(false);
     const storyProgress = useRef(new Animated.Value(0)).current;
+    const { isAgeVerified } = useAgeGate();
 
     const isOwnProfile = userId === currentUser?.uid;
+
+    // Handle create trip button with age verification check
+    const handleCreateTrip = () => {
+        if (!isAgeVerified) {
+            setShowAgeModal(true);
+            return;
+        }
+        navigation.navigate('CreateTrip');
+    };
 
     // Default Avatar Component (Instagram-style)
     const DefaultAvatar = ({ name, size = 80 }: { name: string; size?: number }) => {
@@ -189,7 +202,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                     email: currentUser.email,
                     photoURL: currentUser.photoURL || null,
                     bio: '',
-                    kycStatus: 'pending',
+                    ageVerified: false,
                     followers: [],
                     following: [],
                 });
@@ -209,7 +222,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                     displayName: currentUser.displayName || 'User',
                     photoURL: currentUser.photoURL,
                     bio: '',
-                    kycStatus: 'pending',
+                    ageVerified: false,
                     followers: [],
                     following: [],
                 });
@@ -585,7 +598,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                         </TouchableOpacity>
                         {isOwnProfile && (
                             <View style={{ flexDirection: 'row', gap: 12 }}>
-                                <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={() => navigation.navigate('CreateTrip')}>
+                                <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={handleCreateTrip}>
                                     <Ionicons name="add" size={24} color={colors.text} />
                                 </TouchableOpacity>
                                 <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={() => setShowEditModal(true)}>
@@ -632,8 +645,8 @@ const UserProfileScreen = ({ route, navigation }) => {
                     <View style={styles.nameSection}>
                         <View style={styles.nameRow}>
                             <Text style={[styles.displayName, { color: colors.text }]}>{user.displayName}</Text>
-                            {user.kycStatus === 'verified' && (
-                                <Ionicons name="checkmark-circle" size={20} color="#3B82F6" style={{ marginLeft: 4 }} />
+                            {user.ageVerified === true && (
+                                <Ionicons name="checkmark-circle" size={20} color="#10B981" style={{ marginLeft: 4 }} />
                             )}
                         </View>
                         {user.username && <Text style={[styles.displayUsername, { color: colors.textSecondary }]}>@{user.username}</Text>}
@@ -854,6 +867,13 @@ const UserProfileScreen = ({ route, navigation }) => {
                     setUser(prev => ({ ...prev, photoURL: null }));
                 }}
             />
+
+            {/* Age Verification Modal */}
+            <AgeVerificationModal
+                visible={showAgeModal}
+                onClose={() => setShowAgeModal(false)}
+                action="create or join a trip"
+            />
         </SafeAreaView>
     );
 };
@@ -934,7 +954,7 @@ const styles = StyleSheet.create({
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
     modalContent: { borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, padding: SPACING.xl },
     listModalContent: { height: '70%', borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, padding: SPACING.xl },
-    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.xl },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.xl, paddingHorizontal: SPACING.xl },
     modalTitle: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold },
     editAvatarSection: { alignItems: 'center', marginBottom: SPACING.xl },
     editAvatarGradient: { width: 100, height: 100, borderRadius: 50, padding: 3, justifyContent: 'center', alignItems: 'center' },
@@ -977,7 +997,7 @@ const styles = StyleSheet.create({
     // Fullscreen edit modal styles
     fullscreenModal: { flex: 1 },
     editScrollView: { flex: 1 },
-    editScrollContent: { padding: SPACING.lg },
+    editScrollContent: { padding: SPACING.xl },
 });
 
 export default UserProfileScreen;

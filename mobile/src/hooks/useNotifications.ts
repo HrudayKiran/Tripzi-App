@@ -6,8 +6,7 @@ export type NotificationType =
     | 'like'
     | 'comment'
     | 'message'
-    | 'kyc_approved'
-    | 'kyc_rejected'
+    | 'age_verified'
     | 'trip_join'
     | 'trip_full'
     | 'action_required';

@@ -16,24 +16,23 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/consta
 
 const { width } = Dimensions.get('window');
 
-interface KycBlockingModalProps {
+interface AgeVerificationModalProps {
     visible: boolean;
     onClose: () => void;
-    status: 'none' | 'pending' | 'verified' | 'rejected' | 'loading' | 'approved';
     action?: string;
 }
 
 /**
- * Modal that blocks non-KYC verified users from performing certain actions.
- * Shows a friendly message and CTA to navigate to KYC verification screen.
+ * Modal that prompts users to verify their age before performing certain actions.
+ * For v1.0.0: Simple age verification (18+ required)
  */
-export function KycBlockingModal({ visible, onClose, action = 'perform this action' }: KycBlockingModalProps) {
+export function AgeVerificationModal({ visible, onClose, action = 'perform this action' }: AgeVerificationModalProps) {
     const navigation = useNavigation();
     const { colors } = useTheme();
 
     const handleVerifyNow = () => {
         onClose();
-        navigation.navigate('KYC' as never);
+        navigation.navigate('AgeVerification' as never);
     };
 
     return (
@@ -54,17 +53,17 @@ export function KycBlockingModal({ visible, onClose, action = 'perform this acti
                         colors={['#8B5CF6', '#EC4899']}
                         style={styles.iconContainer}
                     >
-                        <Ionicons name="shield-checkmark" size={40} color="#fff" />
+                        <Ionicons name="calendar" size={40} color="#fff" />
                     </LinearGradient>
 
                     {/* Title */}
                     <Text style={[styles.title, { color: colors.text }]}>
-                        KYC Verification Required
+                        Age Verification Required
                     </Text>
 
                     {/* Message */}
                     <Text style={[styles.message, { color: colors.textSecondary }]}>
-                        To {action}, you need to complete KYC verification first. This helps us maintain a safe and trusted community.
+                        To {action}, please verify that you're 18 or older. This helps us maintain a safe community.
                     </Text>
 
                     {/* Benefits */}
@@ -79,7 +78,7 @@ export function KycBlockingModal({ visible, onClose, action = 'perform this acti
                         </View>
                         <View style={styles.benefitRow}>
                             <Ionicons name="checkmark-circle" size={18} color="#10B981" />
-                            <Text style={[styles.benefitText, { color: colors.text }]}>Build trust with travelers</Text>
+                            <Text style={[styles.benefitText, { color: colors.text }]}>Takes less than a minute</Text>
                         </View>
                     </View>
 
@@ -91,8 +90,8 @@ export function KycBlockingModal({ visible, onClose, action = 'perform this acti
                             end={{ x: 1, y: 0 }}
                             style={styles.primaryButton}
                         >
-                            <Ionicons name="shield-checkmark-outline" size={20} color="#fff" />
-                            <Text style={styles.primaryButtonText}>Verify Now</Text>
+                            <Ionicons name="calendar-outline" size={20} color="#fff" />
+                            <Text style={styles.primaryButtonText}>Verify My Age</Text>
                         </LinearGradient>
                     </TouchableOpacity>
 
@@ -184,4 +183,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default KycBlockingModal;
+export default AgeVerificationModal;

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Animated, Dimensions, FlatList, Linking, Alert, Share, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import firestore from '@react-native-firebase/firestore';
+import storage from '@react-native-firebase/storage';
 import auth from '@react-native-firebase/auth';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
@@ -12,7 +13,8 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/consta
 import NotificationService from '../utils/notificationService';
 import ReportTripModal from '../components/ReportTripModal';
 import { pickAndUploadImage } from '../utils/imageUpload';
-import { useKycGate } from '../hooks/useKycGate';
+import { useAgeGate } from '../hooks/useAgeGate';
+import AgeVerificationModal from '../components/AgeVerificationModal';
 
 const { width } = Dimensions.get('window');
 
@@ -53,13 +55,14 @@ const GENDER_PREFERENCES = [
 
 const TripDetailsScreen = ({ route, navigation }) => {
   const { colors } = useTheme();
+  const { isAgeVerified } = useAgeGate();
+  const [showAgeModal, setShowAgeModal] = useState(false);
   const [trip, setTrip] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isJoined, setIsJoined] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const { tripId } = route.params;
   const user = auth().currentUser;
-  const { isAgeVerified, kycStatus } = useKycGate();
 
   // Rating states
   const [userRating, setUserRating] = useState(0);
@@ -249,11 +252,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
 
     // Check age verification for joining
     if (!isJoined && !isAgeVerified) {
-      Alert.alert(
-        'Age Verification Required',
-        'You must complete age verification (18+) before joining trips. Go to Profile → Verify Age to get started.',
-        [{ text: 'OK' }]
-      );
+      setShowAgeModal(true);
       return;
     }
 
@@ -311,10 +310,17 @@ const TripDetailsScreen = ({ route, navigation }) => {
   };
 
   const handleMessage = () => {
+    // Check if there are other participants (for owner)
+    if (isOwner && (!trip.participants || trip.participants.length <= 1)) {
+      Alert.alert('No Joined Users', 'Wait for someone to join your trip to start chatting!');
+      return;
+    }
+
     const chatId = `trip_${tripId}`;
     navigation.navigate('Chat', {
       chatId,
       tripTitle: trip?.title,
+      tripImage: trip?.coverImage || trip?.images?.[0],
       isGroupChat: true,
     });
   };
@@ -393,6 +399,21 @@ const TripDetailsScreen = ({ route, navigation }) => {
 
     setSaving(true);
     try {
+      // Delete removed images from Storage
+      const originalImages = trip?.images || [];
+      const imagesToDelete = originalImages.filter((img: string) => !editImages.includes(img) && img.includes('firebasestorage'));
+
+      if (imagesToDelete.length > 0) {
+        await Promise.all(imagesToDelete.map(async (imageUrl: string) => {
+          try {
+            const ref = storage().refFromURL(imageUrl);
+            await ref.delete();
+          } catch (error) {
+            console.warn('Failed to delete storage image:', error);
+          }
+        }));
+      }
+
       await firestore().collection('trips').doc(tripId).update({
         title: editTitle.trim(),
         fromLocation: editFromLocation.trim(),
@@ -583,12 +604,15 @@ const TripDetailsScreen = ({ route, navigation }) => {
             }}
           >
             {images.map((item, index) => (
-              <Image
-                key={`img_${index}`}
-                source={{ uri: item }}
-                style={styles.carouselImage}
-                resizeMode="cover"
-              />
+              <View key={`img_container_${index}`} style={styles.imageWrapper}>
+                <Image
+                  key={`img_${index}`}
+                  source={{ uri: item }}
+                  style={styles.carouselImage}
+                  resizeMode="cover"
+                />
+
+              </View>
             ))}
           </ScrollView>
           {images.length > 1 && (
@@ -941,13 +965,15 @@ const TripDetailsScreen = ({ route, navigation }) => {
             size="medium"
           />
         )}
-        <TouchableOpacity
-          style={[styles.messageButton, { backgroundColor: colors.primary }]}
-          onPress={handleMessage}
-        >
-          <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
-          <Text style={styles.messageButtonText}>Message</Text>
-        </TouchableOpacity>
+        {(isJoined || isOwner) && (
+          <TouchableOpacity
+            style={[styles.messageButton, { backgroundColor: colors.primary }]}
+            onPress={handleMessage}
+          >
+            <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
+            <Text style={styles.messageButtonText}>Message Group</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Edit Trip Modal */}
@@ -1259,7 +1285,13 @@ const TripDetailsScreen = ({ route, navigation }) => {
         trip={trip}
         onClose={() => setShowReportModal(false)}
       />
-    </View >
+
+      <AgeVerificationModal
+        visible={showAgeModal}
+        onClose={() => setShowAgeModal(false)}
+        action="join this trip"
+      />
+    </View>
   );
 };
 
@@ -1382,6 +1414,38 @@ const styles = StyleSheet.create({
   dateOptionDay: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold, width: 40 },
   dateOptionDate: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold, width: 40 },
   dateOptionMonth: { fontSize: FONT_SIZE.sm, flex: 1 },
+
+  // Image Overlay Styles
+  imageWrapper: { position: 'relative' },
+  imageOverlay: {
+    position: 'absolute',
+    bottom: SPACING.md,
+    left: SPACING.lg,
+    // Removed gradient/background as requested
+    // backgroundColor: 'transparent',
+  },
+  overlayTitle: {
+    color: '#fff',
+    fontSize: FONT_SIZE.xl,
+    fontWeight: FONT_WEIGHT.bold,
+    textShadowColor: 'rgba(0,0,0,0.9)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 4,
+  },
+  overlayLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4
+  },
+  overlayLocation: {
+    color: '#fff',
+    fontSize: FONT_SIZE.md,
+    fontWeight: FONT_WEIGHT.bold,
+    textShadowColor: 'rgba(0,0,0,0.9)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 4,
+  },
 });
 
 export default TripDetailsScreen;

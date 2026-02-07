@@ -59,7 +59,7 @@ const UsernameSetupScreen = ({ navigation }) => {
                 email: currentUser.email,
                 photoURL: currentUser.photoURL,
                 createdAt: firestore.FieldValue.serverTimestamp(),
-                kycStatus: 'pending',
+                ageVerified: false,
                 followers: [],
                 following: [],
             }, { merge: true });

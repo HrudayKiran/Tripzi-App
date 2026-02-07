@@ -14,11 +14,11 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
     
-    // Check if user's KYC is approved
-    function isKycVerified() {
+    // Check if user's age is verified
+    function isAgeVerified() {
       return isAuthenticated() && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.kycStatus == 'approved'; // Strict check
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.ageVerified == true;
     }
     
     // Check if user is an admin
@@ -33,15 +33,14 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isAuthenticated();
       
-      // Users can only create their own profile, MUST start as 'user' and 'pending'
+      // Users can only create their own profile
       allow create: if isOwner(userId) &&
         (!('role' in request.resource.data) || request.resource.data.role == 'user') &&
-        (!('kycStatus' in request.resource.data) || request.resource.data.kycStatus == 'pending') &&
-        (!('rating' in request.resource.data) || request.resource.data.rating == 0);
+        (!('ageVerified' in request.resource.data) || request.resource.data.ageVerified == false);
 
       // Users can update own profile EXCEPT sensitive fields
       allow update: if isAdmin() || (isOwner(userId) && 
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'kycStatus', 'rating', 'emailVerified', 'phoneVerified', 'userId']));
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'ageVerified', 'rating', 'emailVerified', 'phoneVerified', 'userId']));
       
       allow delete: if isAdmin();
     }
@@ -54,26 +53,14 @@ service cloud.firestore {
       allow write: if isAdmin();  // Only admins can modify
     }
     
-    // ==================== KYC COLLECTION ====================
-    
-    match /kyc/{kycId} {
-      allow read: if isAuthenticated() && 
-        (resource.data.userId == request.auth.uid || isAdmin());
-      
-      allow create: if isAuthenticated() && 
-        request.resource.data.userId == request.auth.uid &&
-        request.resource.data.status == 'pending';
-      
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
-    }
+    // Note: KYC collection removed in v1.0.0 - using ageVerified field on users
     
     // ==================== TRIPS COLLECTION ====================
     
     match /trips/{tripId} {
       allow read: if isAuthenticated();
       
-      allow create: if isKycVerified() && 
+      allow create: if isAgeVerified() && 
         request.resource.data.userId == request.auth.uid;
       
       allow update: if isAuthenticated() && 
@@ -107,7 +94,11 @@ service cloud.firestore {
         allow create: if isAuthenticated() && 
           request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants &&
           request.resource.data.senderId == request.auth.uid;
-        allow update, delete: if isAuthenticated() && resource.data.senderId == request.auth.uid;
+        allow update: if isAuthenticated() && 
+          (resource.data.senderId == request.auth.uid || 
+           (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'status'])));
+        allow delete: if isAuthenticated() && resource.data.senderId == request.auth.uid;
       }
     }
     
@@ -115,8 +106,7 @@ service cloud.firestore {
     
     match /notifications/{notificationId} {
       // Allow read only if user is recipient (works with where clause)
-      allow read: if isAuthenticated() && 
-        (request.auth.uid == resource.data.recipientId || isAdmin());
+      allow read: if isAuthenticated() && request.auth.uid == resource.data.recipientId;
       allow create: if isAdmin(); // Only admins/Cloud Functions can create
       allow update, delete: if isAuthenticated() && resource.data.recipientId == request.auth.uid;
     }

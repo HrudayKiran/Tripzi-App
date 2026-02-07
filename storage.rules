@@ -89,32 +89,11 @@ service firebase.storage {
       allow delete: if isOwner(userId);
     }
     
-    // ==================== STORY MEDIA (Images & Videos) ====================
+    // Note: Stories removed in v1.0.0
     
-    match /stories/{userId}/{allPaths=**} {
-      // Anyone authenticated can read stories
-      allow read: if isAuthenticated();
-      
-      // Only the user can upload their stories
-      allow create, update: if isOwner(userId) && isMediaFile() && isValidMediaSize();
-      // User can delete their stories
-      allow delete: if isOwner(userId);
-    }
     
-    // ==================== KYC DOCUMENTS ====================
+    // Note: KYC documents removed in v1.0.0 - using ageVerified field on users
     
-    match /kyc/{userId}/{allPaths=**} {
-      // Only the user and admins can read KYC documents
-      allow read: if isOwner(userId) || request.auth.token.admin == true;
-      
-      // Only the user can upload their KYC documents
-      allow create, update: if isOwner(userId) && isValidSize();
-      // User cannot delete KYC documents (audit trail) - keeping strict or allowing? 
-      // User usually shouldn't delete KYC unless retrying? sticking to original intent which was 'write'.
-      // If original was write, they could overwrite (update) or delete. 
-      // Assuming retrying is allowed, delete should be allowed.
-      allow delete: if isOwner(userId);
-    }
     
     // ==================== CHAT MEDIA (Images, Videos, Voice) ====================
     

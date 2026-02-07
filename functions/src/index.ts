@@ -130,124 +130,116 @@ async function createNotification(data: {
   });
 }
 
-// ==================== KYC NOTIFICATION FUNCTION ====================
+// ==================== TRIP JOIN - GROUP CHAT ====================
 
 /**
- * Send push and in-app notification when user KYC status changes to 'verified'.
+ * When a user joins a trip:
+ * 1. Create group chat if first joiner, or add to existing chat
+ * 2. Notify host and joining user
+ * Each trip gets unique chat: trip_{tripId}
  */
-export const onKycStatusChange = onDocumentUpdated(
-  { document: "users/{userId}", database: "(default)" },
-  async (event) => {
-    if (!event.data) return;
-
-    const before = event.data.before.data();
-    const after = event.data.after.data();
-    const userId = event.params.userId;
-
-    // Check if kycStatus changed to 'approved' (the status set by admin)
-    if (before?.kycStatus !== 'approved' && after?.kycStatus === 'approved') {
-      console.log(`KYC approved for user ${userId}`);
-
-      // Send push notification
-      await sendPushToUser(userId, {
-        title: '🎉 KYC Approved!',
-        body: 'Your identity has been verified. You now have full access to Tripzi!',
-        data: { type: 'kyc_approved', userId },
-      });
-
-      // Create in-app notification
-      await createNotification({
-        recipientId: userId,
-        type: 'kyc_approved',
-        title: 'KYC Verification Complete',
-        message: 'Your identity has been verified successfully! You now have full access to all features.',
-        entityType: 'user',
-        entityId: userId,
-        deepLinkRoute: 'Profile',
-        deepLinkParams: { userId },
-      });
-
-      console.log(`KYC notification sent to user ${userId}`);
-    }
-
-    // Handle KYC rejection
-    if (before?.kycStatus !== 'rejected' && after?.kycStatus === 'rejected') {
-      console.log(`KYC rejected for user ${userId}`);
-
-      await sendPushToUser(userId, {
-        title: '❌ KYC Review Required',
-        body: 'Your identity verification needs attention. Please check and resubmit.',
-        data: { type: 'kyc_rejected', userId },
-      });
-
-      await createNotification({
-        recipientId: userId,
-        type: 'kyc_rejected',
-        title: 'KYC Verification Issue',
-        message: 'Your identity verification was not approved. Please check the requirements and try again.',
-        entityType: 'user',
-        entityId: userId,
-        deepLinkRoute: 'KYC',
-        deepLinkParams: { userId },
-      });
-    }
-  }
-);
-
-// ==================== TRIP FUNCTIONS ====================
-
-/**
- * Create group chat when trip reaches max travelers.
- */
-export const createGroupChatOnTripFull = onDocumentUpdated(
+export const onTripJoined = onDocumentUpdated(
   { document: "trips/{tripId}", database: "(default)" },
   async (event) => {
     if (!event.data) return;
 
-    const tripData = event.data.after.data();
+    const beforeData = event.data.before.data();
+    const afterData = event.data.after.data();
     const tripId = event.params.tripId;
 
-    if (
-      tripData.participants &&
-      tripData.maxTravelers &&
-      tripData.participants.length === tripData.maxTravelers
-    ) {
-      const chatRoomId = `trip_${tripId}`;
-      const chatRoomRef = db.collection("chats").doc(chatRoomId);
-      const chatRoomSnap = await chatRoomRef.get();
+    const beforeParticipants: string[] = beforeData.participants || [];
+    const afterParticipants: string[] = afterData.participants || [];
 
-      if (!chatRoomSnap.exists) {
-        await chatRoomRef.set({
-          participants: tripData.participants,
-          tripId: tripId,
-          isGroupChat: true,
-          groupName: tripData.title,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        console.log(`Group chat created for trip ${tripId}`);
+    // Check if a new user joined (participants increased)
+    if (afterParticipants.length <= beforeParticipants.length) return;
 
-        // Notify all participants
-        for (const userId of tripData.participants) {
-          await createNotification({
-            recipientId: userId,
-            type: "trip_full",
-            title: "Trip is Full! 🎉",
-            message: `The trip "${tripData.title}" is now full. A group chat has been created!`,
-            entityId: tripId,
-            entityType: "trip",
-            deepLinkRoute: "Message",
-            deepLinkParams: { chatId: chatRoomId },
-          });
+    // Find the new joiner(s)
+    const newJoiners = afterParticipants.filter(
+      (uid: string) => !beforeParticipants.includes(uid)
+    );
 
-          await sendPushToUser(userId, {
-            title: "Trip is Full! 🎉",
-            body: `The trip "${tripData.title}" is now full. Check the group chat!`,
-            data: { route: "Message", chatId: chatRoomId },
-          });
-        }
-      }
+    if (newJoiners.length === 0) return;
+
+    const hostId = afterData.userId;
+    const tripTitle = afterData.title || "Trip";
+    const destination = afterData.destination || afterData.toLocation || "destination";
+    const chatRoomId = `trip_${tripId}`;
+    const chatRoomRef = db.collection("chats").doc(chatRoomId);
+
+    // Get or create group chat
+    const chatRoomSnap = await chatRoomRef.get();
+
+    if (!chatRoomSnap.exists) {
+      // First joiner - create group chat
+      await chatRoomRef.set({
+        participants: afterParticipants,
+        tripId: tripId,
+        isGroupChat: true,
+        groupName: `${tripTitle} - ${destination}`,
+        groupPhoto: afterData.images?.[0] || afterData.coverImage || null,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastMessage: "Group chat created for this trip!",
+        lastMessageTime: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      console.log(`Group chat created for trip ${tripId}`);
+    } else {
+      // Add new joiner(s) to existing chat
+      await chatRoomRef.update({
+        participants: admin.firestore.FieldValue.arrayUnion(...newJoiners),
+      });
+      console.log(`Added ${newJoiners.length} user(s) to trip ${tripId} chat`);
     }
-  });
+
+    // Notify each new joiner and the host
+    for (const joinerId of newJoiners) {
+      // Get joiner info
+      const joinerDoc = await db.collection("users").doc(joinerId).get();
+      const joiner = joinerDoc.data() || {};
+      const joinerName = joiner.displayName || "Someone";
+
+      // Notify the HOST
+      if (hostId !== joinerId) {
+        await createNotification({
+          recipientId: hostId,
+          type: "trip_join",
+          title: "🎉 New Traveler!",
+          message: `${joinerName} joined your trip to ${destination}!`,
+          entityId: tripId,
+          entityType: "trip",
+          actorId: joinerId,
+          actorName: joinerName,
+          actorPhotoUrl: joiner.photoURL,
+          deepLinkRoute: "Chat",
+          deepLinkParams: { chatId: chatRoomId },
+        });
+
+        await sendPushToUser(hostId, {
+          title: "🎉 New Traveler!",
+          body: `${joinerName} joined your trip to ${destination}!`,
+          data: { route: "Chat", chatId: chatRoomId },
+        });
+      }
+
+      // Notify the JOINING USER
+      await createNotification({
+        recipientId: joinerId,
+        type: "trip_join",
+        title: "✅ You're In!",
+        message: `You joined "${tripTitle}"! Chat with the host for trip details.`,
+        entityId: tripId,
+        entityType: "trip",
+        deepLinkRoute: "Chat",
+        deepLinkParams: { chatId: chatRoomId },
+      });
+
+      await sendPushToUser(joinerId, {
+        title: "✅ You're In!",
+        body: `You joined "${tripTitle}"! Chat with the host for details.`,
+        data: { route: "Chat", chatId: chatRoomId },
+      });
+    }
+  }
+);
 
 // ==================== LIKE NOTIFICATIONS ====================
 
@@ -466,139 +458,9 @@ export const onChatDeleted = onDocumentDeleted(
   });
 
 
-// ==================== KYC NOTIFICATIONS ====================
+// Note: KYC functions removed - using age verification (UI-only) in v1.0.0
 
-/**
- * Send notification when KYC status changes (approved/rejected).
- */
-export const onKycUpdated = onDocumentUpdated(
-  { document: "kyc/{kycId}", database: "(default)" },
-  async (event) => {
-    if (!event.data) return;
-
-    const before = event.data.before.data();
-    const after = event.data.after.data();
-
-    // Only trigger if status changed
-    if (before.status === after.status) return;
-
-    const isApproved = after.status === "approved";
-    const isRejected = after.status === "rejected";
-
-    if (!isApproved && !isRejected) return;
-
-    // Update user's kycStatus
-    await db.collection("users").doc(after.userId).update({
-      kycStatus: after.status,
-    });
-
-    // Create notification
-    await createNotification({
-      recipientId: after.userId,
-      type: isApproved ? "kyc_approved" : "kyc_rejected",
-      title: isApproved ? "KYC Approved! 🎉" : "KYC Update",
-      message: isApproved ?
-        "Congrats, your KYC is successfully verified. Start posting or join trips!" :
-        `Your KYC was rejected: ${after.rejectionReason || "Please resubmit with valid documents."}`,
-      entityId: undefined,
-      entityType: "kyc",
-      deepLinkRoute: isApproved ? "Feed" : "KycScreen",
-      deepLinkParams: {},
-    });
-
-    // Send push notification
-    await sendPushToUser(after.userId, {
-      title: isApproved ? "KYC Approved! 🎉" : "KYC Update",
-      body: isApproved ?
-        "Congrats, your KYC is successfully verified. Start posting or join trips!" :
-        "Your KYC application needs attention.",
-      data: { route: isApproved ? "Feed" : "KycScreen" },
-    });
-  });
-
-// ==================== TRIP JOIN/LEAVE NOTIFICATIONS ====================
-
-/**
- * Send notification when someone joins OR leaves a trip.
- */
-export const onTripParticipantChange = onDocumentUpdated(
-  { document: "trips/{tripId}", database: "(default)" },
-  async (event) => {
-    if (!event.data) return;
-
-    const before = event.data.before.data();
-    const after = event.data.after.data();
-    const tripId = event.params.tripId;
-
-    const beforeParticipants = before.participants || [];
-    const afterParticipants = after.participants || [];
-
-    // Check if a new participant was added (JOIN)
-    const newParticipants = afterParticipants.filter(
-      (uid: string) => !beforeParticipants.includes(uid)
-    );
-
-    // Check if a participant was removed (LEAVE)
-    const leftParticipants = beforeParticipants.filter(
-      (uid: string) => !afterParticipants.includes(uid)
-    );
-
-    // Handle JOINs
-    for (const newUserId of newParticipants) {
-      if (newUserId === after.userId) continue;
-
-      const joinerDoc = await db.collection("users").doc(newUserId).get();
-      const joiner = joinerDoc.data() || {};
-
-      await createNotification({
-        recipientId: after.userId,
-        type: "trip_join",
-        title: "New Trip Member! 🎒",
-        message: `${joiner.displayName || "Someone"} joined your trip "${after.title || after.destination}"`,
-        entityId: tripId,
-        entityType: "trip",
-        actorId: newUserId,
-        actorName: joiner.displayName,
-        actorPhotoUrl: joiner.photoURL,
-        deepLinkRoute: "TripDetails",
-        deepLinkParams: { tripId },
-      });
-
-      await sendPushToUser(after.userId, {
-        title: "New Trip Member! 🎒",
-        body: `${joiner.displayName || "Someone"} joined your trip "${after.title || after.destination}"`,
-        data: { route: "TripDetails", tripId },
-      });
-    }
-
-    // Handle LEAVEs
-    for (const leftUserId of leftParticipants) {
-      if (leftUserId === after.userId) continue;
-
-      const leaverDoc = await db.collection("users").doc(leftUserId).get();
-      const leaver = leaverDoc.data() || {};
-
-      await createNotification({
-        recipientId: after.userId,
-        type: "trip_leave",
-        title: "Traveler Left 👋",
-        message: `${leaver.displayName || "Someone"} left your trip "${after.title || after.destination}"`,
-        entityId: tripId,
-        entityType: "trip",
-        actorId: leftUserId,
-        actorName: leaver.displayName,
-        actorPhotoUrl: leaver.photoURL,
-        deepLinkRoute: "TripDetails",
-        deepLinkParams: { tripId },
-      });
-
-      await sendPushToUser(after.userId, {
-        title: "Traveler Left 👋",
-        body: `${leaver.displayName || "Someone"} left your trip "${after.title || after.destination}"`,
-        data: { route: "TripDetails", tripId },
-      });
-    }
-  });
+// Note: onTripParticipantChange removed - replaced by onTripJoined which creates group chat
 
 // ==================== TRIP CANCELLED NOTIFICATION ====================
 
@@ -698,29 +560,13 @@ export const onUserFollowed = onDocumentUpdated(
     }
   });
 
-// ==================== STORY NOTIFICATION ====================
-
-/**
- * Notify followers when a user posts a story.
- * (Limited to batch sending to avoid massive fanout bills, usually topics are better here)
- * For MVP: We will just log it or send to top 5 followers? 
- * Actually, let's skip massive fanout for now as it's dangerous for free tier. 
- * We will fully implement it but Commented OUT the heavy loop.
- */
-export const onStoryCreated = onDocumentCreated(
-  { document: "stories/{storyId}", database: "(default)" },
-  async (event) => {
-    // Placeholder for Story Notifications
-    // Requires Fetching all followers -> Sending msg.
-    // Dangerous for > 100 followers on Blaze/Spark plan limits.
-    // console.log("Story created - Notification logic reserved for scalability update.");
-    return;
-  });
+// Note: onStoryCreated removed - no stories in v1.0.0
 
 // ==================== NEW USER WELCOME NOTIFICATION ====================
 
 /**
- * Create welcome/KYC reminder notification for new users.
+ * Welcome notification for new users.
+ * Prompts them to verify age to access full features.
  */
 export const onUserCreated = onDocumentCreated(
   { document: "users/{userId}", database: "(default)" },
@@ -729,24 +575,24 @@ export const onUserCreated = onDocumentCreated(
 
     const userId = event.params.userId;
 
-    // Create actionable notification for KYC verification
+    // Create welcome notification
     await createNotification({
       recipientId: userId,
-      type: "action_required",
+      type: "welcome",
       title: "Welcome to Tripzi! 🌍",
-      message: "Want to post or join a trip? Please verify your KYC to get started.",
+      message: "Verify your age to start creating and joining trips!",
       entityId: undefined,
       entityType: undefined,
-      deepLinkRoute: "KycScreen",
+      deepLinkRoute: "Profile",
       deepLinkParams: {},
     });
 
-    // Send push notification (delayed slightly to allow FCM token registration)
+    // Send push notification (delayed to allow FCM token registration)
     setTimeout(async () => {
       await sendPushToUser(userId, {
         title: "Welcome to Tripzi! 🌍",
-        body: "Complete your KYC to start creating and joining trips!",
-        data: { route: "KycScreen" },
+        body: "Complete age verification to unlock all features!",
+        data: { route: "Profile" },
       });
     }, 5000);
   });

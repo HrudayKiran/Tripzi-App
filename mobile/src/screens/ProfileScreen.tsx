@@ -78,28 +78,29 @@ const ProfileScreen = ({ navigation }) => {
     );
   };
 
-  // Quick KYC verify for testing - removes the need to do actual KYC
-  const verifyMyKyc = async () => {
+  // Quick age verify for testing - removes the need to do actual verification
+  const verifyMyAge = async () => {
     const currentUser = auth().currentUser;
     if (!currentUser) return;
 
     try {
       await firestore().collection('users').doc(currentUser.uid).update({
-        kycStatus: 'verified',
-        kycVerifiedAt: firestore.FieldValue.serverTimestamp(),
+        ageVerified: true,
+        ageVerifiedAt: firestore.FieldValue.serverTimestamp(),
       });
-      Alert.alert('Success! ✓', 'Your KYC has been verified for testing.');
+      Alert.alert('Success! ✓', 'Your age has been verified for testing.');
     } catch (error) {
       // Error handled silently
-      Alert.alert('Done', 'KYC status updated.');
+      Alert.alert('Done', 'Age verification status updated.');
     }
   };
 
-  const MenuItem = ({ icon, iconColor, iconBg, text, badge = null, onPress, isDestructive = false }) => (
+  const MenuItem = ({ icon, iconColor, iconBg, text, badge = null, onPress, isDestructive = false, disabled = false }) => (
     <TouchableOpacity
-      style={[styles.menuItem, { backgroundColor: colors.card }]}
-      onPress={onPress}
-      activeOpacity={0.7}
+      style={[styles.menuItem, { backgroundColor: colors.card }, disabled && { opacity: 0.8 }]}
+      onPress={disabled ? undefined : onPress}
+      activeOpacity={disabled ? 1 : 0.7}
+      disabled={disabled}
     >
       <View style={[styles.menuIconBox, { backgroundColor: iconBg }]}>
         <Ionicons name={icon} size={22} color={iconColor} />
@@ -112,7 +113,7 @@ const ProfileScreen = ({ navigation }) => {
           <Text style={styles.badgeText}>{badge}</Text>
         </View>
       )}
-      <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+      {!disabled && <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />}
     </TouchableOpacity>
   );
 
@@ -180,12 +181,13 @@ const ProfileScreen = ({ navigation }) => {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>GENERAL</Text>
 
           <MenuItem
-            icon="shield-checkmark-outline"
+            icon="calendar-outline"
             iconColor="#10B981"
             iconBg="#D1FAE5"
-            text="KYC Status"
-            badge={user?.kycStatus === 'verified' ? 'Verified' : user?.kycStatus === 'pending' ? 'Pending' : 'Required'}
-            onPress={() => navigation.navigate('KYC')}
+            text="Age Verification"
+            badge={user?.ageVerified === true ? 'Verified' : 'Required'}
+            onPress={() => navigation.navigate('AgeVerification')}
+            disabled={user?.ageVerified === true}
           />
           <MenuItem
             icon="document-text-outline"

@@ -244,9 +244,8 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
     return (
         <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
             <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
             >
                 <View style={styles.overlay}>
                     <TouchableOpacity style={styles.backdrop} onPress={onClose} />
@@ -256,7 +255,7 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
                             { backgroundColor: colors.background, transform: [{ translateY: slideAnim }] }
                         ]}
                     >
-                        <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+                        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top', 'left', 'right']}>
                             {/* Header */}
                             <View style={[styles.header, { borderBottomColor: colors.border }]}>
                                 <View style={styles.headerHandle} />
@@ -316,8 +315,8 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
 };
 
 const styles = StyleSheet.create({
-    overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
-    backdrop: { flex: 1 },
+    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    backdrop: { ...StyleSheet.absoluteFillObject },
     container: { height: '70%', borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl },
     header: { alignItems: 'center', paddingVertical: SPACING.md, borderBottomWidth: 1 },
     headerHandle: { width: 40, height: 4, backgroundColor: '#ccc', borderRadius: 2, marginBottom: SPACING.sm },
@@ -335,7 +334,7 @@ const styles = StyleSheet.create({
     commentTime: { fontSize: FONT_SIZE.xs, marginTop: SPACING.xs },
     emptyContainer: { alignItems: 'center', paddingVertical: SPACING.xxxl },
     emptyText: { fontSize: FONT_SIZE.sm, marginTop: SPACING.md },
-    inputContainer: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, borderTopWidth: 1 },
+    inputContainer: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, paddingBottom: 20, borderTopWidth: 1 },
     inputAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: SPACING.sm },
     input: { flex: 1, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.lg, maxHeight: 80 },
     sendButton: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginLeft: SPACING.sm },

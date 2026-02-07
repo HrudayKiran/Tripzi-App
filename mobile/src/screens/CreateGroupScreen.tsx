@@ -24,7 +24,7 @@ interface User {
     displayName: string;
     username?: string;
     photoURL?: string;
-    kycStatus?: string;
+    ageVerified?: boolean;
 }
 
 const CreateGroupScreen = ({ navigation }) => {
@@ -272,7 +272,7 @@ const CreateGroupScreen = ({ navigation }) => {
                 <View style={styles.userInfo}>
                     <View style={styles.userNameRow}>
                         <Text style={[styles.userName, { color: colors.text }]}>{item.displayName}</Text>
-                        {item.kycStatus === 'verified' && (
+                        {item.ageVerified === true && (
                             <Ionicons name="shield-checkmark" size={14} color="#10B981" style={{ marginLeft: 4 }} />
                         )}
                     </View>

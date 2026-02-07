@@ -35,7 +35,7 @@ import TripDetailsScreen from '../screens/TripDetailsScreen';
 import CreateGroupScreen from '../screens/CreateGroupScreen';
 import GroupInfoScreen from '../screens/GroupInfoScreen';
 import StoriesScreen from '../screens/StoriesScreen';
-import KycScreen from '../screens/KycScreen';
+import AgeVerificationScreen from '../screens/AgeVerificationScreen';
 import TermsScreen from '../screens/TermsScreen';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
 import HelpSupportScreen from '../screens/HelpSupportScreen';
@@ -292,8 +292,7 @@ const AppNavigator = () => {
                         <Stack.Screen name="CreateGroupChat" component={CreateGroupScreen} />
                         <Stack.Screen name="GroupInfo" component={GroupInfoScreen} />
                         <Stack.Screen name="Stories" component={StoriesScreen} />
-                        <Stack.Screen name="KYC" component={KycScreen} />
-                        <Stack.Screen name="KycScreen" component={KycScreen} />
+                        <Stack.Screen name="AgeVerification" component={AgeVerificationScreen} />
                         <Stack.Screen name="Terms" component={TermsScreen} />
                         <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
                         <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />

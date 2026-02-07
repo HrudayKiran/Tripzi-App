@@ -87,12 +87,16 @@ const ReportTripModal: React.FC<ReportTripModalProps> = ({ visible, trip, onClos
 
     return (
         <Modal visible={visible} animationType="slide" transparent>
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={{ flex: 1 }}
+            >
                 <View style={styles.modalOverlay}>
-                    <KeyboardAvoidingView
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                        style={[styles.modalContent, { backgroundColor: colors.card }]}
-                    >
+                    <TouchableWithoutFeedback onPress={onClose}>
+                        <View style={StyleSheet.absoluteFill} />
+                    </TouchableWithoutFeedback>
+
+                    <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
                         <View style={styles.header}>
                             <Text style={[styles.title, { color: colors.text }]}>Report Trip</Text>
                             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
@@ -157,9 +161,9 @@ const ReportTripModal: React.FC<ReportTripModalProps> = ({ visible, trip, onClos
                                 )}
                             </TouchableOpacity>
                         </View>
-                    </KeyboardAvoidingView>
+                    </View>
                 </View>
-            </TouchableWithoutFeedback>
+            </KeyboardAvoidingView>
         </Modal>
     );
 };

@@ -72,7 +72,7 @@ const SignUpScreen = ({ navigation }) => {
           userId: user.uid, email, displayName: fullName,
           username: fullName.toLowerCase().replace(/\s+/g, '') + Math.floor(Math.random() * 1000),
           phoneNumber: phoneNumber || null,
-          role: 'user', kycStatus: 'pending', followers: [], following: [], rating: 0,
+          role: 'user', ageVerified: false, followers: [], following: [], rating: 0,
           createdAt: firestore.FieldValue.serverTimestamp(),
           lastLoginAt: firestore.FieldValue.serverTimestamp(),
         });

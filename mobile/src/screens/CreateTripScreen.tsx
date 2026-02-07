@@ -1,18 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Image, Platform, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
-import { Video, ResizeMode } from 'expo-av';
+
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
-import { useKycGate } from '../hooks/useKycGate';
-import KycBlockingModal from '../components/KycBlockingModal';
+
 
 const { width } = Dimensions.get('window');
 
@@ -58,15 +57,15 @@ const GENDER_PREFERENCES = [
 
 const CreateTripScreen = ({ navigation }) => {
     const { colors } = useTheme();
-    const { isAgeVerified, kycStatus, isLoading: isKycLoading } = useKycGate();
-    const [showKycModal, setShowKycModal] = useState(false);
+
     const [step, setStep] = useState(1);
     const totalSteps = 5;
 
     // Step 1: Basic Info
     const [title, setTitle] = useState('');
     const [images, setImages] = useState<string[]>([]);
-    const [autoAddImages, setAutoAddImages] = useState(false);
+    const [imageLocations, setImageLocations] = useState<string[]>([]); // To store specific place names
+
 
     // Step 2: Location & Dates
     const [fromLocation, setFromLocation] = useState('');
@@ -116,43 +115,20 @@ const CreateTripScreen = ({ navigation }) => {
         }
     };
 
-    const pickVideo = async () => {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-            Alert.alert('Permission needed', 'Please grant gallery permissions.');
-            return;
-        }
-
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-            allowsMultipleSelection: false,
-            quality: 1,
-        });
-
-        if (!result.canceled && result.assets[0]) {
-            const asset = result.assets[0];
-            // Check file size if possible (approx limit verification)
-            // 50MB ~ 50 * 1024 * 1024 bytes
-            if (asset.fileSize && asset.fileSize > 50 * 1024 * 1024) {
-                Alert.alert('File too large', 'Please select a video under 50MB.');
-                return;
-            }
-            setVideo(asset.uri);
-            // Store the MIME type for upload
-            if (asset.mimeType) {
-
-            }
-
-        }
-    };
-
     const removeImage = (index: number) => {
         setImages(prev => prev.filter((_, i) => i !== index));
+        setImageLocations(prev => prev.filter((_, i) => i !== index));
     };
 
-    const removeVideo = () => {
-        setVideo(null);
-    };
+
+
+
+
+
+
+
+
+
 
     const toggleSelection = (id: string, list: string[], setList: (val: string[]) => void) => {
         if (list.includes(id)) {
@@ -224,11 +200,7 @@ const CreateTripScreen = ({ navigation }) => {
             return;
         }
 
-        // Check age verification status using the hook (already loaded)
-        if (!isAgeVerified && kycStatus !== 'loading') {
-            setShowKycModal(true);
-            return;
-        }
+
 
         setIsPosting(true);
 
@@ -237,9 +209,10 @@ const CreateTripScreen = ({ navigation }) => {
             let uploadedImageUrls: string[] = [];
             if (images.length > 0) {
 
-
                 for (let i = 0; i < images.length; i++) {
                     const imageUri = images[i];
+
+
                     const filename = `trips/${currentUser.uid}/${Date.now()}_${i}.jpg`;
                     const reference = storage().ref(filename);
 
@@ -247,33 +220,9 @@ const CreateTripScreen = ({ navigation }) => {
                         await reference.putFile(imageUri, { contentType: 'image/jpeg' });
                         const downloadUrl = await reference.getDownloadURL();
                         uploadedImageUrls.push(downloadUrl);
-
                     } catch (uploadError) {
-
-                        // Continue with other images
+                        console.error('Image upload failed:', uploadError);
                     }
-                }
-            }
-
-            // Upload Video if exists
-            let uploadedVideoUrl = null;
-            if (video) {
-                const filename = `trip_videos/${currentUser.uid}/${Date.now()}.mp4`;
-                const reference = storage().ref(filename);
-
-                // Required for generic file uploads if needed, but putFile handles it
-                try {
-
-
-                    await reference.putFile(video, { contentType: 'video/mp4' });
-                    uploadedVideoUrl = await reference.getDownloadURL();
-
-                } catch (videoError: any) {
-                    console.error('Video upload failed:', videoError);
-                    console.error('Video error code:', videoError?.code);
-                    console.error('Video error message:', videoError?.message);
-                    Alert.alert('Video Upload Failed', `${videoError?.message || 'Unknown error'}. Trip will be posted without video.`);
-                    // Non-critical, just don't attach video
                 }
             }
 
@@ -285,6 +234,7 @@ const CreateTripScreen = ({ navigation }) => {
             const tripData = {
                 title,
                 images: finalImages,
+                imageLocations: imageLocations.slice(0, finalImages.length), // Save specific place names
                 fromLocation,
                 toLocation,
                 mapsLink: generateMapsLink(toLocation),
@@ -312,7 +262,7 @@ const CreateTripScreen = ({ navigation }) => {
                 location: toLocation,
                 tripType: tripTypes[0] || 'Adventure',
                 coverImage: finalImages[0],
-                video: uploadedVideoUrl,
+                // video removed
             };
 
             // Create trip
@@ -416,19 +366,9 @@ const CreateTripScreen = ({ navigation }) => {
                                 )}
                             </View>
 
-                            {/* Auto-add images toggle */}
-                            <View style={styles.autoImageToggle}>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={[styles.label, { color: colors.text, marginBottom: 4 }]}>Auto-add images from internet</Text>
-                                    <Text style={[styles.hintText, { color: colors.textSecondary }]}>If no images uploaded, auto-fetch based on destination</Text>
-                                </View>
-                                <TouchableOpacity
-                                    style={[styles.toggleButton, autoAddImages && styles.toggleButtonActive]}
-                                    onPress={() => setAutoAddImages(!autoAddImages)}
-                                >
-                                    <View style={[styles.toggleCircle, autoAddImages && styles.toggleCircleActive]} />
-                                </TouchableOpacity>
-                            </View>
+
+
+
                         </Animatable.View>
                     )}
 
@@ -682,6 +622,8 @@ const CreateTripScreen = ({ navigation }) => {
                                     </TouchableOpacity>
                                 ))}
                             </View>
+
+
                         </Animatable.View>
                     )}
 
@@ -766,12 +708,6 @@ const CreateTripScreen = ({ navigation }) => {
                 </View>
             </SafeAreaView>
 
-            {/* Modals */}
-            <KycBlockingModal
-                visible={showKycModal}
-                onClose={() => setShowKycModal(false)}
-                status={kycStatus}
-            />
         </View>
     );
 };

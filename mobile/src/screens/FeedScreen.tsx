@@ -371,7 +371,7 @@ const FeedScreen = ({ navigation }) => {
                                                 </Text>
                                             )}
                                         </View>
-                                        {user.kycStatus === 'verified' && (
+                                        {user.ageVerified === true && (
                                             <Ionicons name="shield-checkmark" size={16} color="#10B981" />
                                         )}
                                     </TouchableOpacity>

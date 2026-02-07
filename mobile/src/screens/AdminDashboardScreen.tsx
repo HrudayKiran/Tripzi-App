@@ -28,7 +28,6 @@ const { width } = Dimensions.get('window');
 // Tab configuration
 const TABS = [
     { id: 'overview', label: 'Overview', icon: 'grid-outline' },
-    { id: 'kyc', label: 'KYC', icon: 'shield-checkmark-outline' },
     { id: 'users', label: 'Users', icon: 'people-outline' },
     { id: 'reports', label: 'Reports', icon: 'flag-outline' },
     { id: 'feedback', label: 'Feedback', icon: 'chatbubbles-outline' },
@@ -43,9 +42,8 @@ const AdminDashboardScreen = ({ navigation }) => {
     const [refreshing, setRefreshing] = useState(false);
     const [stats, setStats] = useState({
         totalUsers: 0,
-        pendingKYC: 0,
-        verifiedKYC: 0,
-        rejectedKYC: 0,
+        ageVerified: 0,
+        notVerified: 0,
         totalTrips: 0,
         activeTrips: 0,
         totalFeedback: 0,
@@ -64,6 +62,7 @@ const AdminDashboardScreen = ({ navigation }) => {
     const [processingId, setProcessingId] = useState<string | null>(null);
     const [reports, setReports] = useState<any[]>([]);
     const [viewingKyc, setViewingKyc] = useState<any | null>(null);
+
 
     useEffect(() => {
         checkAdminAccess();
@@ -107,19 +106,14 @@ const AdminDashboardScreen = ({ navigation }) => {
             const suggestionsSnapshot = await firestore().collection('suggestions').get();
             const bugsSnapshot = await firestore().collection('bugs').get();
 
-            let pending = 0, verified = 0, rejected = 0;
-            const pendingRequests: any[] = [];
+            let verified = 0, notVerified = 0;
 
             usersSnapshot.docs.forEach(doc => {
                 const data = doc.data();
-                const kycStatus = data.kyc?.status || data.kycStatus;
-                if (kycStatus === 'pending') {
-                    pending++;
-                    pendingRequests.push({ id: doc.id, ...data });
-                } else if (kycStatus === 'verified') {
+                if (data.ageVerified === true) {
                     verified++;
-                } else if (kycStatus === 'rejected') {
-                    rejected++;
+                } else {
+                    notVerified++;
                 }
             });
 
@@ -130,12 +124,10 @@ const AdminDashboardScreen = ({ navigation }) => {
                 return endDate >= now;
             }).length;
 
-            setKycRequests(pendingRequests);
             setStats({
                 totalUsers: usersSnapshot.size,
-                pendingKYC: pending,
-                verifiedKYC: verified,
-                rejectedKYC: rejected,
+                ageVerified: verified,
+                notVerified: notVerified,
                 totalTrips: tripsSnapshot.size,
                 activeTrips,
                 totalFeedback: suggestionsSnapshot.size + bugsSnapshot.size,
@@ -334,8 +326,8 @@ const AdminDashboardScreen = ({ navigation }) => {
             {/* Stats Grid */}
             <View style={styles.statsGrid}>
                 <StatCard icon="people" iconColor="#8B5CF6" iconBg="#EDE9FE" value={stats.totalUsers} label="Total Users" onPress={() => setActiveTab('users')} />
-                <StatCard icon="time" iconColor="#F59E0B" iconBg="#FEF3C7" value={stats.pendingKYC} label="Pending KYC" onPress={() => setActiveTab('kyc')} />
-                <StatCard icon="shield-checkmark" iconColor="#10B981" iconBg="#D1FAE5" value={stats.verifiedKYC} label="Verified" />
+                <StatCard icon="shield-checkmark" iconColor="#10B981" iconBg="#D1FAE5" value={stats.ageVerified} label="Age Verified" />
+                <StatCard icon="time" iconColor="#F59E0B" iconBg="#FEF3C7" value={stats.notVerified} label="Not Verified" />
                 <StatCard icon="airplane" iconColor="#3B82F6" iconBg="#DBEAFE" value={stats.totalTrips} label="Total Trips" onPress={() => setActiveTab('trips')} />
                 <StatCard icon="chatbubbles" iconColor="#EC4899" iconBg="#FCE7F3" value={stats.totalFeedback} label="Feedback" onPress={() => setActiveTab('feedback')} />
                 <StatCard icon="bug" iconColor="#EF4444" iconBg="#FEE2E2" value={stats.bugs} label="Bug Reports" />
@@ -346,118 +338,15 @@ const AdminDashboardScreen = ({ navigation }) => {
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Actions</Text>
             </View>
             <View style={styles.quickActions}>
-                <TouchableOpacity style={[styles.quickActionBtn, { backgroundColor: '#EDE9FE' }]} onPress={() => setActiveTab('kyc')}>
-                    <Ionicons name="shield-checkmark" size={24} color="#8B5CF6" />
-                    <Text style={[styles.quickActionText, { color: '#8B5CF6' }]}>Review KYC</Text>
-                    {stats.pendingKYC > 0 && <View style={styles.badge}><Text style={styles.badgeText}>{stats.pendingKYC}</Text></View>}
+                <TouchableOpacity style={[styles.quickActionBtn, { backgroundColor: '#EDE9FE' }]} onPress={() => setActiveTab('users')}>
+                    <Ionicons name="people" size={24} color="#8B5CF6" />
+                    <Text style={[styles.quickActionText, { color: '#8B5CF6' }]}>Manage Users</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.quickActionBtn, { backgroundColor: '#DBEAFE' }]} onPress={() => setActiveTab('feedback')}>
                     <Ionicons name="chatbubbles" size={24} color="#3B82F6" />
                     <Text style={[styles.quickActionText, { color: '#3B82F6' }]}>View Feedback</Text>
                 </TouchableOpacity>
             </View>
-
-            {/* Recent Activity */}
-            {kycRequests.length > 0 && (
-                <>
-                    <View style={styles.sectionHeader}>
-                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Pending KYC Requests</Text>
-                        <TouchableOpacity onPress={() => setActiveTab('kyc')}>
-                            <Text style={[styles.seeAll, { color: colors.primary }]}>See All</Text>
-                        </TouchableOpacity>
-                    </View>
-                    {kycRequests.slice(0, 3).map(req => (
-                        <View key={req.id} style={[styles.kycCard, { backgroundColor: colors.card }]}>
-                            <Image source={{ uri: req.photoURL || undefined }} style={styles.kycAvatar} />
-                            <View style={styles.kycInfo}>
-                                <Text style={[styles.kycName, { color: colors.text }]}>{req.displayName || 'User'}</Text>
-                                <Text style={[styles.kycEmail, { color: colors.textSecondary }]}>{req.email}</Text>
-                            </View>
-                            <TouchableOpacity
-                                style={[styles.approveBtn, processingId === req.id && { opacity: 0.5 }]}
-                                onPress={() => handleVerifyKyc(req.id)}
-                                disabled={processingId === req.id}
-                            >
-                                <Ionicons name="checkmark" size={20} color="#fff" />
-                            </TouchableOpacity>
-                        </View>
-                    ))}
-                </>
-            )}
-        </Animatable.View>
-    );
-
-    // KYC Tab
-    const renderKYC = () => (
-        <Animatable.View animation="fadeIn" duration={300}>
-            {kycRequests.length === 0 ? (
-                <View style={styles.emptyState}>
-                    <Ionicons name="shield-checkmark-outline" size={64} color={colors.textSecondary} />
-                    <Text style={[styles.emptyTitle, { color: colors.text }]}>All Clear!</Text>
-                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No pending KYC requests</Text>
-                </View>
-            ) : (
-                kycRequests.map(req => (
-                    <View key={req.id} style={[styles.kycDetailCard, { backgroundColor: colors.card }]}>
-                        <View style={styles.kycDetailHeader}>
-                            <Image source={{ uri: req.photoURL || undefined }} style={styles.kycDetailAvatar} />
-                            <View style={styles.kycDetailInfo}>
-                                <Text style={[styles.kycDetailName, { color: colors.text }]}>{req.displayName}</Text>
-                                <Text style={[styles.kycDetailEmail, { color: colors.textSecondary }]}>{req.email}</Text>
-                            </View>
-                        </View>
-
-                        <View style={styles.kycDataRow}>
-                            <Text style={[styles.kycLabel, { color: colors.textSecondary }]}>Aadhaar:</Text>
-                            <Text style={[styles.kycValue, { color: colors.text }]}>{req.kyc?.aadhaar || 'N/A'}</Text>
-                        </View>
-                        <View style={styles.kycDataRow}>
-                            <Text style={[styles.kycLabel, { color: colors.textSecondary }]}>DOB:</Text>
-                            <Text style={[styles.kycValue, { color: colors.text }]}>
-                                {req.kyc?.dateOfBirth?.toDate?.().toLocaleDateString() || 'N/A'}
-                            </Text>
-                        </View>
-
-                        {req.kyc?.selfieUrl && (
-                            <TouchableOpacity onPress={() => setViewingKyc({
-                                userId: req.id,
-                                selfieImageUrl: req.kyc?.selfieUrl,
-                                aadhaarImageUrl: req.kyc?.aadhaarUrl,
-                                aadhaarNumber: req.kyc?.aadhaar,
-                                dateOfBirth: req.kyc?.dateOfBirth
-                            })}>
-                                <Image source={{ uri: req.kyc.selfieUrl }} style={styles.kycDocImage} resizeMode="cover" />
-                                <Text style={{ textAlign: 'center', color: colors.primary, marginTop: 4 }}>Tap to View Docs</Text>
-                            </TouchableOpacity>
-                        )}
-
-                        <View style={styles.kycActions}>
-                            <TouchableOpacity
-                                style={[styles.rejectBtn, processingId === req.id && { opacity: 0.5 }]}
-                                onPress={() => { setSelectedUser(req); setShowRejectModal(true); }}
-                                disabled={processingId === req.id}
-                            >
-                                <Ionicons name="close" size={20} color="#EF4444" />
-                                <Text style={styles.rejectBtnText}>Reject</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.verifyBtn, processingId === req.id && { opacity: 0.5 }]}
-                                onPress={() => handleVerifyKyc(req.id)}
-                                disabled={processingId === req.id}
-                            >
-                                {processingId === req.id ? (
-                                    <ActivityIndicator size="small" color="#fff" />
-                                ) : (
-                                    <>
-                                        <Ionicons name="checkmark" size={20} color="#fff" />
-                                        <Text style={styles.verifyBtnText}>Approve</Text>
-                                    </>
-                                )}
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                ))
-            )}
         </Animatable.View>
     );
 
@@ -496,19 +385,16 @@ const AdminDashboardScreen = ({ navigation }) => {
                     <View style={[
                         styles.kycBadge,
                         {
-                            backgroundColor: user.kycStatus === 'verified' ? '#D1FAE5' :
-                                user.kycStatus === 'pending' ? '#FEF3C7' : '#F3F4F6'
+                            backgroundColor: user.ageVerified === true ? '#D1FAE5' : '#F3F4F6'
                         }
                     ]}>
                         <Text style={[
                             styles.kycBadgeText,
                             {
-                                color: user.kycStatus === 'verified' ? '#10B981' :
-                                    user.kycStatus === 'pending' ? '#F59E0B' : '#6B7280'
+                                color: user.ageVerified === true ? '#10B981' : '#6B7280'
                             }
                         ]}>
-                            {user.kycStatus === 'verified' ? 'Verified' :
-                                user.kycStatus === 'pending' ? 'Pending' : 'None'}
+                            {user.ageVerified === true ? 'Verified' : 'Not Verified'}
                         </Text>
                     </View>
                 </TouchableOpacity>
@@ -660,12 +546,12 @@ const AdminDashboardScreen = ({ navigation }) => {
                     <Text style={[styles.systemValue, { color: colors.text }]}>{stats.totalTrips}</Text>
                 </View>
                 <View style={styles.systemRow}>
-                    <Text style={[styles.systemLabel, { color: colors.textSecondary }]}>Pending KYC:</Text>
-                    <Text style={[styles.systemValue, { color: '#F59E0B' }]}>{stats.pendingKYC}</Text>
+                    <Text style={[styles.systemLabel, { color: colors.textSecondary }]}>Age Verified:</Text>
+                    <Text style={[styles.systemValue, { color: '#10B981' }]}>{stats.ageVerified}</Text>
                 </View>
                 <View style={styles.systemRow}>
-                    <Text style={[styles.systemLabel, { color: colors.textSecondary }]}>Verified KYC:</Text>
-                    <Text style={[styles.systemValue, { color: '#10B981' }]}>{stats.verifiedKYC}</Text>
+                    <Text style={[styles.systemLabel, { color: colors.textSecondary }]}>Not Verified:</Text>
+                    <Text style={[styles.systemValue, { color: '#F59E0B' }]}>{stats.notVerified}</Text>
                 </View>
             </View>
 
@@ -686,7 +572,7 @@ const AdminDashboardScreen = ({ navigation }) => {
     const renderContent = () => {
         switch (activeTab) {
             case 'overview': return renderOverview();
-            case 'kyc': return renderKYC();
+            // case 'kyc': return renderKYC(); // Removed
             case 'users': return renderUsers();
             case 'reports': return renderReports();
             case 'feedback': return renderFeedback();
@@ -779,9 +665,9 @@ const AdminDashboardScreen = ({ navigation }) => {
                                     <Text style={[styles.modalValue, { color: colors.text }]}>{selectedUser.role || 'user'}</Text>
                                 </View>
                                 <View style={styles.modalInfoRow}>
-                                    <Text style={[styles.modalLabel, { color: colors.textSecondary }]}>KYC:</Text>
-                                    <Text style={[styles.modalValue, { color: selectedUser.kycStatus === 'verified' ? '#10B981' : '#F59E0B' }]}>
-                                        {selectedUser.kycStatus || 'None'}
+                                    <Text style={[styles.modalLabel, { color: colors.textSecondary }]}>Age Verification:</Text>
+                                    <Text style={[styles.modalValue, { color: selectedUser.ageVerified === true ? '#10B981' : '#F59E0B' }]}>
+                                        {selectedUser.ageVerified === true ? 'Verified' : 'Not Verified'}
                                     </Text>
                                 </View>
 
