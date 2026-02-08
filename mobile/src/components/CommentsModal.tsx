@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, FlatList, Image, KeyboardAvoidingView, Platform, Animated, Alert, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, FlatList, KeyboardAvoidingView, Platform, Animated, Alert, Keyboard, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -7,7 +7,10 @@ import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import DefaultAvatar from './DefaultAvatar';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const MODAL_HEIGHT = SCREEN_HEIGHT * 0.9; // Occupational height (Instagram style)
 
 type Comment = {
     id: string;
@@ -31,58 +34,61 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
     const [newComment, setNewComment] = useState('');
     const [editingComment, setEditingComment] = useState<Comment | null>(null);
     const [editText, setEditText] = useState('');
-    const slideAnim = useRef(new Animated.Value(500)).current;
+    const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
     const currentUser = auth().currentUser;
 
     useEffect(() => {
         if (visible) {
-            slideAnim.setValue(500);
+            slideAnim.setValue(SCREEN_HEIGHT);
             Animated.spring(slideAnim, {
                 toValue: 0,
                 useNativeDriver: true,
-                speed: 14,
-                bounciness: 0,
+                speed: 12,
+                bounciness: 2,
             }).start();
         } else {
             Animated.timing(slideAnim, {
-                toValue: 500,
-                duration: 250,
+                toValue: SCREEN_HEIGHT,
+                duration: 200,
                 useNativeDriver: true,
             }).start();
         }
     }, [visible]);
 
-    // Real-time comments listener
+    // ... (rest of hook logic)
+
+    // Render part needs to use height: '75%'
+    // I need to locate where style is applied.
+    // It is applied in `styles.container` and overriding style in render.
+
+    // ...
+
+
+    // Real-time comments listener (kept same)
     useEffect(() => {
         if (!visible || !tripId) return;
-
-        const commentsRef = firestore()
+        const unsubscribe = firestore()
             .collection('trips')
             .doc(tripId)
             .collection('comments')
-            .orderBy('createdAt', 'desc');
-
-        const unsubscribe = commentsRef.onSnapshot(
-            (snapshot) => {
-                const commentsData = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                })) as Comment[];
-                setComments(commentsData);
-            },
-            (error) => {
-                // Listener error
-
-                setComments([]);
-            }
-        );
-
+            .orderBy('createdAt', 'desc')
+            .onSnapshot(
+                (snapshot) => {
+                    const commentsData = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data(),
+                    })) as Comment[];
+                    setComments(commentsData);
+                },
+                () => setComments([])
+            );
         return () => unsubscribe();
     }, [visible, tripId]);
 
     const handleSendComment = async () => {
         if (!newComment.trim() || !currentUser) return;
 
+        // ... (Optimistic update logic same as before)
         const tempId = `temp_${Date.now()}`;
         const comment: Comment = {
             id: tempId,
@@ -93,105 +99,51 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
             createdAt: new Date(),
         };
 
-        // Optimistic update with temp ID
         setComments(prev => [comment, ...prev]);
         setNewComment('');
 
         try {
-            const docRef = await firestore()
-                .collection('trips')
-                .doc(tripId)
-                .collection('comments')
-                .add({
-                    text: comment.text,
-                    userId: comment.userId,
-                    userName: comment.userName,
-                    userImage: comment.userImage,
-                    createdAt: firestore.FieldValue.serverTimestamp(),
-                });
-            // Real-time listener will update the list automatically
-            Keyboard.dismiss();
-        } catch {
-            // Comment save failed silently
-        }
+            await firestore().collection('trips').doc(tripId).collection('comments').add({
+                text: comment.text,
+                userId: comment.userId,
+                userName: comment.userName,
+                userImage: comment.userImage,
+                createdAt: firestore.FieldValue.serverTimestamp(),
+            });
+            // Don't dismiss keyboard to keep flow smooth like Instagram
+        } catch { }
     };
 
-    const handleEditComment = (comment: Comment) => {
-        setEditingComment(comment);
-        setEditText(comment.text);
-    };
-
+    // ... (Edit/Delete logic same, omitting for brevity in thought but including in code)
+    const handleEditComment = (comment: Comment) => { setEditingComment(comment); setEditText(comment.text); };
     const handleSaveEdit = async () => {
         if (!editingComment || !editText.trim()) return;
-
         const updatedText = editText.trim();
-
-        // Optimistic update
-        setComments(prev => prev.map(c =>
-            c.id === editingComment.id ? { ...c, text: updatedText } : c
-        ));
-        setEditingComment(null);
-        setEditText('');
-
-        try {
-            await firestore()
-                .collection('trips')
-                .doc(tripId)
-                .collection('comments')
-                .doc(editingComment.id)
-                .update({ text: updatedText });
-        } catch {
-            // Comment update failed silently
-        }
+        setComments(prev => prev.map(c => c.id === editingComment.id ? { ...c, text: updatedText } : c));
+        setEditingComment(null); setEditText('');
+        try { await firestore().collection('trips').doc(tripId).collection('comments').doc(editingComment.id).update({ text: updatedText }); } catch { }
     };
-
     const handleDeleteComment = (comment: Comment) => {
-        Alert.alert(
-            'Delete Comment',
-            'Are you sure you want to delete this comment?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: async () => {
-                        // Optimistic delete
-                        setComments(prev => prev.filter(c => c.id !== comment.id));
-
-                        try {
-                            await firestore()
-                                .collection('trips')
-                                .doc(tripId)
-                                .collection('comments')
-                                .doc(comment.id)
-                                .delete();
-                        } catch {
-                            // Re-add if failed
-                            setComments(prev => [comment, ...prev]);
-                        }
-                    },
-                },
-            ]
-        );
+        Alert.alert('Delete Comment', 'Are you sure?', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Delete', style: 'destructive', onPress: async () => {
+                    setComments(prev => prev.filter(c => c.id !== comment.id));
+                    try { await firestore().collection('trips').doc(tripId).collection('comments').doc(comment.id).delete(); } catch { setComments(prev => [comment, ...prev]); }
+                }
+            }
+        ]);
     };
 
-    const handleUserPress = (userId: string) => {
-        onClose();
-        navigation.navigate('UserProfile' as never, { userId } as never);
-    };
+    const handleUserPress = (userId: string) => { onClose(); navigation.navigate('UserProfile' as never, { userId } as never); };
 
     const renderComment = ({ item }: { item: Comment }) => {
         const isOwner = item.userId === currentUser?.uid;
         const isEditing = editingComment?.id === item.id;
-
         return (
             <View style={[styles.commentItem, { backgroundColor: colors.card }]}>
                 <TouchableOpacity onPress={() => handleUserPress(item.userId)}>
-                    <DefaultAvatar
-                        uri={item.userImage}
-                        size={40}
-                        style={styles.commentAvatar}
-                    />
+                    <DefaultAvatar uri={item.userImage} size={40} style={styles.commentAvatar} />
                 </TouchableOpacity>
                 <View style={styles.commentContent}>
                     <View style={styles.commentHeader}>
@@ -209,15 +161,11 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
                             </View>
                         )}
                     </View>
-
                     {isEditing ? (
                         <View style={styles.editContainer}>
                             <TextInput
                                 style={[styles.editInput, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                                value={editText}
-                                onChangeText={setEditText}
-                                multiline
-                                autoFocus
+                                value={editText} onChangeText={setEditText} multiline autoFocus
                             />
                             <View style={styles.editActions}>
                                 <TouchableOpacity onPress={() => setEditingComment(null)} style={styles.editBtn}>
@@ -242,20 +190,41 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
     };
 
     return (
-        <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+        <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+            {/* 
+                Structure for Instagram-like smooth keyboard:
+                1. KAV with behavior "height" (Android) or "padding" (iOS)?
+                   Actually, with 'resize' mode in app.json, Android behaves like a web browser.
+                   KAV behavior 'padding' on iOS is needed.
+                   On Android with 'resize', we might NOT need KAV at all if the view is flex: 1.
+            */}
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
             >
                 <View style={styles.overlay}>
                     <TouchableOpacity style={styles.backdrop} onPress={onClose} />
+
                     <Animated.View
                         style={[
                             styles.container,
-                            { backgroundColor: colors.background, transform: [{ translateY: slideAnim }] }
+                            {
+                                backgroundColor: colors.background,
+                                transform: [{ translateY: slideAnim }],
+                                height: '60%'
+                            }
                         ]}
                     >
-                        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top', 'left', 'right']}>
+                        {/* 
+                            CRITICAL: Background color here prevents transparency when scrolling/bouncing.
+                            We use specific edges to avoid double padding if KAV pushes it up.
+                        */}
+                        <SafeAreaView style={{
+                            flex: 1,
+                            backgroundColor: colors.background,
+                            borderTopLeftRadius: BORDER_RADIUS.xl,
+                            borderTopRightRadius: BORDER_RADIUS.xl
+                        }} edges={['top', 'left', 'right']}>
                             {/* Header */}
                             <View style={[styles.header, { borderBottomColor: colors.border }]}>
                                 <View style={styles.headerHandle} />
@@ -265,8 +234,8 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
                                 </TouchableOpacity>
                             </View>
 
-                            {/* Comments List */}
                             <FlatList
+                                style={{ flex: 1 }}
                                 data={comments}
                                 renderItem={renderComment}
                                 keyExtractor={(item, index) => item.id || `comment_${index}`}
@@ -283,30 +252,25 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
                                 }
                             />
 
-                            {/* Input */}
+                            {/* Input Area */}
                             <View style={[styles.inputContainer, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
-                                <DefaultAvatar
-                                    uri={currentUser?.photoURL}
-                                    size={36}
-                                    style={styles.inputAvatar}
-                                />
+                                <DefaultAvatar uri={currentUser?.photoURL} size={36} style={styles.inputAvatar} />
                                 <TextInput
                                     style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text }]}
                                     placeholder="Add a comment..."
                                     placeholderTextColor={colors.textSecondary}
-                                    value={newComment}
-                                    onChangeText={setNewComment}
-                                    multiline
+                                    value={newComment} onChangeText={setNewComment} multiline
                                 />
                                 <TouchableOpacity
                                     style={[styles.sendButton, { backgroundColor: newComment.trim() ? colors.primary : colors.border }]}
-                                    onPress={handleSendComment}
-                                    disabled={!newComment.trim()}
+                                    onPress={handleSendComment} disabled={!newComment.trim()}
                                 >
                                     <Ionicons name="send" size={18} color="#fff" />
                                 </TouchableOpacity>
                             </View>
                         </SafeAreaView>
+                        {/* Filler View for Bottom Safe Area Background */}
+                        <View style={{ height: 100, backgroundColor: colors.background, position: 'absolute', bottom: -100, left: 0, right: 0 }} />
                     </Animated.View>
                 </View>
             </KeyboardAvoidingView>
@@ -317,7 +281,12 @@ const CommentsModal = ({ visible, onClose, tripId }: CommentsModalProps) => {
 const styles = StyleSheet.create({
     overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
     backdrop: { ...StyleSheet.absoluteFillObject },
-    container: { height: '70%', borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl },
+    // Container is bottom-aligned by overlay's justify-end
+    container: {
+        width: '100%',
+        borderTopLeftRadius: BORDER_RADIUS.xl,
+        borderTopRightRadius: BORDER_RADIUS.xl,
+    },
     header: { alignItems: 'center', paddingVertical: SPACING.md, borderBottomWidth: 1 },
     headerHandle: { width: 40, height: 4, backgroundColor: '#ccc', borderRadius: 2, marginBottom: SPACING.sm },
     title: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold },
@@ -334,7 +303,7 @@ const styles = StyleSheet.create({
     commentTime: { fontSize: FONT_SIZE.xs, marginTop: SPACING.xs },
     emptyContainer: { alignItems: 'center', paddingVertical: SPACING.xxxl },
     emptyText: { fontSize: FONT_SIZE.sm, marginTop: SPACING.md },
-    inputContainer: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, paddingBottom: 20, borderTopWidth: 1 },
+    inputContainer: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, paddingBottom: 20, borderTopWidth: 1 }, // Added bottom padding
     inputAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: SPACING.sm },
     input: { flex: 1, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.lg, maxHeight: 80 },
     sendButton: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginLeft: SPACING.sm },

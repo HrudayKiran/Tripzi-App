@@ -142,7 +142,12 @@ const ShareModal = ({ visible, onClose, tripId, tripTitle, tripImage }: ShareMod
                 }, { merge: true });
             }
 
-            // Show toast instead of alert - will add toast render below
+            // Increment Share Count
+            // Increment Share Count
+            firestore().collection('trips').doc(tripId).update({
+                shareCount: firestore.FieldValue.increment(1)
+            }).catch(() => { });
+
             setSelectedUsers([]);
             setShowToast(true);
             setTimeout(() => {
@@ -150,7 +155,8 @@ const ShareModal = ({ visible, onClose, tripId, tripTitle, tripImage }: ShareMod
                 onClose();
             }, 2000);
         } catch (error) {
-
+            console.error('In-App Share Error:', error);
+            Alert.alert('Error', 'Failed to share trip with selected users.');
             setShowToast(false);
         } finally {
             setSending(false);
@@ -166,13 +172,16 @@ const ShareModal = ({ visible, onClose, tripId, tripTitle, tripImage }: ShareMod
             });
 
             const shareContent = {
-                message: data.message,
+                message: `${data.message}\n${data.webLink}`,
                 title: data.title,
                 url: data.webLink, // iOS support
             };
 
             const result = await Share.share(shareContent);
             if (result.action === Share.sharedAction) {
+                firestore().collection('trips').doc(tripId).update({
+                    shareCount: firestore.FieldValue.increment(1)
+                }).catch(() => { });
                 onClose();
             }
         } catch (error) {
@@ -184,14 +193,24 @@ const ShareModal = ({ visible, onClose, tripId, tripTitle, tripImage }: ShareMod
 
     const handleCopyLink = async () => {
         try {
-            // For now constructing manual link if function call is too slow/complex for just copy
-            // Ideally we use the deep link
-            const link = `https://tripzi.app/trip/${tripId}`;
-            await Clipboard.setStringAsync(link);
+            // Generate smart link via Cloud Function
+            const { data } = await functions().httpsCallable('generateShareLink')({
+                tripId,
+                tripTitle,
+                tripImage,
+            });
+
+            await Clipboard.setStringAsync(data.webLink);
+
+            firestore().collection('trips').doc(tripId).update({
+                shareCount: firestore.FieldValue.increment(1)
+            }).catch(() => { });
+
             setShowToast(true);
             setTimeout(() => setShowToast(false), 2000);
         } catch (error) {
-            Alert.alert('Error', 'Failed to copy link');
+            console.error('Copy Link Error:', error);
+            Alert.alert('Error', 'Failed to generate link. Please check your connection.');
         }
     };
 
@@ -233,7 +252,7 @@ const ShareModal = ({ visible, onClose, tripId, tripTitle, tripImage }: ShareMod
                             disabled={selectedUsers.length === 0 || sending}
                             style={[
                                 styles.sendButton,
-                                { backgroundColor: selectedUsers.length > 0 ? colors.primary : colors.border }
+                                { backgroundColor: selectedUsers.length > 0 ? colors.primary : `${colors.primary}80` }
                             ]}
                         >
                             {sending ? (

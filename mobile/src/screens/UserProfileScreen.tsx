@@ -17,6 +17,9 @@ import NotificationService from '../utils/notificationService';
 import { useAgeGate } from '../hooks/useAgeGate';
 import AgeVerificationModal from '../components/AgeVerificationModal';
 
+import CommentsModal from '../components/CommentsModal';
+import ReportTripModal from '../components/ReportTripModal';
+
 const { width, height } = Dimensions.get('window');
 
 // Fallback user
@@ -64,6 +67,12 @@ const UserProfileScreen = ({ route, navigation }) => {
     const [hostRating, setHostRating] = useState<{ average: number; count: number } | null>(null);
     const [showFullImage, setShowFullImage] = useState(false);
     const [showAgeModal, setShowAgeModal] = useState(false);
+
+    // Hoisted Modal State
+    const [activeModal, setActiveModal] = useState<'none' | 'comments' | 'report'>('none');
+    const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
+    const [selectedTrip, setSelectedTrip] = useState<any>(null);
+
     const storyProgress = useRef(new Animated.Value(0)).current;
     const { isAgeVerified } = useAgeGate();
 
@@ -429,20 +438,49 @@ const UserProfileScreen = ({ route, navigation }) => {
     };
 
     const handleFollow = async () => {
-        if (!currentUser) return;
-        setIsFollowing(!isFollowing);
+        if (!currentUser || !user) return; // check user exists
+
+        const newIsFollowing = !isFollowing;
+        setIsFollowing(newIsFollowing);
+
+        // Optimistically update follower count locally
+        const originalFollowers = user.followers || [];
+        setUser(prev => {
+            if (!prev) return prev;
+            let updatedFollowers = [...(prev.followers || [])];
+            if (newIsFollowing) {
+                if (!updatedFollowers.includes(currentUser.uid)) updatedFollowers.push(currentUser.uid);
+            } else {
+                updatedFollowers = updatedFollowers.filter(id => id !== currentUser.uid);
+            }
+            return { ...prev, followers: updatedFollowers };
+        });
+
         try {
             const userRef = firestore().collection('users').doc(userId);
             const currentUserRef = firestore().collection('users').doc(currentUser.uid);
 
-            if (isFollowing) {
+            if (!newIsFollowing) { // Unfollow
                 await userRef.update({ followers: firestore.FieldValue.arrayRemove(currentUser.uid) });
                 await currentUserRef.update({ following: firestore.FieldValue.arrayRemove(userId) });
-            } else {
+            } else { // Follow
                 await userRef.update({ followers: firestore.FieldValue.arrayUnion(currentUser.uid) });
                 await currentUserRef.update({ following: firestore.FieldValue.arrayUnion(userId) });
+
+                // Send notification when following
+                if (newIsFollowing) {
+                    const followerName = currentUser.displayName || 'Someone';
+                    await NotificationService.onFollow(currentUser.uid, followerName, userId);
+                }
             }
-        } catch (error) { }
+        } catch (error) {
+            console.error('Follow error:', error);
+            Alert.alert('Error', 'Failed to update follow status.');
+
+            // Revert state
+            setIsFollowing(!newIsFollowing);
+            setUser(prev => ({ ...prev, followers: originalFollowers }));
+        }
     };
 
     const handleMessage = async () => {
@@ -560,6 +598,14 @@ const UserProfileScreen = ({ route, navigation }) => {
                     key={trip.id}
                     trip={{ ...trip, user: user || trip.user }}
                     onPress={() => navigation.navigate('TripDetails', { tripId: trip.id })}
+                    onCommentPress={() => {
+                        setSelectedTripId(trip.id);
+                        setActiveModal('comments');
+                    }}
+                    onReportPress={() => {
+                        setSelectedTrip(trip);
+                        setActiveModal('report');
+                    }}
                 />
             ))}
         </View>
@@ -873,6 +919,25 @@ const UserProfileScreen = ({ route, navigation }) => {
                 visible={showAgeModal}
                 onClose={() => setShowAgeModal(false)}
                 action="create or join a trip"
+            />
+            {/* Hoisted Modals */}
+            <CommentsModal
+                visible={activeModal === 'comments'}
+                onClose={() => {
+                    setActiveModal('none');
+                    setSelectedTripId(null);
+                }}
+                tripId={selectedTripId || ''}
+            />
+
+            <ReportTripModal
+                visible={activeModal === 'report'}
+                onClose={() => {
+                    setActiveModal('none');
+                    setSelectedTripId(null);
+                    setSelectedTrip(null);
+                }}
+                trip={selectedTrip}
             />
         </SafeAreaView>
     );

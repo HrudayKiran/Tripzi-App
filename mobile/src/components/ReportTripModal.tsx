@@ -48,9 +48,14 @@ const ReportTripModal: React.FC<ReportTripModalProps> = ({ visible, trip, onClos
 
         setSubmitting(true);
         try {
+            const selectedReason = REPORT_TYPES.find(t => t.id === reportType)?.label || reportType;
+
             const reportRef = await firestore().collection('reports').add({
                 tripId: trip?.id,
                 tripTitle: trip?.title || 'Untitled Trip',
+                targetId: trip?.id,
+                targetType: 'trip',
+                reason: selectedReason, // Human readable reason
                 reporterId: auth().currentUser?.uid,
                 reportedUserId: trip?.userId,
                 type: reportType,
@@ -86,7 +91,14 @@ const ReportTripModal: React.FC<ReportTripModalProps> = ({ visible, trip, onClos
     if (!visible) return null;
 
     return (
-        <Modal visible={visible} animationType="slide" transparent>
+        <Modal visible={visible} animationType="fade" transparent>
+            {/* 
+                Structure for Instagram-like smooth keyboard:
+                1. KAV with behavior "height" (Android) or "padding" (iOS)?
+                   Actually, with 'resize' mode in app.json, Android behaves like a web browser.
+                   KAV behavior 'padding' on iOS is needed.
+                   On Android with 'resize', we might NOT need KAV at all if the view is flex: 1.
+            */}
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
@@ -161,6 +173,9 @@ const ReportTripModal: React.FC<ReportTripModalProps> = ({ visible, trip, onClos
                                 )}
                             </TouchableOpacity>
                         </View>
+
+                        {/* Filler View to cover bottom safe area when keyboard pushes up */}
+                        <View style={{ height: 100, backgroundColor: colors.card, position: 'absolute', bottom: -100, left: 0, right: 0 }} />
                     </View>
                 </View>
             </KeyboardAvoidingView>
@@ -174,11 +189,15 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'flex-end',
     },
+    keyboardView: {
+        width: '100%',
+    },
     modalContent: {
         borderTopLeftRadius: BORDER_RADIUS.xl,
         borderTopRightRadius: BORDER_RADIUS.xl,
         padding: SPACING.lg,
-        maxHeight: '80%',
+        maxHeight: '90%',
+        overflow: 'visible',
     },
     header: {
         marginBottom: SPACING.lg,

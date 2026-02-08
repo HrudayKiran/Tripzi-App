@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Platform, Alert } from 'react-native';
-import fs, { getFirestore, collection, doc, setDoc, serverTimestamp } from '@react-native-firebase/firestore';
+import fs, { getFirestore, collection, doc, setDoc, serverTimestamp, getDoc } from '@react-native-firebase/firestore';
 import ms, { getMessaging, getToken, onMessage, onNotificationOpenedApp, getInitialNotification, requestPermission, AuthorizationStatus } from '@react-native-firebase/messaging';
 import au, { getAuth, onAuthStateChanged } from '@react-native-firebase/auth';
 import * as RootNavigation from '../navigation/RootNavigation';
@@ -58,14 +58,18 @@ const usePushNotifications = () => {
           }
         );
 
-        // Handle notification when app is in foreground
-        // Don't show Alert - the in-app notifications modal handles this
-        // Just log for debugging
+        // Enable foreground notification presentation options
+        await messaging.setForegroundNotificationPresentationOptions({
+          alert: true,
+          badge: true,
+          sound: true,
+        });
+
+        // Handle notification when app is in foreground - Just log it now, system handles UI
         unsubscribeOnMessage = onMessage(messaging,
           async (remoteMessage) => {
             console.log('[PUSH] Foreground notification received:', remoteMessage.notification?.title);
-            // In-app notifications are handled by useNotifications hook via Firestore listener
-            // No alert needed - prevents modal spam
+            // System notification will show automatically due to setForegroundNotificationPresentationOptions
           }
         );
 
@@ -130,12 +134,29 @@ const usePushNotifications = () => {
 
     const saveTokenToFirestore = async (user: any, token: string) => {
       try {
-        const deviceId = getDeviceId();
-        console.log('[PUSH] Saving token for user:', user.uid, 'device:', deviceId);
-
         const db = getFirestore();
         const tokenRef = doc(db, 'push_tokens', user.uid);
+        const tokenDoc = await getDoc(tokenRef);
 
+        let deviceId = getDeviceId(); // Default new ID
+        let tokensMap: any = {};
+
+        if (tokenDoc.exists()) {
+          const data = tokenDoc.data();
+          tokensMap = data?.tokens || {};
+
+          // Check if this token already exists
+          const existingDeviceId = Object.keys(tokensMap).find(
+            key => tokensMap[key]?.token === token
+          );
+
+          if (existingDeviceId) {
+            console.log('[PUSH] Token already exists for device:', existingDeviceId);
+            deviceId = existingDeviceId; // Reuse the existing key
+          }
+        }
+
+        // Update or Set the token entry
         await setDoc(tokenRef, {
           tokens: {
             [deviceId]: {
@@ -146,7 +167,7 @@ const usePushNotifications = () => {
           }
         }, { merge: true });
 
-        console.log('[PUSH] Token saved successfully to push_tokens/' + user.uid);
+        console.log('[PUSH] Token saved/updated successfully for', deviceId);
       } catch (error: any) {
         console.error('[PUSH] Error saving token:', error.message);
       }
@@ -162,36 +183,45 @@ const usePushNotifications = () => {
   }, []);
 
   const handleNotificationNavigation = (data: NotificationData) => {
+    console.log('[PUSH] Handling notification navigation:', data);
     const route = data.route;
     if (!route) return;
 
-    try {
-      switch (route) {
-        case 'TripDetails':
-          if (data.tripId) {
-            RootNavigation.navigate('TripDetails', { tripId: data.tripId });
-          }
-          break;
-        case 'Message':
-          if (data.chatId) {
-            RootNavigation.navigate('Message', { chatId: data.chatId });
-          }
-          break;
-        case 'KYC':
-          RootNavigation.navigate('KYC', {});
-          break;
-        case 'UserProfile':
-        case 'Profile':
-          if (data.userId) {
-            RootNavigation.navigate('UserProfile', { userId: data.userId });
-          }
-          break;
-        default:
-          RootNavigation.navigate('App', {});
-          break;
+    // Helper to navigate safely
+    const navigate = (name: string, params?: any) => {
+      try {
+        RootNavigation.navigate(name, params);
+      } catch (e) {
+        console.error('[PUSH] Navigation failed:', e);
       }
-    } catch (error) {
-      // Navigation might not be ready
+    };
+
+    switch (route) {
+      case 'TripDetails':
+        if (data.tripId) {
+          navigate('TripDetails', { tripId: data.tripId });
+        }
+        break;
+      case 'Chat':
+      case 'Message':
+        if (data.chatId) {
+          navigate('Chat', { chatId: data.chatId }); // Verify if screen name is 'Chat' or 'Message'
+        }
+        break;
+      case 'UserProfile':
+      case 'Profile':
+        if (data.userId) {
+          navigate('UserProfile', { userId: data.userId });
+        } else {
+          navigate('UserProfile', {}); // Go to own profile
+        }
+        break;
+      case 'AdminDashboard':
+        navigate('AdminDashboard');
+        break;
+      default:
+        console.log('[PUSH] Unknown route:', route);
+        break;
     }
   };
 };

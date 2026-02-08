@@ -6,9 +6,7 @@ import useTripLike from '../hooks/useTripLike';
 import { useTheme } from '../contexts/ThemeContext';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
-import CommentsModal from './CommentsModal';
 import ShareModal from './ShareModal';
-import ReportTripModal from './ReportTripModal';
 import CustomToggle from './CustomToggle';
 import DefaultAvatar from './DefaultAvatar';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
@@ -31,23 +29,24 @@ interface TripCardProps {
     trip: any;
     onPress?: () => void;
     isVisible?: boolean; // For auto-play video when visible
+    onCommentPress: (tripId: string) => void;
+    onReportPress: (trip: any) => void;
 }
 
-const TripCard = memo(({ trip, onPress, isVisible = false }: TripCardProps) => {
+const TripCard = memo(({ trip, onPress, isVisible = false, onCommentPress, onReportPress }: TripCardProps) => {
     const { colors } = useTheme();
     const navigation = useNavigation();
     const { isLiked, likeCount, handleLike } = useTripLike(trip);
     const [isFollowing, setIsFollowing] = useState(false);
-    const [showComments, setShowComments] = useState(false);
+    // Removed local modal state
     const [isJoining, setIsJoining] = useState(false);
     const [hasJoined, setHasJoined] = useState(false);
-    const [commentCount, setCommentCount] = useState(0);
+    const [commentCount, setCommentCount] = useState(trip.commentCount || 0);
     const [showFullDescription, setShowFullDescription] = useState(false);
     const [userRating, setUserRating] = useState<{ avg: number; count: number } | null>(null);
     const [activeImageIndex, setActiveImageIndex] = useState(0);
     const [showShare, setShowShare] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
-    const [showReportModal, setShowReportModal] = useState(false);
     const [menuPosition, setMenuPosition] = useState<{ top: number, right: number } | null>(null);
     const moreButtonRef = useRef<View>(null);
     // Dynamic aspect ratio state (default to 4:5)
@@ -89,18 +88,18 @@ const TripCard = memo(({ trip, onPress, isVisible = false }: TripCardProps) => {
             return;
         }
 
-        firestore()
+        const unsubscribe = firestore()
             .collection('users')
             .doc(trip.userId)
-            .get()
-            .then((doc) => {
+            .onSnapshot((doc) => {
                 if (doc.exists) {
                     const userData = doc.data();
                     const followers = userData?.followers || [];
                     setIsFollowing(followers.includes(currentUser.uid));
                 }
-            })
-            .catch(() => { });
+            }, () => { });
+
+        return () => unsubscribe();
     }, [trip.userId, currentUser?.uid]);
 
     // Load user rating
@@ -214,9 +213,11 @@ const TripCard = memo(({ trip, onPress, isVisible = false }: TripCardProps) => {
                 const followerName = currentUser.displayName || 'Someone';
                 await NotificationService.onFollow(currentUser.uid, followerName, trip.userId);
             }
-        } catch {
+        } catch (error) {
+            console.error('Follow error:', error);
             // Revert on error
             setIsFollowing(isFollowing);
+            Alert.alert('Error', 'Failed to update follow status.');
         }
     };
 
@@ -263,12 +264,11 @@ const TripCard = memo(({ trip, onPress, isVisible = false }: TripCardProps) => {
 
                 // Navigate to Group Chat if it's the first joiner (Total 2: Owner + You) or if chat exists
                 // We just navigate to ChatScreen, it handles creation/fetching
-                navigation.navigate('ChatScreen' as never, {
-                    chatId: `trip_${trip.id}`,
-                    tripId: trip.id,
-                    tripTitle: trip.title,
-                    tripImage: trip.coverImage || trip.images?.[0]
-                } as never);
+                /* 
+                   REMOVED: Navigation to ChatScreen. 
+                   Backend now handles adding user to group chat and sending notification.
+                   User stays on Trip Card with "Joined" state.
+                */
             }
         } catch {
             // Keep previous state on error
@@ -409,7 +409,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false }: TripCardProps) => {
                                 <Text style={[styles.actionCount, { color: colors.text }]}>{likeCount || 0}</Text>
                             </Animated.View>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.actionButton} onPress={() => setShowComments(true)}>
+                        <TouchableOpacity style={styles.actionButton} onPress={() => onCommentPress(trip.id)}>
                             <View style={styles.actionItem}>
                                 <Ionicons name="chatbubble-outline" size={24} color={colors.text} />
                                 <Text style={[styles.actionCount, { color: colors.text }]}>{commentCount || 0}</Text>
@@ -532,12 +532,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false }: TripCardProps) => {
                 </View>
             </View >
 
-            {/* Comments Modal */}
-            < CommentsModal
-                visible={showComments}
-                onClose={() => setShowComments(false)}
-                tripId={trip.id}
-            />
+
 
             {/* Share Modal */}
             < ShareModal
@@ -588,7 +583,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false }: TripCardProps) => {
                                         style={styles.menuOption}
                                         onPress={() => {
                                             setShowMenu(false);
-                                            setShowReportModal(true);
+                                            onReportPress(trip);
                                         }}
                                     >
                                         <Ionicons name="flag-outline" size={20} color="#EF4444" />
@@ -601,12 +596,6 @@ const TripCard = memo(({ trip, onPress, isVisible = false }: TripCardProps) => {
                 </TouchableOpacity>
             </Modal>
 
-            {/* Report Modal */}
-            <ReportTripModal
-                visible={showReportModal}
-                onClose={() => setShowReportModal(false)}
-                trip={trip}
-            />
         </>
     );
 });

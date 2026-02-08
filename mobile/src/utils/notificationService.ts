@@ -78,55 +78,31 @@ export const createNotification = async ({
  * Pre-built notification creators for common events
  */
 export const NotificationService = {
-    // When someone follows you
+    // When someone follows you - Handled by Cloud Function 'onUserFollowed'
     onFollow: async (followerId: string, followerName: string, targetUserId: string) => {
-        await createNotification({
-            recipientId: targetUserId,
-            type: 'follow',
-            title: 'New Follower',
-            body: `${followerName} started following you`,
-            data: { userId: followerId },
-            senderId: followerId,
-        });
+        // await createNotification({...}); 
+        console.log('Notification handled by backend: Follow');
     },
 
-    // When someone likes your trip
+    // When someone likes your trip - Handled by Cloud Function 'onLikeCreated'
     onLike: async (likerId: string, likerName: string, tripId: string, tripOwnerId: string, tripTitle: string) => {
-        await createNotification({
-            recipientId: tripOwnerId,
-            type: 'like',
-            title: 'New Like ❤️',
-            body: `${likerName} liked your trip "${tripTitle}"`,
-            data: { tripId, userId: likerId },
-            senderId: likerId,
-        });
+        // await createNotification({...});
+        console.log('Notification handled by backend: Like');
     },
 
-    // When someone comments on your trip
+    // When someone comments on your trip - Handled by Cloud Function 'onCommentCreated'
     onComment: async (commenterId: string, commenterName: string, tripId: string, tripOwnerId: string, tripTitle: string) => {
-        await createNotification({
-            recipientId: tripOwnerId,
-            type: 'comment',
-            title: 'New Comment 💬',
-            body: `${commenterName} commented on "${tripTitle}"`,
-            data: { tripId, userId: commenterId },
-            senderId: commenterId,
-        });
+        // await createNotification({...});
+        console.log('Notification handled by backend: Comment');
     },
 
-    // When someone joins your trip
+    // When someone joins your trip - Handled by Cloud Function 'onTripJoined'
     onJoinTrip: async (joinerId: string, joinerName: string, tripId: string, tripOwnerId: string, tripTitle: string) => {
-        await createNotification({
-            recipientId: tripOwnerId,
-            type: 'join_trip',
-            title: 'New Traveler! 🎒',
-            body: `${joinerName} joined your trip "${tripTitle}"`,
-            data: { tripId, userId: joinerId },
-            senderId: joinerId,
-        });
+        // await createNotification({...});
+        console.log('Notification handled by backend: Join');
     },
 
-    // When someone leaves your trip
+    // When someone leaves your trip - NOT handled by Cloud Function yet
     onLeaveTrip: async (leaverId: string, leaverName: string, tripId: string, tripOwnerId: string, tripTitle: string) => {
         await createNotification({
             recipientId: tripOwnerId,
@@ -138,19 +114,13 @@ export const NotificationService = {
         });
     },
 
-    // When someone rates your completed trip
+    // When someone rates your completed trip - Handled by Cloud Function 'onRatingCreated'
     onTripRating: async (raterId: string, raterName: string, tripId: string, tripOwnerId: string, tripTitle: string, rating: number) => {
-        await createNotification({
-            recipientId: tripOwnerId,
-            type: 'trip_rating',
-            title: 'New Rating ⭐',
-            body: `${raterName} rated "${tripTitle}" ${rating} stars`,
-            data: { tripId, userId: raterId, rating },
-            senderId: raterId,
-        });
+        // await createNotification({...});
+        console.log('Notification handled by backend: Rating');
     },
 
-    // KYC verified
+    // KYC verified - Handled by backend/manual
     onKycVerified: async (userId: string) => {
         await createNotification({
             recipientId: userId,
@@ -161,7 +131,7 @@ export const NotificationService = {
         });
     },
 
-    // KYC rejected
+    // KYC rejected - Handled by backend/manual
     onKycRejected: async (userId: string, reason: string) => {
         await createNotification({
             recipientId: userId,
@@ -172,48 +142,22 @@ export const NotificationService = {
         });
     },
 
-    // Trip cancelled
+    // Trip cancelled - Handled by Cloud Function 'onTripDeleted'
     onTripCancelled: async (participantId: string, tripId: string, tripTitle: string, hostName: string) => {
-        await createNotification({
-            recipientId: participantId,
-            type: 'trip_cancelled',
-            title: 'Trip Cancelled ⚠️',
-            body: `"${tripTitle}" by ${hostName} has been cancelled`,
-            data: { tripId },
-        });
+        // await createNotification({...});
+        console.log('Notification handled by backend: Trip Cancelled');
     },
 
-    // Chat message (handled by Cloud Functions for FCM)
+    // Chat message (handled by Cloud Functions for FCM) - Handled by Cloud Function 'onMessageCreated'
     onChatMessage: async (recipientId: string, senderId: string, senderName: string, chatId: string, preview: string) => {
-        await createNotification({
-            recipientId,
-            type: 'chat_message',
-            title: senderName,
-            body: preview.length > 50 ? preview.substring(0, 50) + '...' : preview,
-            data: { chatId, userId: senderId },
-            senderId,
-        });
+        // await createNotification({...});
+        console.log('Notification handled by backend: Chat Message');
     },
 
-    // Report submitted (notify admins)
+    // Report submitted (notify admins) - Handled by Cloud Function 'onReportCreated'
     onReportSubmitted: async (reporterId: string, reportType: string, targetId: string, targetTitle: string) => {
-        try {
-            const adminsSnapshot = await firestore()
-                .collection('users')
-                .where('role', '==', 'admin')
-                .get();
-
-            for (const adminDoc of adminsSnapshot.docs) {
-                await createNotification({
-                    recipientId: adminDoc.id,
-                    type: 'system',
-                    title: '🚨 New Report',
-                    body: `${reportType} report on "${targetTitle}"`,
-                    data: {},
-                    senderId: reporterId,
-                });
-            }
-        } catch { }
+        // await createNotification({...});
+        console.log('Notification handled by backend: Report Submitted');
     },
 
     // Report status update (notify reporter)

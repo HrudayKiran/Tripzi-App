@@ -13,6 +13,8 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '..
 
 import firestore from '@react-native-firebase/firestore';
 import AppLogo from '../components/AppLogo';
+import CommentsModal from '../components/CommentsModal'; // Imported
+import ReportTripModal from '../components/ReportTripModal'; // Imported
 
 const { width, height } = Dimensions.get('window');
 
@@ -30,6 +32,12 @@ const FeedScreen = ({ navigation }) => {
     const [searchedUsers, setSearchedUsers] = useState<any[]>([]);
     const [searchingUsers, setSearchingUsers] = useState(false);
     const [focusedTripId, setFocusedTripId] = useState<string | null>(null);
+
+    // Hoisted Modal State
+    const [activeModal, setActiveModal] = useState<'none' | 'comments' | 'report'>('none');
+    const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
+    const [selectedTrip, setSelectedTrip] = useState<any>(null);
+
     const searchTimeout = useRef<NodeJS.Timeout | null>(null);
 
     // Viewability config for auto-play videos - stricter threshold
@@ -293,6 +301,14 @@ const FeedScreen = ({ navigation }) => {
                             trip={item}
                             onPress={() => navigation.navigate('TripDetails', { tripId: item.id })}
                             isVisible={focusedTripId === item.id}
+                            onCommentPress={(tripId) => {
+                                setSelectedTripId(tripId);
+                                setActiveModal('comments');
+                            }}
+                            onReportPress={(trip) => {
+                                setSelectedTrip(trip);
+                                setActiveModal('report');
+                            }}
                         />
                     )}
                     showsVerticalScrollIndicator={false}
@@ -421,6 +437,26 @@ const FeedScreen = ({ navigation }) => {
                 visible={filterVisible}
                 onClose={() => setFilterVisible(false)}
                 onApply={handleApplyFilters}
+            />
+
+            {/* Hoisted Comments Modal */}
+            <CommentsModal
+                visible={activeModal === 'comments'}
+                onClose={() => {
+                    setActiveModal('none');
+                    setSelectedTripId(null);
+                }}
+                tripId={selectedTripId || ''}
+            />
+
+            {/* Hoisted Report Modal */}
+            <ReportTripModal
+                visible={activeModal === 'report'}
+                onClose={() => {
+                    setActiveModal('none');
+                    setSelectedTrip(null);
+                }}
+                trip={selectedTrip}
             />
         </View>
     );

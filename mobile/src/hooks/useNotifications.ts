@@ -72,22 +72,23 @@ export function useNotifications(): UseNotificationsReturn {
 
         const unsubscribe = firestore()
             .collection('notifications')
-            .where('recipientId', '==', userId)
+            .doc(userId)
+            .collection('items')
+            .orderBy('createdAt', 'desc')
             .limit(50)
             .onSnapshot(
                 (snapshot) => {
-
                     const notifs = snapshot.docs.map((doc) => {
                         const data = doc.data();
                         return {
                             id: doc.id,
-                            recipientId: data.recipientId,
+                            recipientId: userId, // Implied by collection path
                             type: data.type as NotificationType,
                             title: data.title,
-                            message: data.message,
-                            entityId: data.entityId || null,
+                            message: data.body || data.message, // handle both body and message fields
+                            entityId: data.data?.tripId || data.data?.chatId || data.entityId || null,
                             entityType: data.entityType || null,
-                            actorId: data.actorId || null,
+                            actorId: data.senderId || data.actorId || null,
                             actorName: data.actorName || null,
                             actorPhotoUrl: data.actorPhotoUrl || null,
                             deepLinkRoute: data.deepLinkRoute || '',
@@ -97,30 +98,38 @@ export function useNotifications(): UseNotificationsReturn {
                             createdAt: data.createdAt?.toDate() || new Date(),
                         } as AppNotification;
                     });
-                    // Sort client-side since we removed orderBy to avoid index requirement
-                    notifs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
                     setNotifications(notifs);
-                    setUnreadCount(notifs.filter((n) => !n.read).length);
+                    setUnreadCount(notifs.filter(n => !n.read).length);
                     setLoading(false);
-
                 },
                 (err) => {
-                    console.error('🔔 [NOTIF] ❌ Listener error:', err);
-                    setError(err as Error);
+                    // Ignore permission errors if user is logged out (likely due to logout action)
+                    if (err.code?.includes('permission-denied') && !auth().currentUser) {
+                        return;
+                    }
+                    console.error('Notification listener error:', err);
+                    setError(err);
                     setLoading(false);
                 }
             );
+
 
         return () => unsubscribe();
     }, [refreshKey]);
 
     const markAsRead = useCallback(async (notificationId: string) => {
+        const userId = auth().currentUser?.uid;
+        if (!userId) return;
         try {
-            await firestore().collection('notifications').doc(notificationId).update({
-                read: true,
-                readAt: firestore.FieldValue.serverTimestamp(),
-            });
+            await firestore()
+                .collection('notifications')
+                .doc(userId)
+                .collection('items')
+                .doc(notificationId)
+                .update({
+                    read: true,
+                    readAt: firestore.FieldValue.serverTimestamp(),
+                });
         } catch (err) {
             console.error('Error marking notification as read:', err);
             throw err;
@@ -130,23 +139,24 @@ export function useNotifications(): UseNotificationsReturn {
     const markAllAsRead = useCallback(async () => {
         const userId = auth().currentUser?.uid;
         if (!userId) return;
-
         try {
+            const batch = firestore().batch();
             const unreadDocs = await firestore()
                 .collection('notifications')
-                .where('recipientId', '==', userId)
+                .doc(userId)
+                .collection('items')
                 .where('read', '==', false)
                 .get();
 
             if (unreadDocs.empty) return;
 
-            const batch = firestore().batch();
             unreadDocs.docs.forEach((doc) => {
                 batch.update(doc.ref, {
                     read: true,
                     readAt: firestore.FieldValue.serverTimestamp(),
                 });
             });
+
             await batch.commit();
         } catch (err) {
             console.error('Error marking all notifications as read:', err);
@@ -155,8 +165,15 @@ export function useNotifications(): UseNotificationsReturn {
     }, []);
 
     const deleteNotification = useCallback(async (notificationId: string) => {
+        const userId = auth().currentUser?.uid;
+        if (!userId) return;
         try {
-            await firestore().collection('notifications').doc(notificationId).delete();
+            await firestore()
+                .collection('notifications')
+                .doc(userId)
+                .collection('items')
+                .doc(notificationId)
+                .delete();
         } catch (err) {
             console.error('Error deleting notification:', err);
             throw err;

@@ -308,7 +308,7 @@ const AppNavigator = () => {
                 </NavigationContainer>
                 <OfflineBanner />
             </NetworkProvider>
-        </ThemeProvider>
+        </ThemeProvider >
     );
 };
 
