@@ -85,7 +85,7 @@ const LaunchScreen = () => {
               ]}
             />
           </View>
-          <Text style={styles.versionText}>v1.0.0 Beta</Text>
+          <Text style={styles.versionText}>v1.0.0</Text>
         </View>
 
       </LinearGradient>

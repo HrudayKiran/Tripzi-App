@@ -29,12 +29,10 @@ import ChatsListScreen from '../screens/ChatsListScreen';
 import ChatScreen from '../screens/ChatScreen';
 import CreateTripScreen from '../screens/CreateTripScreen';
 import ProfileScreen from '../screens/ProfileScreen';
-import CommentsScreen from '../screens/CommentsScreen';
 import MapScreen from '../screens/MapScreen';
 import TripDetailsScreen from '../screens/TripDetailsScreen';
 import CreateGroupScreen from '../screens/CreateGroupScreen';
 import GroupInfoScreen from '../screens/GroupInfoScreen';
-import StoriesScreen from '../screens/StoriesScreen';
 import AgeVerificationScreen from '../screens/AgeVerificationScreen';
 import TermsScreen from '../screens/TermsScreen';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
@@ -287,11 +285,9 @@ const AppNavigator = () => {
                         <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
 
                         <Stack.Screen name="Chat" component={ChatScreen} />
-                        <Stack.Screen name="Comments" component={CommentsScreen} />
                         <Stack.Screen name="Map" component={MapScreen} />
                         <Stack.Screen name="CreateGroupChat" component={CreateGroupScreen} />
                         <Stack.Screen name="GroupInfo" component={GroupInfoScreen} />
-                        <Stack.Screen name="Stories" component={StoriesScreen} />
                         <Stack.Screen name="AgeVerification" component={AgeVerificationScreen} />
                         <Stack.Screen name="Terms" component={TermsScreen} />
                         <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />

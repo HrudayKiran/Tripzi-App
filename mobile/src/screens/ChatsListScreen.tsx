@@ -33,7 +33,7 @@ interface SearchUser {
 
 const ChatsListScreen = ({ navigation }) => {
     const { colors } = useTheme();
-    const { chats, loading, refreshChats } = useChats();
+    const { chats, loading, refreshChats, deleteChat } = useChats();
 
     // Use state for currentUser to properly handle auth state
     const [currentUser, setCurrentUser] = useState(auth().currentUser);
@@ -53,72 +53,68 @@ const ChatsListScreen = ({ navigation }) => {
     const [searchResults, setSearchResults] = useState<SearchUser[]>([]);
     const [searching, setSearching] = useState(false);
     const [startingChat, setStartingChat] = useState(false);
-    const [storyUsers, setStoryUsers] = useState<any[]>([]);
-    const [myStories, setMyStories] = useState<any[]>([]);
+
 
     // Messages Settings modal
     const [showMessagesSettings, setShowMessagesSettings] = useState(false);
     const [readReceipts, setReadReceipts] = useState(true);
 
-    // Fetch following users for stories
-    React.useEffect(() => {
-        if (!currentUser) {
+    // Selection Mode State
+    const [selectedChats, setSelectedChats] = useState<Set<string>>(new Set());
+    const isSelectionMode = selectedChats.size > 0;
 
-            return;
+    const handleLongPress = (chatId: string) => {
+        const newSelected = new Set(selectedChats);
+        if (newSelected.has(chatId)) {
+            newSelected.delete(chatId);
+        } else {
+            newSelected.add(chatId);
         }
+        setSelectedChats(newSelected);
+    };
 
-        const unsubscribe = firestore()
-            .collection('users')
-            .doc(currentUser.uid)
-            .onSnapshot(async (doc) => {
-                if (doc.exists) {
-                    const userData = doc.data();
-                    const following = userData?.following || [];
+    const handlePressChat = (chat: Chat) => {
+        if (isSelectionMode) {
+            handleLongPress(chat.id);
+        } else {
+            const otherUser = chat.type === 'direct' ? getOtherParticipant(chat) : null;
+            navigation.navigate('Chat', {
+                chatId: chat.id,
+                otherUserId: otherUser?.uid,
+                otherUserName: chat.type === 'group' ? chat.groupName : otherUser?.displayName,
+                otherUserPhoto: chat.type === 'group' ? chat.groupIcon : otherUser?.photoURL,
+                isGroupChat: chat.type === 'group',
+                tripTitle: chat.type === 'group' ? chat.groupName : undefined,
+            });
+        }
+    };
 
-                    if (following.length > 0) {
-                        const users = await Promise.all(
-                            following.slice(0, 10).map(async (uid: string) => {
-                                try {
-                                    const userDoc = await firestore().collection('users').doc(uid).get();
-                                    return userDoc.exists ? { id: uid, ...userDoc.data() } : null;
-                                } catch { return null; }
-                            })
-                        );
-                        const validUsers = users.filter(Boolean);
-
-                        setStoryUsers(validUsers);
-                    } else {
-
-                        setStoryUsers([]);
+    const handleDeleteSelected = () => {
+        Alert.alert(
+            'Delete Chat?',
+            `Are you sure you want to delete ${selectedChats.size} chat${selectedChats.size > 1 ? 's' : ''}?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const promises = Array.from(selectedChats).map(id => deleteChat(id));
+                            await Promise.all(promises);
+                            setSelectedChats(new Set()); // Exit selection mode
+                        } catch (error) {
+                            Alert.alert('Error', 'Failed to delete chats');
+                        }
                     }
-                } else {
-
                 }
-            });
-        return () => unsubscribe();
-    }, [currentUser]);
+            ]
+        );
+    };
 
-    // Fetch user's own stories to determine "Your Story" visibility
-    React.useEffect(() => {
-        if (!currentUser) return;
-
-        const now = new Date();
-        const unsubscribe = firestore()
-            .collection('stories')
-            .where('userId', '==', currentUser.uid)
-            .onSnapshot((snapshot) => {
-                const activeStories = snapshot.docs
-                    .map((doc) => ({ id: doc.id, ...doc.data() }))
-                    .filter((story: any) => {
-                        if (!story.expiresAt) return true;
-                        const expiresAt = story.expiresAt.toDate ? story.expiresAt.toDate() : new Date(story.expiresAt);
-                        return expiresAt > now;
-                    });
-
-                setMyStories(activeStories);
-            });
-        return () => unsubscribe();
-    }, [currentUser]);
+    const handleCancelSelection = () => {
+        setSelectedChats(new Set());
+    };
 
     const getOtherParticipant = useCallback(
         (chat: Chat) => {
@@ -274,8 +270,12 @@ const ChatsListScreen = ({ navigation }) => {
         return (
             <Animatable.View animation="fadeInUp" delay={index * 50} duration={300}>
                 <TouchableOpacity
-                    style={[styles.chatItem, { backgroundColor: colors.card }]}
-                    onPress={() => navigation.navigate('Chat', { chatId: item.id })}
+                    style={[
+                        styles.chatItem,
+                        { backgroundColor: selectedChats.has(item.id) ? colors.border : colors.card }
+                    ]}
+                    onPress={() => handlePressChat(item)}
+                    onLongPress={() => handleLongPress(item.id)}
                     activeOpacity={0.7}
                 >
                     {/* Avatar */}
@@ -371,52 +371,7 @@ const ChatsListScreen = ({ navigation }) => {
         </View>
     );
 
-    // Stories header component
-    const renderStoriesHeader = () => (
-        <View style={styles.storiesContainer}>
-            {/* Your story - Only show if user has stories */}
-            {myStories.length > 0 && (
-                <TouchableOpacity
-                    style={styles.storyItem}
-                    onPress={() => navigation.navigate('Stories', { viewMyStory: true })}
-                >
-                    <LinearGradient colors={['#8B5CF6', '#EC4899']} style={styles.storyGradient}>
-                        {currentUser?.photoURL ? (
-                            <Image source={{ uri: currentUser.photoURL }} style={styles.storyAvatar} />
-                        ) : (
-                            <View style={[styles.storyAvatarPlaceholder, { backgroundColor: colors.primary }]}>
-                                <Text style={styles.storyInitial}>
-                                    {(currentUser?.displayName || 'U').charAt(0).toUpperCase()}
-                                </Text>
-                            </View>
-                        )}
-                    </LinearGradient>
-                    <Text style={[styles.storyName, { color: colors.textSecondary }]} numberOfLines={1}>Your Story</Text>
-                </TouchableOpacity>
-            )}
-            {/* Following users stories */}
-            {storyUsers.map((user) => (
-                <TouchableOpacity
-                    key={user.id}
-                    style={styles.storyItem}
-                    onPress={() => navigation.navigate('UserProfile', { userId: user.id })}
-                >
-                    <LinearGradient colors={['#F59E0B', '#EF4444']} style={styles.storyGradient}>
-                        {user.photoURL ? (
-                            <Image source={{ uri: user.photoURL }} style={styles.storyAvatar} />
-                        ) : (
-                            <View style={[styles.storyAvatarPlaceholder, { backgroundColor: colors.primary }]}>
-                                <Text style={styles.storyInitial}>{(user.displayName || 'U').charAt(0).toUpperCase()}</Text>
-                            </View>
-                        )}
-                    </LinearGradient>
-                    <Text style={[styles.storyName, { color: colors.textSecondary }]} numberOfLines={1}>
-                        {user.displayName?.split(' ')[0] || 'User'}
-                    </Text>
-                </TouchableOpacity>
-            ))}
-        </View>
-    );
+    // Stories header component removed (v1.0.0)
 
     if (loading) {
         return (
@@ -431,28 +386,41 @@ const ChatsListScreen = ({ navigation }) => {
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
             {/* Header */}
-            <View style={styles.header}>
-                <Text style={[styles.headerTitle, { color: colors.text }]}>Messages</Text>
-                <View style={styles.headerButtons}>
-                    <TouchableOpacity
-                        style={[styles.headerButton, { backgroundColor: colors.card }]}
-                        onPress={() => setShowSearch(true)}
-                        activeOpacity={0.7}
-                    >
-                        <Ionicons name="search-outline" size={22} color={colors.text} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.headerButton, { backgroundColor: colors.card }]}
-                        onPress={() => setShowMessagesSettings(true)}
-                        activeOpacity={0.7}
-                    >
-                        <Ionicons name="ellipsis-vertical" size={22} color={colors.text} />
+            {isSelectionMode ? (
+                <View style={[styles.header, { backgroundColor: colors.primary }]}>
+                    <View style={styles.headerLeft}>
+                        <TouchableOpacity onPress={handleCancelSelection}>
+                            <Ionicons name="arrow-back" size={24} color="white" />
+                        </TouchableOpacity>
+                        <Text style={[styles.headerTitle, { color: 'white', marginLeft: 16 }]}>
+                            {selectedChats.size} Selected
+                        </Text>
+                    </View>
+                    <TouchableOpacity onPress={handleDeleteSelected}>
+                        <Ionicons name="trash-outline" size={24} color="white" />
                     </TouchableOpacity>
                 </View>
-            </View>
-
-            {/* Stories Section - Minimal gap */}
-            {renderStoriesHeader()}
+            ) : (
+                <View style={styles.header}>
+                    <Text style={[styles.headerTitle, { color: colors.text }]}>Messages</Text>
+                    <View style={styles.headerButtons}>
+                        <TouchableOpacity
+                            style={[styles.headerButton, { backgroundColor: colors.card }]}
+                            onPress={() => setShowSearch(true)}
+                            activeOpacity={0.7}
+                        >
+                            <Ionicons name="search-outline" size={22} color={colors.text} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.headerButton, { backgroundColor: colors.card }]}
+                            onPress={() => setShowMessagesSettings(true)}
+                            activeOpacity={0.7}
+                        >
+                            <Ionicons name="ellipsis-vertical" size={22} color={colors.text} />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            )}
 
             {/* Chat List */}
             <FlatList
@@ -553,28 +521,6 @@ const ChatsListScreen = ({ navigation }) => {
                             style={styles.dropdownItem}
                             onPress={() => {
                                 setShowMessagesSettings(false);
-                                navigation.navigate('CreateGroupChat');
-                            }}
-                        >
-                            <Ionicons name="people" size={20} color={colors.text} />
-                            <Text style={[styles.dropdownText, { color: colors.text }]}>New group</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.dropdownItem}
-                            onPress={() => {
-                                setShowMessagesSettings(false);
-                                navigation.navigate('Stories');
-                            }}
-                        >
-                            <Ionicons name="add-circle" size={20} color={colors.text} />
-                            <Text style={[styles.dropdownText, { color: colors.text }]}>Add story</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.dropdownItem}
-                            onPress={() => {
-                                setShowMessagesSettings(false);
                                 navigation.navigate('MessageSettings');
                             }}
                         >
@@ -604,6 +550,10 @@ const styles = StyleSheet.create({
         paddingHorizontal: SPACING.xl,
         paddingTop: SPACING.md,
         paddingBottom: SPACING.sm,
+    },
+    headerLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     persistentSearchBar: {
         flexDirection: 'row',
@@ -791,62 +741,6 @@ const styles = StyleSheet.create({
     noResultsText: {
         marginTop: SPACING.md,
         fontSize: FONT_SIZE.md,
-        textAlign: 'center',
-    },
-    // Stories Styles
-    storiesContainer: {
-        flexDirection: 'row',
-        paddingVertical: SPACING.sm,
-        paddingHorizontal: SPACING.lg,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0,0,0,0.05)',
-    },
-    storyItem: {
-        alignItems: 'center',
-        marginRight: SPACING.lg,
-        width: 72,
-    },
-    storyGradient: {
-        width: 68,
-        height: 68,
-        borderRadius: 34,
-        padding: 3,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 4,
-    },
-    storyInner: {
-        width: 62,
-        height: 62,
-        borderRadius: 31,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 3,
-        borderColor: '#fff',
-    },
-    storyAvatar: {
-        width: 62,
-        height: 62,
-        borderRadius: 31,
-        borderWidth: 3,
-        borderColor: '#fff',
-    },
-    storyAvatarPlaceholder: {
-        width: 62,
-        height: 62,
-        borderRadius: 31,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 3,
-        borderColor: '#fff',
-    },
-    storyInitial: {
-        color: '#fff',
-        fontSize: FONT_SIZE.xl,
-        fontWeight: FONT_WEIGHT.bold,
-    },
-    storyName: {
-        fontSize: FONT_SIZE.xs,
         textAlign: 'center',
     },
     searchResultsList: {

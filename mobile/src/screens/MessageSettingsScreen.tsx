@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -11,14 +11,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const SAVE_TO_GALLERY_KEY = '@tripzi_save_to_gallery';
 
 const MessageSettingsScreen = ({ navigation }) => {
     const { colors } = useTheme();
 
-    const [readReceipts, setReadReceipts] = useState(true);
-    const [typingIndicators, setTypingIndicators] = useState(true);
-    const [mediaAutoDownload, setMediaAutoDownload] = useState(true);
-    const [saveMedia, setSaveMedia] = useState(false);
+    // Save to Gallery — enabled by default
+    const [saveMedia, setSaveMedia] = useState(true);
+
+    const handleToggleSaveMedia = async (value: boolean) => {
+        setSaveMedia(value);
+        // Persist setting later if package available
+    };
 
     const SettingItem = ({ icon, title, subtitle, value, onValueChange }) => (
         <View style={[styles.settingItem, { backgroundColor: colors.card }]}>
@@ -50,40 +56,14 @@ const MessageSettingsScreen = ({ navigation }) => {
             </View>
 
             <ScrollView style={styles.content}>
-                <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>PRIVACY</Text>
-
-                <SettingItem
-                    icon="checkmark-done"
-                    title="Read Receipts"
-                    subtitle="Show when you've read messages"
-                    value={readReceipts}
-                    onValueChange={setReadReceipts}
-                />
-
-                <SettingItem
-                    icon="ellipsis-horizontal"
-                    title="Typing Indicators"
-                    subtitle="Show when you're typing"
-                    value={typingIndicators}
-                    onValueChange={setTypingIndicators}
-                />
-
                 <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>MEDIA</Text>
-
-                <SettingItem
-                    icon="cloud-download"
-                    title="Auto-Download Media"
-                    subtitle="Automatically download photos and videos"
-                    value={mediaAutoDownload}
-                    onValueChange={setMediaAutoDownload}
-                />
 
                 <SettingItem
                     icon="save"
                     title="Save to Gallery"
-                    subtitle="Save received media to your device"
+                    subtitle="Save received images and documents to your device gallery"
                     value={saveMedia}
-                    onValueChange={setSaveMedia}
+                    onValueChange={handleToggleSaveMedia}
                 />
             </ScrollView>
         </SafeAreaView>

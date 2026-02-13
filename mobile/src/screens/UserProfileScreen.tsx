@@ -9,7 +9,6 @@ import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
-import FollowersModal from '../components/FollowersModal';
 import TripCard from '../components/TripCard';
 import ProfilePictureViewer from '../components/ProfilePictureViewer';
 import { pickAndUploadImage } from '../utils/imageUpload';
@@ -17,7 +16,6 @@ import NotificationService from '../utils/notificationService';
 import { useAgeGate } from '../hooks/useAgeGate';
 import AgeVerificationModal from '../components/AgeVerificationModal';
 
-import CommentsModal from '../components/CommentsModal';
 import ReportTripModal from '../components/ReportTripModal';
 
 const { width, height } = Dimensions.get('window');
@@ -30,8 +28,6 @@ const FALLBACK_USER = {
     photoURL: 'https://randomuser.me/api/portraits/men/32.jpg',
     bio: 'Passionate traveler | 50+ trips 🏔️',
     ageVerified: true,
-    followers: [],
-    following: [],
 };
 
 const UserProfileScreen = ({ route, navigation }) => {
@@ -46,10 +42,7 @@ const UserProfileScreen = ({ route, navigation }) => {
         { id: 'add', type: 'add' },
     ]);
     const [loading, setLoading] = useState(true);
-    const [isFollowing, setIsFollowing] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
-    const [showFollowersModal, setShowFollowersModal] = useState(false);
-    const [showFollowingModal, setShowFollowingModal] = useState(false);
     const [showStoryModal, setShowStoryModal] = useState(false);
     const [showEditTripModal, setShowEditTripModal] = useState(false);
     const [currentStory, setCurrentStory] = useState(null);
@@ -62,15 +55,13 @@ const UserProfileScreen = ({ route, navigation }) => {
     const [editTripTitle, setEditTripTitle] = useState('');
     const [editTripLocation, setEditTripLocation] = useState('');
     const [profileImage, setProfileImage] = useState(null);
-    const [followers, setFollowers] = useState([]);
-    const [following, setFollowing] = useState([]);
+
     const [hostRating, setHostRating] = useState<{ average: number; count: number } | null>(null);
     const [showFullImage, setShowFullImage] = useState(false);
     const [showAgeModal, setShowAgeModal] = useState(false);
 
     // Hoisted Modal State
-    const [activeModal, setActiveModal] = useState<'none' | 'comments' | 'report'>('none');
-    const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
+    const [activeModal, setActiveModal] = useState<'none' | 'report'>('none');
     const [selectedTrip, setSelectedTrip] = useState<any>(null);
 
     const storyProgress = useRef(new Animated.Value(0)).current;
@@ -153,36 +144,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                 setEditUsername(userData.username || '');
                 setProfileImage(userData.photoURL);
 
-                if (userData.followers?.includes(currentUser?.uid)) {
-                    setIsFollowing(true);
-                }
-
                 // Trips are now handled by useEffect subscription
-
-                // Load followers/following
-                if (userData.followers?.length > 0) {
-                    const followersData = await Promise.all(
-                        userData.followers.slice(0, 20).map(async (uid) => {
-                            try {
-                                const doc = await firestore().collection('users').doc(uid).get();
-                                return doc.exists ? { id: uid, ...doc.data() } : null;
-                            } catch { return null; }
-                        })
-                    );
-                    setFollowers(followersData.filter(Boolean));
-                }
-
-                if (userData.following?.length > 0) {
-                    const followingData = await Promise.all(
-                        userData.following.slice(0, 20).map(async (uid) => {
-                            try {
-                                const doc = await firestore().collection('users').doc(uid).get();
-                                return doc.exists ? { id: uid, ...doc.data() } : null;
-                            } catch { return null; }
-                        })
-                    );
-                    setFollowing(followingData.filter(Boolean));
-                }
 
                 // Fetch host ratings for this user
                 if (userId) {
@@ -212,8 +174,6 @@ const UserProfileScreen = ({ route, navigation }) => {
                     photoURL: currentUser.photoURL || null,
                     bio: '',
                     ageVerified: false,
-                    followers: [],
-                    following: [],
                 });
                 setEditName(currentUser.displayName || '');
                 setProfileImage(currentUser.photoURL);
@@ -232,8 +192,6 @@ const UserProfileScreen = ({ route, navigation }) => {
                     photoURL: currentUser.photoURL,
                     bio: '',
                     ageVerified: false,
-                    followers: [],
-                    following: [],
                 });
                 setEditName(currentUser.displayName || '');
                 setProfileImage(currentUser.photoURL);
@@ -437,51 +395,7 @@ const UserProfileScreen = ({ route, navigation }) => {
         ]);
     };
 
-    const handleFollow = async () => {
-        if (!currentUser || !user) return; // check user exists
 
-        const newIsFollowing = !isFollowing;
-        setIsFollowing(newIsFollowing);
-
-        // Optimistically update follower count locally
-        const originalFollowers = user.followers || [];
-        setUser(prev => {
-            if (!prev) return prev;
-            let updatedFollowers = [...(prev.followers || [])];
-            if (newIsFollowing) {
-                if (!updatedFollowers.includes(currentUser.uid)) updatedFollowers.push(currentUser.uid);
-            } else {
-                updatedFollowers = updatedFollowers.filter(id => id !== currentUser.uid);
-            }
-            return { ...prev, followers: updatedFollowers };
-        });
-
-        try {
-            const userRef = firestore().collection('users').doc(userId);
-            const currentUserRef = firestore().collection('users').doc(currentUser.uid);
-
-            if (!newIsFollowing) { // Unfollow
-                await userRef.update({ followers: firestore.FieldValue.arrayRemove(currentUser.uid) });
-                await currentUserRef.update({ following: firestore.FieldValue.arrayRemove(userId) });
-            } else { // Follow
-                await userRef.update({ followers: firestore.FieldValue.arrayUnion(currentUser.uid) });
-                await currentUserRef.update({ following: firestore.FieldValue.arrayUnion(userId) });
-
-                // Send notification when following
-                if (newIsFollowing) {
-                    const followerName = currentUser.displayName || 'Someone';
-                    await NotificationService.onFollow(currentUser.uid, followerName, userId);
-                }
-            }
-        } catch (error) {
-            console.error('Follow error:', error);
-            Alert.alert('Error', 'Failed to update follow status.');
-
-            // Revert state
-            setIsFollowing(!newIsFollowing);
-            setUser(prev => ({ ...prev, followers: originalFollowers }));
-        }
-    };
 
     const handleMessage = async () => {
         if (!currentUser || !user) return;
@@ -545,11 +459,7 @@ const UserProfileScreen = ({ route, navigation }) => {
         }
     };
 
-    const navigateToProfile = (uid) => {
-        setShowFollowersModal(false);
-        setShowFollowingModal(false);
-        navigation.push('UserProfile', { userId: uid });
-    };
+
 
     const renderStory = ({ item, index }) => {
         if (item.type === 'add') {
@@ -580,7 +490,7 @@ const UserProfileScreen = ({ route, navigation }) => {
     };
 
     const renderUserItem = ({ item }) => (
-        <TouchableOpacity style={[styles.userItem, { backgroundColor: colors.card }]} onPress={() => navigateToProfile(item.id)}>
+        <TouchableOpacity style={[styles.userItem, { backgroundColor: colors.card }]} onPress={() => navigation.push('UserProfile', { userId: item.id })}>
             <Image source={{ uri: item.photoURL || undefined }} style={styles.userAvatar} />
             <View style={styles.userInfo}>
                 <Text style={[styles.userItemName, { color: colors.text }]}>{item.displayName || 'User'}</Text>
@@ -598,10 +508,6 @@ const UserProfileScreen = ({ route, navigation }) => {
                     key={trip.id}
                     trip={{ ...trip, user: user || trip.user }}
                     onPress={() => navigation.navigate('TripDetails', { tripId: trip.id })}
-                    onCommentPress={() => {
-                        setSelectedTripId(trip.id);
-                        setActiveModal('comments');
-                    }}
                     onReportPress={() => {
                         setSelectedTrip(trip);
                         setActiveModal('report');
@@ -674,16 +580,6 @@ const UserProfileScreen = ({ route, navigation }) => {
                                 <Text style={[styles.statValue, { color: colors.text }]}>{trips.length}</Text>
                                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Trips</Text>
                             </TouchableOpacity>
-                            <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-                            <TouchableOpacity style={styles.statItem} onPress={() => setShowFollowersModal(true)}>
-                                <Text style={[styles.statValue, { color: colors.text }]}>{user.followers?.length || 0}</Text>
-                                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Followers</Text>
-                            </TouchableOpacity>
-                            <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-                            <TouchableOpacity style={styles.statItem} onPress={() => setShowFollowingModal(true)}>
-                                <Text style={[styles.statValue, { color: colors.text }]}>{user.following?.length || 0}</Text>
-                                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Following</Text>
-                            </TouchableOpacity>
                         </View>
                     </View>
 
@@ -716,16 +612,8 @@ const UserProfileScreen = ({ route, navigation }) => {
                     {/* Action Buttons */}
                     {!isOwnProfile && (
                         <View style={styles.actionButtonsContainer}>
-                            <TouchableOpacity
-                                style={[styles.primaryBtn, { backgroundColor: isFollowing ? colors.card : colors.primary, borderColor: isFollowing ? colors.border : 'transparent', borderWidth: isFollowing ? 1 : 0 }]}
-                                onPress={handleFollow}
-                            >
-                                <Text style={[styles.primaryBtnText, { color: isFollowing ? colors.text : '#fff' }]}>
-                                    {isFollowing ? 'Following' : 'Follow'}
-                                </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={[styles.secondaryBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={handleMessage}>
-                                <Text style={[styles.secondaryBtnText, { color: colors.text }]}>Message</Text>
+                            <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.primary }]} onPress={handleMessage}>
+                                <Text style={[styles.primaryBtnText, { color: '#fff' }]}>Message</Text>
                             </TouchableOpacity>
                         </View>
                     )}
@@ -883,23 +771,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                 </View>
             </Modal>
 
-            {/* Followers Modal - Full screen slide from right */}
-            <FollowersModal
-                visible={showFollowersModal}
-                onClose={() => setShowFollowersModal(false)}
-                title="Followers"
-                users={followers}
-                onUserPress={navigateToProfile}
-            />
 
-            {/* Following Modal - Full screen slide from right */}
-            <FollowersModal
-                visible={showFollowingModal}
-                onClose={() => setShowFollowingModal(false)}
-                title="Following"
-                users={following}
-                onUserPress={navigateToProfile}
-            />
 
             {/* Profile Picture Viewer */}
             <ProfilePictureViewer
@@ -920,21 +792,12 @@ const UserProfileScreen = ({ route, navigation }) => {
                 onClose={() => setShowAgeModal(false)}
                 action="create or join a trip"
             />
-            {/* Hoisted Modals */}
-            <CommentsModal
-                visible={activeModal === 'comments'}
-                onClose={() => {
-                    setActiveModal('none');
-                    setSelectedTripId(null);
-                }}
-                tripId={selectedTripId || ''}
-            />
+
 
             <ReportTripModal
                 visible={activeModal === 'report'}
                 onClose={() => {
                     setActiveModal('none');
-                    setSelectedTripId(null);
                     setSelectedTrip(null);
                 }}
                 trip={selectedTrip}

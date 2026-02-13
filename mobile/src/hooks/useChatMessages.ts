@@ -42,6 +42,8 @@ export interface Message {
     editedAt?: FirestoreTimestamp;
     deletedFor: string[];
     deletedForEveryoneAt?: FirestoreTimestamp;
+
+    mentions?: string[];
     createdAt: FirestoreTimestamp;
 }
 
@@ -49,7 +51,7 @@ interface UseChatMessagesReturn {
     messages: Message[];
     loading: boolean;
     error: Error | null;
-    sendMessage: (text: string, replyTo?: ReplyTo) => Promise<void>;
+    sendMessage: (text: string, replyTo?: ReplyTo, mentions?: string[]) => Promise<void>;
     markAsRead: () => Promise<void>;
     loadMoreMessages: () => void;
     hasMore: boolean;
@@ -57,7 +59,7 @@ interface UseChatMessagesReturn {
 
 const PAGE_SIZE = 50;
 
-export function useChatMessages(chatId: string | undefined): UseChatMessagesReturn {
+export function useChatMessages(chatId: string | undefined, clearedAt?: FirestoreTimestamp): UseChatMessagesReturn {
     const [messages, setMessages] = useState<Message[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
@@ -97,7 +99,15 @@ export function useChatMessages(chatId: string | undefined): UseChatMessagesRetu
                         }))
                         .filter((msg: any) => {
                             // Filter out messages deleted for current user
-                            return !msg.deletedFor?.includes(currentUser.uid);
+                            if (msg.deletedFor?.includes(currentUser.uid)) return false;
+
+                            // Filter out messages before clearedAt
+                            if (clearedAt && msg.createdAt) {
+                                const msgTime = (msg.createdAt as any).toDate ? (msg.createdAt as any).toDate() : new Date(msg.createdAt as any);
+                                const clearTime = (clearedAt as any).toDate ? (clearedAt as any).toDate() : new Date(clearedAt as any);
+                                if (msgTime <= clearTime) return false;
+                            }
+                            return true;
                         }) as Message[];
 
                     // Reverse to show oldest first (for chat UI)
@@ -119,13 +129,13 @@ export function useChatMessages(chatId: string | undefined): UseChatMessagesRetu
             );
 
         return () => unsubscribe();
-    }, [chatId, currentUser?.uid]);
+    }, [chatId, currentUser?.uid, clearedAt]); // Re-run if clearedAt changes
 
     // Lock to prevent double-send
     const sendingLock = useRef(false);
 
     const sendMessage = useCallback(
-        async (text: string, replyTo?: ReplyTo): Promise<void> => {
+        async (text: string, replyTo?: ReplyTo, mentions?: string[]): Promise<void> => {
             if (!chatId || !currentUser || !text.trim()) return;
 
             // Create a unique key for this message to prevent duplicates
@@ -151,7 +161,7 @@ export function useChatMessages(chatId: string | undefined): UseChatMessagesRetu
                 const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
                 const userData = userDoc.data();
 
-                const messageData: Omit<Message, 'id'> = {
+                const messageData: Omit<Message, 'id'> & { mentions?: string[] } = {
                     senderId: currentUser.uid,
                     senderName: userData?.displayName || currentUser.displayName || 'User',
                     type: 'text',
@@ -167,6 +177,10 @@ export function useChatMessages(chatId: string | undefined): UseChatMessagesRetu
                     messageData.replyTo = replyTo;
                 }
 
+                if (mentions && mentions.length > 0) {
+                    messageData.mentions = mentions;
+                }
+
                 // Create message
                 await firestore()
                     .collection('chats')
@@ -174,7 +188,7 @@ export function useChatMessages(chatId: string | undefined): UseChatMessagesRetu
                     .collection('messages')
                     .add(messageData);
 
-                // Update chat's lastMessage and updatedAt
+                // Update chat's lastMessage and updatedAt AND unhide chat (remove from deletedBy)
                 await firestore()
                     .collection('chats')
                     .doc(chatId)
@@ -189,6 +203,22 @@ export function useChatMessages(chatId: string | undefined): UseChatMessagesRetu
                         updatedAt: firestore.FieldValue.serverTimestamp(),
                         // Increment unread count for other participants
                         [`unreadCount.${currentUser.uid}`]: 0,
+                        // UNHIDE CHAT: Remove ONLY the current user from deletedBy so they see it again. 
+                        // Actually, remove EVERYONE so it reappears for other person too if they deleted it? 
+                        // "when the same user sends a message then again that conversation will appear" - implies for sender.
+                        // "like whatsapp" -> if I delete chat, sending msg brings it back. 
+                        // If *recipient* deleted it, receiving msg brings it back.
+                        // So we should remove ALL participants from deletedBy to ensure visibility for everyone?
+                        // Or just remove current user? 
+                        // WhatsApp: if I delete chat, valid for me. Receiving msg brings it back. Sending msg brings it back.
+                        // So we should ideally clear `deletedBy` for ALL participants (empty array) or remove specific users.
+                        // Ideally we remove Current User AND Recipient if they blocked it.
+                        // Simpler: Just set deletedBy to empty array? Or just remove current user?
+                        // If I deleted it, `deletedBy` has `[me]`. Sending msg -> remove `me`.
+                        // If recipient deleted it, `deletedBy` has `[them]`. Receiving msg (here) -> remove `them`.
+                        // So we should remove ALL UIDs from `deletedBy`? Or just reset it to []?
+                        // Resetting to [] is safest to ensure everyone sees the new message.
+                        deletedBy: []
                     });
 
 

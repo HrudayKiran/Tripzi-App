@@ -1,71 +1,11 @@
 
-import { onDocumentUpdated, onDocumentCreated, onDocumentDeleted } from 'firebase-functions/v2/firestore';
+import { onDocumentUpdated, onDocumentDeleted } from 'firebase-functions/v2/firestore';
 import { db } from '../utils/firebase';
 import { createNotification, sendPushToUser } from '../utils/notifications';
 import * as admin from 'firebase-admin';
 
-// ==================== TRIP UPDATE NOTIFICATIONS ====================
+// ==================== TRIP NOTIFICATIONS ====================
 
-/**
- * Notify host when a trip is Liked.
- */
-export const onTripLiked = onDocumentUpdated(
-    { document: "trips/{tripId}" },
-    async (event) => {
-        try {
-            if (!event.data) return;
-
-            const beforeData = event.data.before.data();
-            const afterData = event.data.after.data();
-            const tripId = event.params.tripId;
-            const hostId = afterData.userId;
-            const tripTitle = afterData.title || "Trip";
-
-            if (!hostId) {
-                console.error(`[LikeTrigger] No hostId found for trip ${tripId}`);
-                return;
-            }
-
-            // Check for New Likes
-            const beforeLikes = beforeData.likes || [];
-            const afterLikes = afterData.likes || [];
-
-            if (afterLikes.length > beforeLikes.length) {
-                const newLikerId = afterLikes.find((uid: string) => !beforeLikes.includes(uid));
-
-                if (newLikerId && newLikerId !== hostId) {
-                    console.log(`[LikeTrigger] New liker ${newLikerId} found for trip ${tripId}`);
-
-                    const likerDoc = await db.collection("users").doc(newLikerId).get();
-                    const likerName = likerDoc.data()?.displayName || "Someone";
-
-                    console.log(`[LikeTrigger] Sending notification to host ${hostId}`);
-
-                    await createNotification({
-                        recipientId: hostId,
-                        type: "like",
-                        title: "New Like ❤️",
-                        message: `${likerName} liked your trip "${tripTitle}"`,
-                        entityId: tripId,
-                        entityType: "trip",
-                        actorId: newLikerId,
-                        actorName: likerName,
-                        deepLinkRoute: "TripDetails",
-                        deepLinkParams: { tripId },
-                    });
-
-                    await sendPushToUser(hostId, {
-                        title: "New Like ❤️",
-                        body: `${likerName} liked your trip "${tripTitle}"`,
-                        data: { route: "TripDetails", tripId },
-                    });
-                }
-            }
-        } catch (error) {
-            console.error('[LikeTrigger] Error processing like:', error);
-        }
-    }
-);
 
 /**
  * Handle Trip Joins: Create/Update Group Chat & Notify
@@ -345,52 +285,6 @@ export const onTripUpdated = onDocumentUpdated(
 );
 
 
-/**
- * Notify host when a new comment is added.
- */
-export const onCommentCreated = onDocumentCreated(
-    { document: "trips/{tripId}/comments/{commentId}" },
-    async (event) => {
-        const snapshot = event.data;
-        if (!snapshot) return;
-
-        const commentData = snapshot.data();
-        const tripId = event.params.tripId;
-        const commenterId = commentData.userId;
-        const text = commentData.text;
-
-        const tripDoc = await db.collection("trips").doc(tripId).get();
-        if (!tripDoc.exists) return;
-
-        const tripData = tripDoc.data();
-        const hostId = tripData?.userId;
-        const tripTitle = tripData?.title || "Trip";
-
-        if (hostId && hostId !== commenterId) {
-            const commenterDoc = await db.collection("users").doc(commenterId).get();
-            const commenterName = commenterDoc.data()?.displayName || "Someone";
-
-            await createNotification({
-                recipientId: hostId,
-                type: "comment",
-                title: "New Comment 💬",
-                message: `${commenterName} commented: "${text}"`,
-                entityId: tripId,
-                entityType: "trip",
-                actorId: commenterId,
-                actorName: commenterName,
-                deepLinkRoute: "TripDetails",
-                deepLinkParams: { tripId },
-            });
-
-            await sendPushToUser(hostId, {
-                title: "New Comment 💬",
-                body: `${commenterName} commented on "${tripTitle}"`,
-                data: { route: "TripDetails", tripId },
-            });
-        }
-    }
-);
 
 /**
  * Notify participants when a trip is DELETED (Cancelled) by the host.

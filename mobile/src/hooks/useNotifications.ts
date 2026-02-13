@@ -3,8 +3,6 @@ import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firest
 import auth from '@react-native-firebase/auth';
 
 export type NotificationType =
-    | 'like'
-    | 'comment'
     | 'message'
     | 'age_verified'
     | 'trip_join'

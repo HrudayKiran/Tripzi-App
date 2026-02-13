@@ -29,8 +29,8 @@ export interface Chat {
     createdBy?: string;
     lastMessage?: LastMessage;
     unreadCount: { [uid: string]: number };
-    mutedBy: string[];
-    pinnedBy: string[];
+    deletedBy: string[];
+    clearedAt?: { [uid: string]: FirestoreTimestamp };
     createdAt: FirestoreTimestamp;
     updatedAt: FirestoreTimestamp;
 }
@@ -41,6 +41,7 @@ interface UseChatsReturn {
     error: Error | null;
     createDirectChat: (otherUserId: string, otherUserDetails: ChatParticipant) => Promise<string>;
     getOrCreateDirectChat: (otherUserId: string, otherUserDetails: ChatParticipant) => Promise<string>;
+    deleteChat: (chatId: string) => Promise<void>;
     refreshChats: () => void;
 }
 
@@ -59,26 +60,24 @@ export function useChats(): UseChatsReturn {
             return;
         }
 
-
-
         const unsubscribe = firestore()
             .collection('chats')
             .where('participants', 'array-contains', currentUser.uid)
             .orderBy('updatedAt', 'desc')
             .onSnapshot(
                 (snapshot) => {
-                    // Guard against null snapshot
                     if (!snapshot) {
                         setChats([]);
                         setLoading(false);
                         return;
                     }
 
-                    const chatsList: Chat[] = snapshot.docs.map((doc) => ({
-                        id: doc.id,
-                        ...doc.data(),
-                    })) as Chat[];
-
+                    const chatsList: Chat[] = snapshot.docs
+                        .map((doc) => ({
+                            id: doc.id,
+                            ...doc.data(),
+                        }))
+                        .filter((chat: any) => !chat.deletedBy?.includes(currentUser.uid)) as Chat[];
 
                     setChats(chatsList);
                     setLoading(false);
@@ -115,8 +114,9 @@ export function useChats(): UseChatsReturn {
                     [currentUser.uid]: 0,
                     [otherUserId]: 0,
                 },
-                mutedBy: [],
-                pinnedBy: [],
+
+                deletedBy: [],
+                clearedAt: {},
                 createdAt: firestore.FieldValue.serverTimestamp() as any,
                 updatedAt: firestore.FieldValue.serverTimestamp() as any,
             };
@@ -132,7 +132,6 @@ export function useChats(): UseChatsReturn {
         async (otherUserId: string, otherUserDetails: ChatParticipant): Promise<string> => {
             if (!currentUser) throw new Error('Not authenticated');
 
-            // Check if a direct chat already exists between these two users
             const existingChat = chats.find(
                 (chat) =>
                     chat.type === 'direct' &&
@@ -141,11 +140,15 @@ export function useChats(): UseChatsReturn {
             );
 
             if (existingChat) {
-
+                // If it was deleted, restore it (optimization: only if needed, but safe to always do)
+                if (existingChat.deletedBy?.includes(currentUser.uid)) {
+                    await firestore().collection('chats').doc(existingChat.id).update({
+                        deletedBy: firestore.FieldValue.arrayRemove(currentUser.uid)
+                    });
+                }
                 return existingChat.id;
             }
 
-            // Also check Firestore in case local state is stale
             const querySnapshot = await firestore()
                 .collection('chats')
                 .where('type', '==', 'direct')
@@ -158,15 +161,36 @@ export function useChats(): UseChatsReturn {
             });
 
             if (foundChat) {
-
+                // Restore if deleted
+                const data = foundChat.data();
+                if (data.deletedBy?.includes(currentUser.uid)) {
+                    await foundChat.ref.update({
+                        deletedBy: firestore.FieldValue.arrayRemove(currentUser.uid)
+                    });
+                }
                 return foundChat.id;
             }
 
-            // Create new chat
             return createDirectChat(otherUserId, otherUserDetails);
         },
         [currentUser, chats, createDirectChat]
     );
+
+    const deleteChat = useCallback(async (chatId: string) => {
+        if (!currentUser) return;
+        try {
+            await firestore()
+                .collection('chats')
+                .doc(chatId)
+                .update({
+                    deletedBy: firestore.FieldValue.arrayUnion(currentUser.uid),
+                    // [`clearedAt.${currentUser.uid}`]: firestore.FieldValue.serverTimestamp()
+                });
+        } catch (error) {
+            console.error('Error deleting chat:', error);
+            throw error;
+        }
+    }, [currentUser]);
 
     const refreshChats = useCallback(() => {
         setRefreshKey((prev) => prev + 1);
@@ -178,6 +202,7 @@ export function useChats(): UseChatsReturn {
         error,
         createDirectChat,
         getOrCreateDirectChat,
+        deleteChat,
         refreshChats,
     };
 }

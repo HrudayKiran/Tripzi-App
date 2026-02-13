@@ -137,7 +137,7 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser }: LiveLoc
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
-    map: { width, height: height, ...StyleSheet.absoluteFillObject },
+    map: { ...StyleSheet.absoluteFillObject },
     header: {
         position: 'absolute',
         top: 50,

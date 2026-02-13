@@ -28,7 +28,7 @@ export const createNotification = async (payload: NotificationPayload) => {
 
         // Deduplication Logic
         // check if a similar notification exists from the same actor for the same entity
-        if (['like', 'follow', 'join_trip', 'leave_trip'].includes(data.type)) {
+        if (['join_trip', 'leave_trip'].includes(data.type)) {
             const recentSnapshot = await db.collection('notifications')
                 .doc(recipientId)
                 .collection('items')

@@ -40,19 +40,36 @@ export const onMessageCreated = onDocumentCreated(
             senderName = senderDoc.data()?.displayName || "Someone";
         }
 
+        // Check for Mentions
+        const mentions: string[] = messageData.mentions || [];
+        const isEveryoneMentioned = mentions.includes('everyone');
+
+        // Determine notification content
         const notificationTitle = isGroup ? groupName : senderName;
-        const notificationBody = isGroup
+        let notificationBody = isGroup
             ? (senderId === 'system' ? text : `${senderName}: ${type === 'image' ? '📷 Image' : text}`)
             : (type === 'image' ? 'Sent an image 📷' : text);
+
+        if (isEveryoneMentioned) {
+            notificationBody = `${senderName} mentioned everyone: ${text}`;
+        }
 
         const recipients = participants.filter((uid: string) => uid !== senderId);
 
         for (const recipientId of recipients) {
+            // Customize body for specific mentions
+            let userBody = notificationBody;
+            let userTitle = notificationTitle;
+
+            if (!isEveryoneMentioned && mentions.includes(recipientId)) {
+                userBody = `${senderName} mentioned you: ${text}`;
+            }
+
             await createNotification({
                 recipientId,
                 type: "message",
-                title: notificationTitle,
-                message: notificationBody,
+                title: userTitle,
+                message: userBody,
                 entityId: chatId,
                 entityType: "chat", // or "message"
                 actorId: senderId,
@@ -62,8 +79,8 @@ export const onMessageCreated = onDocumentCreated(
             });
 
             await sendPushToUser(recipientId, {
-                title: notificationTitle,
-                body: notificationBody,
+                title: userTitle,
+                body: userBody,
                 data: { route: "Chat", chatId },
             });
         }

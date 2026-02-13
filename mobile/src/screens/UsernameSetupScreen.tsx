@@ -60,8 +60,6 @@ const UsernameSetupScreen = ({ navigation }) => {
                 photoURL: currentUser.photoURL,
                 createdAt: firestore.FieldValue.serverTimestamp(),
                 ageVerified: false,
-                followers: [],
-                following: [],
             }, { merge: true });
 
             navigation.replace('App');

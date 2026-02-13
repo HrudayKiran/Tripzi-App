@@ -56,8 +56,6 @@ const GoogleProfileScreen = ({ route, navigation }) => {
                 bio: '',
                 role: 'user',
                 ageVerified: false,
-                followers: [],
-                following: [],
                 rating: 0,
                 pushNotifications: true,
                 phoneVerified: false,

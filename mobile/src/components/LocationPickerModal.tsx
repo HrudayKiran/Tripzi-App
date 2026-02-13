@@ -142,7 +142,7 @@ const LocationPickerModal = ({ visible, onClose, onSelectLocation }: LocationPic
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
-    map: { width, height: height, ...StyleSheet.absoluteFillObject },
+    map: { ...StyleSheet.absoluteFillObject },
     backButton: {
         position: 'absolute',
         top: 50,

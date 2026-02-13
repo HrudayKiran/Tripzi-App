@@ -77,18 +77,76 @@ export const wipeUserData = async (uid: string) => {
         const chatsQuery = await db.collection('chats').where('participants', 'array-contains', uid).get();
         for (const chatDoc of chatsQuery.docs) {
             const chatData = chatDoc.data();
+            const chatId = chatDoc.id;
+
             if (chatData.type === 'direct') {
-                // Delete DM entirely
-                // 9a. Delete messages subcollection
+                // ==================== DIRECT CHAT: DELETE EVERYTHING ====================
+                console.log(`Deleting direct chat ${chatId}`);
+
+                // 9a. Delete Storage (All images in this chat)
+                // Path: chats/{chatId}/...
+                try {
+                    await bucket.deleteFiles({ prefix: `chats/${chatId}/` });
+                } catch (e) {
+                    console.log(`Error deleting storage for chat ${chatId}:`, e);
+                }
+
+                // 9b. Delete Messages Subcollection
                 const messagesSnapshot = await chatDoc.ref.collection('messages').get();
                 messagesSnapshot.forEach(msg => bulkWriter.delete(msg.ref));
-                // 9b. Delete chat doc
+
+                // 9c. Delete Chat Document
                 bulkWriter.delete(chatDoc.ref);
+
             } else {
-                // Remove from Group
+                // ==================== GROUP CHAT: REMOVE MEMBER & CLEAN UP MEDIA ====================
+                console.log(`Removing user from group chat ${chatId}`);
+
+                // 9d. Remove from Participants
                 bulkWriter.update(chatDoc.ref, {
-                    participants: admin.firestore.FieldValue.arrayRemove(uid)
+                    participants: admin.firestore.FieldValue.arrayRemove(uid),
+                    [`participantDetails.${uid}`]: admin.firestore.FieldValue.delete(), // Also remove details map
+                    // Optional: Add a system message saying user left? (Skipped for now to avoid side effects)
                 });
+
+                // 9e. Delete User's Image Messages & Storage in Group
+                // This is expensive but necessary for full cleanup.
+                const userImagesQuery = await chatDoc.ref.collection('messages')
+                    .where('senderId', '==', uid)
+                    .where('type', '==', 'image')
+                    .get();
+
+                for (const msgDoc of userImagesQuery.docs) {
+                    const mediaUrl = msgDoc.data().mediaUrl;
+                    if (mediaUrl) {
+                        try {
+                            // Extract path from URL or use if we stored path. 
+                            // Since we don't store path, we must rely on bucket search or skip.
+                            // Logic: If filename is unique enough, we might find it?
+                            // Actually, we can try to parse the URL if it's a standard Firebase Storage URL.
+                            // But usually, it's safer to just delete the message doc.
+                            // If we can't easily find the file, we leave it (orphaned file).
+                            // HOWEVER, if the file is at chats/{chatId}/images/{filename}, we can't easily know filename without parsing.
+
+                            // Attempt to parse: .../o/chats%2F{chatId}%2Fimages%2F{filename}?alt=...
+                            // Decode URL -> find substring "chats/{chatId}/images/"
+                            const decoded = decodeURIComponent(mediaUrl);
+                            const match = decoded.match(new RegExp(`chats/${chatId}/images/([^?]*)`));
+                            if (match) {
+                                const fullPath = `chats/${chatId}/images/${match[1]}`;
+                                await bucket.file(fullPath).delete().catch(e => console.log('File not found or error:', e));
+                            }
+                        } catch (e) {
+                            console.log('Error cleaning up group chat image:', e);
+                        }
+                    }
+                    // Delete the message doc itself?
+                    // "when a user is deleted chats collection... is not deleting"
+                    // Usually we keep messages but mark sender as "Deleted User".
+                    // But if user wants FULL delete, we should delete messages.
+                    // Let's delete the message doc.
+                    bulkWriter.delete(msgDoc.ref);
+                }
             }
         }
 
@@ -108,6 +166,10 @@ export const wipeUserData = async (uid: string) => {
             });
         });
 
+        // 12. Stories (Delete all stories by user)
+        const storiesQuery = await db.collection('stories').where('userId', '==', uid).get();
+        storiesQuery.forEach(doc => bulkWriter.delete(doc.ref));
+
         // ==================== C. STORAGE (Prefix Deletion) ====================
         // Based on `imageUpload.ts` pattern: folder/userId/filename
 
@@ -119,18 +181,21 @@ export const wipeUserData = async (uid: string) => {
         }
 
         // 2. Trip Images: `trips/{uid}/...`
-        // This effectively separates user's trip storage. All images for all their trips live here.
         try {
             await bucket.deleteFiles({ prefix: `trips/${uid}/` });
         } catch (e) {
             console.log("Error deleting trips storage:", e);
         }
 
-        // 3. Chat Images: `chats/{uid}/...`
+        // 3. Chat Images: Handled in Step 9 (Per-chat basis)
+        // Previous logic `chats/{uid}` was incorrect.
+
+
+        // 4. Story Images: `stories/{uid}/...`
         try {
-            await bucket.deleteFiles({ prefix: `chats/${uid}/` });
+            await bucket.deleteFiles({ prefix: `stories/${uid}/` });
         } catch (e) {
-            console.log("Error deleting chats storage:", e);
+            console.log("Error deleting stories storage:", e);
         }
 
         await bulkWriter.close();

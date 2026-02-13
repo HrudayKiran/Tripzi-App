@@ -12,4 +12,3 @@ export * from './triggers/config';
 
 // Export utils if needed (usually not triggers)
 // export * from './utils/notifications';
-export * from './callable/share';

@@ -20,7 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { Audio, Video, ResizeMode } from 'expo-av';
+
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
 import { useChatMessages, Message, ReplyTo } from '../hooks/useChatMessages';
@@ -42,6 +42,8 @@ interface ChatScreenProps {
             otherUserId?: string;
             otherUserName?: string;
             otherUserPhoto?: string;
+            isGroupChat?: boolean;
+            tripTitle?: string;
         };
     };
 }
@@ -49,14 +51,18 @@ interface ChatScreenProps {
 const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     const { chatId, otherUserId, otherUserName, otherUserPhoto } = route.params;
     const { colors } = useTheme();
-    const { messages, loading, sendMessage, markAsRead } = useChatMessages(chatId);
     const { chats } = useChats();
+    const currentUser = auth().currentUser;
+    const chat = chats.find((c) => c.id === chatId);
+    const clearedAt = currentUser ? chat?.clearedAt?.[currentUser.uid] : undefined;
+
+    const { messages, loading, sendMessage, markAsRead } = useChatMessages(chatId, clearedAt);
     const [inputText, setInputText] = useState('');
     const [sending, setSending] = useState(false);
     const [uploading, setUploading] = useState(false);
     const flatListRef = useRef<FlatList>(null);
     const sendingRef = useRef(false); // Ref-based lock to prevent double-send
-    const currentUser = auth().currentUser;
+    // Ref-based lock to prevent double-send
 
     // Context menu state
     const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
@@ -75,7 +81,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     // Image viewer state
     const [viewingImage, setViewingImage] = useState<string | null>(null);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
-    const [previewVideo, setPreviewVideo] = useState<string | null>(null);
+
 
     // Location state
     const [gettingLocation, setGettingLocation] = useState(false);
@@ -88,13 +94,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     const locationSubscription = useRef<Location.LocationSubscription | null>(null);
     const [activeSharersCount, setActiveSharersCount] = useState(0);
 
-    // Voice note state
-    const [recording, setRecording] = useState<any>(null);
-    const [isRecording, setIsRecording] = useState(false);
-    const [recordingDuration, setRecordingDuration] = useState(0);
-    const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
-    const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
-    const soundRef = useRef<any>(null);
+
 
     // Typing indicator state
     const [isTyping, setIsTyping] = useState(false);
@@ -108,8 +108,20 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
 
+    // Mention state
+    const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+    const [filteredMembers, setFilteredMembers] = useState<any[]>([]);
+
+    const groupMembers = React.useMemo(() => {
+        if (chat?.type !== 'group' || !chat.participantDetails) return [];
+        return Object.entries(chat.participantDetails).map(([uid, details]: [string, any]) => ({
+            uid,
+            ...details
+        }));
+    }, [chat]);
+
     // Get chat details
-    const chat = chats.find((c) => c.id === chatId);
+    // Get chat details (already retrieved above)
     const otherParticipantUid = chat?.participants.find((uid) => uid !== currentUser?.uid) || otherUserId;
     const otherParticipant = chat?.participantDetails?.[otherParticipantUid || ''];
 
@@ -119,6 +131,45 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     const displayPhoto = chat?.type === 'group'
         ? chat.groupIcon
         : otherParticipant?.photoURL || otherUserPhoto;
+
+
+
+    // Render Mention Suggestions
+    const renderMentionSuggestions = () => {
+        if (!mentionQuery) return null;
+
+        return (
+            <View style={[styles.mentionList, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                {/* Tag Everyone Option */}
+                {mentionQuery.toLowerCase() === 'everyone'.substring(0, mentionQuery.length) || 'everyone'.includes(mentionQuery.toLowerCase()) ? (
+                    <TouchableOpacity style={[styles.mentionItem, { borderBottomColor: colors.border }]} onPress={handleSelectTagEveryone}>
+                        <View style={[styles.mentionAvatarPlaceholder, { backgroundColor: colors.primary }]}>
+                            <Ionicons name="people" size={16} color="#fff" />
+                        </View>
+                        <Text style={[styles.mentionName, { color: colors.text }]}>Everyone</Text>
+                    </TouchableOpacity>
+                ) : null}
+
+                <FlatList
+                    data={filteredMembers}
+                    keyExtractor={(item) => item.uid}
+                    keyboardShouldPersistTaps="handled"
+                    renderItem={({ item }) => (
+                        <TouchableOpacity style={[styles.mentionItem, { borderBottomColor: colors.border }]} onPress={() => handleSelectMention(item)}>
+                            {item.photoURL ? (
+                                <Image source={{ uri: item.photoURL }} style={styles.mentionAvatar} />
+                            ) : (
+                                <View style={[styles.mentionAvatarPlaceholder, { backgroundColor: colors.primary }]}>
+                                    <Text style={{ color: '#fff', fontSize: 12 }}>{item.displayName?.charAt(0)}</Text>
+                                </View>
+                            )}
+                            <Text style={[styles.mentionName, { color: colors.text }]}>{item.displayName}</Text>
+                        </TouchableOpacity>
+                    )}
+                />
+            </View>
+        );
+    };
 
     // Mark messages as read when entering chat
     useEffect(() => {
@@ -246,6 +297,28 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     // Handle text input
     const handleTextChange = (text: string) => {
         setInputText(text);
+
+        // Mention logic
+        if (chat?.type === 'group') {
+            const lastAt = text.lastIndexOf('@');
+            if (lastAt !== -1) {
+                const query = text.substring(lastAt + 1);
+                // Check if query contains space (end of mention)
+                if (!query.includes(' ')) {
+                    setMentionQuery(query);
+                    const lowerQuery = query.toLowerCase();
+                    const matches = groupMembers.filter(m =>
+                        (m.displayName || '').toLowerCase().includes(lowerQuery)
+                    );
+                    setFilteredMembers(matches);
+                } else {
+                    setMentionQuery(null);
+                }
+            } else {
+                setMentionQuery(null);
+            }
+        }
+
         if (text.length > 0 && !isTyping) {
             setIsTyping(true);
             updateTypingStatus(true);
@@ -253,6 +326,26 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             setIsTyping(false);
             updateTypingStatus(false);
         }
+    };
+
+    const handleSelectMention = (member: any) => {
+        if (!mentionQuery) return;
+        const lastAt = inputText.lastIndexOf('@');
+        const prefix = inputText.substring(0, lastAt);
+        const suffix = inputText.substring(lastAt + mentionQuery.length + 1); // +1 might be wrong if query is varying
+        // actually simplest is: replace the last @query with @Name 
+        const newText = prefix + `@${member.displayName} ` + suffix; // Add space
+        setInputText(newText);
+        setMentionQuery(null);
+    };
+
+    const handleSelectTagEveryone = () => {
+        if (!mentionQuery) return;
+        const lastAt = inputText.lastIndexOf('@');
+        const prefix = inputText.substring(0, lastAt);
+        const newText = prefix + `@everyone `;
+        setInputText(newText);
+        setMentionQuery(null);
     };
 
     const handleSend = async () => {
@@ -266,9 +359,23 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
 
         const textToSend = inputText.trim();
         setInputText(''); // Clear input immediately to prevent re-send
+        setMentionQuery(null);
+
+        // Extract mentions
+        const mentions: string[] = [];
+        if (chat?.type === 'group') {
+            if (textToSend.includes('@everyone')) {
+                mentions.push('everyone');
+            }
+            groupMembers.forEach(m => {
+                if (textToSend.includes(`@${m.displayName}`)) {
+                    mentions.push(m.uid);
+                }
+            });
+        }
 
         try {
-            await sendMessage(textToSend, replyingTo || undefined);
+            await sendMessage(textToSend, replyingTo || undefined, mentions);
             setReplyingTo(null);
         } catch (error) {
             console.error('Failed to send message:', error);
@@ -279,88 +386,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         }
     };
 
-    // Pick and send image
-    const pickVideo = async () => {
-        setShowAttachmentPicker(false);
-        try {
-            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (status !== 'granted') {
-                Alert.alert('Permission needed', 'Please grant gallery permissions.');
-                return;
-            }
-            // Launch picker
-            const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-                allowsEditing: false,
-                quality: 1,
-            });
 
-            if (!result.canceled && result.assets[0]) {
-                const asset = result.assets[0];
-                // 50MB limit check
-                if (asset.fileSize && asset.fileSize > 50 * 1024 * 1024) {
-                    Alert.alert('File too large', 'Please select a video under 50MB.');
-                    return;
-                }
-                setPreviewVideo(asset.uri);
-            }
-        } catch (error) {
-            console.error('Video picker error:', error);
-            Alert.alert('Error', 'Failed to pick video.');
-        }
-    };
-
-    const sendVideoMessage = async (videoUri: string) => {
-        if (!currentUser || !chatId) return;
-        setUploading(true);
-
-        try {
-            const filename = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.mp4`;
-            const storageRef = storage().ref(`chats/${chatId}/videos/${filename}`);
-            await storageRef.putFile(videoUri);
-            const downloadUrl = await storageRef.getDownloadURL();
-
-            const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
-            const userData = userDoc.data();
-
-            await firestore()
-                .collection('chats')
-                .doc(chatId)
-                .collection('messages')
-                .add({
-                    senderId: currentUser.uid,
-                    senderName: userData?.displayName || currentUser.displayName || 'User',
-                    type: 'video',
-                    mediaUrl: downloadUrl,
-                    status: 'sent',
-                    readBy: {},
-                    deliveredTo: [],
-                    deletedFor: [],
-                    createdAt: firestore.FieldValue.serverTimestamp(),
-                });
-
-            await firestore()
-                .collection('chats')
-                .doc(chatId)
-                .update({
-                    lastMessage: {
-                        text: '🎥 Video',
-                        senderId: currentUser.uid,
-                        senderName: userData?.displayName || currentUser.displayName || 'User',
-                        timestamp: firestore.FieldValue.serverTimestamp(),
-                        type: 'video',
-                    },
-                    updatedAt: firestore.FieldValue.serverTimestamp(),
-                    [`unreadCount.${currentUser.uid}`]: 0,
-                });
-
-        } catch (error) {
-            console.error('Failed to send video:', error);
-            Alert.alert('Error', 'Failed to send video.');
-        } finally {
-            setUploading(false);
-        }
-    };
 
     const pickImage = async (useCamera: boolean = false) => {
         setShowAttachmentPicker(false);
@@ -679,163 +705,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         });
     };
 
-    // Voice recording
-    const startRecording = async () => {
-        try {
-            const { status } = await Audio.requestPermissionsAsync();
-            if (status !== 'granted') {
-                Alert.alert('Permission needed', 'Please enable microphone access.');
-                return;
-            }
 
-            await Audio.setAudioModeAsync({
-                allowsRecordingIOS: true,
-                playsInSilentModeIOS: true,
-            });
-
-            const { recording } = await Audio.Recording.createAsync(
-                Audio.RecordingOptionsPresets.HIGH_QUALITY
-            );
-            setRecording(recording);
-            setIsRecording(true);
-            setRecordingDuration(0);
-
-            // Start timer
-            recordingTimerRef.current = setInterval(() => {
-                setRecordingDuration((prev) => prev + 1);
-            }, 1000);
-        } catch (error) {
-            console.error('Failed to start recording:', error);
-            Alert.alert('Error', 'Failed to start recording.');
-        }
-    };
-
-    const stopRecording = async (send: boolean = true) => {
-        if (!recording) return;
-
-        try {
-            if (recordingTimerRef.current) {
-                clearInterval(recordingTimerRef.current);
-            }
-
-            await recording.stopAndUnloadAsync();
-            const uri = recording.getURI();
-            setRecording(null);
-            setIsRecording(false);
-
-            if (send && uri) {
-                await sendVoiceMessage(uri, recordingDuration);
-            }
-
-            setRecordingDuration(0);
-        } catch (error) {
-            console.error('Failed to stop recording:', error);
-        }
-    };
-
-    const cancelRecording = async () => {
-        await stopRecording(false);
-    };
-
-    const sendVoiceMessage = async (uri: string, duration: number) => {
-        if (!currentUser || !chatId) return;
-        setUploading(true);
-
-        try {
-            const filename = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.m4a`;
-            const storageRef = storage().ref(`chats/${chatId}/voice/${filename}`);
-            await storageRef.putFile(uri);
-            const downloadUrl = await storageRef.getDownloadURL();
-
-            const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
-            const userData = userDoc.data();
-
-            await firestore()
-                .collection('chats')
-                .doc(chatId)
-                .collection('messages')
-                .add({
-                    senderId: currentUser.uid,
-                    senderName: userData?.displayName || currentUser.displayName || 'User',
-                    type: 'voice',
-                    mediaUrl: downloadUrl,
-                    voiceDuration: duration,
-                    status: 'sent',
-                    readBy: {},
-                    deliveredTo: [],
-                    deletedFor: [],
-                    createdAt: firestore.FieldValue.serverTimestamp(),
-                });
-
-            await firestore()
-                .collection('chats')
-                .doc(chatId)
-                .update({
-                    lastMessage: {
-                        text: `🎤 Voice (${formatDuration(duration)})`,
-                        senderId: currentUser.uid,
-                        senderName: userData?.displayName || currentUser.displayName || 'User',
-                        timestamp: firestore.FieldValue.serverTimestamp(),
-                        type: 'voice',
-                    },
-                    updatedAt: firestore.FieldValue.serverTimestamp(),
-                    [`unreadCount.${currentUser.uid}`]: 0,
-                });
-
-
-        } catch (error) {
-            console.error('Failed to send voice message:', error);
-            Alert.alert('Error', 'Failed to send voice message.');
-        } finally {
-            setUploading(false);
-        }
-    };
-
-    const playVoiceMessage = async (message: Message) => {
-        if (!message.mediaUrl) return;
-
-        try {
-            // Stop current playback
-            if (soundRef.current) {
-                await soundRef.current.stopAsync();
-                await soundRef.current.unloadAsync();
-                soundRef.current = null;
-                if (playingVoiceId === message.id) {
-                    setPlayingVoiceId(null);
-                    return;
-                }
-            }
-
-            await Audio.setAudioModeAsync({
-                allowsRecordingIOS: false,
-                playsInSilentModeIOS: true,
-            });
-
-            const { sound } = await Audio.Sound.createAsync(
-                { uri: message.mediaUrl },
-                { shouldPlay: true }
-            );
-
-            soundRef.current = sound;
-            setPlayingVoiceId(message.id);
-
-            sound.setOnPlaybackStatusUpdate((status) => {
-                if (status.isLoaded && status.didJustFinish) {
-                    setPlayingVoiceId(null);
-                    sound.unloadAsync();
-                    soundRef.current = null;
-                }
-            });
-        } catch (error) {
-            console.error('Failed to play voice message:', error);
-        }
-    };
-
-    const formatDuration = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
-    };
 
     // Long press handler
     const handleLongPress = (message: Message) => {
@@ -1136,6 +1006,11 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 )}
 
                 <Pressable onLongPress={() => handleLongPress(item)} delayLongPress={300}>
+                    {!isOwn && chat?.type === 'group' && (
+                        <Text style={[styles.senderName, { color: colors.textSecondary }]}>
+                            {item.senderName || 'User'}
+                        </Text>
+                    )}
                     <View style={[styles.messageRow, isOwn && styles.ownMessageRow]}>
                         <View
                             style={[
@@ -1202,38 +1077,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                                 </TouchableOpacity>
                             )}
 
-                            {/* Voice message */}
-                            {item.type === 'voice' && item.mediaUrl && (
-                                <TouchableOpacity
-                                    onPress={() => playVoiceMessage(item)}
-                                    style={styles.voiceContainer}
-                                >
-                                    <View style={[styles.voicePlayButton, { backgroundColor: isOwn ? 'rgba(255,255,255,0.2)' : colors.primary }]}>
-                                        <Ionicons
-                                            name={playingVoiceId === item.id ? 'pause' : 'play'}
-                                            size={20}
-                                            color={isOwn ? '#fff' : '#fff'}
-                                        />
-                                    </View>
-                                    <View style={styles.voiceWaveform}>
-                                        {[...Array(12)].map((_, i) => (
-                                            <View
-                                                key={i}
-                                                style={[
-                                                    styles.voiceBar,
-                                                    {
-                                                        backgroundColor: isOwn ? 'rgba(255,255,255,0.5)' : colors.primary,
-                                                        height: 8 + Math.random() * 16,
-                                                    },
-                                                ]}
-                                            />
-                                        ))}
-                                    </View>
-                                    <Text style={[styles.voiceDuration, { color: isOwn ? 'rgba(255,255,255,0.8)' : colors.textSecondary }]}>
-                                        {formatDuration(item.voiceDuration || 0)}
-                                    </Text>
-                                </TouchableOpacity>
-                            )}
+
 
                             {/* Trip Share message */}
                             {item.type === 'trip_share' && (
@@ -1266,18 +1110,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                                 </TouchableOpacity>
                             )}
 
-                            {/* Video message */}
-                            {item.type === 'video' && item.mediaUrl && (
-                                <View style={styles.videoContainer}>
-                                    <Video
-                                        style={styles.messageVideo}
-                                        source={{ uri: item.mediaUrl }}
-                                        useNativeControls
-                                        resizeMode={ResizeMode.COVER}
-                                        isLooping={false}
-                                    />
-                                </View>
-                            )}
+
 
 
 
@@ -1321,7 +1154,11 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 <TouchableOpacity
                     style={styles.headerInfo}
                     onPress={() => {
-                        if (otherParticipantUid) {
+                        const isGroup = chat?.type === 'group' || route.params?.isGroupChat;
+                        if (isGroup) {
+                            // Navigate to GroupInfo (assuming it exists and takes chatId)
+                            navigation.navigate('GroupInfo', { chatId });
+                        } else if (otherParticipantUid) {
                             navigation.navigate('UserProfile', { userId: otherParticipantUid });
                         }
                     }}
@@ -1381,22 +1218,13 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 </View>
             )}
 
-            {/* Recording indicator */}
-            {isRecording && (
-                <View style={[styles.recordingBar, { backgroundColor: '#EF4444' }]}>
-                    <View style={styles.recordingPulse} />
-                    <Text style={styles.recordingText}>Recording {formatDuration(recordingDuration)}</Text>
-                    <TouchableOpacity onPress={cancelRecording} style={styles.cancelRecordingBtn}>
-                        <Ionicons name="close" size={20} color="#fff" />
-                    </TouchableOpacity>
-                </View>
-            )}
+
 
             {/* Messages */}
             <KeyboardAvoidingView
                 style={styles.messagesContainer}
-                behavior={Platform.OS === 'ios' ? 'height' : undefined}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
             >
                 <FlatList
                     ref={flatListRef}
@@ -1470,16 +1298,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                                 <Ionicons name="send" size={18} color="#fff" />
                             )}
                         </TouchableOpacity>
-                    ) : (
-                        <TouchableOpacity
-                            style={[styles.sendButton, { backgroundColor: isRecording ? '#EF4444' : colors.primary }]}
-                            onPress={isRecording ? () => stopRecording(true) : startRecording}
-                            onLongPress={startRecording}
-                            activeOpacity={0.7}
-                        >
-                            <Ionicons name={isRecording ? 'stop' : 'mic'} size={18} color="#fff" />
-                        </TouchableOpacity>
-                    )}
+                    ) : null}
                 </View>
             </KeyboardAvoidingView>
 
@@ -1550,12 +1369,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                                 <Text style={[styles.attachmentLabel, { color: colors.text }]}>Camera</Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity style={styles.attachmentOption} onPress={() => pickVideo()}>
-                                <View style={[styles.attachmentIcon, { backgroundColor: '#F59E0B' }]}>
-                                    <Ionicons name="videocam" size={28} color="#fff" />
-                                </View>
-                                <Text style={[styles.attachmentLabel, { color: colors.text }]}>Video</Text>
-                            </TouchableOpacity>
+
 
                             <TouchableOpacity style={styles.attachmentOption} onPress={() => pickImage(false)}>
                                 <View style={[styles.attachmentIcon, { backgroundColor: '#EC4899' }]}>
@@ -1717,39 +1531,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 </View>
             </Modal>
 
-            {/* Video Preview Modal (Before Send) */}
-            <Modal visible={!!previewVideo} transparent animationType="slide">
-                <View style={[styles.imageViewerModal, { backgroundColor: '#000' }]}>
-                    <Video
-                        source={{ uri: previewVideo || '' }}
-                        style={styles.fullImage}
-                        resizeMode={ResizeMode.CONTAIN}
-                        useNativeControls
-                        isLooping
-                    />
 
-                    <View style={styles.previewActions}>
-                        <TouchableOpacity
-                            style={[styles.previewButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
-                            onPress={() => setPreviewVideo(null)}
-                        >
-                            <Text style={styles.previewButtonText}>Cancel</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.previewButton, { backgroundColor: colors.primary }]}
-                            onPress={() => {
-                                if (previewVideo) {
-                                    sendVideoMessage(previewVideo);
-                                    setPreviewVideo(null);
-                                }
-                            }}
-                        >
-                            <Text style={[styles.previewButtonText, { fontWeight: 'bold' }]}>Send</Text>
-                            <Ionicons name="send" size={16} color="#fff" style={{ marginLeft: 6 }} />
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
         </SafeAreaView >
     );
 };
@@ -1821,6 +1603,14 @@ const styles = StyleSheet.create({
     replyingText: { flex: 1 },
     replyingLabel: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.semibold },
     replyingMessage: { fontSize: FONT_SIZE.sm },
+
+    // Mention List
+    mentionList: { maxHeight: 200, borderTopWidth: 1 },
+    mentionItem: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, borderBottomWidth: 1 },
+    mentionAvatar: { width: 32, height: 32, borderRadius: 16, marginRight: SPACING.md },
+    mentionAvatarPlaceholder: { width: 32, height: 32, borderRadius: 16, marginRight: SPACING.md, justifyContent: 'center', alignItems: 'center' },
+    mentionName: { fontSize: FONT_SIZE.md },
+
     composer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderTopWidth: 1 },
     attachButton: { padding: SPACING.xs },
     input: { flex: 1, marginHorizontal: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.xl, fontSize: FONT_SIZE.md, maxHeight: 100 },
@@ -1880,6 +1670,7 @@ const styles = StyleSheet.create({
     myLiveBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 16 },
     myLiveText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
     stopLiveText: { color: '#fff', fontSize: 12, fontWeight: 'bold', textDecorationLine: 'underline' },
+    senderName: { fontSize: 10, marginLeft: SPACING.md + 4, marginBottom: 2, fontWeight: 'bold' },
 });
 
 export default ChatScreen;

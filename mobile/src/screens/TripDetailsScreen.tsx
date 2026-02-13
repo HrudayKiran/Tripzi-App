@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Animated, Dimensions, FlatList, Linking, Alert, Share, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Animated, Dimensions, FlatList, Linking, Alert, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
@@ -7,7 +7,7 @@ import auth from '@react-native-firebase/auth';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
-import CustomToggle from '../components/CustomToggle';
+
 import DefaultAvatar from '../components/DefaultAvatar';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
 import NotificationService from '../utils/notificationService';
@@ -299,15 +299,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
     }
   };
 
-  const handleShare = async () => {
-    try {
-      await Share.share({
-        message: `🚀 Check out this trip: ${trip?.title}!\n\n📍 ${trip?.location || 'Adventure'}\n💰 ${formatCost(trip?.costPerPerson || trip?.cost)}/person\n\nJoin on Tripzi! 🌍`,
-      });
-    } catch (error) {
-      // Error handled silently
-    }
-  };
+
 
   const handleMessage = () => {
     // Check if there are other participants (for owner)
@@ -567,7 +559,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
         scrollEventThrottle={16}
       >
-        {/* Header with Back Button - Now inside scroll */}
+        {/* Header with Back Button + Join */}
         <SafeAreaView edges={['top']} style={styles.headerInScroll}>
           <View style={styles.header}>
             <TouchableOpacity
@@ -579,13 +571,30 @@ const TripDetailsScreen = ({ route, navigation }) => {
             <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
               {trip.title || 'Trip Details'}
             </Text>
-            {!isOwner && (
+            {/* Join button in header - matching TripCard style */}
+            {!isOwner && !isCompleted && (
               <TouchableOpacity
-                style={[styles.headerButton, { backgroundColor: colors.card }]}
-                onPress={() => setShowReportModal(true)}
+                style={[
+                  styles.headerJoinButton,
+                  {
+                    backgroundColor: isJoined ? 'transparent' : colors.primary,
+                    borderColor: colors.primary,
+                  },
+                ]}
+                onPress={handleJoinToggle}
+                disabled={spotsLeft <= 0 && !isJoined}
+                activeOpacity={0.7}
               >
-                <Ionicons name="flag-outline" size={24} color={colors.text} />
+                <Text style={[styles.headerJoinText, { color: isJoined ? colors.primary : '#fff' }]}>
+                  {isJoined ? 'Joined' : spotsLeft <= 0 ? 'Full' : 'Join'}
+                </Text>
               </TouchableOpacity>
+            )}
+            {isCompleted && (
+              <View style={styles.headerCompletedBadge}>
+                <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                <Text style={styles.headerCompletedText}>Done</Text>
+              </View>
             )}
           </View>
         </SafeAreaView>
@@ -637,58 +646,87 @@ const TripDetailsScreen = ({ route, navigation }) => {
 
         {/* Content */}
         <View style={[styles.contentContainer, { backgroundColor: colors.background }]}>
-          {/* Title & Creator */}
+          {/* Title & Creator + Report */}
           <Animatable.View animation="fadeInUp" delay={100}>
             <Text style={[styles.title, { color: colors.text }]}>{trip.title}</Text>
-            <TouchableOpacity
-              style={styles.creatorInfo}
-              onPress={() => navigation.navigate('UserProfile', { userId: trip.userId })}
-            >
-              <DefaultAvatar
-                uri={trip.user?.photoURL}
-                size={48}
-                style={styles.creatorAvatar}
-              />
-              <View>
-                <Text style={[styles.creatorName, { color: colors.text }]}>
-                  {trip.user?.displayName || 'Trip Creator'}
-                </Text>
-                <Text style={[styles.creatorLabel, { color: colors.textSecondary }]}>Organizer</Text>
-              </View>
-            </TouchableOpacity>
+            <View style={styles.creatorRow}>
+              <TouchableOpacity
+                style={styles.creatorInfo}
+                onPress={() => navigation.navigate('UserProfile', { userId: trip.userId })}
+              >
+                <DefaultAvatar
+                  uri={trip.user?.photoURL}
+                  size={48}
+                  style={styles.creatorAvatar}
+                />
+                <View>
+                  <Text style={[styles.creatorName, { color: colors.text }]}>
+                    {trip.user?.displayName || 'Trip Creator'}
+                  </Text>
+                  <Text style={[styles.creatorLabel, { color: colors.textSecondary }]}>Organizer</Text>
+                </View>
+              </TouchableOpacity>
+              {/* Report button next to organizer */}
+              {!isOwner && (
+                <TouchableOpacity
+                  style={[styles.reportButton, { backgroundColor: '#FEE2E2' }]}
+                  onPress={() => setShowReportModal(true)}
+                >
+                  <Ionicons name="flag-outline" size={16} color="#EF4444" />
+                  <Text style={styles.reportButtonText}>Report</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </Animatable.View>
 
-          {/* Action Buttons Row */}
-          <View style={styles.actionButtonsRow}>
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.card }]} onPress={handleShare}>
-              <Ionicons name="share-social-outline" size={20} color={colors.primary} />
-              <Text style={[styles.actionBtnText, { color: colors.primary }]}>Share</Text>
-            </TouchableOpacity>
-            {isOwner && (
-              <>
-                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.card }]} onPress={openEditModal}>
-                  <Ionicons name="create-outline" size={20} color={colors.primary} />
-                  <Text style={[styles.actionBtnText, { color: colors.primary }]}>Edit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.actionBtn, { backgroundColor: '#FEE2E2' }]}
-                  onPress={handleDeleteTrip}
-                  disabled={deleting}
-                >
-                  <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                  <Text style={[styles.actionBtnText, { color: '#EF4444' }]}>Delete</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.actionBtn, { backgroundColor: '#FEE2E2' }]}
-                  onPress={handleCancelTrip}
-                  disabled={deleting}
-                >
-                  <Ionicons name="close-circle-outline" size={20} color="#EF4444" />
-                  <Text style={[styles.actionBtnText, { color: '#EF4444' }]}>Cancel Trip</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
+          {/* Destination - Large Location + View in Google Maps */}
+          <TouchableOpacity
+            style={[styles.destinationCard, { backgroundColor: colors.card }]}
+            onPress={handleOpenMaps}
+            activeOpacity={0.7}
+          >
+            <View style={styles.destinationLeft}>
+              <View style={[styles.destinationIconWrap, { backgroundColor: colors.primary + '15' }]}>
+                <Ionicons name="location" size={28} color={colors.primary} />
+              </View>
+              <View style={styles.destinationInfo}>
+                <Text style={[styles.destinationLabel, { color: colors.textSecondary }]}>Destination</Text>
+                <Text style={[styles.destinationText, { color: colors.text }]} numberOfLines={1}>
+                  {trip.toLocation || trip.location || 'TBD'}
+                </Text>
+              </View>
+            </View>
+            <View style={[styles.viewMapsBtn, { backgroundColor: colors.primary }]}>
+              <Ionicons name="navigate" size={16} color="#fff" />
+              <Text style={styles.viewMapsText}>View in Google Maps</Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Owner Action Buttons */}
+          {isOwner && (
+            <View style={styles.actionButtonsRow}>
+              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.card }]} onPress={openEditModal}>
+                <Ionicons name="create-outline" size={20} color={colors.primary} />
+                <Text style={[styles.actionBtnText, { color: colors.primary }]}>Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: '#FEE2E2' }]}
+                onPress={handleDeleteTrip}
+                disabled={deleting}
+              >
+                <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                <Text style={[styles.actionBtnText, { color: '#EF4444' }]}>Delete</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: '#FEE2E2' }]}
+                onPress={handleCancelTrip}
+                disabled={deleting}
+              >
+                <Ionicons name="close-circle-outline" size={20} color="#EF4444" />
+                <Text style={[styles.actionBtnText, { color: '#EF4444' }]}>Cancel Trip</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Quick Stats */}
           <Animatable.View animation="fadeInUp" delay={200} style={[styles.statsRow, { backgroundColor: colors.card }]}>
@@ -730,25 +768,6 @@ const TripDetailsScreen = ({ route, navigation }) => {
             <DetailRow icon="👥" label="Group" value={`${trip.genderPreference === 'male' ? 'Male only' : trip.genderPreference === 'female' ? 'Female only' : 'Anyone can join'}`} colors={colors} />
           </Animatable.View>
 
-          {/* Location Map */}
-          <Animatable.View animation="fadeInUp" delay={500}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Location</Text>
-            <View style={[styles.mapContainer, { backgroundColor: colors.card }]}>
-              <Image
-                source={{ uri: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(trip.toLocation || trip.location || 'India')}&zoom=12&size=600x200&maptype=roadmap&markers=color:red%7C${encodeURIComponent(trip.toLocation || trip.location || 'India')}&key=YOUR_API_KEY` }}
-                style={styles.staticMap}
-                resizeMode="cover"
-              />
-              <View style={styles.mapOverlay}>
-                <Ionicons name="location" size={32} color="#EF4444" />
-                <Text style={[styles.mapText, { color: colors.text }]}>{trip.toLocation || trip.location || 'Location'}</Text>
-              </View>
-              <TouchableOpacity style={[styles.viewMapButton, { backgroundColor: colors.primary }]} onPress={handleOpenMaps}>
-                <Ionicons name="navigate" size={18} color="#fff" />
-                <Text style={styles.viewMapButtonText}>View in Google Maps</Text>
-              </TouchableOpacity>
-            </View>
-          </Animatable.View>
 
           {/* Places to Visit */}
           {trip.placesToVisit?.length > 0 && (
@@ -949,32 +968,18 @@ const TripDetailsScreen = ({ route, navigation }) => {
         </View>
       </ScrollView >
 
-      {/* Footer Actions - Toggle on left, Message button on right */}
-      <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-        {isCompleted ? (
-          <View style={styles.completedBadge}>
-            <Ionicons name="checkmark-circle" size={18} color="#10B981" />
-            <Text style={styles.completedBadgeText}>Trip Completed</Text>
-          </View>
-        ) : (
-          <CustomToggle
-            value={isJoined}
-            onValueChange={handleJoinToggle}
-            onLabel="Trip Joined"
-            offLabel="Join Trip"
-            size="medium"
-          />
-        )}
-        {(isJoined || isOwner) && (
+      {/* Footer — Message Group button (only for joined/owner) */}
+      {(isJoined || isOwner) && (
+        <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
           <TouchableOpacity
             style={[styles.messageButton, { backgroundColor: colors.primary }]}
             onPress={handleMessage}
           >
-            <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
+            <Ionicons name="chatbubble-ellipses" size={20} color="#fff" />
             <Text style={styles.messageButtonText}>Message Group</Text>
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      )}
 
       {/* Edit Trip Modal */}
       <Modal visible={showEditModal} animationType="slide" transparent>
@@ -1310,6 +1315,10 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
   headerTitle: { flex: 1, fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, textAlign: 'center', marginHorizontal: SPACING.md },
   headerButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  headerJoinButton: { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 22, borderWidth: 1.5 },
+  headerJoinText: { fontSize: 14, fontWeight: '700' },
+  headerCompletedBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#D1FAE5', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, gap: 4 },
+  headerCompletedText: { color: '#10B981', fontSize: 12, fontWeight: '700' },
   imageCarousel: { aspectRatio: 4 / 5, overflow: 'hidden' },
   carouselImage: { width: width, aspectRatio: 4 / 5 },
   imageDotsContainer: { position: 'absolute', bottom: 20, alignSelf: 'center', flexDirection: 'row', gap: SPACING.xs },
@@ -1318,10 +1327,22 @@ const styles = StyleSheet.create({
   imageCountText: { color: '#fff', fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.semibold },
   contentContainer: { borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, marginTop: -20, padding: SPACING.xl },
   title: { fontSize: 28, fontWeight: FONT_WEIGHT.bold, marginBottom: SPACING.md },
-  creatorInfo: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.lg },
+  creatorRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACING.lg },
+  creatorInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   creatorAvatar: { width: 48, height: 48, borderRadius: 24, marginRight: SPACING.md },
   creatorName: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
   creatorLabel: { fontSize: FONT_SIZE.xs },
+  reportButton: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, gap: 4 },
+  reportButtonText: { color: '#EF4444', fontSize: 12, fontWeight: '600' },
+  // Destination card
+  destinationCard: { flexDirection: 'column', borderRadius: BORDER_RADIUS.lg, padding: SPACING.md, marginBottom: SPACING.md, gap: SPACING.md },
+  destinationLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
+  destinationIconWrap: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+  destinationInfo: { flex: 1 },
+  destinationLabel: { fontSize: FONT_SIZE.xs, marginBottom: 2 },
+  destinationText: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold },
+  viewMapsBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: SPACING.sm + 2, borderRadius: BORDER_RADIUS.md, gap: 6 },
+  viewMapsText: { color: '#fff', fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
   statsRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', padding: SPACING.lg, borderRadius: BORDER_RADIUS.lg, marginBottom: SPACING.xl },
   statItem: { alignItems: 'center' },
   statEmoji: { fontSize: 24, marginBottom: SPACING.xs },
@@ -1355,13 +1376,9 @@ const styles = StyleSheet.create({
   participantImage: { width: 36, height: 36, borderRadius: 18 },
   moreParticipants: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginLeft: -10, borderWidth: 2, borderColor: '#fff' },
   moreText: { color: '#fff', fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold },
-  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', padding: SPACING.lg, borderTopWidth: 1, gap: SPACING.md, justifyContent: 'space-between', alignItems: 'center' },
-  messageButton: { flexDirection: 'row', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.lg, alignItems: 'center', gap: SPACING.sm },
-  messageButtonText: { color: '#fff', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
-  joinButton: { flex: 1, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
-  joinButtonText: { color: '#fff', fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold },
-  toggleContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
-  toggleLabel: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
+  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: SPACING.lg, borderTopWidth: 1, alignItems: 'center' },
+  messageButton: { flexDirection: 'row', width: '100%', paddingVertical: SPACING.md + 2, borderRadius: BORDER_RADIUS.lg, alignItems: 'center', justifyContent: 'center', gap: SPACING.sm },
+  messageButtonText: { color: '#fff', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
   completedBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#D1FAE5', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.lg, gap: SPACING.sm },
   completedBadgeText: { color: '#10B981', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
   // Rating styles

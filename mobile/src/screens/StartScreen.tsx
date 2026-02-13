@@ -142,7 +142,7 @@ const StartScreen = ({ navigation }) => {
       await firestore().collection('users').doc(uid).set({
         userId: uid, email, displayName, photoURL, username,
         createdAt: firestore.FieldValue.serverTimestamp(),
-        role: 'user', ageVerified: false, followers: [], following: [],
+        role: 'user', ageVerified: false,
       });
 
       showToast('Account Created! 🎉');

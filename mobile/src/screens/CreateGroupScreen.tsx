@@ -50,45 +50,9 @@ const CreateGroupScreen = ({ navigation }) => {
     const [groupName, setGroupName] = useState('');
     const [groupIcon, setGroupIcon] = useState<string | null>(null);
     const [creating, setCreating] = useState(false);
-    const [following, setFollowing] = useState<User[]>([]);
-
-    // Load users the current user follows
-    useEffect(() => {
-        loadFollowing();
-    }, []);
-
-    const loadFollowing = async () => {
-        if (!currentUser) {
-
-            return;
-        }
-        try {
-
-            const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
-            const userData = userDoc.data();
-            const followingIds = userData?.following || [];
 
 
-            if (followingIds.length > 0) {
-                const users = await Promise.all(
-                    followingIds.slice(0, 20).map(async (uid: string) => {
-                        const doc = await firestore().collection('users').doc(uid).get();
-                        if (doc.exists) {
-                            return { id: uid, ...doc.data() } as User;
-                        }
-                        return null;
-                    })
-                );
-                const validUsers = users.filter(Boolean) as User[];
 
-                setFollowing(validUsers);
-            } else {
-
-            }
-        } catch (error) {
-            console.error('👥 [GROUP] Failed to load following:', error);
-        }
-    };
 
     const handleSearch = async (query: string) => {
         setSearchQuery(query);
@@ -373,20 +337,20 @@ const CreateGroupScreen = ({ navigation }) => {
                         </View>
                     ) : (
                         <FlatList
-                            data={searchQuery.length > 0 ? searchResults : following}
+                            data={searchResults}
                             renderItem={renderUserItem}
                             keyExtractor={(item) => item.id}
                             contentContainerStyle={styles.userList}
                             ListHeaderComponent={
                                 <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-                                    {searchQuery.length > 0 ? 'Search Results' : 'People You Follow'}
+                                    {searchQuery.length > 0 ? 'Search Results' : 'Search users to add'}
                                 </Text>
                             }
                             ListEmptyComponent={
                                 <View style={styles.emptyContainer}>
                                     <Ionicons name="people-outline" size={48} color={colors.textSecondary} style={{ marginBottom: 12 }} />
                                     <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                                        {searchQuery.length > 0 ? 'No users found' : 'You\'re not following anyone yet'}
+                                        {searchQuery.length > 0 ? 'No users found' : 'Start typing to find people'}
                                     </Text>
                                     {searchQuery.length === 0 && (
                                         <Text style={[styles.emptyHint, { color: colors.textSecondary }]}>
