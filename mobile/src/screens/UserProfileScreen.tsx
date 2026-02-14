@@ -59,6 +59,7 @@ const UserProfileScreen = ({ route, navigation }) => {
     const [hostRating, setHostRating] = useState<{ average: number; count: number } | null>(null);
     const [showFullImage, setShowFullImage] = useState(false);
     const [showAgeModal, setShowAgeModal] = useState(false);
+    const [showCreateModal, setShowCreateModal] = useState(false);
 
     // Hoisted Modal State
     const [activeModal, setActiveModal] = useState<'none' | 'report'>('none');
@@ -70,12 +71,22 @@ const UserProfileScreen = ({ route, navigation }) => {
     const isOwnProfile = userId === currentUser?.uid;
 
     // Handle create trip button with age verification check
-    const handleCreateTrip = () => {
+    const handleCreateButtonPress = () => {
         if (!isAgeVerified) {
             setShowAgeModal(true);
             return;
         }
+        setShowCreateModal(true);
+    };
+
+    const handleCreateTripManual = () => {
+        setShowCreateModal(false);
         navigation.navigate('CreateTrip');
+    };
+
+    const handleCreateTripAI = () => {
+        setShowCreateModal(false);
+        navigation.navigate('AIChat');
     };
 
     // Default Avatar Component (Instagram-style)
@@ -550,7 +561,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                         </TouchableOpacity>
                         {isOwnProfile && (
                             <View style={{ flexDirection: 'row', gap: 12 }}>
-                                <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={handleCreateTrip}>
+                                <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={handleCreateButtonPress}>
                                     <Ionicons name="add" size={24} color={colors.text} />
                                 </TouchableOpacity>
                                 <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={() => setShowEditModal(true)}>
@@ -802,6 +813,55 @@ const UserProfileScreen = ({ route, navigation }) => {
                 }}
                 trip={selectedTrip}
             />
+
+            {/* Create Selection Modal */}
+            <Modal
+                visible={showCreateModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowCreateModal(false)}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setShowCreateModal(false)}
+                >
+                    <Animatable.View animation="fadeInUp" duration={300} style={[styles.createModalContent, { backgroundColor: colors.background }]}>
+                        <Text style={[styles.createModalTitle, { color: colors.text }]}>Create New Trip ✈️</Text>
+
+                        <TouchableOpacity
+                            style={[styles.createOption, { backgroundColor: colors.card }]}
+                            onPress={handleCreateTripManual}
+                        >
+                            <View style={[styles.createOptionIcon, { backgroundColor: '#E0E7FF' }]}>
+                                <Ionicons name="create-outline" size={24} color="#6366F1" />
+                            </View>
+                            <View style={styles.createOptionText}>
+                                <Text style={[styles.createOptionTitle, { color: colors.text }]}>Manual Creation</Text>
+                                <Text style={[styles.createOptionDesc, { color: colors.textSecondary }]}>Fill in details and add your own photos</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.createOption, { backgroundColor: colors.card }]}
+                            onPress={() => {
+                                setShowCreateModal(false);
+                                navigation.navigate('App', { screen: 'AITripPlanner' });
+                            }}
+                        >
+                            <View style={[styles.createOptionIcon, { backgroundColor: '#EDE9FE' }]}>
+                                <Ionicons name="sparkles" size={24} color="#8B5CF6" />
+                            </View>
+                            <View style={styles.createOptionText}>
+                                <Text style={[styles.createOptionTitle, { color: colors.text }]}>Create with AI</Text>
+                                <Text style={[styles.createOptionDesc, { color: colors.textSecondary }]}>Let AI plan and generate images for you</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                    </Animatable.View>
+                </TouchableOpacity>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -926,6 +986,15 @@ const styles = StyleSheet.create({
     fullscreenModal: { flex: 1 },
     editScrollView: { flex: 1 },
     editScrollContent: { padding: SPACING.xl },
+
+    // Create Modal Styles
+    createModalContent: { width: '100%', borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, padding: SPACING.xl, paddingBottom: SPACING.xxl + SPACING.xl },
+    createModalTitle: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold, marginBottom: SPACING.lg, textAlign: 'center' },
+    createOption: { flexDirection: 'row', alignItems: 'center', padding: SPACING.lg, borderRadius: BORDER_RADIUS.lg, marginBottom: SPACING.md },
+    createOptionIcon: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.md },
+    createOptionText: { flex: 1 },
+    createOptionTitle: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold, marginBottom: 2 },
+    createOptionDesc: { fontSize: FONT_SIZE.sm },
 });
 
 export default UserProfileScreen;

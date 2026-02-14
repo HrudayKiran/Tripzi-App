@@ -3,6 +3,7 @@
     "name": "Tripzi",
     "slug": "mobile",
     "version": "1.0.0",
+    "scheme": "tripzi",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -49,9 +50,6 @@
               "scheme": "https",
               "host": "tripzi.com",
               "pathPrefix": "/user"
-            },
-            {
-              "scheme": "tripzi"
             }
           ],
           "category": [

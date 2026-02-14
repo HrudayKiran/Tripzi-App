@@ -55,30 +55,34 @@ const GENDER_PREFERENCES = [
     { id: 'female', label: 'Female Only', icon: 'female' },
 ];
 
-const CreateTripScreen = ({ navigation }) => {
+const CreateTripScreen = ({ navigation, route }: any) => {
     const { colors } = useTheme();
+    const initialData = route.params?.initialTripData;
 
     const [step, setStep] = useState(1);
     const totalSteps = 5;
 
     // Step 1: Basic Info
-    const [title, setTitle] = useState('');
-    const [images, setImages] = useState<string[]>([]);
+    const [title, setTitle] = useState(initialData?.title || '');
+    // Initialize images from AI data if available (passed as 'images' array of URLs)
+    const [images, setImages] = useState<string[]>(initialData?.images || []);
     const [imageLocations, setImageLocations] = useState<string[]>([]); // To store specific place names
+
+    // ... (existing code) ...
 
 
     // Step 2: Location & Dates
-    const [fromLocation, setFromLocation] = useState('');
-    const [toLocation, setToLocation] = useState('');
+    const [fromLocation, setFromLocation] = useState(initialData?.fromLocation || '');
+    const [toLocation, setToLocation] = useState(initialData?.toLocation || '');
     const [mapsLink, setMapsLink] = useState('');
     const [fromDate, setFromDate] = useState(new Date());
     const [toDate, setToDate] = useState(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000));
     const [showDateModal, setShowDateModal] = useState<'from' | 'to' | null>(null);
 
     // Step 3: Trip Details
-    const [tripTypes, setTripTypes] = useState<string[]>([]);
+    const [tripTypes, setTripTypes] = useState<string[]>(initialData?.tripType ? [initialData.tripType] : []);
     const [transportModes, setTransportModes] = useState<string[]>([]);
-    const [costPerPerson, setCostPerPerson] = useState('');
+    const [costPerPerson, setCostPerPerson] = useState(initialData?.cost ? String(initialData.cost) : '');
 
     // Step 4: Accommodation & Group
     const [accommodationType, setAccommodationType] = useState('');
@@ -88,9 +92,9 @@ const CreateTripScreen = ({ navigation }) => {
     const [genderPreference, setGenderPreference] = useState('anyone');
 
     // Step 5: Description
-    const [description, setDescription] = useState('');
-    const [mandatoryItems, setMandatoryItems] = useState('');
-    const [placesToVisit, setPlacesToVisit] = useState('');
+    const [description, setDescription] = useState(initialData?.description || '');
+    const [mandatoryItems, setMandatoryItems] = useState(initialData?.mandatoryItems?.join(', ') || '');
+    const [placesToVisit, setPlacesToVisit] = useState(initialData?.placesToVisit?.join(', ') || '');
 
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
     const [isPosting, setIsPosting] = useState(false);
@@ -119,16 +123,6 @@ const CreateTripScreen = ({ navigation }) => {
         setImages(prev => prev.filter((_, i) => i !== index));
         setImageLocations(prev => prev.filter((_, i) => i !== index));
     };
-
-
-
-
-
-
-
-
-
-
 
     const toggleSelection = (id: string, list: string[], setList: (val: string[]) => void) => {
         if (list.includes(id)) {
@@ -189,7 +183,6 @@ const CreateTripScreen = ({ navigation }) => {
         return `https://www.google.com/maps/search/?api=1&query=${encoded}`;
     };
 
-
     const handlePostTrip = async () => {
         if (!validateStep(step)) return;
 
@@ -200,18 +193,20 @@ const CreateTripScreen = ({ navigation }) => {
             return;
         }
 
-
-
         setIsPosting(true);
 
         try {
             // Upload images to Firebase Storage first
             let uploadedImageUrls: string[] = [];
             if (images.length > 0) {
-
                 for (let i = 0; i < images.length; i++) {
                     const imageUri = images[i];
 
+                    // Check if it's already a remote URL (e.g. from AI)
+                    if (imageUri.startsWith('http') || imageUri.startsWith('https')) {
+                        uploadedImageUrls.push(imageUri);
+                        continue;
+                    }
 
                     const filename = `trips/${currentUser.uid}/${Date.now()}_${i}.jpg`;
                     const reference = storage().ref(filename);

@@ -227,6 +227,20 @@ const FeedScreen = ({ navigation }) => {
             </View>
             <View style={styles.headerActions}>
                 <TouchableOpacity
+                    style={[styles.iconButton, { backgroundColor: colors.card }]}
+                    onPress={() => setSearchVisible(true)}
+                >
+                    <Ionicons name="search-outline" size={22} color={colors.text} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[styles.iconButton, { backgroundColor: colors.card }]}
+                    onPress={() => setFilterVisible(true)}
+                >
+                    <Ionicons name="options-outline" size={22} color={colors.text} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
                     style={[styles.notifyButton, { backgroundColor: colors.card }]}
                     onPress={() => setNotificationsVisible(true)}
                     activeOpacity={0.7}
@@ -492,9 +506,9 @@ const styles = StyleSheet.create({
         gap: SPACING.sm,
     },
     iconButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        width: 42,
+        height: 42,
+        borderRadius: 21,
         justifyContent: 'center',
         alignItems: 'center',
     },

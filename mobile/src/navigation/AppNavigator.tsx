@@ -24,6 +24,7 @@ import FeedScreen from '../screens/FeedScreen';
 import MomentsScreen from '../screens/MomentsScreen';
 import SearchScreen from '../screens/SearchScreen';
 import MyTripsScreen from '../screens/MyTripsScreen';
+import AIChatScreen from '../screens/AIChatScreen';
 
 import ChatsListScreen from '../screens/ChatsListScreen';
 import ChatScreen from '../screens/ChatScreen';
@@ -80,10 +81,11 @@ const AppTabs = () => {
                 }}
             />
             <Tab.Screen
-                name="Search"
-                component={SearchScreen}
+                name="AITripPlanner"
+                component={AIChatScreen}
                 options={{
-                    tabBarIcon: ({ color, size }) => <Ionicons name="search-outline" size={size} color={color} />,
+                    tabBarLabel: 'AI Planner',
+                    tabBarIcon: ({ color, size }) => <Ionicons name="sparkles-outline" size={size} color={color} />,
                 }}
             />
             <Tab.Screen
@@ -283,6 +285,7 @@ const AppNavigator = () => {
                         <Stack.Screen name="MyTrips" component={MyTripsScreen} />
                         <Stack.Screen name="CreateTrip" component={CreateTripScreen} />
                         <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
+                        <Stack.Screen name="AIChat" component={AIChatScreen} />
 
                         <Stack.Screen name="Chat" component={ChatScreen} />
                         <Stack.Screen name="Map" component={MapScreen} />
