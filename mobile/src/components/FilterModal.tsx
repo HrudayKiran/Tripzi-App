@@ -219,6 +219,40 @@ const FilterModal = ({ visible, onClose, onApply }: FilterModalProps) => {
                                 </View>
                             </View>
 
+                            {/* Custom Budget Input */}
+                            <View style={styles.section}>
+                                <View style={styles.sectionHeader}>
+                                    <Ionicons name="cash-outline" size={20} color="#8B5CF6" />
+                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Custom Budget</Text>
+                                </View>
+                                <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
+                                    <Text style={{ color: colors.textSecondary, marginRight: SPACING.xs }}>₹</Text>
+                                    <TextInput
+                                        style={[styles.input, { color: colors.text }]}
+                                        placeholder="Enter max budget..."
+                                        placeholderTextColor={colors.textSecondary}
+                                        keyboardType="numeric"
+                                        value={!BUDGET_OPTIONS.some(opt => opt.id === maxCost) ? maxCost.toString() : ''}
+                                        onChangeText={(text) => {
+                                            if (text === '') {
+                                                // When cleared, keep current value or reset to highest
+                                                setMaxCost(500000);
+                                            } else {
+                                                const num = parseInt(text);
+                                                if (!isNaN(num) && num > 0) {
+                                                    setMaxCost(num);
+                                                }
+                                            }
+                                        }}
+                                    />
+                                    {!BUDGET_OPTIONS.some(opt => opt.id === maxCost) && maxCost < 500000 && (
+                                        <TouchableOpacity onPress={() => setMaxCost(500000)}>
+                                            <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            </View>
+
                             {/* Max Travelers */}
                             <View style={styles.section}>
                                 <View style={styles.sectionHeader}>
@@ -256,7 +290,7 @@ const FilterModal = ({ visible, onClose, onApply }: FilterModalProps) => {
                                     <Ionicons name="compass-outline" size={20} color={colors.primary} />
                                     <Text style={[styles.sectionTitle, { color: colors.text }]}>Trip Type</Text>
                                 </View>
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollOptions}>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.optionsRow}>
                                     {TRIP_TYPES.map((option) => (
                                         <TouchableOpacity
                                             key={option.id}
@@ -344,43 +378,6 @@ const FilterModal = ({ visible, onClose, onApply }: FilterModalProps) => {
                                         </TouchableOpacity>
                                     ))}
                                 </View>
-                            </View>
-
-                            {/* Custom Budget Input */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Ionicons name="cash-outline" size={20} color="#8B5CF6" />
-                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Custom Budget (Optional)</Text>
-                                </View>
-                                <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
-                                    <Text style={{ color: colors.textSecondary, marginRight: SPACING.xs }}>₹</Text>
-                                    <TextInput
-                                        style={[styles.input, { color: colors.text }]}
-                                        placeholder="Enter max budget..."
-                                        placeholderTextColor={colors.textSecondary}
-                                        keyboardType="numeric"
-                                        value={!BUDGET_OPTIONS.some(opt => opt.id === maxCost) ? maxCost.toString() : ''}
-                                        onChangeText={(text) => {
-                                            if (text === '') {
-                                                // When cleared, keep current value or reset to highest
-                                                setMaxCost(500000);
-                                            } else {
-                                                const num = parseInt(text);
-                                                if (!isNaN(num) && num > 0) {
-                                                    setMaxCost(num);
-                                                }
-                                            }
-                                        }}
-                                    />
-                                    {!BUDGET_OPTIONS.some(opt => opt.id === maxCost) && maxCost < 500000 && (
-                                        <TouchableOpacity onPress={() => setMaxCost(500000)}>
-                                            <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
-                                        </TouchableOpacity>
-                                    )}
-                                </View>
-                                <Text style={[styles.helperText, { color: colors.textSecondary }]}>
-                                    Or select from quick options above
-                                </Text>
                             </View>
 
                             <View style={{ height: SPACING.xxl }} />
