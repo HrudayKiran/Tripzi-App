@@ -363,7 +363,7 @@ const AIChatScreen = ({ navigation }: any) => {
                 {!isUser && (
                     <View style={styles.avatarContainer}>
                         <Image
-                            source={require('../../assets/icon.png')}
+                            source={require('../../assets/Tripzi AI.png')}
                             style={styles.avatarImage}
                         />
                     </View>
@@ -405,13 +405,13 @@ const AIChatScreen = ({ navigation }: any) => {
                     <View style={styles.headerTitleContainer}>
                         <View style={styles.headerAvatarContainer}>
                             <Image
-                                source={require('../../assets/icon.png')}
+                                source={require('../../assets/Tripzi AI.png')}
                                 style={styles.headerAvatarImage}
                             />
                         </View>
                         <View>
                             <Text style={[styles.headerTitle, { color: colors.text }]}>Tripzi AI</Text>
-                            <Text style={[styles.headerSubtitle, { color: colors.primary }]}>Premium Travel Assistant</Text>
+                            <Text style={[styles.headerSubtitle, { color: colors.primary }]}>Your Travel Assistant</Text>
                         </View>
                     </View>
                     <TouchableOpacity onPress={() => setMessages([])}>

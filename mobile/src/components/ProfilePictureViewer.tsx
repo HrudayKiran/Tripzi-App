@@ -60,24 +60,28 @@ const ProfilePictureViewer = ({
 
         setIsDeleting(true);
         try {
-            // 1. Delete from Firebase Storage
-            const deleted = await deleteFromStorage(imageUrl);
-
-            if (deleted) {
-                // 2. Update Firestore to remove URL
-                const userId = auth().currentUser?.uid;
-                if (userId) {
-                    await firestore().collection('users').doc(userId).update({
-                        photoURL: null,
-                    });
+            // 1. Delete from Firebase Storage (if it's a storage URL)
+            if (imageUrl.includes('firebasestorage')) {
+                try {
+                    await deleteFromStorage(imageUrl);
+                } catch (e) {
+                    console.log('Storage delete skipped or failed', e);
                 }
-
-                onDeleted?.();
-                onClose();
-                Alert.alert('Success', 'Profile picture deleted successfully');
-            } else {
-                Alert.alert('Error', 'Failed to delete image. Please try again.');
             }
+
+            // 2. Always update Firestore to remove URL
+            const userId = auth().currentUser?.uid;
+            if (userId) {
+                await firestore().collection('users').doc(userId).update({
+                    photoURL: null,
+                });
+            }
+
+            onDeleted?.();
+            onClose();
+            Alert.alert('Success', 'Profile picture removed.');
+            return; // Exit early as we manually handled success
+
         } catch (error) {
             console.error('Error deleting profile picture:', error);
             Alert.alert('Error', 'Failed to delete image. Please try again.');

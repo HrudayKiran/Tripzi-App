@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, ActivityIndicator, Modal, TextInput, FlatList, Dimensions, Alert, Animated } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,7 +12,9 @@ import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 import TripCard from '../components/TripCard';
 import ProfilePictureViewer from '../components/ProfilePictureViewer';
+import DefaultAvatar from '../components/DefaultAvatar';
 import { pickAndUploadImage } from '../utils/imageUpload';
+
 import NotificationService from '../utils/notificationService';
 import { useAgeGate } from '../hooks/useAgeGate';
 import AgeVerificationModal from '../components/AgeVerificationModal';
@@ -36,7 +39,9 @@ const UserProfileScreen = ({ route, navigation }) => {
     const userId = route.params?.userId || currentUser?.uid;
 
     const { colors } = useTheme();
+    const insets = useSafeAreaInsets();
     const [user, setUser] = useState(null);
+
     const [trips, setTrips] = useState([]);
     const [stories, setStories] = useState<any[]>([
         { id: 'add', type: 'add' },
@@ -66,9 +71,51 @@ const UserProfileScreen = ({ route, navigation }) => {
     const [selectedTrip, setSelectedTrip] = useState<any>(null);
 
     const storyProgress = useRef(new Animated.Value(0)).current;
+
+    // Header Animation Refs
+    const scrollY = useRef(new Animated.Value(0)).current;
+    const lastScrollY = useRef(0);
+    const headerTranslateY = useRef(new Animated.Value(0)).current;
+    const HEADER_HEIGHT = 60 + insets.top;
+
     const { isAgeVerified } = useAgeGate();
 
     const isOwnProfile = userId === currentUser?.uid;
+
+    const handleScroll = (event: any) => {
+        const currentScrollY = event.nativeEvent.contentOffset.y;
+        const direction = currentScrollY > lastScrollY.current ? 'down' : 'up';
+
+        // Only hide if we've scrolled past the header height
+        if (currentScrollY > HEADER_HEIGHT) {
+            if (direction === 'down') {
+                // Hide header
+                Animated.timing(headerTranslateY, {
+                    toValue: -HEADER_HEIGHT,
+                    duration: 200,
+                    useNativeDriver: true,
+                }).start();
+            } else {
+                // Show header
+                Animated.timing(headerTranslateY, {
+                    toValue: 0,
+                    duration: 200,
+                    useNativeDriver: true,
+                }).start();
+            }
+        } else if (currentScrollY < 0) {
+            // Ensure header is shown when pulling down (bounce)
+            Animated.timing(headerTranslateY, {
+                toValue: 0,
+                duration: 0,
+                useNativeDriver: true,
+            }).start();
+        }
+
+        lastScrollY.current = currentScrollY;
+    };
+
+
 
     // Handle create trip button with age verification check
     const handleCreateButtonPress = () => {
@@ -89,18 +136,7 @@ const UserProfileScreen = ({ route, navigation }) => {
         navigation.navigate('AIChat');
     };
 
-    // Default Avatar Component (Instagram-style)
-    const DefaultAvatar = ({ name, size = 80 }: { name: string; size?: number }) => {
-        const initial = (name || 'U').charAt(0).toUpperCase();
-        return (
-            <LinearGradient
-                colors={['#8B5CF6', '#EC4899', '#F59E0B']}
-                style={[styles.defaultAvatar, { width: size, height: size, borderRadius: size / 2 }]}
-            >
-                <Text style={[styles.defaultAvatarText, { fontSize: size * 0.4 }]}>{initial}</Text>
-            </LinearGradient>
-        );
-    };
+
 
     // Reload data when screen comes into focus (e.g., after creating a trip)
     useEffect(() => {
@@ -227,8 +263,9 @@ const UserProfileScreen = ({ route, navigation }) => {
                 userId: currentUser.uid,
                 aspect: [1, 1],
                 quality: 0.7,
-                allowsEditing: false,
+                allowsEditing: true,
             });
+
 
             if (result.success && result.url) {
                 // Update local state
@@ -517,13 +554,23 @@ const UserProfileScreen = ({ route, navigation }) => {
             {trips.map((trip) => (
                 <TripCard
                     key={trip.id}
-                    trip={{ ...trip, user: user || trip.user }}
+                    trip={{
+                        ...trip,
+                        user: {
+                            displayName: user.displayName,
+                            photoURL: user.photoURL,
+                            uid: user.id
+                        }
+                    }}
                     onPress={() => navigation.navigate('TripDetails', { tripId: trip.id })}
                     onReportPress={() => {
                         setSelectedTrip(trip);
                         setActiveModal('report');
                     }}
+                    showOptions={false}
                 />
+
+
             ))}
         </View>
     );
@@ -550,75 +597,101 @@ const UserProfileScreen = ({ route, navigation }) => {
         );
     }
 
+
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-            <ScrollView showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>
-                {/* Header - No Gradient */}
-                <View style={[styles.gradientHeader, { backgroundColor: colors.background }]}>
-                    <View style={styles.headerRow}>
-                        <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={() => navigation.goBack()}>
-                            <Ionicons name="arrow-back" size={24} color={colors.text} />
-                        </TouchableOpacity>
-                        {isOwnProfile && (
-                            <View style={{ flexDirection: 'row', gap: 12 }}>
-                                <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={handleCreateButtonPress}>
-                                    <Ionicons name="add" size={24} color={colors.text} />
-                                </TouchableOpacity>
-                                <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={() => setShowEditModal(true)}>
-                                    <Ionicons name="create-outline" size={24} color={colors.text} />
-                                </TouchableOpacity>
-                            </View>
-                        )}
-                    </View>
-                </View>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
 
-                <View style={[styles.profileContent, { backgroundColor: colors.background, marginTop: 0 }]}>
-                    {/* Top Section: Avatar & Stats */}
-                    <View style={styles.topSection}>
-                        <TouchableOpacity onPress={() => (profileImage || user.photoURL) ? setShowFullImage(true) : null} style={styles.avatarContainer}>
-                            <View style={[styles.avatarBorder, { backgroundColor: colors.background }]}>
-                                {profileImage || user.photoURL ? (
-                                    <Image source={{ uri: profileImage || user.photoURL }} style={styles.avatar} />
-                                ) : (
-                                    <DefaultAvatar name={user.displayName || 'U'} size={80} />
-                                )}
-                            </View>
-                        </TouchableOpacity>
+            {/* Sticky Collapsible Header */}
+            <Animated.View
+                style={[
+                    styles.stickyHeader,
+                    {
+                        backgroundColor: colors.background,
+                        transform: [{ translateY: headerTranslateY }],
+                        zIndex: 100,
+                        elevation: 5,
+                        paddingTop: insets.top,
+                        height: HEADER_HEIGHT,
+                    }
+                ]}
+            >
 
-                        {/* Stats - Now to the right of avatar, cleaner look */}
-                        <View style={styles.statsContainer}>
-                            <TouchableOpacity style={styles.statItem} onPress={() => isOwnProfile && navigation.navigate('MyTrips', { initialTab: 'completed' })}>
-                                <Text style={[styles.statValue, { color: colors.text }]}>{trips.length}</Text>
-                                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Trips</Text>
+                <View style={styles.headerRow}>
+                    <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={() => navigation.goBack()}>
+                        <Ionicons name="arrow-back" size={24} color={colors.text} />
+                    </TouchableOpacity>
+                    {isOwnProfile && (
+                        <View style={{ flexDirection: 'row', gap: 12 }}>
+                            <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={handleCreateButtonPress}>
+                                <Ionicons name="add" size={24} color={colors.text} />
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={() => setShowEditModal(true)}>
+                                <Ionicons name="create-outline" size={24} color={colors.text} />
                             </TouchableOpacity>
                         </View>
-                    </View>
+                    )}
+                </View>
+            </Animated.View>
 
-                    {/* Check if verified or has rating */}
-                    <View style={styles.nameSection}>
-                        <View style={styles.nameRow}>
-                            <Text style={[styles.displayName, { color: colors.text }]}>{user.displayName}</Text>
-                            {user.ageVerified === true && (
-                                <Ionicons name="checkmark-circle" size={20} color="#10B981" style={{ marginLeft: 4 }} />
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                nestedScrollEnabled={true}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
+                contentContainerStyle={{ paddingTop: HEADER_HEIGHT }} // Offset for sticky header
+            >
+
+
+                <View style={[styles.profileContent, { backgroundColor: colors.background, marginTop: 0 }]}>
+
+                    {/* Main Profile Header Row: Avatar | Info | Stats */}
+                    <View style={styles.headerProfileRow}>
+
+                        {/* 1. Avatar */}
+                        <TouchableOpacity onPress={isOwnProfile ? pickProfileImage : () => (profileImage || user.photoURL) ? setShowFullImage(true) : null}>
+                            <View style={styles.avatarContainer}>
+                                <View style={[styles.avatarBorder, { backgroundColor: colors.background }]}>
+                                    <DefaultAvatar
+                                        uri={profileImage || user.photoURL}
+                                        name={user.displayName}
+                                        size={80}
+                                        style={styles.avatar}
+                                    />
+                                </View>
+                            </View>
+                        </TouchableOpacity>
+
+                        {/* 2. Info Column (Name, Username, Rating) */}
+                        <View style={styles.userInfoColumn}>
+                            <View style={styles.nameRow}>
+                                <Text style={[styles.displayName, { color: colors.text }]} numberOfLines={1}>{user.displayName}</Text>
+                                {user.ageVerified === true && (
+                                    <Ionicons name="checkmark-circle" size={18} color="#10B981" style={{ marginLeft: 4 }} />
+                                )}
+                            </View>
+
+                            {user.username && <Text style={[styles.displayUsername, { color: colors.textSecondary }]}>@{user.username}</Text>}
+
+                            {hostRating && (
+                                <View style={styles.ratingContainer}>
+                                    <Ionicons name="star" size={12} color="#F59E0B" />
+                                    <Text style={styles.ratingScore}>{hostRating.average}</Text>
+                                    <Text style={[styles.ratingCount, { color: colors.textSecondary }]}>({hostRating.count})</Text>
+                                </View>
                             )}
                         </View>
-                        {user.username && <Text style={[styles.displayUsername, { color: colors.textSecondary }]}>@{user.username}</Text>}
 
-                        {/* Rating Badge - Now prominent below name/username */}
-                        {hostRating && (
-                            <View style={styles.ratingContainer}>
-                                <View style={styles.ratingBadge}>
-                                    <Ionicons name="star" size={14} color="#F59E0B" />
-                                    <Text style={styles.ratingScore}>{hostRating.average}</Text>
-                                </View>
-                                <Text style={[styles.ratingCount, { color: colors.textSecondary }]}>({hostRating.count} reviews)</Text>
-                            </View>
-                        )}
-
-                        {user.bio ? (
-                            <Text style={[styles.bioText, { color: colors.text }]}>{user.bio}</Text>
-                        ) : null}
+                        {/* 3. Stats Column (Trips) */}
+                        <TouchableOpacity style={styles.statsColumn} onPress={() => isOwnProfile && navigation.navigate('MyTrips', { initialTab: 'completed' })}>
+                            <Text style={[styles.statValue, { color: colors.text }]}>{trips.length}</Text>
+                            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total Trips</Text>
+                        </TouchableOpacity>
                     </View>
+
+                    {/* Bio - Below the header row */}
+                    {user.bio ? (
+                        <Text style={[styles.bioText, { color: colors.text }]}>{user.bio}</Text>
+                    ) : null}
 
                     {/* Action Buttons */}
                     {!isOwnProfile && (
@@ -691,9 +764,17 @@ const UserProfileScreen = ({ route, navigation }) => {
                         showsVerticalScrollIndicator={false}
                     >
                         <TouchableOpacity style={styles.editAvatarSection} onPress={pickProfileImage}>
-                            <LinearGradient colors={['#8B5CF6', '#EC4899']} style={styles.editAvatarGradient}>
-                                <Image source={{ uri: profileImage || user?.photoURL }} style={styles.editAvatar} />
-                            </LinearGradient>
+                            <View style={styles.avatarContainer}>
+                                <DefaultAvatar
+                                    uri={profileImage || user?.photoURL}
+                                    name={user?.displayName}
+                                    size={100}
+                                    style={styles.editAvatar}
+                                />
+                                <View style={[styles.editIconBadge, { backgroundColor: colors.primary, right: 0, bottom: 0, width: 32, height: 32, borderRadius: 16 }]}>
+                                    <Ionicons name="camera" size={18} color="#fff" />
+                                </View>
+                            </View>
                             <Text style={[styles.changePhotoText, { color: colors.primary }]}>Change Photo</Text>
                         </TouchableOpacity>
 
@@ -837,7 +918,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                                 <Ionicons name="create-outline" size={24} color="#6366F1" />
                             </View>
                             <View style={styles.createOptionText}>
-                                <Text style={[styles.createOptionTitle, { color: colors.text }]}>Manual Creation</Text>
+                                <Text style={[styles.createOptionTitle, { color: colors.text }]}>Create a Trip Manually</Text>
                                 <Text style={[styles.createOptionDesc, { color: colors.textSecondary }]}>Fill in details and add your own photos</Text>
                             </View>
                             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
@@ -851,10 +932,15 @@ const UserProfileScreen = ({ route, navigation }) => {
                             }}
                         >
                             <View style={[styles.createOptionIcon, { backgroundColor: '#EDE9FE' }]}>
-                                <Ionicons name="sparkles" size={24} color="#8B5CF6" />
+                                <View style={styles.headerAvatarContainer}>
+                                    <Image
+                                        source={require('../../assets/Tripzi AI.png')}
+                                        style={styles.headerAvatarImage}
+                                    />
+                                </View>
                             </View>
                             <View style={styles.createOptionText}>
-                                <Text style={[styles.createOptionTitle, { color: colors.text }]}>Create with AI</Text>
+                                <Text style={[styles.createOptionTitle, { color: colors.text }]}>Create with Tripzi AI</Text>
                                 <Text style={[styles.createOptionDesc, { color: colors.textSecondary }]}>Let AI plan and generate images for you</Text>
                             </View>
                             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
@@ -862,9 +948,10 @@ const UserProfileScreen = ({ route, navigation }) => {
                     </Animatable.View>
                 </TouchableOpacity>
             </Modal>
-        </SafeAreaView>
+        </View>
     );
 };
+
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
@@ -873,34 +960,34 @@ const styles = StyleSheet.create({
     backBtn: { padding: SPACING.lg },
     // Standard Header - no fixed height, no large padding
     gradientHeader: { paddingTop: SPACING.lg, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xs },
-    headerRow: { flexDirection: 'row', justifyContent: 'space-between' },
-    headerButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' },
+    headerButton: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
 
     // Profile Content - stacked immediately below
-    profileContent: { flex: 1, marginTop: 0, paddingTop: SPACING.sm, paddingHorizontal: 20 },
-    topSection: { flexDirection: 'row', alignItems: 'center' },
+    // Profile Content - stacked immediately below
+    profileContent: { flex: 1, marginTop: 0, paddingHorizontal: 20 },
+
+    headerProfileRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
+
     avatarContainer: { position: 'relative' },
-    avatarBorder: { padding: 4, borderRadius: 52, elevation: 0, shadowOpacity: 0 }, // Removed shadow for cleaner look
-    avatar: { width: 80, height: 80, borderRadius: 40 }, // Slightly smaller or standard size
-    editIconBadge: { position: 'absolute', bottom: 0, right: 0, width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#fff' },
+    avatarBorder: { borderRadius: 40 },
+    avatar: { width: 80, height: 80, borderRadius: 40 },
+    editIconBadge: { position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
 
-    statsContainer: { flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', marginLeft: 20 },
-    statItem: { alignItems: 'center', padding: 8 },
-    statDivider: { width: 1, height: 30 },
-    statValue: { fontSize: 20, fontWeight: '700' },
-    statLabel: { fontSize: 13, marginTop: 2 },
-
-    nameSection: { marginTop: 16 },
+    userInfoColumn: { flex: 1, marginLeft: 16, justifyContent: 'center' },
     nameRow: { flexDirection: 'row', alignItems: 'center' },
-    displayName: { fontSize: 24, fontWeight: '700', letterSpacing: -0.5 },
+    displayName: { fontSize: 20, fontWeight: '700', letterSpacing: -0.5 },
     displayUsername: { fontSize: 14, marginTop: 2 },
 
-    ratingContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 8, backgroundColor: 'rgba(245, 158, 11, 0.1)', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-    ratingBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-    ratingScore: { fontSize: 14, fontWeight: '700', color: '#B45309' },
-    ratingCount: { fontSize: 13, marginLeft: 6 },
+    ratingContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 },
+    ratingScore: { fontSize: 13, fontWeight: '700', color: '#B45309' },
+    ratingCount: { fontSize: 12 },
 
-    bioText: { marginTop: 12, fontSize: 15, lineHeight: 22 },
+    statsColumn: { alignItems: 'center', paddingLeft: 10 },
+    statValue: { fontSize: 18, fontWeight: '700' },
+    statLabel: { fontSize: 12, marginTop: 2 },
+
+    bioText: { marginTop: 16, fontSize: 15, lineHeight: 22 },
 
     actionButtonsContainer: { flexDirection: 'row', gap: 12, marginTop: 24 },
     primaryBtn: { flex: 1, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
@@ -943,10 +1030,30 @@ const styles = StyleSheet.create({
     modalContent: { borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, padding: SPACING.xl },
     listModalContent: { height: '70%', borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, padding: SPACING.xl },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.xl, paddingHorizontal: SPACING.xl },
-    modalTitle: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold },
+    modalTitle: {
+        fontSize: FONT_SIZE.xl,
+        fontWeight: FONT_WEIGHT.bold,
+    },
+    headerTitle: {
+
+        fontSize: 22,
+        fontWeight: FONT_WEIGHT.bold,
+    },
+    stickyHeader: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: SPACING.lg,
+        paddingTop: SPACING.md, // Add explicit top padding since we removed SafeAreaView wrapper
+        paddingBottom: SPACING.sm,
+    },
     editAvatarSection: { alignItems: 'center', marginBottom: SPACING.xl },
     editAvatarGradient: { width: 100, height: 100, borderRadius: 50, padding: 3, justifyContent: 'center', alignItems: 'center' },
-    editAvatar: { width: 94, height: 94, borderRadius: 47, backgroundColor: '#fff' },
+    editAvatar: { borderRadius: 50 },
     changePhotoText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold, marginTop: SPACING.sm },
     inputLabel: { fontSize: FONT_SIZE.xs, marginBottom: SPACING.xs, marginTop: SPACING.md },
     input: { padding: SPACING.md, borderRadius: BORDER_RADIUS.md, borderWidth: 1, fontSize: FONT_SIZE.md },
@@ -995,6 +1102,25 @@ const styles = StyleSheet.create({
     createOptionText: { flex: 1 },
     createOptionTitle: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold, marginBottom: 2 },
     createOptionDesc: { fontSize: FONT_SIZE.sm },
+
+
+    //
+    headerAvatarContainer: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        overflow: 'hidden',
+        backgroundColor: '#fff',
+        borderWidth: 2,
+        borderColor: '#fff',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    headerAvatarImage: {
+        width: '100%',
+        height: '100%',
+        resizeMode: 'cover',
+    },
 });
 
 export default UserProfileScreen;

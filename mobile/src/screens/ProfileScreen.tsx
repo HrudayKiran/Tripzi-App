@@ -7,6 +7,10 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import DefaultAvatar from '../components/DefaultAvatar';
+
+
 
 const ProfileScreen = ({ navigation }) => {
   const { colors } = useTheme();
@@ -18,13 +22,18 @@ const ProfileScreen = ({ navigation }) => {
     const currentUser = auth().currentUser;
     if (!currentUser) return;
 
-    // Permanent Admin Promotion for specific ID
     if (currentUser.uid === 'S3FDk8SnV7haRUec2zPoUo38Vi02') {
       firestore().collection('users').doc(currentUser.uid).update({ role: 'admin' })
         .catch(() => { });
     }
 
+    // Configure Google Signin
+    GoogleSignin.configure({
+      webClientId: '334857280812-mb7tsrfd5q53ubachdlftnmogmskqu2c.apps.googleusercontent.com',
+    });
+
     const unsubscribe = firestore()
+
       .collection('users')
       .doc(currentUser.uid)
       .onSnapshot((doc) => {
@@ -67,6 +76,18 @@ const ProfileScreen = ({ navigation }) => {
               }
             } catch (e) { }
 
+            try {
+              // Vital for showing the account picker next time
+              await GoogleSignin.revokeAccess();
+              await GoogleSignin.signOut();
+            } catch (error: any) {
+              // Ignore "SIGN_IN_REQUIRED" error as it just means we're already signed out
+              if (error.code !== 'SIGN_IN_REQUIRED' && error.message !== 'SIGN_IN_REQUIRED') {
+                console.error('Google Sign-Out Error:', error);
+              }
+            }
+
+
             await auth().signOut();
             navigation.reset({
               index: 0,
@@ -77,6 +98,7 @@ const ProfileScreen = ({ navigation }) => {
       ]
     );
   };
+
 
   // Quick age verify for testing - removes the need to do actual verification
   const verifyMyAge = async () => {
@@ -139,12 +161,17 @@ const ProfileScreen = ({ navigation }) => {
         >
           <Animatable.View animation="fadeInUp" duration={400} style={[styles.profileCard, { backgroundColor: colors.card }]}>
             <View style={styles.avatarContainer}>
-              <Image
-                style={styles.avatar}
-                source={{ uri: user?.photoURL || auth.currentUser?.photoURL || undefined }}
-              />
-              <View style={[styles.onlineIndicator, { borderColor: colors.card }]} />
+              <View style={[styles.avatarBorder, { backgroundColor: colors.background }]}>
+                <DefaultAvatar
+                  uri={user?.photoURL || auth.currentUser?.photoURL}
+                  name={user?.displayName || auth.currentUser?.displayName}
+                  size={80}
+                  style={styles.avatar} // Ensure styles.avatar doesn't conflict, mainly size
+                />
+              </View>
             </View>
+
+
             <View style={styles.profileInfo}>
               <Text style={[styles.userName, { color: colors.text }]}>
                 {user?.displayName || auth.currentUser?.displayName || 'User'}
@@ -270,19 +297,22 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.lg,
     marginBottom: SPACING.xl,
   },
-  avatarContainer: { position: 'relative' },
-  avatar: { width: 64, height: 64, borderRadius: 32 },
-  onlineIndicator: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#10B981',
-    borderWidth: 3,
+  avatarContainer: {
+    alignItems: 'center',
+    marginRight: SPACING.md,
   },
+
+  avatarBorder: {
+    padding: 4,
+    borderRadius: 50,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+  },
+  avatar: { width: 80, height: 80, borderRadius: 40 },
   profileInfo: { flex: 1, marginLeft: SPACING.lg },
+
   userName: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold },
   userEmail: { fontSize: FONT_SIZE.sm, marginTop: 2 },
   username: { fontSize: FONT_SIZE.sm, marginTop: 2 },

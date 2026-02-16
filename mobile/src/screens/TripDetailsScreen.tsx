@@ -94,6 +94,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [participantsData, setParticipantsData] = useState<any[]>([]);
+  const [showMenu, setShowMenu] = useState(false);
 
   const scrollY = useRef(new Animated.Value(0)).current;
   const isOwner = trip?.userId === user?.uid;
@@ -175,21 +176,17 @@ const TripDetailsScreen = ({ route, navigation }) => {
     if (tripId) {
       fetchRatings();
     }
-  }, [tripId, user?.uid]);
+  }, [tripId, user]);
+
+  const isCompleted = React.useMemo(() => {
+    if (!trip || !trip.toDate) return false;
+    const endDate = trip.toDate.toDate ? trip.toDate.toDate() : new Date(trip.toDate);
+    return endDate < new Date();
+  }, [trip]);
 
   const handleSubmitRating = async () => {
-    if (!user) {
-      Alert.alert('Sign In Required', 'Please sign in to rate trips.');
-      return;
-    }
-
-    if (!isJoined) {
-      Alert.alert('Join Trip Required', 'You must join this trip to leave a rating.');
-      return;
-    }
-
-    if (userRating === 0) {
-      Alert.alert('Rating Required', 'Please select a star rating.');
+    if (!isCompleted) {
+      Alert.alert('Trip Not Completed', 'You can only rate a trip after it has ended.');
       return;
     }
 
@@ -299,15 +296,11 @@ const TripDetailsScreen = ({ route, navigation }) => {
     }
   };
 
-
-
   const handleMessage = () => {
-    // Check if there are other participants (for owner)
     if (isOwner && (!trip.participants || trip.participants.length <= 1)) {
       Alert.alert('No Joined Users', 'Wait for someone to join your trip to start chatting!');
       return;
     }
-
     const chatId = `trip_${tripId}`;
     navigation.navigate('Chat', {
       chatId,
@@ -545,33 +538,27 @@ const TripDetailsScreen = ({ route, navigation }) => {
   const images = trip.images?.length > 0 ? trip.images : [trip.coverImage || 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800'];
   const spotsLeft = Math.max(0, (trip.maxTravelers || 8) - (trip.participants?.length || trip.currentTravelers || 1));
 
-  // Check if trip is completed (past end date)
-  const isCompleted = (() => {
-    if (!trip.toDate) return false;
-    const endDate = new Date(trip.toDate);
-    return endDate < new Date();
-  })();
+
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
-        scrollEventThrottle={16}
-      >
-        {/* Header with Back Button + Join */}
-        <SafeAreaView edges={['top']} style={styles.headerInScroll}>
-          <View style={styles.header}>
-            <TouchableOpacity
-              style={[styles.headerButton, { backgroundColor: colors.card }]}
-              onPress={() => navigation.goBack()}
-            >
-              <Ionicons name="arrow-back" size={24} color={colors.text} />
-            </TouchableOpacity>
-            <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
-              {trip.title || 'Trip Details'}
-            </Text>
-            {/* Join button in header - matching TripCard style */}
+      {/* Fixed Header with Back Button + Title + Menu */}
+      <SafeAreaView edges={['top']} style={{ zIndex: 100, backgroundColor: colors.background, elevation: 5 }}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={[styles.headerButton, { backgroundColor: colors.card }]}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+
+          <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
+            {trip.title}
+          </Text>
+
+          {/* Right Side Actions */}
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {/* Join button for non-owners */}
             {!isOwner && !isCompleted && (
               <TouchableOpacity
                 style={[
@@ -579,6 +566,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
                   {
                     backgroundColor: isJoined ? 'transparent' : colors.primary,
                     borderColor: colors.primary,
+                    marginRight: SPACING.sm
                   },
                 ]}
                 onPress={handleJoinToggle}
@@ -590,16 +578,58 @@ const TripDetailsScreen = ({ route, navigation }) => {
                 </Text>
               </TouchableOpacity>
             )}
-            {isCompleted && (
-              <View style={styles.headerCompletedBadge}>
-                <Ionicons name="checkmark-circle" size={14} color="#10B981" />
-                <Text style={styles.headerCompletedText}>Done</Text>
+
+            {/* Three Dots Menu for Owner */}
+            {isOwner && (
+              <View>
+                <TouchableOpacity
+                  style={[styles.headerButton, { backgroundColor: colors.card }]}
+                  onPress={() => setShowMenu(!showMenu)}
+                >
+                  <Ionicons name="ellipsis-vertical" size={24} color={colors.text} />
+                </TouchableOpacity>
+
+                {/* Dropdown Menu */}
+                {showMenu && (
+                  <View style={[styles.dropdownMenu, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); openEditModal(); }}>
+                      <Ionicons name="create-outline" size={20} color={colors.text} />
+                      <Text style={[styles.menuText, { color: colors.text }]}>Edit Trip</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); handleCancelTrip(); }}>
+                      <Ionicons name="close-circle-outline" size={20} color={colors.text} />
+                      <Text style={[styles.menuText, { color: colors.text }]}>Cancel Trip</Text>
+                    </TouchableOpacity>
+                    <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+                    <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); handleDeleteTrip(); }}>
+                      <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                      <Text style={[styles.menuText, { color: '#EF4444' }]}>Delete Trip</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             )}
-          </View>
-        </SafeAreaView>
 
-        {/* Trip Images Carousel */}
+            {/* Report for non-owners */}
+            {!isOwner && (
+              <TouchableOpacity
+                style={[styles.headerButton, { backgroundColor: colors.card, marginLeft: 8 }]}
+                onPress={() => setShowReportModal(true)}
+              >
+                <Ionicons name="flag-outline" size={20} color={colors.text} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </SafeAreaView>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+        scrollEventThrottle={16}
+      >
+
+        {/* ... (Image Carousel - unchanged) ... */}
         <View style={styles.imageCarousel}>
           <ScrollView
             horizontal
@@ -620,10 +650,10 @@ const TripDetailsScreen = ({ route, navigation }) => {
                   style={styles.carouselImage}
                   resizeMode="cover"
                 />
-
               </View>
             ))}
           </ScrollView>
+          {/* ... (Dots and Count - unchanged) ... */}
           {images.length > 1 && (
             <View style={styles.imageDotsContainer}>
               {images.map((_, index) => (
@@ -646,9 +676,10 @@ const TripDetailsScreen = ({ route, navigation }) => {
 
         {/* Content */}
         <View style={[styles.contentContainer, { backgroundColor: colors.background }]}>
-          {/* Title & Creator + Report */}
+          {/* Title removed - moved to header */}
           <Animatable.View animation="fadeInUp" delay={100}>
-            <Text style={[styles.title, { color: colors.text }]}>{trip.title}</Text>
+
+            {/* Creator Row with Message Button */}
             <View style={styles.creatorRow}>
               <TouchableOpacity
                 style={styles.creatorInfo}
@@ -656,7 +687,8 @@ const TripDetailsScreen = ({ route, navigation }) => {
               >
                 <DefaultAvatar
                   uri={trip.user?.photoURL}
-                  size={48}
+                  name={trip.user?.displayName}
+                  size={50}
                   style={styles.creatorAvatar}
                 />
                 <View>
@@ -666,68 +698,38 @@ const TripDetailsScreen = ({ route, navigation }) => {
                   <Text style={[styles.creatorLabel, { color: colors.textSecondary }]}>Organizer</Text>
                 </View>
               </TouchableOpacity>
-              {/* Report button next to organizer */}
-              {!isOwner && (
+
+              {/* Message Button next to organizer (for joined users or owner) */}
+              {(isJoined || isOwner) && (
                 <TouchableOpacity
-                  style={[styles.reportButton, { backgroundColor: '#FEE2E2' }]}
-                  onPress={() => setShowReportModal(true)}
+                  style={[styles.smallMessageBtn, { backgroundColor: colors.primary }]}
+                  onPress={handleMessage}
                 >
-                  <Ionicons name="flag-outline" size={16} color="#EF4444" />
-                  <Text style={styles.reportButtonText}>Report</Text>
+                  <Ionicons name="chatbubble-ellipses-outline" size={20} color="#fff" />
+                  <Text style={styles.smallMessageBtnText}>Group Chat</Text>
                 </TouchableOpacity>
               )}
             </View>
           </Animatable.View>
 
-          {/* Destination - Large Location + View in Google Maps */}
-          <TouchableOpacity
-            style={[styles.destinationCard, { backgroundColor: colors.card }]}
-            onPress={handleOpenMaps}
-            activeOpacity={0.7}
-          >
-            <View style={styles.destinationLeft}>
-              <View style={[styles.destinationIconWrap, { backgroundColor: colors.primary + '15' }]}>
-                <Ionicons name="location" size={28} color={colors.primary} />
-              </View>
-              <View style={styles.destinationInfo}>
-                <Text style={[styles.destinationLabel, { color: colors.textSecondary }]}>Destination</Text>
-                <Text style={[styles.destinationText, { color: colors.text }]} numberOfLines={1}>
-                  {trip.toLocation || trip.location || 'TBD'}
-                </Text>
-              </View>
+          {/* Compact Destination Row */}
+          <View style={[styles.destinationCardRow, { backgroundColor: colors.card }]}>
+            <View style={styles.destinationInfoCol}>
+              <Text style={[styles.destinationLabel, { color: colors.textSecondary }]}>Destination</Text>
+              <Text style={[styles.destinationText, { color: colors.text }]} numberOfLines={1}>
+                {trip.toLocation || trip.location || 'TBD'}
+              </Text>
             </View>
-            <View style={[styles.viewMapsBtn, { backgroundColor: colors.primary }]}>
-              <Ionicons name="navigate" size={16} color="#fff" />
-              <Text style={styles.viewMapsText}>View in Google Maps</Text>
-            </View>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.compactMapBtn, { backgroundColor: colors.primary + '20' }]}
+              onPress={handleOpenMaps}
+            >
+              <Ionicons name="map" size={18} color={colors.primary} />
+              <Text style={[styles.compactMapBtnText, { color: colors.primary }]}>Google Maps</Text>
+            </TouchableOpacity>
+          </View>
 
-          {/* Owner Action Buttons */}
-          {isOwner && (
-            <View style={styles.actionButtonsRow}>
-              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.card }]} onPress={openEditModal}>
-                <Ionicons name="create-outline" size={20} color={colors.primary} />
-                <Text style={[styles.actionBtnText, { color: colors.primary }]}>Edit</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: '#FEE2E2' }]}
-                onPress={handleDeleteTrip}
-                disabled={deleting}
-              >
-                <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                <Text style={[styles.actionBtnText, { color: '#EF4444' }]}>Delete</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: '#FEE2E2' }]}
-                onPress={handleCancelTrip}
-                disabled={deleting}
-              >
-                <Ionicons name="close-circle-outline" size={20} color="#EF4444" />
-                <Text style={[styles.actionBtnText, { color: '#EF4444' }]}>Cancel Trip</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
+          {/* ... (Stats, Description, Details, Places, Items, Participants - unchanged) ... */}
           {/* Quick Stats */}
           <Animatable.View animation="fadeInUp" delay={200} style={[styles.statsRow, { backgroundColor: colors.card }]}>
             <View style={styles.statItem}>
@@ -812,6 +814,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
                 >
                   <DefaultAvatar
                     uri={participant.photoURL}
+                    name={participant.displayName}
                     size={36}
                     style={styles.participantImage}
                   />
@@ -825,41 +828,16 @@ const TripDetailsScreen = ({ route, navigation }) => {
             </View>
           </Animatable.View>
 
-          {/* Ratings Section - Only show for completed trips */}
-          {isCompleted && (
+          {/* Ratings Section - Moved outside isCompleted check for LIST, kept for submitting */}
+          {/* Always show if there are ratings OR if completed */}
+          {(existingRatings.length > 0 || isCompleted) && (
             <Animatable.View animation="fadeInUp" delay={900}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>
                 Ratings & Reviews {averageRating && `⭐ ${averageRating}`}
               </Text>
 
-              {/* Owner View - Show rating summary */}
-              {isOwner ? (
-                <View style={[styles.ratingCard, { backgroundColor: colors.card }]}>
-                  <Text style={[styles.ratingCardTitle, { color: colors.text }]}>
-                    Your Trip's Ratings
-                  </Text>
-                  {existingRatings.length > 0 ? (
-                    <View style={{ alignItems: 'center', paddingVertical: SPACING.md }}>
-                      <Text style={{ fontSize: 48, marginBottom: SPACING.xs }}>⭐</Text>
-                      <Text style={[{ fontSize: FONT_SIZE.xxl, fontWeight: FONT_WEIGHT.bold, color: colors.text }]}>
-                        {averageRating}
-                      </Text>
-                      <Text style={[{ fontSize: FONT_SIZE.md, color: colors.textSecondary, marginTop: SPACING.xs }]}>
-                        {existingRatings.length} {existingRatings.length === 1 ? 'Rating' : 'Ratings'}
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={{ alignItems: 'center', paddingVertical: SPACING.lg }}>
-                      <Ionicons name="star-outline" size={48} color={colors.textSecondary} />
-                      <Text style={[{ fontSize: FONT_SIZE.md, color: colors.textSecondary, marginTop: SPACING.md, textAlign: 'center' }]}>
-                        No ratings yet{'\n'}Ratings will appear here after participants rate your trip
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              ) : (
-                /* Participant View - Show rating form */
-                /* Participant View - Show rating form */
+              {/* Only allow submitting if completed */}
+              {isCompleted && !isOwner && (
                 <View style={[styles.ratingCard, { backgroundColor: colors.card }]}>
                   {isJoined ? (
                     <>
@@ -867,7 +845,6 @@ const TripDetailsScreen = ({ route, navigation }) => {
                         {hasRated ? 'Update Your Rating' : 'Rate This Trip'}
                       </Text>
 
-                      {/* Star Rating */}
                       <View style={styles.starsRow}>
                         {[1, 2, 3, 4, 5].map((star) => (
                           <TouchableOpacity
@@ -884,7 +861,6 @@ const TripDetailsScreen = ({ route, navigation }) => {
                         ))}
                       </View>
 
-                      {/* Feedback Input */}
                       <TextInput
                         style={[styles.feedbackInput, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
                         placeholder="Share your experience... (optional)"
@@ -895,7 +871,6 @@ const TripDetailsScreen = ({ route, navigation }) => {
                         maxLength={500}
                       />
 
-                      {/* Submit Button */}
                       <TouchableOpacity
                         style={[styles.submitRatingButton, { backgroundColor: colors.primary, opacity: submittingRating ? 0.6 : 1 }]}
                         onPress={handleSubmitRating}
@@ -924,19 +899,20 @@ const TripDetailsScreen = ({ route, navigation }) => {
                 </View>
               )}
 
-              {/* Existing Reviews - Show for everyone */}
+              {/* Reviews List - Always show if exists, regardless of isCompleted */}
               {existingRatings.length > 0 && (
                 <View style={styles.reviewsList}>
-                  <Text style={[styles.reviewsTitle, { color: colors.text }]}>
-                    {existingRatings.length} Review{existingRatings.length !== 1 ? 's' : ''}
-                  </Text>
                   {existingRatings.slice(0, 5).map((review) => (
                     <View key={review.id} style={[styles.reviewItem, { backgroundColor: colors.card }]}>
                       <View style={styles.reviewHeader}>
-                        <Image
-                          source={{ uri: review.userPhoto || undefined }}
-                          style={styles.reviewAvatar}
-                        />
+                        <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { userId: review.userId })}>
+                          <DefaultAvatar
+                            uri={review.userPhoto}
+                            name={review.userName}
+                            size={36}
+                            style={styles.reviewAvatar}
+                          />
+                        </TouchableOpacity>
                         <View style={styles.reviewInfo}>
                           <Text style={[styles.reviewName, { color: colors.text }]}>{review.userName}</Text>
                           <View style={styles.reviewStars}>
@@ -963,26 +939,16 @@ const TripDetailsScreen = ({ route, navigation }) => {
             </Animatable.View>
           )}
 
-          {/* Spacer for footer */}
-          <View style={{ height: 100 }} />
+          {/* Spacer for scroll */}
+          <View style={{ height: 40 }} />
         </View>
       </ScrollView >
 
-      {/* Footer — Message Group button (only for joined/owner) */}
-      {(isJoined || isOwner) && (
-        <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-          <TouchableOpacity
-            style={[styles.messageButton, { backgroundColor: colors.primary }]}
-            onPress={handleMessage}
-          >
-            <Ionicons name="chatbubble-ellipses" size={20} color="#fff" />
-            <Text style={styles.messageButtonText}>Message Group</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      {/* Footer Removed (Message button moved to creator row) */}
 
-      {/* Edit Trip Modal */}
+      {/* ... (Keep Modal Rendering - same as before) ... */}
       <Modal visible={showEditModal} animationType="slide" transparent>
+        {/* ... */}
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -1313,7 +1279,7 @@ const styles = StyleSheet.create({
   centeredContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   headerInScroll: { marginBottom: SPACING.sm },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
-  headerTitle: { flex: 1, fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, textAlign: 'center', marginHorizontal: SPACING.md },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, paddingHorizontal: SPACING.sm },
   headerButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
   headerJoinButton: { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 22, borderWidth: 1.5 },
   headerJoinText: { fontSize: 14, fontWeight: '700' },
@@ -1463,6 +1429,17 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 4,
   },
+  dropdownMenu: { position: 'absolute', top: 50, right: 20, width: 200, padding: SPACING.sm, borderRadius: BORDER_RADIUS.md, borderWidth: 1, elevation: 5, zIndex: 1000 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, gap: SPACING.sm },
+  menuText: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
+  menuDivider: { height: 1, marginVertical: SPACING.xs },
+  smallMessageBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.sm, paddingVertical: 6, borderRadius: BORDER_RADIUS.md, gap: 4, marginLeft: SPACING.sm },
+  smallMessageBtnText: { color: '#fff', fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
+  destinationCardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: SPACING.md, borderRadius: BORDER_RADIUS.lg, marginBottom: SPACING.md },
+  destinationInfoCol: { flex: 1, marginRight: SPACING.md },
+  compactMapBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: 8, borderRadius: BORDER_RADIUS.md, gap: 6 },
+  compactMapBtnText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
+
 });
 
 export default TripDetailsScreen;

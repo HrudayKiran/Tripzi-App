@@ -27,9 +27,11 @@ interface TripCardProps {
     onPress?: () => void;
     isVisible?: boolean;
     onReportPress: (trip: any) => void;
+    showOptions?: boolean;
 }
 
-const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress }: TripCardProps) => {
+const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOptions = true }: TripCardProps) => {
+
     const { colors } = useTheme();
     const navigation = useNavigation();
     const [isJoining, setIsJoining] = useState(false);
@@ -184,6 +186,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress }: Trip
                     <TouchableOpacity style={styles.userInfo} onPress={handleUserPress}>
                         <DefaultAvatar
                             uri={trip.user?.photoURL || trip.user?.image}
+                            name={trip.user?.displayName || trip.user?.name || 'Traveler'}
                             size={38}
                             style={styles.avatar}
                         />
@@ -235,19 +238,21 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress }: Trip
                         )}
 
                         {/* Three dots menu */}
-                        <View ref={moreButtonRef} collapsable={false}>
-                            <TouchableOpacity
-                                style={styles.moreButton}
-                                onPress={() => {
-                                    moreButtonRef.current?.measure((x, y, w, h, pageX, pageY) => {
-                                        setMenuPosition({ top: pageY + h + 4, right: Dimensions.get('window').width - (pageX + w) });
-                                        setShowMenu(true);
-                                    });
-                                }}
-                            >
-                                <Ionicons name="ellipsis-vertical" size={20} color={colors.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
+                        {showOptions && (
+                            <View ref={moreButtonRef} collapsable={false}>
+                                <TouchableOpacity
+                                    style={styles.moreButton}
+                                    onPress={() => {
+                                        moreButtonRef.current?.measure((x, y, w, h, pageX, pageY) => {
+                                            setMenuPosition({ top: pageY + h + 4, right: Dimensions.get('window').width - (pageX + w) });
+                                            setShowMenu(true);
+                                        });
+                                    }}
+                                >
+                                    <Ionicons name="ellipsis-vertical" size={20} color={colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+                        )}
                     </View>
                 </View>
 
@@ -379,7 +384,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress }: Trip
                 </View>
 
                 {/* Tags + View Details */}
-                <View style={styles.bottomRow}>
+                <View style={[styles.bottomRow, { paddingVertical: SPACING.md }]}>
                     <View style={styles.tagsRow}>
                         <View style={[styles.tag, {
                             backgroundColor: trip.genderPreference === 'male' ? '#DBEAFE' :
@@ -401,15 +406,21 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress }: Trip
                     </View>
 
                     <TouchableOpacity
-                        style={[styles.viewDetailsButton, { borderColor: colors.border }]}
+                        style={[styles.viewDetailsButton, {
+                            borderColor: colors.primary,
+                            backgroundColor: colors.primary + '10', // 10% opacity 
+                            paddingHorizontal: 20,
+                            paddingVertical: 10,
+                        }]}
                         onPress={onPress}
                         activeOpacity={0.7}
                     >
-                        <Text style={[styles.viewDetailsText, { color: colors.primary }]}>View Details</Text>
-                        <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+                        <Text style={[styles.viewDetailsText, { color: colors.primary, fontSize: FONT_SIZE.md }]}>View Details</Text>
+                        <Ionicons name="chevron-forward" size={16} color={colors.primary} />
                     </TouchableOpacity>
                 </View>
             </View>
+
 
             {/* Three Dots Menu — Report only */}
             <Modal visible={showMenu} transparent animationType="fade" onRequestClose={() => setShowMenu(false)}>
