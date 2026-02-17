@@ -80,7 +80,7 @@ const CreateGroupScreen = ({ navigation }) => {
 
             setSearchResults(results);
         } catch (error) {
-            console.error('Search error:', error);
+            
         } finally {
             setSearching(false);
         }
@@ -113,7 +113,7 @@ const CreateGroupScreen = ({ navigation }) => {
                 setGroupIcon(result.assets[0].uri);
             }
         } catch (error) {
-            console.error('Image picker error:', error);
+            
         }
     };
 
@@ -210,7 +210,7 @@ const CreateGroupScreen = ({ navigation }) => {
 
             navigation.replace('Chat', { chatId: chatRef.id });
         } catch (error) {
-            console.error('Failed to create group:', error);
+            
             Alert.alert('Error', 'Failed to create group. Please try again.');
         } finally {
             setCreating(false);

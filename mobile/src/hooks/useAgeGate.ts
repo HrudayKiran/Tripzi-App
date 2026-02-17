@@ -73,7 +73,7 @@ export function useAgeGate(): UseAgeGateReturn {
                     setIsLoading(false);
                 },
                 (error) => {
-                    console.error('Age verification listener error:', error);
+                    
                     setIsAgeVerified(false);
                     setIsLoading(false);
                 }

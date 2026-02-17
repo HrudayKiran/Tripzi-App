@@ -216,7 +216,7 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                         const downloadUrl = await reference.getDownloadURL();
                         uploadedImageUrls.push(downloadUrl);
                     } catch (uploadError) {
-                        console.error('Image upload failed:', uploadError);
+                        
                     }
                 }
             }

@@ -73,7 +73,7 @@ const AgeVerificationScreen = ({ navigation }) => {
                 [{ text: 'Continue', onPress: () => navigation.goBack() }]
             );
         } catch (error) {
-            console.error('Age verification error:', error);
+            
             setSubmitting(false);
             Alert.alert('Error', 'Failed to verify age. Please try again.');
         }

@@ -49,7 +49,7 @@ const AIChatScreen = ({ navigation }: any) => {
                     setIsAgeVerified(false);
                 }
             } catch (error) {
-                console.error("Error fetching profile:", error);
+                
                 setIsAgeVerified(false);
             } finally {
                 setIsLoadingProfile(false);
@@ -80,7 +80,7 @@ const AIChatScreen = ({ navigation }: any) => {
             const newAiMessages = responses.reverse();
             setMessages(prev => [...newAiMessages, ...prev]);
         } catch (error) {
-            console.error(error);
+            
             Alert.alert("Error", "Failed to connect to AI. Please try again.");
         } finally {
             setIsTyping(false);
@@ -221,7 +221,7 @@ const AIChatScreen = ({ navigation }: any) => {
                             setMessages(prev => [successMsg, ...prev]);
 
                         } catch (error: any) {
-                            console.error("Auto-Post Error:", error);
+                            
                             Alert.alert("Error", "Failed to auto-post trip. Please try 'Edit & Post' instead.");
                         }
                     }
@@ -333,7 +333,7 @@ const AIChatScreen = ({ navigation }: any) => {
                 </Animatable.View>
             );
         } catch (e) {
-            console.log("JSON Parse Error:", e, "Input was:", jsonString);
+            
             return null; // Fallback to showing text
         }
     };

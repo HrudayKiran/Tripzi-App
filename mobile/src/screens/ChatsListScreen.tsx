@@ -185,7 +185,7 @@ const ChatsListScreen = ({ navigation }) => {
 
             setSearchResults(Array.from(results.values()));
         } catch (error) {
-            console.error('Search error:', error);
+            
         } finally {
             setSearching(false);
         }
@@ -254,7 +254,7 @@ const ChatsListScreen = ({ navigation }) => {
                 otherUserPhoto: user.photoURL,
             });
         } catch (error) {
-            console.error('Error starting chat:', error);
+            
             Alert.alert('Error', 'Could not start chat. Please try again.');
         } finally {
             setStartingChat(false);

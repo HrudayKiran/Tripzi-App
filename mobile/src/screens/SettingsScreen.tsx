@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
-import CustomToggle from '../components/CustomToggle';
+
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 
 import auth from '@react-native-firebase/auth';
@@ -83,7 +83,7 @@ const SettingsScreen = ({ navigation }) => {
                             await auth().signOut();
                             Alert.alert("Account Deleted", "Your account has been successfully deleted.");
                         } catch (error: any) {
-                            console.error("Delete account error:", error);
+
                             Alert.alert("Error", error.message || "Could not delete account. Please try again later.");
                         }
                     }
@@ -122,12 +122,11 @@ const SettingsScreen = ({ navigation }) => {
                                     Receive notifications about new trips and messages
                                 </Text>
                             </View>
-                            <CustomToggle
+                            <Switch
                                 value={pushEnabled}
-                                onValueChange={() => handlePushToggle(!pushEnabled)}
-                                onLabel="On"
-                                offLabel="Off"
-                                size="medium"
+                                onValueChange={handlePushToggle}
+                                trackColor={{ false: '#E5E7EB', true: '#10B981' }}
+                                thumbColor={'#fff'}
                             />
                         </View>
                     </Animatable.View>
@@ -154,12 +153,11 @@ const SettingsScreen = ({ navigation }) => {
                                     Toggle between light and dark theme
                                 </Text>
                             </View>
-                            <CustomToggle
+                            <Switch
                                 value={isDarkMode}
                                 onValueChange={toggleTheme}
-                                onLabel="On"
-                                offLabel="Off"
-                                size="medium"
+                                trackColor={{ false: '#E5E7EB', true: '#10B981' }}
+                                thumbColor={'#fff'}
                             />
                         </View>
                     </Animatable.View>

@@ -17,11 +17,7 @@ import LaunchScreen from '../screens/LaunchScreen';
 import WelcomeScreen from '../screens/WelcomeScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
 import StartScreen from '../screens/StartScreen';
-import SignInScreen from '../screens/SignInScreen';
-import SignUpScreen from '../screens/SignUpScreen';
-import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import FeedScreen from '../screens/FeedScreen';
-import MomentsScreen from '../screens/MomentsScreen';
 import SearchScreen from '../screens/SearchScreen';
 import MyTripsScreen from '../screens/MyTripsScreen';
 import AIChatScreen from '../screens/AIChatScreen';
@@ -42,9 +38,6 @@ import SuggestFeatureScreen from '../screens/SuggestFeatureScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
-import UsernameSetupScreen from '../screens/UsernameSetupScreen';
-import GoogleProfileScreen from '../screens/GoogleProfileScreen';
-import PhoneVerificationScreen from '../screens/PhoneVerificationScreen';
 import MessageSettingsScreen from '../screens/MessageSettingsScreen';
 
 const Stack = createStackNavigator();
@@ -147,13 +140,11 @@ const AppNavigator = () => {
 
         // Also listen for auth changes during runtime
         const unsubscribe = auth().onAuthStateChanged(async (userState) => {
-            console.log('[AppNavigator] onAuthStateChanged fired. User:', userState?.uid || 'null');
             setUser(userState);
 
             // If user just signed in, verify they have a Firestore profile
             if (userState && navigationRef.current) {
                 try {
-                    console.log('[AppNavigator] Checking Firestore for user profile...');
                     const firestore = require('@react-native-firebase/firestore').default;
 
                     // Retry logic to handle race condition during sign-up
@@ -165,27 +156,23 @@ const AppNavigator = () => {
                     for (let attempt = 0; attempt < maxRetries; attempt++) {
                         const userDoc = await firestore().collection('users').doc(userState.uid).get();
                         docExists = typeof userDoc.exists === 'function' ? userDoc.exists() : userDoc.exists;
-                        console.log(`[AppNavigator] Firestore check attempt ${attempt + 1}. Exists:`, docExists);
 
                         if (docExists) break;
 
                         // Wait before retrying (but not after the last attempt)
                         if (attempt < maxRetries - 1) {
-                            console.log('[AppNavigator] Doc not found, waiting before retry...');
                             await new Promise(resolve => setTimeout(resolve, retryDelay));
                         }
                     }
 
                     if (!docExists) {
                         // User has no Firestore profile after retries - sign them out
-                        console.log('[AppNavigator] User has NO profile after retries, signing out...');
                         await auth().signOut();
                         return;
                     }
-                    console.log('[AppNavigator] User HAS profile, allowing navigation');
+
                 } catch (error: any) {
                     // Error checking - sign out to be safe
-                    console.log('[AppNavigator] Firestore error:', error.message);
                     await auth().signOut();
                     return;
                 }
@@ -193,10 +180,9 @@ const AppNavigator = () => {
 
             // Handle runtime logout
             if (!userState && navigationRef.current) {
-                console.log('[AppNavigator] User logged out, resetting to Welcome');
                 navigationRef.current.reset({
                     index: 1,
-                    routes: [{ name: 'Welcome' }, { name: 'Start' }],
+                    routes: [{ name: 'Welcome' }, { name: 'Launch' }],
                 });
             }
         });
@@ -220,11 +206,7 @@ const AppNavigator = () => {
         config: {
             screens: {
                 // Auth
-                SignIn: 'signin',
-                SignUp: 'signup',
 
-                // Deep link into TripeDetails directly
-                TripDetails: 'trip/:tripId',
 
                 // Profile
                 UserProfile: 'user/:userId',
@@ -233,7 +215,7 @@ const AppNavigator = () => {
                 App: {
                     screens: {
                         Home: 'feed',
-                        Moments: 'moments',
+
                         Messages: 'messages',
                         Profile: 'profile',
                     }
@@ -270,9 +252,6 @@ const AppNavigator = () => {
                         <Stack.Screen name="Welcome" component={WelcomeScreen} />
                         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                         <Stack.Screen name="Start" component={StartScreen} />
-                        <Stack.Screen name="SignIn" component={SignInScreen} />
-                        <Stack.Screen name="SignUp" component={SignUpScreen} />
-                        <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
 
                         {/* Main App */}
                         <Stack.Screen
@@ -298,11 +277,7 @@ const AppNavigator = () => {
                         <Stack.Screen name="SuggestFeature" component={SuggestFeatureScreen} />
                         <Stack.Screen name="Settings" component={SettingsScreen} />
                         <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
-                        <Stack.Screen name="UserProfile" component={UserProfileScreen} />
-                        <Stack.Screen name="UsernameSetup" component={UsernameSetupScreen} />
-                        <Stack.Screen name="GoogleProfile" component={GoogleProfileScreen} />
-                        <Stack.Screen name="PhoneVerification" component={PhoneVerificationScreen} />
-                        <Stack.Screen name="MessageSettings" component={MessageSettingsScreen} />
+
                     </Stack.Navigator>
                 </NavigationContainer>
                 <OfflineBanner />

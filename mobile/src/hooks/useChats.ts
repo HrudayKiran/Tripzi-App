@@ -84,7 +84,7 @@ export function useChats(): UseChatsReturn {
                     setError(null);
                 },
                 (err) => {
-                    console.error('📱 [CHATS] Error loading chats:', err);
+                    
                     setError(err as Error);
                     setLoading(false);
                 }
@@ -187,7 +187,7 @@ export function useChats(): UseChatsReturn {
                     // [`clearedAt.${currentUser.uid}`]: firestore.FieldValue.serverTimestamp()
                 });
         } catch (error) {
-            console.error('Error deleting chat:', error);
+            
             throw error;
         }
     }, [currentUser]);

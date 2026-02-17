@@ -122,7 +122,7 @@ export function useChatMessages(chatId: string | undefined, clearedAt?: Firestor
 
                 },
                 (err) => {
-                    console.error('💬 [MESSAGES] Error:', err);
+                    
                     setError(err as Error);
                     setLoading(false);
                 }
@@ -265,7 +265,7 @@ export function useChatMessages(chatId: string | undefined, clearedAt?: Firestor
             await batch.commit();
 
         } catch (err) {
-            console.error('💬 [MESSAGES] Error marking as read:', err);
+            
         }
     }, [chatId, currentUser, messages]);
 

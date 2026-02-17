@@ -378,7 +378,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             await sendMessage(textToSend, replyingTo || undefined, mentions);
             setReplyingTo(null);
         } catch (error) {
-            console.error('Failed to send message:', error);
+            
             setInputText(textToSend); // Restore on error
         } finally {
             setSending(false);
@@ -417,7 +417,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 setPreviewImage(result.assets[0].uri);
             }
         } catch (error) {
-            console.error('Image picker error:', error);
+            
             Alert.alert('Error', 'Failed to pick image.');
         }
     };
@@ -466,7 +466,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     [`unreadCount.${currentUser.uid}`]: 0,
                 });
         } catch (error) {
-            console.error('Failed to send image:', error);
+            
             Alert.alert('Error', 'Failed to send image.');
         } finally {
             setUploading(false);
@@ -567,7 +567,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
 
 
         } catch (error) {
-            console.error('Failed to send location:', error);
+            
             Alert.alert('Error', 'Failed to get location.');
         } finally {
             setGettingLocation(false);
@@ -624,7 +624,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                             startLocationWatcher();
 
                         } catch (error) {
-                            console.error("Live share error", error);
+                            
                             setIsSharingLive(false);
                         }
                     }
@@ -670,7 +670,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             });
             locationSubscription.current = sub;
         } catch (e) {
-            console.error("Watcher failed", e);
+            
         }
     };
 
@@ -770,7 +770,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                                 });
                             }
                         } catch (error) {
-                            console.error('Failed to delete message:', error);
+                            
                         }
                     },
                 },
@@ -797,7 +797,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             setEditingMessage(null);
             setEditText('');
         } catch (error) {
-            console.error('Failed to edit message:', error);
+            
             Alert.alert('Error', 'Failed to edit message.');
         }
     };
@@ -831,7 +831,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                             await batch.commit();
                             setShowChatMenu(false);
                         } catch (error) {
-                            console.error('Failed to clear chat:', error);
+                            
                             Alert.alert('Error', 'Failed to clear chat.');
                         }
                     },
@@ -895,7 +895,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                             setSelectedMessages(new Set());
                             setIsSelectionMode(false);
                         } catch (error) {
-                            console.error('Failed to delete messages:', error);
+                            
                             Alert.alert('Error', 'Failed to delete messages.');
                         }
                     },

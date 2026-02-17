@@ -47,7 +47,7 @@ export const initializeAppCheck = async () => {
 
 
     } catch (error) {
-        console.error('Failed to initialize App Check:', error);
+        
     }
 };
 
@@ -86,7 +86,7 @@ export const getAppCheckToken = async (): Promise<string | null> => {
         const { token } = await appCheck().getToken(true);
         return token;
     } catch (error) {
-        console.error('Failed to get App Check token:', error);
+        
         return null;
     }
 };

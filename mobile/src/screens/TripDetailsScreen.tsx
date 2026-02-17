@@ -394,7 +394,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
             const ref = storage().refFromURL(imageUrl);
             await ref.delete();
           } catch (error) {
-            console.warn('Failed to delete storage image:', error);
+            
           }
         }));
       }

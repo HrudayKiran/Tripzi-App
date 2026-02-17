@@ -2,10 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, ActivityIndicator, Image, RefreshControl } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import * as Animatable from 'react-native-animatable';
-import { Ionicons } from '@expo/vector-icons';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
-import CustomToggle from '../components/CustomToggle';
+
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
 import AppLogo from '../components/AppLogo';
 import { useFocusEffect } from '@react-navigation/native';
@@ -130,19 +129,7 @@ const MyTripsScreen = ({ navigation }) => {
           </Text>
         </View>
       </TouchableOpacity>
-      {
-        activeTab === 'Upcoming' && (
-          <View style={styles.toggleSection}>
-            <CustomToggle
-              value={true}
-              onValueChange={() => handleLeaveTrip(item.id)}
-              onLabel="Joined"
-              offLabel="Leave"
-              size="medium"
-            />
-          </View>
-        )
-      }
+
     </Animatable.View >
   );
 

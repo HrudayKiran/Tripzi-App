@@ -70,7 +70,7 @@ export const createNotification = async ({
                 createdAt: firestore.FieldValue.serverTimestamp(),
             });
     } catch (error) {
-        console.error('Error creating notification:', error);
+        
     }
 };
 
@@ -81,25 +81,25 @@ export const NotificationService = {
     // When someone follows you - Handled by Cloud Function 'onUserFollowed'
     onFollow: async (followerId: string, followerName: string, targetUserId: string) => {
         // await createNotification({...}); 
-        console.log('Notification handled by backend: Follow');
+        
     },
 
     // When someone likes your trip - Handled by Cloud Function 'onLikeCreated'
     onLike: async (likerId: string, likerName: string, tripId: string, tripOwnerId: string, tripTitle: string) => {
         // await createNotification({...});
-        console.log('Notification handled by backend: Like');
+        
     },
 
     // When someone comments on your trip - Handled by Cloud Function 'onCommentCreated'
     onComment: async (commenterId: string, commenterName: string, tripId: string, tripOwnerId: string, tripTitle: string) => {
         // await createNotification({...});
-        console.log('Notification handled by backend: Comment');
+        
     },
 
     // When someone joins your trip - Handled by Cloud Function 'onTripJoined'
     onJoinTrip: async (joinerId: string, joinerName: string, tripId: string, tripOwnerId: string, tripTitle: string) => {
         // await createNotification({...});
-        console.log('Notification handled by backend: Join');
+        
     },
 
     // When someone leaves your trip - NOT handled by Cloud Function yet
@@ -117,7 +117,7 @@ export const NotificationService = {
     // When someone rates your completed trip - Handled by Cloud Function 'onRatingCreated'
     onTripRating: async (raterId: string, raterName: string, tripId: string, tripOwnerId: string, tripTitle: string, rating: number) => {
         // await createNotification({...});
-        console.log('Notification handled by backend: Rating');
+        
     },
 
     // KYC verified - Handled by backend/manual
@@ -145,19 +145,19 @@ export const NotificationService = {
     // Trip cancelled - Handled by Cloud Function 'onTripDeleted'
     onTripCancelled: async (participantId: string, tripId: string, tripTitle: string, hostName: string) => {
         // await createNotification({...});
-        console.log('Notification handled by backend: Trip Cancelled');
+        
     },
 
     // Chat message (handled by Cloud Functions for FCM) - Handled by Cloud Function 'onMessageCreated'
     onChatMessage: async (recipientId: string, senderId: string, senderName: string, chatId: string, preview: string) => {
         // await createNotification({...});
-        console.log('Notification handled by backend: Chat Message');
+        
     },
 
     // Report submitted (notify admins) - Handled by Cloud Function 'onReportCreated'
     onReportSubmitted: async (reporterId: string, reportType: string, targetId: string, targetTitle: string) => {
         // await createNotification({...});
-        console.log('Notification handled by backend: Report Submitted');
+        
     },
 
     // Report status update (notify reporter)

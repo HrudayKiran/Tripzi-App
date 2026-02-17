@@ -43,14 +43,12 @@ const UserProfileScreen = ({ route, navigation }) => {
     const [user, setUser] = useState(null);
 
     const [trips, setTrips] = useState([]);
-    const [stories, setStories] = useState<any[]>([
-        { id: 'add', type: 'add' },
-    ]);
+
     const [loading, setLoading] = useState(true);
     const [showEditModal, setShowEditModal] = useState(false);
-    const [showStoryModal, setShowStoryModal] = useState(false);
+
     const [showEditTripModal, setShowEditTripModal] = useState(false);
-    const [currentStory, setCurrentStory] = useState(null);
+
     const [currentTrip, setCurrentTrip] = useState(null);
     const [editName, setEditName] = useState('');
     const [editBio, setEditBio] = useState('');
@@ -70,7 +68,7 @@ const UserProfileScreen = ({ route, navigation }) => {
     const [activeModal, setActiveModal] = useState<'none' | 'report'>('none');
     const [selectedTrip, setSelectedTrip] = useState<any>(null);
 
-    const storyProgress = useRef(new Animated.Value(0)).current;
+
 
     // Header Animation Refs
     const scrollY = useRef(new Animated.Value(0)).current;
@@ -168,7 +166,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                     setTrips(tripsData);
                 }
             }, (error) => {
-                console.warn("Trip listener error:", error);
+
             });
 
         return () => unsubscribe();
@@ -290,50 +288,7 @@ const UserProfileScreen = ({ route, navigation }) => {
         }
     };
 
-    // Add story
-    const addStory = async () => {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-            Alert.alert('Permission needed', 'Please grant camera roll permissions.');
-            return;
-        }
 
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: false,
-            aspect: [9, 16],
-            quality: 0.8,
-        });
-
-        if (!result.canceled && result.assets[0]) {
-            const newStory = {
-                id: Date.now().toString(),
-                image: result.assets[0].uri,
-                title: 'New Story',
-                viewed: false,
-                createdAt: new Date(),
-            };
-            setStories(prev => [prev[0], newStory, ...prev.slice(1)]);
-            Alert.alert('Story Added! 🎉', 'Your story is now visible for 24 hours.');
-        }
-    };
-
-    // View story
-    const viewStory = (story) => {
-        setCurrentStory(story);
-        setShowStoryModal(true);
-        storyProgress.setValue(0);
-
-        Animated.timing(storyProgress, {
-            toValue: 1,
-            duration: 5000,
-            useNativeDriver: false,
-        }).start(() => {
-            setShowStoryModal(false);
-            // Mark as viewed
-            setStories(prev => prev.map(s => s.id === story.id ? { ...s, viewed: true } : s));
-        });
-    };
 
     const handleSaveProfile = async () => {
         if (!currentUser) return;
@@ -358,7 +313,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                     return;
                 }
             } catch (error) {
-                console.warn('Error checking username:', error);
+
             }
             setCheckingUsername(false);
         }
@@ -509,33 +464,7 @@ const UserProfileScreen = ({ route, navigation }) => {
 
 
 
-    const renderStory = ({ item, index }) => {
-        if (item.type === 'add') {
-            return (
-                <Animatable.View animation="fadeInRight" delay={index * 50}>
-                    <TouchableOpacity style={styles.storyItem} onPress={addStory}>
-                        <LinearGradient colors={['#8B5CF6', '#EC4899']} style={styles.addStoryGradient}>
-                            <Ionicons name="add" size={28} color="#fff" />
-                        </LinearGradient>
-                        <Text style={[styles.storyTitle, { color: colors.textSecondary }]}>Add</Text>
-                    </TouchableOpacity>
-                </Animatable.View>
-            );
-        }
-        return (
-            <Animatable.View animation="fadeInRight" delay={index * 50}>
-                <TouchableOpacity style={styles.storyItem} onPress={() => viewStory(item)}>
-                    <LinearGradient
-                        colors={item.viewed ? ['#9CA3AF', '#9CA3AF'] : ['#F59E0B', '#EF4444', '#EC4899']}
-                        style={styles.storyGradient}
-                    >
-                        <Image source={{ uri: item.image }} style={styles.storyImage} />
-                    </LinearGradient>
-                    <Text style={[styles.storyTitle, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
-                </TouchableOpacity>
-            </Animatable.View>
-        );
-    };
+
 
     const renderUserItem = ({ item }) => (
         <TouchableOpacity style={[styles.userItem, { backgroundColor: colors.card }]} onPress={() => navigation.push('UserProfile', { userId: item.id })}>
@@ -725,29 +654,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                 <View style={{ height: 100 }} />
             </ScrollView>
 
-            {/* Story Viewer Modal */}
-            <Modal visible={showStoryModal} transparent animationType="fade">
-                <View style={styles.storyModalContainer}>
-                    <TouchableOpacity style={styles.storyCloseArea} onPress={() => setShowStoryModal(false)} activeOpacity={1}>
-                        {currentStory && (
-                            <>
-                                <View style={styles.storyProgressBar}>
-                                    <Animated.View style={[styles.storyProgress, { width: storyProgress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
-                                </View>
-                                <View style={styles.storyHeader}>
-                                    <Image source={{ uri: user?.photoURL }} style={styles.storyUserAvatar} />
-                                    <Text style={styles.storyUserName}>{user?.displayName}</Text>
-                                    <TouchableOpacity onPress={() => setShowStoryModal(false)}>
-                                        <Ionicons name="close" size={28} color="#fff" />
-                                    </TouchableOpacity>
-                                </View>
-                                <Image source={{ uri: currentStory.image }} style={styles.storyFullImage} resizeMode="contain" />
-                                <Text style={styles.storyCaption}>{currentStory.title}</Text>
-                            </>
-                        )}
-                    </TouchableOpacity>
-                </View>
-            </Modal>
+
 
             {/* Edit Profile Modal - Fullscreen */}
             <Modal visible={showEditModal} animationType="slide">
@@ -1074,12 +981,7 @@ const styles = StyleSheet.create({
     videoIconOverlay: { position: 'absolute', top: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12, padding: 4 },
     gridEditButton: { position: 'absolute', top: 6, right: 6, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12, width: 24, height: 24, justifyContent: 'center', alignItems: 'center' },
 
-    // Restored Story Styles
-    storyItem: { alignItems: 'center', marginRight: SPACING.md },
-    addStoryGradient: { width: 72, height: 72, borderRadius: 36, justifyContent: 'center', alignItems: 'center' },
-    storyTitle: { fontSize: FONT_SIZE.xs, marginTop: SPACING.xs, maxWidth: 70 },
-    storyGradient: { width: 72, height: 72, borderRadius: 36, padding: 3, justifyContent: 'center', alignItems: 'center' },
-    storyImage: { width: 66, height: 66, borderRadius: 33, backgroundColor: '#fff' },
+
 
     // Default Avatar styles
     defaultAvatar: { justifyContent: 'center', alignItems: 'center' },

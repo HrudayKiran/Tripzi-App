@@ -68,7 +68,7 @@ const usePushNotifications = () => {
         // Handle notification when app is in foreground - Just log it now, system handles UI
         unsubscribeOnMessage = onMessage(messaging,
           async (remoteMessage) => {
-            console.log('[PUSH] Foreground notification received:', remoteMessage.notification?.title);
+            
             // System notification will show automatically due to setForegroundNotificationPresentationOptions
           }
         );
@@ -114,21 +114,21 @@ const usePushNotifications = () => {
 
     const getAndSaveToken = async (user: any, freshToken?: string) => {
       try {
-        console.log('[PUSH] getAndSaveToken called for user:', user.uid);
+        
         const messaging = getMessaging();
         const token = freshToken || await getToken(messaging);
 
         if (!token) {
-          console.log('[PUSH] No token received from FCM');
+          
           return;
         }
 
-        console.log('[PUSH] Token received:', token.substring(0, 20) + '...');
+        
 
         await saveTokenToFirestore(user, token);
 
       } catch (error: any) {
-        console.error('[PUSH] Error getting token:', error.message);
+        
       }
     };
 
@@ -151,7 +151,7 @@ const usePushNotifications = () => {
           );
 
           if (existingDeviceId) {
-            console.log('[PUSH] Token already exists for device:', existingDeviceId);
+            
             deviceId = existingDeviceId; // Reuse the existing key
           }
         }
@@ -167,9 +167,9 @@ const usePushNotifications = () => {
           }
         }, { merge: true });
 
-        console.log('[PUSH] Token saved/updated successfully for', deviceId);
+        
       } catch (error: any) {
-        console.error('[PUSH] Error saving token:', error.message);
+        
       }
     };
 
@@ -183,7 +183,7 @@ const usePushNotifications = () => {
   }, []);
 
   const handleNotificationNavigation = (data: NotificationData) => {
-    console.log('[PUSH] Handling notification navigation:', data);
+    
     const route = data.route;
     if (!route) return;
 
@@ -192,7 +192,7 @@ const usePushNotifications = () => {
       try {
         RootNavigation.navigate(name, params);
       } catch (e) {
-        console.error('[PUSH] Navigation failed:', e);
+        
       }
     };
 
@@ -220,7 +220,7 @@ const usePushNotifications = () => {
         navigate('AdminDashboard');
         break;
       default:
-        console.log('[PUSH] Unknown route:', route);
+        
         break;
     }
   };

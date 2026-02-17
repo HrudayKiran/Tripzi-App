@@ -2,7 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import storage from '@react-native-firebase/storage';
 import { Alert, Linking, Platform } from 'react-native';
 
-export type ImageFolder = 'profiles' | 'trips' | 'stories' | 'kyc' | 'chats';
+export type ImageFolder = 'profiles' | 'trips' | 'kyc' | 'chats';
 
 export interface UploadOptions {
     folder: ImageFolder;
@@ -164,7 +164,7 @@ export async function uploadToStorage(
 
         return { success: true, url: downloadUrl, path };
     } catch (error) {
-        console.error('Upload error:', error);
+
         return { success: false, error: 'Upload failed. Please try again.' };
     }
 }
@@ -183,7 +183,7 @@ export async function deleteFromStorage(url: string): Promise<boolean> {
         await reference.delete();
         return true;
     } catch (error) {
-        console.error('Delete from storage error:', error);
+
         return false;
     }
 }
@@ -202,7 +202,7 @@ export async function deleteFromStorageByPath(path: string): Promise<boolean> {
         await reference.delete();
         return true;
     } catch (error) {
-        console.error('Delete from storage error:', error);
+
         return false;
     }
 }

@@ -82,14 +82,14 @@ Expert, Friendly, and App-Aware. Use emojis.
                 const response = await fetch(url, options);
                 // Retry on 503 (Service Unavailable) or 429 (Too Many Requests)
                 if ((response.status === 503 || response.status === 429) && retries > 0) {
-                    console.log(`Service busy (${response.status}). Retrying in ${backoff}ms...`);
+                    
                     await new Promise(resolve => setTimeout(resolve, backoff));
                     return fetchWithRetry(url, options, retries - 1, backoff * 2);
                 }
                 return response;
             } catch (error) {
                 if (retries > 0) {
-                    console.log(`Network error. Retrying in ${backoff}ms...`);
+                    
                     await new Promise(resolve => setTimeout(resolve, backoff));
                     return fetchWithRetry(url, options, retries - 1, backoff * 2);
                 }
@@ -98,7 +98,7 @@ Expert, Friendly, and App-Aware. Use emojis.
         };
 
         try {
-            console.log("Sending to Groq:", text);
+            
 
             // Construct Conversation for OpenAI format
             // System message first
@@ -135,7 +135,7 @@ Expert, Friendly, and App-Aware. Use emojis.
             const data = await response.json();
 
             if (!response.ok) {
-                console.error("Groq API Error:", JSON.stringify(data));
+                
                 // Fallback to generic error if needed, or just let the error throw to catch block
                 // But better to show the error message from Groq if possible
                 if (data.error && data.error.message) {
@@ -152,7 +152,7 @@ Expert, Friendly, and App-Aware. Use emojis.
                     user: aiUser
                 });
             } else {
-                console.error("Groq Error / No Text:", JSON.stringify(data));
+                
 
                 // FALLBACK FOR COORG DEMO IF API FAILS
                 if (text.toLowerCase().includes('coorg')) {
@@ -192,7 +192,7 @@ Expert, Friendly, and App-Aware. Use emojis.
             return responseMessages;
 
         } catch (error: any) {
-            console.error("AI Network Error:", error);
+            
             responseMessages.push({
                 _id: Math.random(),
                 text: "Sorry, I'm having trouble connecting to the AI. Please check your internet connection.",

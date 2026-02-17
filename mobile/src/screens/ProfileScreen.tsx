@@ -83,7 +83,7 @@ const ProfileScreen = ({ navigation }) => {
             } catch (error: any) {
               // Ignore "SIGN_IN_REQUIRED" error as it just means we're already signed out
               if (error.code !== 'SIGN_IN_REQUIRED' && error.message !== 'SIGN_IN_REQUIRED') {
-                console.error('Google Sign-Out Error:', error);
+                
               }
             }
 

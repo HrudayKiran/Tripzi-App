@@ -3,12 +3,10 @@ import React from 'react';
 import { Alert, Linking } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
 import AppNavigator from './src/navigation/AppNavigator';
-import usePushNotifications from './src/hooks/usePushNotifications';
+
 
 export default function App() {
-  // Initialize push notification listeners
-  // Initialize push notification listeners in AppNavigator/AppTabs to access ToastContext
-  // usePushNotifications();
+
 
   // Check for App Updates
   React.useEffect(() => {
@@ -37,7 +35,7 @@ export default function App() {
           }
         }
       } catch (e) {
-        console.log('Version check failed', e);
+
       }
     };
 

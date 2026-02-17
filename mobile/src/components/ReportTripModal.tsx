@@ -81,7 +81,7 @@ const ReportTripModal: React.FC<ReportTripModalProps> = ({ visible, trip, onClos
             setDescription('');
             setReportType('cancellation');
         } catch (error) {
-            console.error(error);
+            
             Alert.alert('Error', 'Failed to submit report');
         } finally {
             setSubmitting(false);

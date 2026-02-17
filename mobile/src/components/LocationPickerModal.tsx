@@ -49,7 +49,7 @@ const LocationPickerModal = ({ visible, onClose, onSelectLocation }: LocationPic
             });
             await fetchAddress(location.coords.latitude, location.coords.longitude);
         } catch (error) {
-            console.error(error);
+            
         } finally {
             setLoading(false);
         }

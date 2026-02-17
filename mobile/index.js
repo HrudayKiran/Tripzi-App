@@ -9,10 +9,10 @@ import App from './App';
 try {
     const messaging = getMessaging();
     messaging.setBackgroundMessageHandler(async remoteMessage => {
-        console.log('Message handled in the background!', remoteMessage);
+        
     });
 } catch (e) {
-    console.log('Failed to set background handler:', e);
+    
 }
 
 registerRootComponent(App);

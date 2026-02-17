@@ -38,7 +38,7 @@ const StartScreen = ({ navigation }) => {
     setLoading(true);
 
     try {
-      console.log('[handleGoogleLogin] Starting flow');
+      
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
       // Force account picker by ensuring previous session is cleared
@@ -60,7 +60,7 @@ const StartScreen = ({ navigation }) => {
       // Sign in to Firebase
       const userCredential = await auth().signInWithCredential(googleCredential);
       const user = userCredential.user;
-      console.log('[handleGoogleLogin] Firebase Auth Success:', user.uid);
+      
 
       // Check Firestore for User Profile
       const userDocRef = firestore().collection('users').doc(user.uid);
@@ -71,14 +71,14 @@ const StartScreen = ({ navigation }) => {
 
       if (docExists) {
         // EXISTING USER: Login
-        console.log('[handleGoogleLogin] Existing user found. Updating login time.');
+        
         await userDocRef.update({
           lastLoginAt: firestore.FieldValue.serverTimestamp(),
         });
         showToast('Welcome back! 🎉');
       } else {
         // NEW USER: Create Profile
-        console.log('[handleGoogleLogin] New user! Creating profile.');
+        
         const { email, displayName, photoURL, uid } = user;
         // Generate a simple username
         const username = email ? email.split('@')[0] : `user_${uid.substring(0, 5)}`;
@@ -101,11 +101,11 @@ const StartScreen = ({ navigation }) => {
       navigation.reset({ index: 0, routes: [{ name: 'App' }] });
 
     } catch (error: any) {
-      console.error('[handleGoogleLogin] Error:', error);
+      
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        console.log('User cancelled login');
+        
       } else if (error.code === statusCodes.IN_PROGRESS) {
-        console.log('Signin in progress');
+        
       } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
         Alert.alert('Error', 'Google Play Services not available or outdated.');
       } else {

@@ -53,6 +53,13 @@ service firebase.storage {
     
     // ==================== PROFILE IMAGES ====================
     
+    // ==================== APP ASSETS ====================
+
+    match /carousel/{allPaths=**} {
+      allow read: if true; // Public read for welcome screen
+      allow write: if isAdmin();
+    }
+    
     // ==================== PROFILE IMAGES ====================
     
     match /profiles/{userId}/{fileName} {

@@ -135,7 +135,7 @@ const AdminDashboardScreen = ({ navigation }) => {
                 suggestions: suggestionsSnapshot.size,
             });
         } catch (e) {
-            console.error('Error fetching stats:', e);
+            
         }
     };
 

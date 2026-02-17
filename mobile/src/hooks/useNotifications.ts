@@ -105,7 +105,7 @@ export function useNotifications(): UseNotificationsReturn {
                     if (err.code?.includes('permission-denied') && !auth().currentUser) {
                         return;
                     }
-                    console.error('Notification listener error:', err);
+                    
                     setError(err);
                     setLoading(false);
                 }
@@ -129,7 +129,7 @@ export function useNotifications(): UseNotificationsReturn {
                     readAt: firestore.FieldValue.serverTimestamp(),
                 });
         } catch (err) {
-            console.error('Error marking notification as read:', err);
+            
             throw err;
         }
     }, []);
@@ -157,7 +157,7 @@ export function useNotifications(): UseNotificationsReturn {
 
             await batch.commit();
         } catch (err) {
-            console.error('Error marking all notifications as read:', err);
+            
             throw err;
         }
     }, []);
@@ -173,7 +173,7 @@ export function useNotifications(): UseNotificationsReturn {
                 .doc(notificationId)
                 .delete();
         } catch (err) {
-            console.error('Error deleting notification:', err);
+            
             throw err;
         }
     }, []);

@@ -65,7 +65,7 @@ const ProfilePictureViewer = ({
                 try {
                     await deleteFromStorage(imageUrl);
                 } catch (e) {
-                    console.log('Storage delete skipped or failed', e);
+                    
                 }
             }
 
@@ -83,7 +83,7 @@ const ProfilePictureViewer = ({
             return; // Exit early as we manually handled success
 
         } catch (error) {
-            console.error('Error deleting profile picture:', error);
+            
             Alert.alert('Error', 'Failed to delete image. Please try again.');
         } finally {
             setIsDeleting(false);

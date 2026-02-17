@@ -90,7 +90,7 @@ export function usePermissions(): UsePermissionsReturn {
                 }
             }
         } catch (error) {
-            console.warn('Notification permission error:', error);
+            
             return false;
         }
     };
@@ -102,7 +102,7 @@ export function usePermissions(): UsePermissionsReturn {
             setPermissions(prev => ({ ...prev, location: granted }));
             return granted;
         } catch (error) {
-            console.warn('Location permission error:', error);
+            
             return false;
         }
     };
@@ -114,7 +114,7 @@ export function usePermissions(): UsePermissionsReturn {
             setPermissions(prev => ({ ...prev, camera: granted }));
             return granted;
         } catch (error) {
-            console.warn('Camera permission error:', error);
+            
             return false;
         }
     };
@@ -126,7 +126,7 @@ export function usePermissions(): UsePermissionsReturn {
             setPermissions(prev => ({ ...prev, mediaLibrary: granted }));
             return granted;
         } catch (error) {
-            console.warn('Media Library permission error:', error);
+            
             return false;
         }
     };

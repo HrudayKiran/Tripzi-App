@@ -95,7 +95,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
 
             setMembers(memberList);
         } catch (error) {
-            console.error('Failed to load group:', error);
+            
         } finally {
             setLoading(false);
         }
@@ -169,7 +169,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
 
             setSearchResults(results);
         } catch (error) {
-            console.error('Search error:', error);
+            
         } finally {
             setSearching(false);
         }
