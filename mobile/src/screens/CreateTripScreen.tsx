@@ -74,27 +74,31 @@ const CreateTripScreen = ({ navigation, route }: any) => {
     // Step 2: Location & Dates
     const [fromLocation, setFromLocation] = useState(initialData?.fromLocation || '');
     const [toLocation, setToLocation] = useState(initialData?.toLocation || '');
-    const [mapsLink, setMapsLink] = useState('');
-    const [fromDate, setFromDate] = useState(new Date());
-    const [toDate, setToDate] = useState(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000));
+    const [mapsLink, setMapsLink] = useState(initialData?.mapsLink || '');
+    const [fromDate, setFromDate] = useState(initialData?.fromDate?.toDate ? initialData.fromDate.toDate() : new Date());
+    const [toDate, setToDate] = useState(initialData?.toDate?.toDate ? initialData.toDate.toDate() : new Date(Date.now() + (initialData?.durationDays || 3) * 24 * 60 * 60 * 1000));
     const [showDateModal, setShowDateModal] = useState<'from' | 'to' | null>(null);
 
     // Step 3: Trip Details
-    const [tripTypes, setTripTypes] = useState<string[]>(initialData?.tripType ? [initialData.tripType] : []);
-    const [transportModes, setTransportModes] = useState<string[]>([]);
-    const [costPerPerson, setCostPerPerson] = useState(initialData?.cost ? String(initialData.cost) : '');
+    // AI returns single string for tripType usually, but we use array
+    const [tripTypes, setTripTypes] = useState<string[]>(initialData?.tripTypes || (initialData?.tripType ? [initialData.tripType] : []));
+
+    // AI returns single string transportMode usually, but we use array
+    const [transportModes, setTransportModes] = useState<string[]>(initialData?.transportModes || (initialData?.transportMode ? [initialData.transportMode] : []));
+
+    const [costPerPerson, setCostPerPerson] = useState(initialData?.costPerPerson ? String(initialData.costPerPerson) : (initialData?.cost ? String(initialData.cost) : ''));
 
     // Step 4: Accommodation & Group
-    const [accommodationType, setAccommodationType] = useState('');
-    const [bookingStatus, setBookingStatus] = useState('');
-    const [accommodationDays, setAccommodationDays] = useState('');
-    const [maxTravelers, setMaxTravelers] = useState('');
-    const [genderPreference, setGenderPreference] = useState('anyone');
+    const [accommodationType, setAccommodationType] = useState(initialData?.accommodationType || '');
+    const [bookingStatus, setBookingStatus] = useState(initialData?.bookingStatus || '');
+    const [accommodationDays, setAccommodationDays] = useState(initialData?.accommodationDays ? String(initialData.accommodationDays) : (initialData?.durationDays ? String(initialData.durationDays) : ''));
+    const [maxTravelers, setMaxTravelers] = useState(initialData?.maxTravelers ? String(initialData.maxTravelers) : '');
+    const [genderPreference, setGenderPreference] = useState(initialData?.genderPreference || 'anyone');
 
     // Step 5: Description
     const [description, setDescription] = useState(initialData?.description || '');
-    const [mandatoryItems, setMandatoryItems] = useState(initialData?.mandatoryItems?.join(', ') || '');
-    const [placesToVisit, setPlacesToVisit] = useState(initialData?.placesToVisit?.join(', ') || '');
+    const [mandatoryItems, setMandatoryItems] = useState(Array.isArray(initialData?.mandatoryItems) ? initialData.mandatoryItems.join(', ') : (initialData?.mandatoryItems || ''));
+    const [placesToVisit, setPlacesToVisit] = useState(Array.isArray(initialData?.placesToVisit) ? initialData.placesToVisit.join(', ') : (initialData?.placesToVisit || ''));
 
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
     const [isPosting, setIsPosting] = useState(false);
@@ -216,7 +220,7 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                         const downloadUrl = await reference.getDownloadURL();
                         uploadedImageUrls.push(downloadUrl);
                     } catch (uploadError) {
-                        
+
                     }
                 }
             }

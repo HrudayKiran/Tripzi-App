@@ -70,7 +70,7 @@ export const createNotification = async ({
                 createdAt: firestore.FieldValue.serverTimestamp(),
             });
     } catch (error) {
-        
+
     }
 };
 
@@ -79,27 +79,27 @@ export const createNotification = async ({
  */
 export const NotificationService = {
     // When someone follows you - Handled by Cloud Function 'onUserFollowed'
-    onFollow: async (followerId: string, followerName: string, targetUserId: string) => {
+    onFollow: async (_followerId: string, _followerName: string, _targetUserId: string) => {
         // await createNotification({...}); 
-        
+
     },
 
     // When someone likes your trip - Handled by Cloud Function 'onLikeCreated'
-    onLike: async (likerId: string, likerName: string, tripId: string, tripOwnerId: string, tripTitle: string) => {
+    onLike: async (_likerId: string, _likerName: string, _tripId: string, _tripOwnerId: string, _tripTitle: string) => {
         // await createNotification({...});
-        
+
     },
 
     // When someone comments on your trip - Handled by Cloud Function 'onCommentCreated'
-    onComment: async (commenterId: string, commenterName: string, tripId: string, tripOwnerId: string, tripTitle: string) => {
+    onComment: async (_commenterId: string, _commenterName: string, _tripId: string, _tripOwnerId: string, _tripTitle: string) => {
         // await createNotification({...});
-        
+
     },
 
     // When someone joins your trip - Handled by Cloud Function 'onTripJoined'
-    onJoinTrip: async (joinerId: string, joinerName: string, tripId: string, tripOwnerId: string, tripTitle: string) => {
+    onJoinTrip: async (_joinerId: string, _joinerName: string, _tripId: string, _tripOwnerId: string, _tripTitle: string) => {
         // await createNotification({...});
-        
+
     },
 
     // When someone leaves your trip - NOT handled by Cloud Function yet
@@ -115,9 +115,9 @@ export const NotificationService = {
     },
 
     // When someone rates your completed trip - Handled by Cloud Function 'onRatingCreated'
-    onTripRating: async (raterId: string, raterName: string, tripId: string, tripOwnerId: string, tripTitle: string, rating: number) => {
+    onTripRating: async (_raterId: string, _raterName: string, _tripId: string, _tripOwnerId: string, _tripTitle: string, _rating: number) => {
         // await createNotification({...});
-        
+
     },
 
     // KYC verified - Handled by backend/manual
@@ -143,21 +143,21 @@ export const NotificationService = {
     },
 
     // Trip cancelled - Handled by Cloud Function 'onTripDeleted'
-    onTripCancelled: async (participantId: string, tripId: string, tripTitle: string, hostName: string) => {
+    onTripCancelled: async (participantId: string, _tripId: string, _tripTitle: string, _hostName: string) => {
         // await createNotification({...});
-        
+
     },
 
     // Chat message (handled by Cloud Functions for FCM) - Handled by Cloud Function 'onMessageCreated'
-    onChatMessage: async (recipientId: string, senderId: string, senderName: string, chatId: string, preview: string) => {
+    onChatMessage: async (_recipientId: string, _senderId: string, _senderName: string, _chatId: string, _preview: string) => {
         // await createNotification({...});
-        
+
     },
 
     // Report submitted (notify admins) - Handled by Cloud Function 'onReportCreated'
-    onReportSubmitted: async (reporterId: string, reportType: string, targetId: string, targetTitle: string) => {
+    onReportSubmitted: async (_reporterId: string, _reportType: string, _targetId: string, _targetTitle: string) => {
         // await createNotification({...});
-        
+
     },
 
     // Report status update (notify reporter)

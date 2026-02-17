@@ -23,7 +23,7 @@ const AIChatScreen = ({ navigation }: any) => {
         setMessages([
             {
                 _id: 1,
-                text: "Hi! I'm Tripzi AI. 🤖\n\nI can plan entire trips for you in seconds. Try asking:\n\n\"Plan a 3-day trip to Goa under ₹10k\"",
+                text: "Hi! I'm Tripzi AI. 🤖\n\nI can act as your personal travel consultant. Tell me where you want to go, and I'll ask you for details to create the perfect trip plan!\n\nTry: \"Plan a trip to Coorg\"",
                 createdAt: new Date(),
                 user: {
                     _id: 'tripzi-ai',
@@ -49,7 +49,7 @@ const AIChatScreen = ({ navigation }: any) => {
                     setIsAgeVerified(false);
                 }
             } catch (error) {
-                
+
                 setIsAgeVerified(false);
             } finally {
                 setIsLoadingProfile(false);
@@ -80,7 +80,7 @@ const AIChatScreen = ({ navigation }: any) => {
             const newAiMessages = responses.reverse();
             setMessages(prev => [...newAiMessages, ...prev]);
         } catch (error) {
-            
+
             Alert.alert("Error", "Failed to connect to AI. Please try again.");
         } finally {
             setIsTyping(false);
@@ -146,53 +146,56 @@ const AIChatScreen = ({ navigation }: any) => {
             [
                 { text: "Cancel", style: "cancel" },
                 {
-                    text: "Review & Post", // Changed text to be clearer
+                    text: "Review & Post",
                     onPress: async () => {
                         try {
                             // Prepare image URLs using LoremFlickr (Stock photos)
-                            // Use keywords provided by AI, or fallback to location name
                             const imageKeywords = trip.imageKeywords || [];
                             const mainKeyword = imageKeywords[0] || trip.toLocation;
 
-                            // Helper to generate URL
-                            const getImageUrl = (keyword: string) => `https://loremflickr.com/800/600/${encodeURIComponent(keyword)}?random=${Math.random()}`;
+                            // Helper to generate URL - use specific keywords
+                            // key is to use simple terms. 
+                            const getImageUrl = (keyword: string) => {
+                                const cleanKeyword = keyword.split(',')[0].trim(); // Take first word if comma separated
+                                return `https://loremflickr.com/800/600/${encodeURIComponent(cleanKeyword)}/all`;
+                            };
 
                             const coverImageUri = getImageUrl(mainKeyword);
                             const finalImages = imageKeywords.length > 0
                                 ? imageKeywords.map((k: string) => getImageUrl(k))
                                 : [coverImageUri];
 
-                            // Construct Trip Data
+                            // Construct Trip Data with STRICT mapping
                             const tripData = {
                                 title: trip.title,
                                 images: finalImages,
-                                imageLocations: [], // AI doesn't give specific lat/long yet
+                                imageLocations: imageKeywords, // Save keywords as "locations" for reference
                                 fromLocation: trip.fromLocation || 'Unknown',
                                 toLocation: trip.toLocation,
                                 mapsLink: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trip.toLocation)}`,
-                                fromDate: firestore.Timestamp.now(), // Default to now if not parsed (AI needs to be better at this)
-                                toDate: firestore.Timestamp.fromMillis(Date.now() + 3 * 24 * 60 * 60 * 1000), // Default 3 days
-                                duration: "3 days",
-                                tripTypes: [trip.tripType || 'Adventure'],
-                                transportModes: ['mixed'],
+                                fromDate: firestore.Timestamp.now(), // Default to now (AI doesn't give specific dates usually)
+                                toDate: firestore.Timestamp.fromMillis(Date.now() + (trip.durationDays || 3) * 24 * 60 * 60 * 1000),
+                                duration: `${trip.durationDays || 3} days`,
+                                tripTypes: [trip.tripType || 'adventure'],
+                                transportModes: [trip.transportMode || 'mixed'], // New Field
                                 costPerPerson: trip.cost || 0,
                                 totalCost: trip.cost || 0,
                                 cost: trip.cost || 0,
-                                accommodationType: 'hotel',
+                                accommodationType: trip.accommodationType || 'hotel', // New Field
                                 bookingStatus: 'to_book',
-                                accommodationDays: 3,
-                                maxTravelers: 5,
+                                accommodationDays: trip.durationDays || 3,
+                                maxTravelers: trip.maxTravelers || 5, // New Field
                                 currentTravelers: 1,
                                 genderPreference: 'anyone',
                                 description: trip.description,
-                                mandatoryItems: [],
+                                mandatoryItems: trip.mandatoryItems || [], // New Field
                                 placesToVisit: trip.placesToVisit || [],
                                 userId: currentUser.uid,
                                 participants: [currentUser.uid],
                                 likes: [],
                                 createdAt: firestore.FieldValue.serverTimestamp(),
                                 location: trip.toLocation,
-                                tripType: trip.tripType || 'Adventure',
+                                tripType: trip.tripType || 'adventure',
                                 coverImage: finalImages[0],
                             };
 
@@ -221,7 +224,7 @@ const AIChatScreen = ({ navigation }: any) => {
                             setMessages(prev => [successMsg, ...prev]);
 
                         } catch (error: any) {
-                            
+
                             Alert.alert("Error", "Failed to auto-post trip. Please try 'Edit & Post' instead.");
                         }
                     }
@@ -233,27 +236,49 @@ const AIChatScreen = ({ navigation }: any) => {
     const renderTripCard = (jsonString: string) => {
         try {
             // ROBUST JSON EXTRACTION:
-            // Find the *first* opening brace and *last* closing brace, ignoring markdown
-            const firstBrace = jsonString.indexOf('{');
-            const lastBrace = jsonString.lastIndexOf('}');
+            let potentialJson = '';
 
-            if (firstBrace === -1 || lastBrace === -1) return null;
+            // 1. Try to find JSON inside code blocks first ```json ... ```
+            const codeBlockRegex = /```json\s*([\s\S]*?)\s*```/;
+            const match = jsonString.match(codeBlockRegex);
 
-            const potentialJson = jsonString.substring(firstBrace, lastBrace + 1);
+            if (match && match[1]) {
+                potentialJson = match[1];
+            } else {
+                // 2. Fallback: Find first '{' and last '}'
+                const firstBrace = jsonString.indexOf('{');
+                const lastBrace = jsonString.lastIndexOf('}');
+                if (firstBrace === -1 || lastBrace === -1) return null;
+                potentialJson = jsonString.substring(firstBrace, lastBrace + 1);
+            }
+
+            // Remove control characters that might break JSON (newlines, tabs in wrong places)
+            // But we need to keep spaces.
+            // A simple approach is just to parse.
+
             const trip = JSON.parse(potentialJson);
 
             if (trip.type !== 'trip_plan') return null;
+
+            // Normalize Description if Itinerary exists
+            if (trip.itinerary && Array.isArray(trip.itinerary)) {
+                trip.description = trip.description + "\n\n" + trip.itinerary.join("\n");
+            }
 
             // Generate Image URLs using LoremFlickr handling
             // We use keywords if available (from new prompt), else check imagePrompts (legacy), else location
             const keywords = trip.imageKeywords || trip.imagePrompts || [];
             const mainKeyword = keywords[0] || trip.toLocation;
 
-            // Note: trip.imagePrompts in legacy might be long descriptions, so we prefer toLocation if keywords missing
-            // But let's try to use the first word or just the location + 'travel' for safety if using description
-            const searchBase = trip.imageKeywords ? mainKeyword : (trip.toLocation + ' travel');
+            // Helper to generate URL - use specific keywords
+            // key is to use simple terms. 
+            const getImageUrl = (keyword: string) => {
+                // Take first 2 words max to be specific but not too long
+                const cleanKeyword = keyword.split(',')[0].trim().split(' ').slice(0, 2).join(' ');
+                return `https://loremflickr.com/800/600/${encodeURIComponent(cleanKeyword)}/all`;
+            };
 
-            const coverImageUri = `https://loremflickr.com/800/600/${encodeURIComponent(searchBase)}?random=${Math.random()}`;
+            const coverImageUri = getImageUrl(mainKeyword);
 
             return (
                 <Animatable.View animation="fadeInUp" style={[styles.tripCard, { backgroundColor: colors.card, shadowColor: '#000' }]}>
@@ -294,10 +319,14 @@ const AIChatScreen = ({ navigation }: any) => {
                         </View>
                         <View style={styles.tripCardRow}>
                             <Ionicons name="time" size={16} color={colors.textSecondary} />
-                            <Text style={[styles.tripCardText, { color: colors.text }]}>~3 Days</Text>
+                            <Text style={[styles.tripCardText, { color: colors.text }]}>~{trip.durationDays} Days</Text>
+                        </View>
+                        <View style={styles.tripCardRow}>
+                            <Ionicons name="bus" size={16} color={colors.textSecondary} />
+                            <Text style={[styles.tripCardText, { color: colors.text }]} numberOfLines={1}>{trip.transportMode || 'Mixed'}</Text>
                         </View>
 
-                        <Text style={[styles.tripCardDesc, { color: colors.textSecondary }]} numberOfLines={2}>
+                        <Text style={[styles.tripCardDesc, { color: colors.textSecondary, maxHeight: 100 }]} numberOfLines={4}>
                             {trip.description}
                         </Text>
 
@@ -333,7 +362,7 @@ const AIChatScreen = ({ navigation }: any) => {
                 </Animatable.View>
             );
         } catch (e) {
-            
+
             return null; // Fallback to showing text
         }
     };
@@ -344,11 +373,7 @@ const AIChatScreen = ({ navigation }: any) => {
         // Check if message contains JSON for a trip plan (look for "type" and "trip_plan" generally)
         const tripCard = !isUser && (item.text.includes('trip_plan') && item.text.includes('type')) ? renderTripCard(item.text) : null;
 
-        // If it's a trip card, we might hide the raw JSON or show a summary
-        // For now, if we successfully rendered a card, we show ONLY the card + a small text summary if needed.
-        // Or we show the card AND the text (if the text has distinct parts).
-        // Simple approach: If card exists, show card. If text is just the JSON, hide text.
-
+        // If it's a trip card, we HIDE the text bubble completely to avoid showing raw JSON
         const showText = !tripCard;
 
         return (

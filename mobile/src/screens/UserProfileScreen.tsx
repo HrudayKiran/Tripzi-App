@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, ActivityIndicator, Modal, TextInput, FlatList, Dimensions, Alert, Animated } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, ActivityIndicator, Modal, TextInput, Dimensions, Alert, Animated } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Ionicons } from '@expo/vector-icons';
@@ -9,7 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
 import TripCard from '../components/TripCard';
 import ProfilePictureViewer from '../components/ProfilePictureViewer';
 import DefaultAvatar from '../components/DefaultAvatar';
@@ -466,16 +466,7 @@ const UserProfileScreen = ({ route, navigation }) => {
 
 
 
-    const renderUserItem = ({ item }) => (
-        <TouchableOpacity style={[styles.userItem, { backgroundColor: colors.card }]} onPress={() => navigation.push('UserProfile', { userId: item.id })}>
-            <Image source={{ uri: item.photoURL || undefined }} style={styles.userAvatar} />
-            <View style={styles.userInfo}>
-                <Text style={[styles.userItemName, { color: colors.text }]}>{item.displayName || 'User'}</Text>
-                {item.username && <Text style={[styles.userItemUsername, { color: colors.primary }]}>@{item.username}</Text>}
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.primary} />
-        </TouchableOpacity>
-    );
+
 
     // Content Rendering
     const renderTripGrid = () => (

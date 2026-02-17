@@ -15,7 +15,7 @@ import usePermissions from '../hooks/usePermissions';
 
 import LaunchScreen from '../screens/LaunchScreen';
 import WelcomeScreen from '../screens/WelcomeScreen';
-import OnboardingScreen from '../screens/OnboardingScreen';
+
 import StartScreen from '../screens/StartScreen';
 import FeedScreen from '../screens/FeedScreen';
 import SearchScreen from '../screens/SearchScreen';
@@ -250,7 +250,7 @@ const AppNavigator = () => {
                         {/* Auth Flow Screens */}
                         <Stack.Screen name="Launch" component={LaunchScreen} />
                         <Stack.Screen name="Welcome" component={WelcomeScreen} />
-                        <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+
                         <Stack.Screen name="Start" component={StartScreen} />
 
                         {/* Main App */}
@@ -277,6 +277,7 @@ const AppNavigator = () => {
                         <Stack.Screen name="SuggestFeature" component={SuggestFeatureScreen} />
                         <Stack.Screen name="Settings" component={SettingsScreen} />
                         <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+                        <Stack.Screen name="UserProfile" component={UserProfileScreen} />
 
                     </Stack.Navigator>
                 </NavigationContainer>
