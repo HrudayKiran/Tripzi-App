@@ -26,3 +26,6 @@ dist-ssr
 
 # Expo
 .expo/
+
+# Specific secrets
+scripts/service-account.json
