@@ -1,52 +1,57 @@
-
-import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
+import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { db } from '../utils/firebase';
 import { createNotification } from '../utils/notifications';
 
 // ==================== SYSTEM NOTIFICATIONS ====================
 
 /**
- * Notify ALL users when a new App Version is released.
- * Listens to: config/version
+ * Shared handler for version config changes.
  */
-export const onAppVersionUpdated = onDocumentUpdated(
-    { document: "config/version" },
-    async (event) => {
-        if (!event.data) return;
+const handleVersionConfigChange = async (event: any) => {
+    const beforeData = event.data?.before?.data() || {};
+    const afterData = event.data?.after?.data();
 
-        const afterData = event.data.after.data();
-        const newVersion = afterData.latestVersion;
-        const releaseNotes = afterData.releaseNotes || "New features available!";
+    // Ignore deletes.
+    if (!afterData) return;
 
-        if (newVersion) {
-            // WARNING: Broadcasting to ALL users is expensive and slow for large user bases.
-            // For v1.0.0 (small scale), we can iterate 'users' collection.
-            // For scale, use FCM Topics ('all_users').
+    const previousVersion = beforeData.latestVersion;
+    const newVersion = afterData.latestVersion;
 
-            // 1. Send Topic Message (Best Practice for Mass Push)
-            /*
-            await messaging.send({
-                topic: 'all_users',
-                notification: { title: 'Update Available! 🚀', body: `Tripzi ${newVersion} is here.` }
-            });
-            */
+    // Only notify when version actually changes.
+    if (!newVersion || newVersion === previousVersion) return;
 
-            // 2. In-App Notifications (Iterating users - simple for now)
-            const usersSnapshot = await db.collection('users').get();
+    const releaseNotes = afterData.releaseNotes || 'New features available!';
+    const storeUrl = afterData.storeUrl || 'https://play.google.com/store/apps/details?id=com.tripzi.mobile';
 
-            const batchPromises = usersSnapshot.docs.map(async (userDoc) => {
-                const userId = userDoc.id;
-                await createNotification({
-                    recipientId: userId,
-                    type: "system",
-                    title: "Update Available 🚀",
-                    message: `Tripzi ${newVersion} is available: ${releaseNotes}`,
-                    deepLinkRoute: "ExternalLink",
-                    deepLinkParams: { url: afterData.storeUrl || "https://play.google.com/store/apps/details?id=com.tripzi.mobile" },
-                });
-            });
+    const usersSnapshot = await db.collection('users').get();
 
-            await Promise.all(batchPromises);
-        }
-    }
+    const batchPromises = usersSnapshot.docs.map((userDoc) =>
+        createNotification({
+            recipientId: userDoc.id,
+            type: 'system',
+            title: 'Update Available 🚀',
+            message: `Tripzi ${newVersion} is available: ${releaseNotes}`,
+            deepLinkRoute: 'ExternalLink',
+            deepLinkParams: { url: storeUrl },
+        })
+    );
+
+    await Promise.all(batchPromises);
+};
+
+/**
+ * Canonical config document trigger.
+ */
+export const onAppSettingsUpdated = onDocumentWritten(
+    { document: 'config/app_settings' },
+    handleVersionConfigChange
+);
+
+/**
+ * Legacy compatibility trigger.
+ * Keep temporarily until all writes are migrated to config/app_settings.
+ */
+export const onLegacyVersionUpdated = onDocumentWritten(
+    { document: 'config/version' },
+    handleVersionConfigChange
 );

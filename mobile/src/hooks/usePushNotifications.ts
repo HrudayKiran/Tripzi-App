@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Platform, Alert } from 'react-native';
+import { Platform, Alert, Linking } from 'react-native';
 import fs, { getFirestore, collection, doc, setDoc, serverTimestamp, getDoc } from '@react-native-firebase/firestore';
 import ms, { getMessaging, getToken, onMessage, onNotificationOpenedApp, getInitialNotification, requestPermission, AuthorizationStatus } from '@react-native-firebase/messaging';
 import au, { getAuth, onAuthStateChanged } from '@react-native-firebase/auth';
@@ -10,6 +10,7 @@ interface NotificationData {
   tripId?: string;
   chatId?: string;
   userId?: string;
+  url?: string;
   [key: string]: string | undefined;
 }
 
@@ -216,8 +217,10 @@ const usePushNotifications = () => {
           navigate('UserProfile', {}); // Go to own profile
         }
         break;
-      case 'AdminDashboard':
-        navigate('AdminDashboard');
+      case 'ExternalLink':
+        if (data.url) {
+          Linking.openURL(data.url).catch(() => { });
+        }
         break;
       default:
         

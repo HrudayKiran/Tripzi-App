@@ -6,7 +6,7 @@ import { createNotification, sendPushToUser } from '../utils/notifications';
 // ==================== REPORT NOTIFICATIONS ====================
 
 /**
- * Notify admins and host when a new report is created.
+ * Notify the reporter and host when a new report is created.
  */
 export const onReportCreated = onDocumentCreated(
     { document: "reports/{reportId}" },
@@ -20,20 +20,16 @@ export const onReportCreated = onDocumentCreated(
         const targetType = reportData.targetType;
         const reason = reportData.reason;
 
-        // 1. Notify Admins
-        const adminsSnapshot = await db.collection("users").where("role", "==", "admin").get();
-
-        for (const adminDoc of adminsSnapshot.docs) {
-            await createNotification({
-                recipientId: adminDoc.id,
-                type: "system",
-                title: "🚨 New Report Received",
-                message: `A ${targetType} was reported for: ${reason}`,
-                entityId: event.params.reportId,
-                entityType: "report",
-                deepLinkRoute: "AdminDashboard",
-            });
-        }
+        // 1. Notify Reporter
+        await createNotification({
+            recipientId: reporterId,
+            type: "report_submitted",
+            title: "Report Submitted",
+            message: "Thanks for your report. We received it and will review it.",
+            entityId: event.params.reportId,
+            entityType: "report",
+            deepLinkRoute: "Profile",
+        });
 
         // 2. Notify Host (if it's a trip report)
         if (targetType === 'trip' && targetId) {
@@ -56,7 +52,7 @@ export const onReportCreated = onDocumentCreated(
                         });
 
                         await sendPushToUser(hostId, {
-                            title: "Trip Under Review ⚠️",
+                            title: "Trip Reported ⚠️",
                             body: `Your trip "${tripData?.title}" has been reported for: ${reason}.`,
                             data: { route: "TripDetails", tripId: targetId },
                         });

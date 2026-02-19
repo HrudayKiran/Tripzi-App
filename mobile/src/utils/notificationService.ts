@@ -3,8 +3,6 @@
  * Centralized notification creation for all app events
  */
 
-import firestore from '@react-native-firebase/firestore';
-
 export type NotificationType =
     | 'follow'
     | 'like'
@@ -50,28 +48,10 @@ export const createNotification = async ({
     data = {},
     senderId,
 }: CreateNotificationParams): Promise<void> => {
-    try {
-        // Don't send notification to yourself
-        if (senderId && senderId === recipientId) {
-            return;
-        }
-
-        await firestore()
-            .collection('notifications')
-            .doc(recipientId)
-            .collection('items')
-            .add({
-                type,
-                title,
-                body,
-                data,
-                senderId: senderId || null,
-                read: false,
-                createdAt: firestore.FieldValue.serverTimestamp(),
-            });
-    } catch (error) {
-
-    }
+    // P0 security hardening:
+    // Client-side notification writes are disabled by Firestore rules.
+    // Notification creation is backend-only via Cloud Functions triggers.
+    return;
 };
 
 /**

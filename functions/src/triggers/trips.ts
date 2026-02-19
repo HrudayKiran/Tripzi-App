@@ -6,6 +6,30 @@ import * as admin from 'firebase-admin';
 
 // ==================== TRIP NOTIFICATIONS ====================
 
+const firstDefined = (...values: any[]): any => {
+    for (const value of values) {
+        if (value !== undefined && value !== null) {
+            return value;
+        }
+    }
+    return null;
+};
+
+const getComparableTimestamp = (value: any): number | null => {
+    if (value === undefined || value === null) return null;
+
+    if (typeof value.toMillis === 'function') {
+        return value.toMillis();
+    }
+
+    if (typeof value.seconds === 'number') {
+        return value.seconds * 1000;
+    }
+
+    const parsed = new Date(value).getTime();
+    return Number.isNaN(parsed) ? null : parsed;
+};
+
 
 /**
  * Handle Trip Joins: Create/Update Group Chat & Notify
@@ -87,18 +111,8 @@ export const onTripJoin = onDocumentUpdated(
                         : `You successfully joined "${tripTitle}". Pack your bags!`,
                     entityId: tripId,
                     entityType: "trip",
-                    deepLinkRoute: "Chat", // Direct to chat if exists, else trip details logic? 
-                    // Actually, if chat exists, we might want to deep link to it. 
-                    // But for now, let's keep it safe. 
-                    // Wait, user asked NOT to navigate to chat on click? 
-                    // "when clicked on join it should not go to chat... instead in background..."
-                    // This was about the BUTTON click in UI. 
-                    // For Notification click, dropping them in Chat is probably good.
+                    deepLinkRoute: chatId ? "Chat" : "TripDetails",
                     deepLinkParams: chatId ? { chatId } : { tripId },
-                    // If we pass chatId, the app needs to handle it. 
-                    // "Chat" route expects { chatId }. 
-                    // If no chat, we fall back to TripDetails? 
-                    // Let's safe-guard: if chatId exists, route to "Chat", else "TripDetails"
                 });
 
                 // Correcting the deepLinkRoute based on chat existence
@@ -210,7 +224,6 @@ export const onTripUpdated = onDocumentUpdated(
         }
 
         // 2. Check for Critical Detail Updates
-        // Skip if it was just a participant change or like
 
         const isDifferent = (a: any, b: any) => {
             // Treat undefined and null as equal
@@ -222,22 +235,24 @@ export const onTripUpdated = onDocumentUpdated(
             return a !== b;
         };
 
+        const beforeDestination = firstDefined(beforeData.toLocation, beforeData.location, beforeData.destination);
+        const afterDestination = firstDefined(afterData.toLocation, afterData.location, afterData.destination);
+
+        const beforeCost = firstDefined(beforeData.cost, beforeData.costPerPerson, beforeData.totalCost, beforeData.price);
+        const afterCost = firstDefined(afterData.cost, afterData.costPerPerson, afterData.totalCost, afterData.price);
+
+        const beforeStartDate = firstDefined(beforeData.fromDate, beforeData.startDate);
+        const afterStartDate = firstDefined(afterData.fromDate, afterData.startDate);
+
+        const beforeEndDate = firstDefined(beforeData.toDate, beforeData.endDate);
+        const afterEndDate = firstDefined(afterData.toDate, afterData.endDate);
+
         const isTitleChanged = isDifferent(beforeData.title, afterData.title);
-        const isDestinationChanged = isDifferent(beforeData.destination, afterData.destination);
+        const isDestinationChanged = isDifferent(beforeDestination, afterDestination);
         const isDescriptionChanged = isDifferent(beforeData.description, afterData.description);
-
-        // Handle potential Timestamp objects or strings for dates
-        const getTs = (d: any) => d?.toMillis ? d.toMillis() : (d?.seconds ? d.seconds * 1000 : new Date(d).getTime());
-        const beforeStart = getTs(beforeData.startDate);
-        const afterStart = getTs(afterData.startDate);
-        // Special date check: if both invalid/missing, equal.
-        const isStartDateChanged = (beforeStart || 0) !== (afterStart || 0);
-
-        const beforeEnd = getTs(beforeData.endDate);
-        const afterEnd = getTs(afterData.endDate);
-        const isEndDateChanged = (beforeEnd || 0) !== (afterEnd || 0);
-
-        const isPriceChanged = isDifferent(beforeData.price, afterData.price);
+        const isStartDateChanged = getComparableTimestamp(beforeStartDate) !== getComparableTimestamp(afterStartDate);
+        const isEndDateChanged = getComparableTimestamp(beforeEndDate) !== getComparableTimestamp(afterEndDate);
+        const isPriceChanged = isDifferent(beforeCost, afterCost);
 
         const isDetailUpdate =
             isTitleChanged ||

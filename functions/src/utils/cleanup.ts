@@ -1,206 +1,181 @@
-
 import * as admin from 'firebase-admin';
 import { db } from './firebase';
 
+const safeDeleteStoragePrefix = async (bucket: any, prefix: string) => {
+    try {
+        await bucket.deleteFiles({ prefix });
+    } catch (error) {
+        console.log(`Storage delete skipped for prefix "${prefix}":`, error);
+    }
+};
+
+const safeDeleteStorageUrl = async (bucket: any, url?: string) => {
+    if (!url || typeof url !== 'string') return;
+
+    try {
+        const decodedUrl = decodeURIComponent(url);
+        const match = decodedUrl.match(/\/o\/([^?]+)/);
+        if (!match?.[1]) return;
+
+        const path = match[1];
+        await bucket.file(path).delete().catch(() => { });
+    } catch (error) {
+        console.log('Unable to delete storage by URL:', error);
+    }
+};
+
+const deleteSubcollectionDocs = async (
+    collectionRef: any,
+    bulkWriter: any
+) => {
+    const snapshot = await collectionRef.get();
+    snapshot.forEach((doc: any) => bulkWriter.delete(doc.ref));
+};
+
 /**
  * Completely wipes a user's data from Firestore and Storage.
- * Designed to be called by Auth Triggers or Admin functions.
- * 
- * STRATEGY: "User Isolation"
- * - All Storage is deleted via user-specific prefixes: `profiles/{uid}`, `trips/{uid}`, `chats/{uid}`.
- * - All Firestore data is identified via `userId` queries.
- * - Shared data (Participants, Likes) is cleaned via array ref removal.
+ * Designed to be called by Auth triggers or callable account deletion.
  */
 export const wipeUserData = async (uid: string) => {
     console.log(`Starting comprehensive wipe for user: ${uid}`);
+
     const bulkWriter = db.bulkWriter();
-    const storage = admin.storage();
-    const bucket = storage.bucket();
+    const bucket = admin.storage().bucket();
 
     try {
-        // ==================== A. OWNED DATA (Direct Deletion) ====================
+        // ==================== A. OWNED ROOT DOCS ====================
 
-        // 1. User Profile & Notifications
-        // Deletes `users/{uid}` and subcollections like `notifications`
         const userRef = db.collection('users').doc(uid);
-        // Note: bulkWriter.delete ignores subcollections. We must list them.
-        const notifsSnapshot = await userRef.collection('items').get();
-        notifsSnapshot.forEach(doc => bulkWriter.delete(doc.ref));
         bulkWriter.delete(userRef);
 
-        // 2. Push Tokens
+        // Notifications now live at notifications/{uid}/items/*
+        const notificationsRootRef = db.collection('notifications').doc(uid);
+        await deleteSubcollectionDocs(notificationsRootRef.collection('items'), bulkWriter);
+        bulkWriter.delete(notificationsRootRef);
+
         bulkWriter.delete(db.collection('push_tokens').doc(uid));
 
-        // 3. Owned Trips
-        const ownedTripsQuery = await db.collection('trips').where('userId', '==', uid).get();
-        for (const tripDoc of ownedTripsQuery.docs) {
+        // ==================== B. OWNED COLLECTION DATA ====================
+
+        const ownedTripsSnapshot = await db.collection('trips').where('userId', '==', uid).get();
+        const ownedTripIds = new Set<string>();
+        ownedTripsSnapshot.forEach((tripDoc) => {
+            ownedTripIds.add(tripDoc.id);
             bulkWriter.delete(tripDoc.ref);
-            // Note: Storage for these trips is deleted in bulk below (C.2)
-        }
-
-        // 4. Ratings (Given by user)
-        const ratingsQuery = await db.collection('ratings').where('raterId', '==', uid).get();
-        ratingsQuery.forEach(doc => bulkWriter.delete(doc.ref));
-
-        // 5. Reports (Submitted by user)
-        const reportsQuery = await db.collection('reports').where('reporterId', '==', uid).get();
-        reportsQuery.forEach(doc => bulkWriter.delete(doc.ref));
-
-        // 6. Comments (Collection Group Query)
-        // Deleting all comments made by user across all trips
-        const commentsQuery = await db.collectionGroup('comments').where('userId', '==', uid).get();
-        commentsQuery.forEach(doc => bulkWriter.delete(doc.ref));
-
-
-        // ==================== B. SHARED DATA (Array Removal) ====================
-
-        // 7. Joined Trips (Remove from participants)
-        const joinedTripsQuery = await db.collection('trips').where('participants', 'array-contains', uid).get();
-        joinedTripsQuery.forEach(doc => {
-            // Only update if not already being deleted (owned trips are handled above)
-            if (doc.data().userId !== uid) {
-                bulkWriter.update(doc.ref, {
-                    participants: admin.firestore.FieldValue.arrayRemove(uid)
-                });
-            }
         });
 
-        // 8. Liked Trips (Remove from likes)
-        const likedTripsQuery = await db.collection('trips').where('likes', 'array-contains', uid).get();
-        likedTripsQuery.forEach(doc => {
-            bulkWriter.update(doc.ref, {
-                likes: admin.firestore.FieldValue.arrayRemove(uid)
+        const ratingDeletePaths = new Set<string>();
+        const ratingsByUserSnapshot = await db.collection('ratings').where('userId', '==', uid).get();
+        ratingsByUserSnapshot.forEach((doc) => {
+            if (ratingDeletePaths.has(doc.ref.path)) return;
+            ratingDeletePaths.add(doc.ref.path);
+            bulkWriter.delete(doc.ref);
+        });
+
+        const ratingsForHostSnapshot = await db.collection('ratings').where('hostId', '==', uid).get();
+        ratingsForHostSnapshot.forEach((doc) => {
+            if (ratingDeletePaths.has(doc.ref.path)) return;
+            ratingDeletePaths.add(doc.ref.path);
+            bulkWriter.delete(doc.ref);
+        });
+
+        const reportsByUserSnapshot = await db.collection('reports').where('reporterId', '==', uid).get();
+        const ownedReportIds: string[] = [];
+        reportsByUserSnapshot.forEach((doc) => {
+            ownedReportIds.push(doc.id);
+            bulkWriter.delete(doc.ref);
+        });
+
+        const feedbackCollections: Array<{ name: string; ownerField: string }> = [
+            { name: 'suggestions', ownerField: 'userId' },
+            { name: 'bugs', ownerField: 'userId' },
+            { name: 'feature_requests', ownerField: 'userId' },
+        ];
+
+        for (const feedback of feedbackCollections) {
+            const snapshot = await db.collection(feedback.name).where(feedback.ownerField, '==', uid).get();
+            snapshot.forEach((doc) => bulkWriter.delete(doc.ref));
+        }
+
+        // ==================== C. SHARED DATA REFERENCES ====================
+
+        const joinedTripsSnapshot = await db.collection('trips').where('participants', 'array-contains', uid).get();
+        joinedTripsSnapshot.forEach((tripDoc) => {
+            if (tripDoc.data().userId === uid || ownedTripIds.has(tripDoc.id)) return;
+            bulkWriter.update(tripDoc.ref, {
+                participants: admin.firestore.FieldValue.arrayRemove(uid),
             });
         });
 
-        // 9. Chats
-        const chatsQuery = await db.collection('chats').where('participants', 'array-contains', uid).get();
-        for (const chatDoc of chatsQuery.docs) {
+        const likedTripsSnapshot = await db.collection('trips').where('likes', 'array-contains', uid).get();
+        likedTripsSnapshot.forEach((tripDoc) => {
+            bulkWriter.update(tripDoc.ref, {
+                likes: admin.firestore.FieldValue.arrayRemove(uid),
+            });
+        });
+
+        const followerSnapshot = await db.collection('users').where('followers', 'array-contains', uid).get();
+        followerSnapshot.forEach((doc) => {
+            bulkWriter.update(doc.ref, {
+                followers: admin.firestore.FieldValue.arrayRemove(uid),
+            });
+        });
+
+        const followingSnapshot = await db.collection('users').where('following', 'array-contains', uid).get();
+        followingSnapshot.forEach((doc) => {
+            bulkWriter.update(doc.ref, {
+                following: admin.firestore.FieldValue.arrayRemove(uid),
+            });
+        });
+
+        // ==================== D. CHATS ====================
+
+        const chatsSnapshot = await db.collection('chats').where('participants', 'array-contains', uid).get();
+        for (const chatDoc of chatsSnapshot.docs) {
             const chatData = chatDoc.data();
             const chatId = chatDoc.id;
 
             if (chatData.type === 'direct') {
-                // ==================== DIRECT CHAT: DELETE EVERYTHING ====================
-                console.log(`Deleting direct chat ${chatId}`);
-
-                // 9a. Delete Storage (All images in this chat)
-                // Path: chats/{chatId}/...
-                try {
-                    await bucket.deleteFiles({ prefix: `chats/${chatId}/` });
-                } catch (e) {
-                    console.log(`Error deleting storage for chat ${chatId}:`, e);
-                }
-
-                // 9b. Delete Messages Subcollection
-                const messagesSnapshot = await chatDoc.ref.collection('messages').get();
-                messagesSnapshot.forEach(msg => bulkWriter.delete(msg.ref));
-
-                // 9c. Delete Chat Document
+                await safeDeleteStoragePrefix(bucket, `chats/${chatId}/`);
+                await deleteSubcollectionDocs(chatDoc.ref.collection('messages'), bulkWriter);
+                await deleteSubcollectionDocs(chatDoc.ref.collection('live_shares'), bulkWriter);
                 bulkWriter.delete(chatDoc.ref);
+                continue;
+            }
 
-            } else {
-                // ==================== GROUP CHAT: REMOVE MEMBER & CLEAN UP MEDIA ====================
-                console.log(`Removing user from group chat ${chatId}`);
+            bulkWriter.update(chatDoc.ref, {
+                participants: admin.firestore.FieldValue.arrayRemove(uid),
+                admins: admin.firestore.FieldValue.arrayRemove(uid),
+                deletedBy: admin.firestore.FieldValue.arrayRemove(uid),
+                [`participantDetails.${uid}`]: admin.firestore.FieldValue.delete(),
+                [`unreadCount.${uid}`]: admin.firestore.FieldValue.delete(),
+                [`clearedAt.${uid}`]: admin.firestore.FieldValue.delete(),
+            });
 
-                // 9d. Remove from Participants
-                bulkWriter.update(chatDoc.ref, {
-                    participants: admin.firestore.FieldValue.arrayRemove(uid),
-                    [`participantDetails.${uid}`]: admin.firestore.FieldValue.delete(), // Also remove details map
-                    // Optional: Add a system message saying user left? (Skipped for now to avoid side effects)
-                });
-
-                // 9e. Delete User's Image Messages & Storage in Group
-                // This is expensive but necessary for full cleanup.
-                const userImagesQuery = await chatDoc.ref.collection('messages')
-                    .where('senderId', '==', uid)
-                    .where('type', '==', 'image')
-                    .get();
-
-                for (const msgDoc of userImagesQuery.docs) {
-                    const mediaUrl = msgDoc.data().mediaUrl;
-                    if (mediaUrl) {
-                        try {
-                            // Extract path from URL or use if we stored path. 
-                            // Since we don't store path, we must rely on bucket search or skip.
-                            // Logic: If filename is unique enough, we might find it?
-                            // Actually, we can try to parse the URL if it's a standard Firebase Storage URL.
-                            // But usually, it's safer to just delete the message doc.
-                            // If we can't easily find the file, we leave it (orphaned file).
-                            // HOWEVER, if the file is at chats/{chatId}/images/{filename}, we can't easily know filename without parsing.
-
-                            // Attempt to parse: .../o/chats%2F{chatId}%2Fimages%2F{filename}?alt=...
-                            // Decode URL -> find substring "chats/{chatId}/images/"
-                            const decoded = decodeURIComponent(mediaUrl);
-                            const match = decoded.match(new RegExp(`chats/${chatId}/images/([^?]*)`));
-                            if (match) {
-                                const fullPath = `chats/${chatId}/images/${match[1]}`;
-                                await bucket.file(fullPath).delete().catch(e => console.log('File not found or error:', e));
-                            }
-                        } catch (e) {
-                            console.log('Error cleaning up group chat image:', e);
-                        }
-                    }
-                    // Delete the message doc itself?
-                    // "when a user is deleted chats collection... is not deleting"
-                    // Usually we keep messages but mark sender as "Deleted User".
-                    // But if user wants FULL delete, we should delete messages.
-                    // Let's delete the message doc.
-                    bulkWriter.delete(msgDoc.ref);
+            // Full delete policy for account wipe: remove authored messages.
+            const authoredMessages = await chatDoc.ref.collection('messages').where('senderId', '==', uid).get();
+            for (const messageDoc of authoredMessages.docs) {
+                const mediaUrl = messageDoc.data()?.mediaUrl;
+                if (mediaUrl) {
+                    await safeDeleteStorageUrl(bucket, mediaUrl);
                 }
+                bulkWriter.delete(messageDoc.ref);
             }
         }
 
-        // 10. Followers (Remove user from other users' followers list)
-        const followersQuery = await db.collection('users').where('followers', 'array-contains', uid).get();
-        followersQuery.forEach(doc => {
-            bulkWriter.update(doc.ref, {
-                followers: admin.firestore.FieldValue.arrayRemove(uid)
-            });
-        });
+        // ==================== E. STORAGE PREFIXES ====================
 
-        // 11. Following (Remove user from other users' following list)
-        const followingQuery = await db.collection('users').where('following', 'array-contains', uid).get();
-        followingQuery.forEach(doc => {
-            bulkWriter.update(doc.ref, {
-                following: admin.firestore.FieldValue.arrayRemove(uid)
-            });
-        });
+        await safeDeleteStoragePrefix(bucket, `profiles/${uid}/`);
+        await safeDeleteStoragePrefix(bucket, `trips/${uid}/`);
+        await safeDeleteStoragePrefix(bucket, `groups/${uid}/`);
+        await safeDeleteStoragePrefix(bucket, `feedback/${uid}/`);
 
-        // 12. Stories (Delete all stories by user)
-        const storiesQuery = await db.collection('stories').where('userId', '==', uid).get();
-        storiesQuery.forEach(doc => bulkWriter.delete(doc.ref));
-
-        // ==================== C. STORAGE (Prefix Deletion) ====================
-        // Based on `imageUpload.ts` pattern: folder/userId/filename
-
-        // 1. Profile Pictures: `profiles/{uid}/...`
-        try {
-            await bucket.deleteFiles({ prefix: `profiles/${uid}/` });
-        } catch (e) {
-            console.log("Error deleting profile storage:", e);
-        }
-
-        // 2. Trip Images: `trips/{uid}/...`
-        try {
-            await bucket.deleteFiles({ prefix: `trips/${uid}/` });
-        } catch (e) {
-            console.log("Error deleting trips storage:", e);
-        }
-
-        // 3. Chat Images: Handled in Step 9 (Per-chat basis)
-        // Previous logic `chats/{uid}` was incorrect.
-
-
-        // 4. Story Images: `stories/{uid}/...`
-        try {
-            await bucket.deleteFiles({ prefix: `stories/${uid}/` });
-        } catch (e) {
-            console.log("Error deleting stories storage:", e);
+        for (const reportId of ownedReportIds) {
+            await safeDeleteStoragePrefix(bucket, `reports/${reportId}/`);
         }
 
         await bulkWriter.close();
         console.log(`Successfully wiped all data for ${uid}`);
-
     } catch (error) {
         console.error(`Error wiping data for ${uid}:`, error);
         throw error;

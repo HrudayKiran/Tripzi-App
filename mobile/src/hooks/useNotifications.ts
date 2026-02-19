@@ -4,9 +4,23 @@ import auth from '@react-native-firebase/auth';
 
 export type NotificationType =
     | 'message'
-    | 'age_verified'
+    | 'join_success'
+    | 'join_trip'
+    | 'leave_trip'
+    | 'trip_update'
+    | 'trip_cancelled'
     | 'trip_join'
+    | 'age_verified'
+    | 'kyc_verified'
+    | 'kyc_approved'
+    | 'kyc_rejected'
+    | 'rating'
+    | 'report_submitted'
+    | 'trip_report'
+    | 'like'
+    | 'comment'
     | 'trip_full'
+    | 'system'
     | 'action_required';
 
 export interface AppNotification {
@@ -16,7 +30,7 @@ export interface AppNotification {
     title: string;
     message: string;
     entityId: string | null;
-    entityType: 'trip' | 'chat' | 'user' | 'kyc' | null;
+    entityType: 'trip' | 'chat' | 'user' | 'kyc' | 'report' | null;
     actorId: string | null;
     actorName: string | null;
     actorPhotoUrl: string | null;

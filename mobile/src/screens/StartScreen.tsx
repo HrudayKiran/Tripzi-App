@@ -90,7 +90,6 @@ const StartScreen = ({ navigation }) => {
           photoURL,
           username,
           createdAt: firestore.FieldValue.serverTimestamp(),
-          role: 'user',
           ageVerified: false,
           lastLoginAt: firestore.FieldValue.serverTimestamp(),
         });

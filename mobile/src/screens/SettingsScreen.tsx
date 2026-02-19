@@ -10,7 +10,6 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '..
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import functions from '@react-native-firebase/functions';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 const SettingsScreen = ({ navigation }) => {
     const { colors, isDarkMode, toggleTheme } = useTheme();
@@ -162,28 +161,8 @@ const SettingsScreen = ({ navigation }) => {
                         </View>
                     </Animatable.View>
 
-                    {/* Admin Dashboard */}
-                    <Animatable.View animation="fadeInUp" duration={400} delay={150}>
-                        <TouchableOpacity
-                            style={[styles.settingCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-                            onPress={() => navigation.navigate('AdminDashboard')}
-                            activeOpacity={0.7}
-                        >
-                            <View style={[styles.iconBox, { backgroundColor: '#EDE9FE' }]}>
-                                <Ionicons name="shield" size={24} color="#8B5CF6" />
-                            </View>
-                            <View style={styles.settingInfo}>
-                                <Text style={[styles.settingTitle, { color: colors.text }]}>Admin Dashboard</Text>
-                                <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
-                                    Manage users, KYC requests, and feedback
-                                </Text>
-                            </View>
-                            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-                        </TouchableOpacity>
-                    </Animatable.View>
-
                     {/* Delete Account */}
-                    <Animatable.View animation="fadeInUp" duration={400} delay={200}>
+                    <Animatable.View animation="fadeInUp" duration={400} delay={150}>
                         <TouchableOpacity
                             style={[styles.settingCard, { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}
                             onPress={handleDeleteAccount}

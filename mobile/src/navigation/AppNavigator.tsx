@@ -18,7 +18,6 @@ import WelcomeScreen from '../screens/WelcomeScreen';
 
 import StartScreen from '../screens/StartScreen';
 import FeedScreen from '../screens/FeedScreen';
-import SearchScreen from '../screens/SearchScreen';
 import MyTripsScreen from '../screens/MyTripsScreen';
 import AIChatScreen from '../screens/AIChatScreen';
 
@@ -36,9 +35,7 @@ import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
 import HelpSupportScreen from '../screens/HelpSupportScreen';
 import SuggestFeatureScreen from '../screens/SuggestFeatureScreen';
 import SettingsScreen from '../screens/SettingsScreen';
-import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
-import MessageSettingsScreen from '../screens/MessageSettingsScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -276,7 +273,6 @@ const AppNavigator = () => {
                         <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
                         <Stack.Screen name="SuggestFeature" component={SuggestFeatureScreen} />
                         <Stack.Screen name="Settings" component={SettingsScreen} />
-                        <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
                         <Stack.Screen name="UserProfile" component={UserProfileScreen} />
 
                     </Stack.Navigator>

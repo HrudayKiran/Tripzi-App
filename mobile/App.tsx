@@ -6,6 +6,22 @@ import AppNavigator from './src/navigation/AppNavigator';
 
 
 export default function App() {
+  const currentVersion = '1.0.0';
+
+  const compareVersions = (a: string, b: string): number => {
+    const aParts = a.split('.').map((part) => parseInt(part, 10) || 0);
+    const bParts = b.split('.').map((part) => parseInt(part, 10) || 0);
+    const max = Math.max(aParts.length, bParts.length);
+
+    for (let i = 0; i < max; i++) {
+      const left = aParts[i] || 0;
+      const right = bParts[i] || 0;
+      if (left > right) return 1;
+      if (left < right) return -1;
+    }
+
+    return 0;
+  };
 
 
   // Check for App Updates
@@ -17,10 +33,26 @@ export default function App() {
         const data = settingsDoc.data();
         if (data) {
           const { minVersion, latestVersion, storeUrl } = data;
-          const currentVersion = "1.0.0";
+          const effectiveStoreUrl = storeUrl || 'market://details?id=com.tripzi.app';
+          const isBelowMinVersion = typeof minVersion === 'string' && compareVersions(currentVersion, minVersion) < 0;
+          const isUpdateAvailable = typeof latestVersion === 'string' && compareVersions(currentVersion, latestVersion) < 0;
 
+          if (isBelowMinVersion) {
+            Alert.alert(
+              'Update Required',
+              'Your app version is no longer supported. Please update to continue.',
+              [
+                {
+                  text: 'Update Now',
+                  onPress: () => Linking.openURL(effectiveStoreUrl)
+                }
+              ],
+              { cancelable: false }
+            );
+            return;
+          }
 
-          if (latestVersion && latestVersion !== currentVersion) {
+          if (isUpdateAvailable) {
             Alert.alert(
               'Update Available 🚀',
               'A new version of Tripzi is available! Please update for the best experience.',
@@ -28,7 +60,7 @@ export default function App() {
                 { text: 'Later', style: 'cancel' },
                 {
                   text: 'Update Now',
-                  onPress: () => Linking.openURL(storeUrl || 'market://details?id=com.tripzi.app')
+                  onPress: () => Linking.openURL(effectiveStoreUrl)
                 }
               ]
             );

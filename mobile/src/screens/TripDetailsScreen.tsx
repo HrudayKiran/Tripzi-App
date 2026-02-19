@@ -208,7 +208,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
         // Update existing rating
         const existingRating = existingRatings.find(r => r.userId === user.uid);
         if (existingRating) {
-          await firestore().collection('trips').doc(tripId).collection('ratings').doc(existingRating.id).update({
+          await firestore().collection('ratings').doc(existingRating.id).update({
             rating: userRating,
             feedback: userFeedback.trim(),
             updatedAt: firestore.FieldValue.serverTimestamp(),
@@ -216,7 +216,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
         }
       } else {
         // Create new rating
-        await firestore().collection('trips').doc(tripId).collection('ratings').add(ratingData);
+        await firestore().collection('ratings').add(ratingData);
         setHasRated(true);
 
         // Send notification to trip owner (only for new ratings, not updates)

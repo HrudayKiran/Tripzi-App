@@ -133,7 +133,7 @@ const CreateGroupScreen = ({ navigation }) => {
             let groupIconUrl = '';
             if (groupIcon) {
                 const filename = `${Date.now()}_group.jpg`;
-                const storageRef = storage().ref(`groups/${filename}`);
+                const storageRef = storage().ref(`groups/${currentUser.uid}/${filename}`);
                 await storageRef.putFile(groupIcon);
                 groupIconUrl = await storageRef.getDownloadURL();
             }

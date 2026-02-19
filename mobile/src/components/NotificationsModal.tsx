@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Animated, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Animated, FlatList, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
@@ -26,14 +26,30 @@ const getNotificationStyle = (type: NotificationType): { icon: string; color: st
             return { icon: 'chatbubble', color: '#3B82F6' };
         case 'message':
             return { icon: 'mail', color: '#8B5CF6' };
+        case 'join_trip':
+        case 'join_success':
+        case 'trip_join':
+            return { icon: 'person-add', color: '#10B981' };
+        case 'leave_trip':
+            return { icon: 'person-remove', color: '#EF4444' };
+        case 'rating':
+            return { icon: 'star', color: '#F59E0B' };
+        case 'trip_update':
+            return { icon: 'create', color: '#3B82F6' };
+        case 'trip_cancelled':
+            return { icon: 'close-circle', color: '#EF4444' };
         case 'kyc_approved':
+        case 'kyc_verified':
             return { icon: 'shield-checkmark', color: '#10B981' };
         case 'kyc_rejected':
             return { icon: 'alert-circle', color: '#EF4444' };
-        case 'trip_join':
-            return { icon: 'person-add', color: '#10B981' };
         case 'trip_full':
             return { icon: 'people', color: '#8B5CF6' };
+        case 'report_submitted':
+        case 'trip_report':
+            return { icon: 'flag', color: '#F97316' };
+        case 'system':
+            return { icon: 'megaphone', color: '#0EA5E9' };
         case 'action_required':
             return { icon: 'notifications', color: '#F59E0B' };
         default:
@@ -163,6 +179,14 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
         if (notification.deepLinkRoute) {
             onClose();
             setTimeout(() => {
+                if (notification.deepLinkRoute === 'ExternalLink') {
+                    const url = notification.deepLinkParams?.url;
+                    if (typeof url === 'string' && url.length > 0) {
+                        Linking.openURL(url).catch(() => { });
+                    }
+                    return;
+                }
+
                 navigation.navigate(notification.deepLinkRoute as never, notification.deepLinkParams as never);
             }, 300);
         }

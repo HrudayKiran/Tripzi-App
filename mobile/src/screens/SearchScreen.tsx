@@ -233,6 +233,8 @@ const SearchScreen = ({ navigation }) => {
                     <TripCard
                         trip={item}
                         onPress={() => navigation.navigate('TripDetails', { tripId: item.id })}
+                        onReportPress={() => { }}
+                        showOptions={false}
                     />
                 )}
                 showsVerticalScrollIndicator={false}

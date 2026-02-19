@@ -22,11 +22,6 @@ const ProfileScreen = ({ navigation }) => {
     const currentUser = auth().currentUser;
     if (!currentUser) return;
 
-    if (currentUser.uid === 'S3FDk8SnV7haRUec2zPoUo38Vi02') {
-      firestore().collection('users').doc(currentUser.uid).update({ role: 'admin' })
-        .catch(() => { });
-    }
-
     // Configure Google Signin
     GoogleSignin.configure({
       webClientId: '334857280812-mb7tsrfd5q53ubachdlftnmogmskqu2c.apps.googleusercontent.com',
@@ -99,23 +94,6 @@ const ProfileScreen = ({ navigation }) => {
     );
   };
 
-
-  // Quick age verify for testing - removes the need to do actual verification
-  const verifyMyAge = async () => {
-    const currentUser = auth().currentUser;
-    if (!currentUser) return;
-
-    try {
-      await firestore().collection('users').doc(currentUser.uid).update({
-        ageVerified: true,
-        ageVerifiedAt: firestore.FieldValue.serverTimestamp(),
-      });
-      Alert.alert('Success! ✓', 'Your age has been verified for testing.');
-    } catch (error) {
-      // Error handled silently
-      Alert.alert('Done', 'Age verification status updated.');
-    }
-  };
 
   const MenuItem = ({ icon, iconColor, iconBg, text, badge = null, onPress, isDestructive = false, disabled = false }) => (
     <TouchableOpacity

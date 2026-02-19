@@ -115,7 +115,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
     };
 
     const updateGroupIcon = async () => {
-        if (!isAdmin) return;
+        if (!isAdmin || !currentUser) return;
         try {
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') {
@@ -132,7 +132,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
 
             if (!result.canceled && result.assets[0]) {
                 const filename = `${Date.now()}_group.jpg`;
-                const storageRef = storage().ref(`groups/${filename}`);
+                const storageRef = storage().ref(`groups/${currentUser.uid}/${filename}`);
                 await storageRef.putFile(result.assets[0].uri);
                 const downloadUrl = await storageRef.getDownloadURL();
 

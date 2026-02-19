@@ -5,8 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
+import functions from '@react-native-firebase/functions';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
 
@@ -59,11 +59,13 @@ const AgeVerificationScreen = ({ navigation }) => {
         const currentUser = auth().currentUser;
 
         try {
-            // Auto-approve: Update user document with age verification
-            await firestore().collection('users').doc(currentUser!.uid).update({
-                ageVerified: true,
-                dateOfBirth: firestore.Timestamp.fromDate(dateOfBirth),
-                ageVerifiedAt: firestore.FieldValue.serverTimestamp(),
+            if (!currentUser) {
+                throw new Error('User not authenticated');
+            }
+
+            const verifyAge = functions().httpsCallable('verifyMyAge');
+            await verifyAge({
+                dateOfBirth: dateOfBirth.toISOString(),
             });
 
             setSubmitting(false);

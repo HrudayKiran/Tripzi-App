@@ -18,7 +18,6 @@ import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
-import NotificationService from '../utils/notificationService';
 
 interface ReportTripModalProps {
     visible: boolean;
@@ -50,7 +49,7 @@ const ReportTripModal: React.FC<ReportTripModalProps> = ({ visible, trip, onClos
         try {
             const selectedReason = REPORT_TYPES.find(t => t.id === reportType)?.label || reportType;
 
-            const reportRef = await firestore().collection('reports').add({
+            await firestore().collection('reports').add({
                 tripId: trip?.id,
                 tripTitle: trip?.title || 'Untitled Trip',
                 targetId: trip?.id,
@@ -67,14 +66,6 @@ const ReportTripModal: React.FC<ReportTripModalProps> = ({ visible, trip, onClos
                 resolvedAt: null,
                 resolution: null
             });
-
-            // Notify Admins
-            await NotificationService.onReportSubmitted(
-                auth().currentUser?.uid || '',
-                reportType,
-                reportRef.id,
-                trip?.title || 'Trip'
-            );
 
             Alert.alert('Report Submitted', 'We will review this within 24 hours.');
             onClose();

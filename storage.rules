@@ -1,135 +1,131 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    
+
     // ==================== HELPER FUNCTIONS ====================
-    
-    // Check if user is authenticated
+
     function isAuthenticated() {
       return request.auth != null;
     }
-    
-    // Check if user owns the path
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
-    
-    // Validate image file
+
     function isImage() {
-      return request.resource.contentType.matches('image/.*');
+      return request.resource != null &&
+        request.resource.contentType.matches('image/.*');
     }
-    
-    // Validate video file
+
     function isVideo() {
-      return request.resource.contentType.matches('video/.*');
+      return request.resource != null &&
+        request.resource.contentType.matches('video/.*');
     }
-    
-    // Validate audio file
+
     function isAudio() {
-      return request.resource.contentType.matches('audio/.*');
+      return request.resource != null &&
+        request.resource.contentType.matches('audio/.*');
     }
-    
-    // Combined media check
+
     function isMediaFile() {
       return isImage() || isVideo() || isAudio();
     }
-    
-    // Validate file size (max 10MB for images/audio)
+
     function isValidSize() {
-      return request.resource.size < 10 * 1024 * 1024;
+      return request.resource != null &&
+        request.resource.size < 10 * 1024 * 1024;
     }
-    
-    // Validate video size (max 100MB)
+
     function isValidVideoSize() {
-      return request.resource.size < 100 * 1024 * 1024;
+      return request.resource != null &&
+        request.resource.size < 100 * 1024 * 1024;
     }
-    
-    // Check appropriate size based on file type
+
     function isValidMediaSize() {
-      return (isImage() && isValidSize()) || 
-             (isAudio() && isValidSize()) ||
-             (isVideo() && isValidVideoSize());
+      return (isImage() && isValidSize()) ||
+        (isAudio() && isValidSize()) ||
+        (isVideo() && isValidVideoSize());
     }
-    
-    // ==================== PROFILE IMAGES ====================
-    
+
+    function isChatParticipant(chatId) {
+      return isAuthenticated() &&
+        firestore.exists(/databases/(default)/documents/chats/$(chatId)) &&
+        request.auth.uid in firestore.get(
+          /databases/(default)/documents/chats/$(chatId)
+        ).data.participants;
+    }
+
+    function isReportOwner(reportId) {
+      return isAuthenticated() &&
+        firestore.exists(/databases/(default)/documents/reports/$(reportId)) &&
+        firestore.get(
+          /databases/(default)/documents/reports/$(reportId)
+        ).data.reporterId == request.auth.uid;
+    }
+
     // ==================== APP ASSETS ====================
 
     match /carousel/{allPaths=**} {
-      allow read: if true; // Public read for welcome screen
-      allow write: if isAdmin();
-    }
-    
-    // ==================== PROFILE IMAGES ====================
-    
-    match /profiles/{userId}/{fileName} {
-      // Anyone can read profile images
       allow read: if true;
-      
-      // Only the user can upload their profile images
-      allow create, update: if isOwner(userId) && isImage() && isValidSize();
-      // User can delete their profile images
-      allow delete: if isOwner(userId);
+      allow write: if false;
     }
-    
-    // ==================== TRIP MEDIA (Images & Videos) ====================
-    
-    match /trips/{userId}/{allPaths=**} {
-      // Anyone authenticated can read trip media
-      allow read: if isAuthenticated();
-      
-      // Only the user can upload their trip media
-      allow create, update: if isOwner(userId) && isMediaFile() && isValidMediaSize();
-      // User can delete their trip media
+
+    // ==================== PROFILE IMAGES ====================
+
+    match /profiles/{userId}/{fileName} {
+      allow read: if true;
+      allow create, update: if isOwner(userId) && isImage() && isValidSize();
       allow delete: if isOwner(userId);
     }
 
-    // ==================== TRIP VIDEOS ====================
-    
-    match /trip_videos/{userId}/{allPaths=**} {
-      // Anyone authenticated can read trip videos
+    // ==================== TRIP MEDIA ====================
+
+    match /trips/{userId}/{allPaths=**} {
       allow read: if isAuthenticated();
-      
-      // Only the user can upload their trip videos
-      allow create, update: if isOwner(userId) && isVideo() && isValidVideoSize();
-      // User can delete their trip videos
+      allow create, update: if isOwner(userId) && isMediaFile() && isValidMediaSize();
       allow delete: if isOwner(userId);
     }
-    
-    // Note: Stories removed in v1.0.0
-    
-    
-    // Note: KYC documents removed in v1.0.0 - using ageVerified field on users
-    
-    
-    // ==================== CHAT MEDIA (Images, Videos, Voice) ====================
-    
-    match /chats/{chatId}/{allPaths=**} {
-      // Participants can read chat media (simplified - anyone authenticated)
+
+    match /trip_videos/{userId}/{allPaths=**} {
       allow read: if isAuthenticated();
-      
-      // Authenticated users can upload media to chats
-      allow create, update: if isAuthenticated() && isMediaFile() && isValidMediaSize();
-      
-      // Allow delete for chat cleanup
-      allow delete: if isAuthenticated();
+      allow create, update: if isOwner(userId) && isVideo() && isValidVideoSize();
+      allow delete: if isOwner(userId);
+    }
+
+    // ==================== GROUP ICONS ====================
+
+    match /groups/{userId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOwner(userId) && isImage() && isValidSize();
+      allow delete: if isOwner(userId);
+    }
+
+    // Legacy one-level group icon paths kept read-only for backward compatibility.
+    match /groups/{legacyFileName} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    // ==================== CHAT MEDIA ====================
+
+    match /chats/{chatId}/{allPaths=**} {
+      allow read: if isChatParticipant(chatId);
+      allow create, update: if isChatParticipant(chatId) && isMediaFile() && isValidMediaSize();
+      allow delete: if isChatParticipant(chatId);
     }
 
     // ==================== REPORT EVIDENCE ====================
-    
+
     match /reports/{reportId}/{allPaths=**} {
-      // Only authenticated users can upload report evidence
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated() && isImage() && isValidSize();
-      // Usually users don't delete report evidence, but if they could write, they could delete.
-      allow delete: if isAuthenticated(); 
+      allow read: if isReportOwner(reportId);
+      allow create, update: if isReportOwner(reportId) && isImage() && isValidSize();
+      allow delete: if isReportOwner(reportId);
     }
 
     // ==================== FEEDBACK ATTACHMENTS ====================
-    
+
     match /feedback/{userId}/{allPaths=**} {
-      // Users can upload screenshots for bugs/suggestions
-      allow read: if isAuthenticated();
+      allow read: if isOwner(userId);
       allow create, update: if isOwner(userId) && isImage() && isValidSize();
       allow delete: if isOwner(userId);
     }
