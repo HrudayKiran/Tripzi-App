@@ -105,7 +105,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
         const tripData = { id: doc.id, ...doc.data() };
         if (tripData.userId) {
           try {
-            const userDoc = await firestore().collection('users').doc(tripData.userId).get();
+            const userDoc = await firestore().collection('public_users').doc(tripData.userId).get();
             if (userDoc.exists) tripData.user = userDoc.data();
           } catch (e) { }
         }
@@ -127,7 +127,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
       }
       try {
         const participantPromises = trip.participants.slice(0, 8).map(async (uid: string) => {
-          const userDoc = await firestore().collection('users').doc(uid).get();
+          const userDoc = await firestore().collection('public_users').doc(uid).get();
           if (userDoc.exists) {
             return { id: uid, ...userDoc.data() };
           }

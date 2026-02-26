@@ -48,23 +48,6 @@ service cloud.firestore {
         request.resource.data.groupIcon == resource.data.groupIcon;
     }
 
-    function isSelfChatLeave(chatId) {
-      return isChatParticipant(chatId) &&
-        request.resource.data.participants is list &&
-        resource.data.participants is list &&
-        request.auth.uid in resource.data.participants &&
-        !(
-          request.auth.uid in request.resource.data.participants
-        ) &&
-        resource.data.participants.hasAll(request.resource.data.participants) &&
-        request.resource.data.participants.size() == resource.data.participants.size() - 1 &&
-        request.resource.data.admins is list &&
-        request.resource.data.participants.hasAll(request.resource.data.admins) &&
-        isChatImmutableFieldsUnchanged() &&
-        request.resource.data.groupName == resource.data.groupName &&
-        request.resource.data.groupIcon == resource.data.groupIcon;
-    }
-
     function isMessageImmutableFieldsUnchanged() {
       return request.resource.data.senderId == resource.data.senderId &&
         request.resource.data.createdAt == resource.data.createdAt &&
@@ -123,7 +106,8 @@ service cloud.firestore {
     // ==================== USERS ====================
 
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      // Private user profile (owner-only read/write; sensitive fields live here).
+      allow read: if isOwner(userId);
 
       allow create: if isOwner(userId) &&
         request.resource.data.userId == request.auth.uid &&
@@ -149,6 +133,13 @@ service cloud.firestore {
         ]);
 
       allow delete: if false;
+    }
+
+    // Public user profile mirror for app-wide discovery/search/view.
+    // Synced by backend trigger from users/{userId}.
+    match /public_users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
     }
 
     // ==================== APP CONFIG ====================
@@ -197,15 +188,21 @@ service cloud.firestore {
         (
           isChatAdmin(chatId) &&
           isChatImmutableFieldsUnchanged() &&
-          request.resource.data.participants is list &&
-          request.resource.data.admins is list &&
-          request.auth.uid in request.resource.data.participants &&
-          request.resource.data.participants.hasAll(request.resource.data.admins)
-        ) ||
-        isSelfChatLeave(chatId)
+          request.resource.data.participants == resource.data.participants &&
+          request.resource.data.admins == resource.data.admins &&
+          request.resource.data.participantDetails == resource.data.participantDetails &&
+          request.resource.data.unreadCount == resource.data.unreadCount &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'groupName',
+            'groupIcon',
+            'updatedAt'
+          ])
+        )
       );
 
-      allow delete: if isChatParticipant(chatId);
+      // Only the original creator can delete a chat document.
+      allow delete: if isAuthenticated() &&
+        resource.data.createdBy == request.auth.uid;
 
       match /messages/{messageId} {
         allow read: if isChatParticipant(chatId);

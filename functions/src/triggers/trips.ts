@@ -97,7 +97,7 @@ export const onTripJoin = onDocumentUpdated(
             }
 
             // 2. Notify & Message
-            for (const joinerId of newJoiners) {
+            await Promise.all(newJoiners.map(async (joinerId: string) => {
                 const joinerDoc = await db.collection("users").doc(joinerId).get();
                 const joinerName = joinerDoc.data()?.displayName || "Someone";
 
@@ -168,7 +168,7 @@ export const onTripJoin = onDocumentUpdated(
                         });
                     }
                 }
-            }
+            }));
         }
     }
 );
@@ -195,8 +195,8 @@ export const onTripUpdated = onDocumentUpdated(
         const leftUsers = beforeParticipants.filter((uid: string) => !afterParticipants.includes(uid));
 
         if (leftUsers.length > 0) {
-            for (const leaverId of leftUsers) {
-                if (leaverId === hostId) continue;
+            await Promise.all(leftUsers.map(async (leaverId: string) => {
+                if (leaverId === hostId) return;
 
                 const leaverDoc = await db.collection("users").doc(leaverId).get();
                 const leaverName = leaverDoc.data()?.displayName || "Someone";
@@ -220,7 +220,7 @@ export const onTripUpdated = onDocumentUpdated(
                     body: `${leaverName} left your trip "${tripTitle}"`,
                     data: { route: "TripDetails", tripId },
                 });
-            }
+            }));
         }
 
         // 2. Check for Critical Detail Updates
@@ -277,7 +277,7 @@ export const onTripUpdated = onDocumentUpdated(
             const recipients = afterParticipants.filter((uid: string) => uid !== hostId);
             console.log(`[TripUpdate] Sending notifications to ${recipients.length} recipients: ${recipients}`);
 
-            for (const recipientId of recipients) {
+            await Promise.all(recipients.map(async (recipientId: string) => {
                 await createNotification({
                     recipientId,
                     type: "trip_update",
@@ -294,7 +294,7 @@ export const onTripUpdated = onDocumentUpdated(
                     body: updateMessage,
                     data: { route: "TripDetails", tripId },
                 });
-            }
+            }));
         }
     }
 );
@@ -317,7 +317,7 @@ export const onTripDeleted = onDocumentDeleted(
 
         const recipients = participants.filter((uid: string) => uid !== hostId);
 
-        for (const recipientId of recipients) {
+        await Promise.all(recipients.map(async (recipientId: string) => {
             await createNotification({
                 recipientId,
                 type: "trip_cancelled",
@@ -333,6 +333,6 @@ export const onTripDeleted = onDocumentDeleted(
                 body: `The trip "${tripTitle}" has been cancelled by the host.`,
                 data: { route: "Home" },
             });
-        }
+        }));
     }
 );

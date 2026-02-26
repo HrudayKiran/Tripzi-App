@@ -20,6 +20,9 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/consta
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
+import functions from '@react-native-firebase/functions';
+import { searchUsersByPrefix } from '../utils/searchUsers';
+import { getPublicProfilesByIds } from '../utils/publicProfiles';
 
 interface Member {
     id: string;
@@ -35,6 +38,7 @@ interface GroupData {
     participants: string[];
     admins: string[];
     createdBy: string;
+    participantDetails?: { [uid: string]: { displayName?: string; photoURL?: string } };
 }
 
 const GroupInfoScreen = ({ navigation, route }) => {
@@ -72,19 +76,18 @@ const GroupInfoScreen = ({ navigation, route }) => {
             setGroup(data);
             setEditName(data.groupName);
 
-            // Load member details
-            const memberList: Member[] = await Promise.all(
-                data.participants.map(async (uid) => {
-                    const userDoc = await firestore().collection('users').doc(uid).get();
-                    const userData = userDoc.data();
-                    return {
-                        id: uid,
-                        displayName: userData?.displayName || 'User',
-                        photoURL: userData?.photoURL,
-                        role: data.admins.includes(uid) ? 'admin' : 'member',
-                    };
-                })
-            );
+            // Load member details from public profile mirror.
+            const publicProfiles = await getPublicProfilesByIds(data.participants || []);
+            const memberList: Member[] = (data.participants || []).map((uid) => {
+                const profile = publicProfiles.get(uid);
+                const fallback = data.participantDetails?.[uid] || {};
+                return {
+                    id: uid,
+                    displayName: profile?.displayName || fallback.displayName || 'User',
+                    photoURL: profile?.photoURL || fallback.photoURL || undefined,
+                    role: data.admins.includes(uid) ? 'admin' : 'member',
+                };
+            });
 
             // Sort: admins first, then alphabetically
             memberList.sort((a, b) => {
@@ -155,17 +158,10 @@ const GroupInfoScreen = ({ navigation, route }) => {
 
         setSearching(true);
         try {
-            const nameQuery = await firestore()
-                .collection('users')
-                .orderBy('displayName')
-                .startAt(query)
-                .endAt(query + '\uf8ff')
-                .limit(10)
-                .get();
-
-            const results = nameQuery.docs
-                .filter((doc) => !group?.participants.includes(doc.id) && doc.id !== currentUser?.uid)
-                .map((doc) => ({ id: doc.id, ...doc.data() }));
+            const users = await searchUsersByPrefix(query, 10);
+            const results = users.filter((user) =>
+                !group?.participants.includes(user.id) && user.id !== currentUser?.uid
+            );
 
             setSearchResults(results);
         } catch (error) {
@@ -178,33 +174,10 @@ const GroupInfoScreen = ({ navigation, route }) => {
     const addMember = async (user: any) => {
         if (!isAdmin || !group) return;
         try {
-            await firestore().collection('chats').doc(chatId).update({
-                participants: firestore.FieldValue.arrayUnion(user.id),
-                [`participantDetails.${user.id}`]: {
-                    displayName: user.displayName || 'User',
-                    photoURL: user.photoURL || '',
-                    role: 'member',
-                },
-                [`unreadCount.${user.id}`]: 0,
+            await functions().httpsCallable('addGroupMember')({
+                chatId,
+                memberId: user.id,
             });
-
-            // Add system message
-            const currentUserDoc = await firestore().collection('users').doc(currentUser!.uid).get();
-            await firestore()
-                .collection('chats')
-                .doc(chatId)
-                .collection('messages')
-                .add({
-                    senderId: 'system',
-                    senderName: 'System',
-                    type: 'system',
-                    text: `${currentUserDoc.data()?.displayName} added ${user.displayName}`,
-                    status: 'sent',
-                    readBy: {},
-                    deliveredTo: [],
-                    deletedFor: [],
-                    createdAt: firestore.FieldValue.serverTimestamp(),
-                });
 
             setShowAddMember(false);
             setSearchQuery('');
@@ -228,29 +201,10 @@ const GroupInfoScreen = ({ navigation, route }) => {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await firestore().collection('chats').doc(chatId).update({
-                                participants: firestore.FieldValue.arrayRemove(member.id),
-                                admins: firestore.FieldValue.arrayRemove(member.id),
-                                [`participantDetails.${member.id}`]: firestore.FieldValue.delete(),
-                                [`unreadCount.${member.id}`]: firestore.FieldValue.delete(),
+                            await functions().httpsCallable('removeGroupMember')({
+                                chatId,
+                                memberId: member.id,
                             });
-
-                            const currentUserDoc = await firestore().collection('users').doc(currentUser!.uid).get();
-                            await firestore()
-                                .collection('chats')
-                                .doc(chatId)
-                                .collection('messages')
-                                .add({
-                                    senderId: 'system',
-                                    senderName: 'System',
-                                    type: 'system',
-                                    text: `${currentUserDoc.data()?.displayName} removed ${member.displayName}`,
-                                    status: 'sent',
-                                    readBy: {},
-                                    deliveredTo: [],
-                                    deletedFor: [],
-                                    createdAt: firestore.FieldValue.serverTimestamp(),
-                                });
 
                             loadGroup();
                         } catch (error) {
@@ -278,12 +232,14 @@ const GroupInfoScreen = ({ navigation, route }) => {
                     onPress: async () => {
                         try {
                             if (newRole === 'admin') {
-                                await firestore().collection('chats').doc(chatId).update({
-                                    admins: firestore.FieldValue.arrayUnion(member.id),
+                                await functions().httpsCallable('promoteGroupAdmin')({
+                                    chatId,
+                                    memberId: member.id,
                                 });
                             } else {
-                                await firestore().collection('chats').doc(chatId).update({
-                                    admins: firestore.FieldValue.arrayRemove(member.id),
+                                await functions().httpsCallable('demoteGroupAdmin')({
+                                    chatId,
+                                    memberId: member.id,
                                 });
                             }
                             loadGroup();
@@ -307,11 +263,8 @@ const GroupInfoScreen = ({ navigation, route }) => {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await firestore().collection('chats').doc(chatId).update({
-                                participants: firestore.FieldValue.arrayRemove(currentUser?.uid),
-                                admins: firestore.FieldValue.arrayRemove(currentUser?.uid),
-                                [`participantDetails.${currentUser?.uid}`]: firestore.FieldValue.delete(),
-                                [`unreadCount.${currentUser?.uid}`]: firestore.FieldValue.delete(),
+                            await functions().httpsCallable('leaveGroup')({
+                                chatId,
                             });
 
                             navigation.navigate('ChatsList');

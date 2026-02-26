@@ -18,6 +18,7 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/consta
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
+import { searchUsersByPrefix } from '../utils/searchUsers';
 
 interface User {
     id: string;
@@ -63,20 +64,16 @@ const CreateGroupScreen = ({ navigation }) => {
 
         setSearching(true);
         try {
-            const nameQuery = await firestore()
-                .collection('users')
-                .orderBy('displayName')
-                .startAt(query)
-                .endAt(query + '\uf8ff')
-                .limit(10)
-                .get();
-
-            const results: User[] = [];
-            nameQuery.docs.forEach((doc) => {
-                if (doc.id !== currentUser?.uid) {
-                    results.push({ id: doc.id, ...doc.data() } as User);
-                }
-            });
+            const users = await searchUsersByPrefix(query, 10);
+            const results: User[] = users
+                .filter((u) => u.id !== currentUser?.uid)
+                .map((u) => ({
+                    id: u.id,
+                    displayName: u.displayName || 'User',
+                    username: u.username,
+                    photoURL: u.photoURL,
+                    ageVerified: u.ageVerified,
+                }));
 
             setSearchResults(results);
         } catch (error) {

@@ -22,6 +22,7 @@ import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 import { LinearGradient } from 'expo-linear-gradient';
+import { searchUsersByPrefix } from '../utils/searchUsers';
 
 interface SearchUser {
     id: string;
@@ -149,41 +150,16 @@ const ChatsListScreen = ({ navigation }) => {
 
         setSearching(true);
         try {
-            const queryLower = query.toLowerCase();
-
-            // Search by displayName
-            const nameQuery = await firestore()
-                .collection('users')
-                .orderBy('displayName')
-                .startAt(query)
-                .endAt(query + '\uf8ff')
-                .limit(10)
-                .get();
-
-            // Search by username
-            const usernameQuery = await firestore()
-                .collection('users')
-                .orderBy('username')
-                .startAt(queryLower)
-                .endAt(queryLower + '\uf8ff')
-                .limit(10)
-                .get();
-
-            const results = new Map<string, SearchUser>();
-
-            [...nameQuery.docs, ...usernameQuery.docs].forEach((doc) => {
-                if (doc.id !== currentUser?.uid && !results.has(doc.id)) {
-                    results.set(doc.id, {
-                        id: doc.id,
-                        displayName: doc.data().displayName || 'User',
-                        username: doc.data().username,
-                        photoURL: doc.data().photoURL,
-                        ageVerified: doc.data().ageVerified,
-                    });
-                }
-            });
-
-            setSearchResults(Array.from(results.values()));
+            const results = await searchUsersByPrefix(query, 10);
+            setSearchResults(
+                results.filter((u) => u.id !== currentUser?.uid).map((u) => ({
+                    id: u.id,
+                    displayName: u.displayName || 'User',
+                    username: u.username,
+                    photoURL: u.photoURL,
+                    ageVerified: u.ageVerified,
+                }))
+            );
         } catch (error) {
             
         } finally {

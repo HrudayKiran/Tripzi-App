@@ -179,7 +179,8 @@ const UserProfileScreen = ({ route, navigation }) => {
         }
 
         try {
-            const userDoc = await firestore().collection('users').doc(userId).get();
+            const profileCollection = isOwnProfile ? 'users' : 'public_users';
+            const userDoc = await firestore().collection(profileCollection).doc(userId).get();
 
             if (userDoc.exists) {
                 const userData = { id: userDoc.id, ...userDoc.data() };
@@ -301,7 +302,7 @@ const UserProfileScreen = ({ route, navigation }) => {
             try {
                 // Check if username is already taken
                 const usernameQuery = await firestore()
-                    .collection('users')
+                    .collection('public_users')
                     .where('username', '==', editUsername.toLowerCase())
                     .get();
 

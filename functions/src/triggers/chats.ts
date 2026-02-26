@@ -56,10 +56,10 @@ export const onMessageCreated = onDocumentCreated(
 
         const recipients = participants.filter((uid: string) => uid !== senderId);
 
-        for (const recipientId of recipients) {
+        await Promise.all(recipients.map(async (recipientId: string) => {
             // Customize body for specific mentions
             let userBody = notificationBody;
-            let userTitle = notificationTitle;
+            const userTitle = notificationTitle;
 
             if (!isEveryoneMentioned && mentions.includes(recipientId)) {
                 userBody = `${senderName} mentioned you: ${text}`;
@@ -83,6 +83,6 @@ export const onMessageCreated = onDocumentCreated(
                 body: userBody,
                 data: { route: "Chat", chatId },
             });
-        }
+        }));
     }
 );

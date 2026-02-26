@@ -10,10 +10,9 @@ import { useTheme } from '../contexts/ThemeContext';
 import NotificationsModal from '../components/NotificationsModal';
 import FilterModal, { FilterOptions } from '../components/FilterModal';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
-
-import firestore from '@react-native-firebase/firestore';
 import AppLogo from '../components/AppLogo';
 import ReportTripModal from '../components/ReportTripModal'; // Imported
+import { searchUsersByPrefix } from '../utils/searchUsers';
 
 const { width, height } = Dimensions.get('window');
 
@@ -96,21 +95,7 @@ const FeedScreen = ({ navigation }) => {
         setSearchingUsers(true);
         searchTimeout.current = setTimeout(async () => {
             try {
-                const searchLower = searchQuery.toLowerCase();
-                const usersSnapshot = await firestore()
-                    .collection('users')
-                    .limit(10)
-                    .get();
-
-                const matchedUsers = usersSnapshot.docs
-                    .map(doc => ({ id: doc.id, ...doc.data() }))
-                    .filter(user =>
-                        user.displayName?.toLowerCase().includes(searchLower) ||
-                        user.username?.toLowerCase().includes(searchLower) ||
-                        user.email?.toLowerCase().includes(searchLower)
-                    )
-                    .slice(0, 5);
-
+                const matchedUsers = await searchUsersByPrefix(searchQuery, 5);
                 setSearchedUsers(matchedUsers);
             } catch (error) {
                 // Search error

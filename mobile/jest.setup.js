@@ -1,5 +1,4 @@
-import 'jest-expo';
-import '@testing-library/react-native/extend-expect';
+require('@testing-library/react-native/extend-expect');
 
 jest.mock('@react-native-firebase/auth', () => () => ({
   currentUser: {

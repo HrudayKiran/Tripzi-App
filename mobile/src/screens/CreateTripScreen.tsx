@@ -200,6 +200,9 @@ const CreateTripScreen = ({ navigation, route }: any) => {
         setIsPosting(true);
 
         try {
+            const currentUserDoc = await firestore().collection('users').doc(currentUser.uid).get();
+            const currentUserData = currentUserDoc.data() || {};
+
             // Upload images to Firebase Storage first
             let uploadedImageUrls: string[] = [];
             if (images.length > 0) {
@@ -255,6 +258,9 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                 mandatoryItems: mandatoryItems.split(',').map(item => item.trim()).filter(Boolean),
                 placesToVisit: placesToVisit.split(',').map(place => place.trim()).filter(Boolean),
                 userId: currentUser.uid,
+                ownerDisplayName: currentUserData.displayName || currentUser.displayName || 'Traveler',
+                ownerPhotoURL: currentUserData.photoURL || currentUser.photoURL || null,
+                ownerUsername: currentUserData.username || null,
                 participants: [currentUser.uid],
                 likes: [],
                 createdAt: firestore.FieldValue.serverTimestamp(),

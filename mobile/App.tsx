@@ -3,29 +3,18 @@ import React from 'react';
 import { Alert, Linking } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
 import AppNavigator from './src/navigation/AppNavigator';
+import { initializeAppCheck } from './src/hooks/useAppCheck';
+import { compareVersions } from './src/utils/version';
 
 
 export default function App() {
   const currentVersion = '1.0.0';
 
-  const compareVersions = (a: string, b: string): number => {
-    const aParts = a.split('.').map((part) => parseInt(part, 10) || 0);
-    const bParts = b.split('.').map((part) => parseInt(part, 10) || 0);
-    const max = Math.max(aParts.length, bParts.length);
-
-    for (let i = 0; i < max; i++) {
-      const left = aParts[i] || 0;
-      const right = bParts[i] || 0;
-      if (left > right) return 1;
-      if (left < right) return -1;
-    }
-
-    return 0;
-  };
-
 
   // Check for App Updates
   React.useEffect(() => {
+    initializeAppCheck().catch(() => { });
+
     const checkAppVersion = async () => {
       try {
         const settingsDoc = await firestore().doc('config/app_settings').get();

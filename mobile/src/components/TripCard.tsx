@@ -75,7 +75,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
         if (!trip.userId) return;
 
         firestore()
-            .collection('users')
+            .collection('public_users')
             .doc(trip.userId)
             .get()
             .then(doc => {

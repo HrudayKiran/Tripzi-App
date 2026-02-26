@@ -79,6 +79,7 @@
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
       "@react-native-firebase/messaging",
+      "@react-native-firebase/app-check",
       [
         "expo-build-properties",
         {

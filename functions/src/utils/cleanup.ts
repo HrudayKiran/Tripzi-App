@@ -47,6 +47,7 @@ export const wipeUserData = async (uid: string) => {
 
         const userRef = db.collection('users').doc(uid);
         bulkWriter.delete(userRef);
+        bulkWriter.delete(db.collection('public_users').doc(uid));
 
         // Notifications now live at notifications/{uid}/items/*
         const notificationsRootRef = db.collection('notifications').doc(uid);

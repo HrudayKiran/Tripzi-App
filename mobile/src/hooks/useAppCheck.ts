@@ -1,59 +1,45 @@
-/**
- * Firebase App Check Hook
- * 
- * App Check helps protect your Firebase backend resources from abuse.
- * It works by verifying that your app is running on a legitimate device
- * and hasn't been tampered with.
- * 
- * SETUP REQUIRED:
- * 1. Enable App Check in Firebase Console (https://console.firebase.google.com)
- * 2. Register your app with Play Integrity (Android)
- * 3. Add SHA-256 fingerprint to Firebase Console
- */
-
 import { useEffect, useState } from 'react';
 import appCheck from '@react-native-firebase/app-check';
 
-// Set to true in production, false in development for easier testing
-const ENABLE_APP_CHECK = !__DEV__;
+const ENABLE_IN_DEV = process.env.EXPO_PUBLIC_ENABLE_APPCHECK === 'true';
+const SHOULD_ENABLE = !__DEV__ || ENABLE_IN_DEV;
+const DEBUG_TOKEN = process.env.EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN?.trim() || undefined;
+const WEB_SITE_KEY = process.env.EXPO_PUBLIC_APPCHECK_WEB_SITE_KEY?.trim() || undefined;
 
-// Use debug token in development (set in Firebase Console > App Check > Apps > Debug Tokens)
-const DEBUG_TOKEN = 'YOUR-DEBUG-TOKEN'; // Replace with your debug token
-
-/**
- * Initialize App Check with Play Integrity (Android)
- */
 export const initializeAppCheck = async () => {
-    if (!ENABLE_APP_CHECK) {
-
+    if (!SHOULD_ENABLE) {
+        if (__DEV__) {
+            console.log('[AppCheck] Disabled in dev. Set EXPO_PUBLIC_ENABLE_APPCHECK=true to enable.');
+        }
         return;
     }
 
-    try {
-        // Configure App Check with Play Integrity provider
-        await appCheck().initializeAppCheck({
-            provider: appCheck.newPlayIntegrityProvider({
-                // Optional: Define which Firebase products App Check protects
-                // By default, it protects all products
-            }),
-            // Enable token auto-refresh
-            isTokenAutoRefreshEnabled: true,
-        });
+    const provider = appCheck().newReactNativeFirebaseAppCheckProvider();
+    provider.configure({
+        android: {
+            provider: __DEV__ ? 'debug' : 'playIntegrity',
+            debugToken: DEBUG_TOKEN,
+        },
+        apple: {
+            provider: __DEV__ ? 'debug' : 'appAttestWithDeviceCheckFallback',
+            debugToken: DEBUG_TOKEN,
+        },
+        web: {
+            provider: __DEV__ ? 'debug' : 'reCaptchaV3',
+            debugToken: DEBUG_TOKEN,
+            siteKey: WEB_SITE_KEY,
+        },
+    });
 
+    await appCheck().initializeAppCheck({
+        provider,
+        isTokenAutoRefreshEnabled: true,
+    });
 
-
-        // Get initial token to verify it's working
-        const { token } = await appCheck().getToken(true);
-
-
-    } catch (error) {
-        
-    }
+    // Warm up one token so App Check metrics start appearing quickly.
+    await appCheck().getToken(false);
 };
 
-/**
- * React hook for App Check status
- */
 export const useAppCheck = () => {
     const [isInitialized, setIsInitialized] = useState(false);
     const [error, setError] = useState<Error | null>(null);
@@ -62,9 +48,10 @@ export const useAppCheck = () => {
         const init = async () => {
             try {
                 await initializeAppCheck();
-                setIsInitialized(true);
             } catch (err) {
                 setError(err as Error);
+            } finally {
+                setIsInitialized(true);
             }
         };
 
@@ -74,19 +61,16 @@ export const useAppCheck = () => {
     return {
         isInitialized,
         error,
-        isEnabled: ENABLE_APP_CHECK,
+        isEnabled: SHOULD_ENABLE,
     };
 };
 
-/**
- * Get App Check token manually (for custom backend calls)
- */
 export const getAppCheckToken = async (): Promise<string | null> => {
+    if (!SHOULD_ENABLE) return null;
     try {
         const { token } = await appCheck().getToken(true);
         return token;
-    } catch (error) {
-        
+    } catch (_) {
         return null;
     }
 };

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 
@@ -7,6 +7,7 @@ const useTrips = () => {
     const [allTrips, setAllTrips] = useState([]); // Keep all trips for other uses
     const [loading, setLoading] = useState(true);
     const [refreshKey, setRefreshKey] = useState(0);
+    const ownerCacheRef = useRef<Map<string, any>>(new Map());
 
     // Refetch function to manually trigger a refresh
     const refetch = useCallback(() => {
@@ -25,30 +26,60 @@ const useTrips = () => {
                 unsubscribe = firestore()
                     .collection('trips')
                     .orderBy('createdAt', 'desc')
+                    .limit(80)
                     .onSnapshot(
                         async (querySnapshot) => {
                             if (querySnapshot && querySnapshot.docs.length > 0) {
-                                const tripsData = await Promise.all(
-                                    querySnapshot.docs.map(async (doc) => {
-                                        const trip = { id: doc.id, ...doc.data() };
+                                const tripsData = querySnapshot.docs.map((doc) => {
+                                    const trip = { id: doc.id, ...doc.data() } as any;
+                                    if (trip.userId && (trip.ownerDisplayName || trip.ownerPhotoURL || trip.ownerUsername)) {
+                                        trip.user = {
+                                            id: trip.userId,
+                                            displayName: trip.ownerDisplayName || 'Traveler',
+                                            photoURL: trip.ownerPhotoURL || null,
+                                            username: trip.ownerUsername || null,
+                                        };
+                                    }
+                                    return trip;
+                                });
 
-                                        if (trip.userId) {
-                                            try {
-                                                const userDoc = await firestore()
-                                                    .collection('users')
-                                                    .doc(trip.userId)
-                                                    .get();
-                                                if (userDoc.exists) {
-                                                    trip.user = { id: userDoc.id, ...userDoc.data() };
-                                                }
-                                            } catch (e) {
-                                                // User fetch failed, use null values
-                                                trip.user = { displayName: 'Unknown Traveler', photoURL: null };
-                                            }
-                                        }
-                                        return trip;
-                                    })
-                                );
+                                const missingOwnerIds = Array.from(
+                                    new Set(
+                                        tripsData
+                                            .filter((trip: any) => trip.userId && !trip.user)
+                                            .map((trip: any) => trip.userId)
+                                    )
+                                ).filter((uid: string) => !ownerCacheRef.current.has(uid));
+
+                                if (missingOwnerIds.length > 0) {
+                                    const chunkSize = 10;
+                                    const ownerChunks = Array.from(
+                                        { length: Math.ceil(missingOwnerIds.length / chunkSize) },
+                                        (_, i) => missingOwnerIds.slice(i * chunkSize, i * chunkSize + chunkSize)
+                                    );
+
+                                    await Promise.all(ownerChunks.map(async (chunk) => {
+                                        if (chunk.length === 0) return;
+                                        const usersSnapshot = await firestore()
+                                            .collection('public_users')
+                                            .where(firestore.FieldPath.documentId(), 'in', chunk)
+                                            .get();
+
+                                        usersSnapshot.docs.forEach((userDoc) => {
+                                            ownerCacheRef.current.set(userDoc.id, { id: userDoc.id, ...userDoc.data() });
+                                        });
+                                    }));
+                                }
+
+                                tripsData.forEach((trip: any) => {
+                                    if (trip.user || !trip.userId) return;
+                                    const cachedOwner = ownerCacheRef.current.get(trip.userId);
+                                    if (cachedOwner) {
+                                        trip.user = cachedOwner;
+                                    } else {
+                                        trip.user = { id: trip.userId, displayName: 'Unknown Traveler', photoURL: null };
+                                    }
+                                });
 
                                 // Store all trips (for profile pages etc.)
                                 setAllTrips(tripsData);

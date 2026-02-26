@@ -6,15 +6,13 @@ module.exports = {
   },
   extends: [
     "eslint:recommended",
-    "plugin:import/errors",
-    "plugin:import/warnings",
+    "plugin:import/recommended",
     "plugin:import/typescript",
-    "google",
     "plugin:@typescript-eslint/recommended",
   ],
   parser: "@typescript-eslint/parser",
   parserOptions: {
-    project: ["tsconfig.json", "tsconfig.dev.json"],
+    ecmaVersion: 2022,
     sourceType: "module",
   },
   ignorePatterns: [
@@ -26,8 +24,14 @@ module.exports = {
     "import",
   ],
   rules: {
-    "quotes": ["error", "double"],
+    "@typescript-eslint/no-explicit-any": "off",
     "import/no-unresolved": 0,
-    "indent": ["error", 2],
+    "indent": "off",
+    "max-len": "off",
+    "object-curly-spacing": "off",
+    "quotes": "off",
+    "require-jsdoc": "off",
+    "valid-jsdoc": "off",
+    "linebreak-style": 0,
   },
 };

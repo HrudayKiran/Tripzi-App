@@ -1,6 +1,6 @@
 # Tripzi Audit Report Index
 
-Date: 2026-02-19
+Date: 2026-02-26
 
 Use these files as individual reports:
 
@@ -27,3 +27,21 @@ Use these files as individual reports:
 
 8. `REPORT_07_EXECUTION_PLAN_P0_P2.md`
    - Actionable implementation plan with exact P0/P1/P2 changes and deployment sequence
+
+9. `P0_IMPLEMENTATION_STATUS.md`
+   - P0 completed implementation details and verification summary
+
+10. `P1_IMPLEMENTATION_STATUS.md`
+   - P1 completed implementation details and migration tooling
+
+11. `P2_IMPLEMENTATION_STATUS.md`
+   - P2 implementation, verification, deployment, and migration execution status
+
+12. `REPORT_08_REVALIDATION_AND_REMAINING_GAPS.md`
+   - Current post-deployment revalidation summary, live schema snapshot, App Check status, and remaining gap list
+
+13. `APP_CHECK_MANUAL_STEPS.md`
+   - Exact manual App Check rollout steps for development -> enforced rollout
+
+14. `P3_IMPLEMENTATION_STATUS.md`
+   - Public profile split + callable group moderation implementation, migration, and deployment status
