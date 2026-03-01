@@ -99,7 +99,7 @@ export const onTripJoin = onDocumentUpdated(
             // 2. Notify & Message
             await Promise.all(newJoiners.map(async (joinerId: string) => {
                 const joinerDoc = await db.collection("users").doc(joinerId).get();
-                const joinerName = joinerDoc.data()?.displayName || "Someone";
+                const joinerName = joinerDoc.data()?.name || joinerDoc.data()?.displayName || "Someone";
 
                 // A. Specific Notification for Joiner
                 await createNotification({
@@ -199,7 +199,7 @@ export const onTripUpdated = onDocumentUpdated(
                 if (leaverId === hostId) return;
 
                 const leaverDoc = await db.collection("users").doc(leaverId).get();
-                const leaverName = leaverDoc.data()?.displayName || "Someone";
+                const leaverName = leaverDoc.data()?.name || leaverDoc.data()?.displayName || "Someone";
 
                 // Notify Host
                 await createNotification({

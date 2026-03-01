@@ -4,9 +4,10 @@ import { createNotification, sendPushToUser } from "../utils/notifications";
 import * as admin from "firebase-admin";
 
 const buildPublicProfile = (userId: string, afterData: any) => {
+  const resolvedName = afterData?.name || afterData?.displayName || "User";
   return {
     userId,
-    displayName: afterData?.displayName || "User",
+    displayName: resolvedName,
     username: afterData?.username || null,
     photoURL: afterData?.photoURL || null,
     bio: afterData?.bio || "",
@@ -74,7 +75,7 @@ export const onUserUpdated = onDocumentWritten(
     // Keep owner summary denormalized on trips for feed/search performance.
     const profileChanged =
       !beforeData ||
-      beforeData.displayName !== afterData.displayName ||
+      (beforeData.name || beforeData.displayName) !== (afterData.name || afterData.displayName) ||
       beforeData.photoURL !== afterData.photoURL ||
       beforeData.username !== afterData.username;
 
@@ -86,7 +87,7 @@ export const onUserUpdated = onDocumentWritten(
         const bulkWriter = db.bulkWriter();
         tripsSnapshot.forEach((tripDoc) => {
           bulkWriter.update(tripDoc.ref, {
-            ownerDisplayName: afterData.displayName || null,
+            ownerDisplayName: afterData.name || afterData.displayName || null,
             ownerPhotoURL: afterData.photoURL || null,
             ownerUsername: afterData.username || null,
             ownerProfileUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),

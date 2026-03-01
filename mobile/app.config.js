@@ -1,0 +1,119 @@
+require('dotenv').config();
+
+const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+
+module.exports = {
+  expo: {
+    name: 'Tripzi',
+    slug: 'mobile',
+    version: '1.0.0',
+    scheme: 'tripzi',
+    orientation: 'portrait',
+    icon: './assets/icon.png',
+    userInterfaceStyle: 'automatic',
+    splash: {
+      image: './assets/icon.png',
+      resizeMode: 'contain',
+      backgroundColor: '#9d74f7',
+    },
+    extra: {
+      eas: {
+        projectId: '3070be5b-0bdf-464b-b994-81505f567054',
+      },
+    },
+    ios: {
+      supportsTablet: true,
+      bundleIdentifier: 'com.tripzi.mobile',
+      config: {
+        googleMapsApiKey,
+      },
+    },
+    android: {
+      adaptiveIcon: {
+        foregroundImage: './assets/icon.png',
+        backgroundColor: '#9d74f7',
+      },
+      package: 'com.tripzi.mobile',
+      googleServicesFile: './google-services.json',
+      config: {
+        googleMaps: {
+          apiKey: googleMapsApiKey,
+        },
+      },
+      intentFilters: [
+        {
+          action: 'VIEW',
+          autoVerify: true,
+          data: [
+            {
+              scheme: 'https',
+              host: 'tripzi.com',
+              pathPrefix: '/trip',
+            },
+            {
+              scheme: 'https',
+              host: 'tripzi.com',
+              pathPrefix: '/user',
+            },
+          ],
+          category: ['BROWSABLE', 'DEFAULT'],
+        },
+      ],
+      permissions: [
+        'android.permission.INTERNET',
+        'android.permission.ACCESS_NETWORK_STATE',
+        'android.permission.POST_NOTIFICATIONS',
+        'android.permission.ACCESS_FINE_LOCATION',
+        'android.permission.ACCESS_COARSE_LOCATION',
+        'android.permission.CAMERA',
+        'android.permission.READ_MEDIA_IMAGES',
+        'android.permission.READ_MEDIA_VIDEO',
+        'android.permission.RECEIVE_BOOT_COMPLETED',
+        'android.permission.VIBRATE',
+        'android.permission.WAKE_LOCK',
+      ],
+    },
+    plugins: [
+      '@react-native-firebase/app',
+      '@react-native-firebase/auth',
+      '@react-native-firebase/messaging',
+      '@react-native-firebase/app-check',
+      [
+        'expo-build-properties',
+        {
+          android: {
+            usesCleartextTraffic: true,
+            minSdkVersion: 24,
+            compileSdkVersion: 35,
+            targetSdkVersion: 35,
+            enableProguardInReleaseBuilds: true,
+            enableShrinkResourcesInReleaseBuilds: true,
+          },
+        },
+      ],
+      [
+        'expo-location',
+        {
+          locationAlwaysAndWhenInUsePermission: 'Allow Tripzi to use your location for sharing and maps.',
+        },
+      ],
+      [
+        'expo-image-picker',
+        {
+          photosPermission: 'Allow Tripzi to access your photos for sharing.',
+          cameraPermission: 'Allow Tripzi to use your camera to take photos.',
+        },
+      ],
+      [
+        'expo-media-library',
+        {
+          photosPermission: 'Allow Tripzi to save photos and videos to your gallery.',
+          savePhotosPermission: 'Allow Tripzi to save photos to your gallery.',
+          isAccessMediaLocationEnabled: true,
+        },
+      ],
+      '@react-native-community/datetimepicker',
+      'expo-font',
+    ],
+  },
+};

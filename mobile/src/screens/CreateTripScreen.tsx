@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Image, Platform, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Image, Platform, Modal, ActivityIndicator, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
@@ -19,7 +19,7 @@ const TRIP_TYPES = [
     { id: 'adventure', label: 'Adventure', icon: 'compass', color: '#F59E0B' },
     { id: 'trekking', label: 'Trekking', icon: 'walk', color: '#10B981' },
     { id: 'bike_ride', label: 'Bike Ride', icon: 'bicycle', color: '#EF4444' },
-    { id: 'road_trip', label: 'Road Trip', icon: 'car-sport', color: '#8B5CF6' },
+    { id: 'road_trip', label: 'Road Trip', icon: 'car-sport', color: '#9d74f7' },
     { id: 'camping', label: 'Camping', icon: 'bonfire', color: '#F97316' },
     { id: 'sightseeing', label: 'Sightseeing', icon: 'camera', color: '#3B82F6' },
     { id: 'beach', label: 'Beach', icon: 'sunny', color: '#06B6D4' },
@@ -258,7 +258,7 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                 mandatoryItems: mandatoryItems.split(',').map(item => item.trim()).filter(Boolean),
                 placesToVisit: placesToVisit.split(',').map(place => place.trim()).filter(Boolean),
                 userId: currentUser.uid,
-                ownerDisplayName: currentUserData.displayName || currentUser.displayName || 'Traveler',
+                ownerDisplayName: currentUserData.name || currentUserData.displayName || currentUser.displayName || 'Traveler',
                 ownerPhotoURL: currentUserData.photoURL || currentUser.photoURL || null,
                 ownerUsername: currentUserData.username || null,
                 participants: [currentUser.uid],
@@ -331,11 +331,18 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                 style={StyleSheet.absoluteFill}
             />
             <SafeAreaView style={styles.container}>
+                <KeyboardAvoidingView
+                    style={styles.keyboardContainer}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    keyboardVerticalOffset={Platform.OS === 'ios' ? 18 : 0}
+                >
                 {renderHeader()}
 
                 <ScrollView
                     contentContainerStyle={styles.content}
                     showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
                 >
                     {/* Step 1: Basic Info */}
                     {step === 1 && (
@@ -619,10 +626,10 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                                 {GENDER_PREFERENCES.map((pref) => (
                                     <TouchableOpacity
                                         key={pref.id}
-                                        style={[styles.chip, { backgroundColor: genderPreference === pref.id ? '#8B5CF6' : colors.card, borderColor: '#8B5CF6' }]}
+                                        style={[styles.chip, { backgroundColor: genderPreference === pref.id ? '#9d74f7' : colors.card, borderColor: '#9d74f7' }]}
                                         onPress={() => setGenderPreference(pref.id)}
                                     >
-                                        <Ionicons name={pref.icon as any} size={18} color={genderPreference === pref.id ? '#fff' : '#8B5CF6'} />
+                                        <Ionicons name={pref.icon as any} size={18} color={genderPreference === pref.id ? '#fff' : '#9d74f7'} />
                                         <Text style={[styles.chipText, { color: genderPreference === pref.id ? '#fff' : colors.text }]}>{pref.label}</Text>
                                     </TouchableOpacity>
                                 ))}
@@ -711,6 +718,7 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                         </LinearGradient>
                     </TouchableOpacity>
                 </View>
+                </KeyboardAvoidingView>
             </SafeAreaView>
 
         </View>
@@ -725,6 +733,7 @@ const styles = StyleSheet.create({
         paddingBottom: SPACING.md,
     },
     container: { flex: 1 },
+    keyboardContainer: { flex: 1 },
     content: { padding: SPACING.lg, paddingBottom: 100 },
     backButton: { padding: SPACING.sm, marginRight: SPACING.sm },
     progressContainer: { flex: 1, gap: 4 },
@@ -819,7 +828,7 @@ const styles = StyleSheet.create({
     autoImageToggle: { flexDirection: 'row', alignItems: 'center', marginTop: SPACING.xl, padding: SPACING.md, borderRadius: BORDER_RADIUS.md, backgroundColor: 'rgba(139, 92, 246, 0.1)' },
     hintText: { fontSize: FONT_SIZE.xs },
     toggleButton: { width: 50, height: 28, borderRadius: 14, backgroundColor: '#E5E7EB', justifyContent: 'center', paddingHorizontal: 2 },
-    toggleButtonActive: { backgroundColor: '#8B5CF6' },
+    toggleButtonActive: { backgroundColor: '#9d74f7' },
     toggleCircle: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#fff', elevation: 2 },
     toggleCircleActive: { alignSelf: 'flex-end' },
 });

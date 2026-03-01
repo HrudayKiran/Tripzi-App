@@ -13,8 +13,6 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/consta
 import NotificationService from '../utils/notificationService';
 import ReportTripModal from '../components/ReportTripModal';
 import { pickAndUploadImage } from '../utils/imageUpload';
-import { useAgeGate } from '../hooks/useAgeGate';
-import AgeVerificationModal from '../components/AgeVerificationModal';
 
 const { width } = Dimensions.get('window');
 
@@ -55,8 +53,6 @@ const GENDER_PREFERENCES = [
 
 const TripDetailsScreen = ({ route, navigation }) => {
   const { colors } = useTheme();
-  const { isAgeVerified } = useAgeGate();
-  const [showAgeModal, setShowAgeModal] = useState(false);
   const [trip, setTrip] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isJoined, setIsJoined] = useState(false);
@@ -244,12 +240,6 @@ const TripDetailsScreen = ({ route, navigation }) => {
   const handleJoinToggle = async () => {
     if (!user) {
       Alert.alert('Sign In Required', 'Please sign in to join trips.');
-      return;
-    }
-
-    // Check age verification for joining
-    if (!isJoined && !isAgeVerified) {
-      setShowAgeModal(true);
       return;
     }
 
@@ -1153,7 +1143,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
                   {GENDER_PREFERENCES.map((pref) => (
                     <TouchableOpacity
                       key={pref.id}
-                      style={[styles.chip, { backgroundColor: editGenderPreference === pref.id ? '#8B5CF6' : colors.inputBackground }]}
+                      style={[styles.chip, { backgroundColor: editGenderPreference === pref.id ? '#9d74f7' : colors.inputBackground }]}
                       onPress={() => setEditGenderPreference(pref.id)}
                     >
                       <Text style={[styles.chipText, { color: editGenderPreference === pref.id ? '#fff' : colors.text }]}>{pref.label}</Text>
@@ -1257,11 +1247,6 @@ const TripDetailsScreen = ({ route, navigation }) => {
         onClose={() => setShowReportModal(false)}
       />
 
-      <AgeVerificationModal
-        visible={showAgeModal}
-        onClose={() => setShowAgeModal(false)}
-        action="join this trip"
-      />
     </View>
   );
 };

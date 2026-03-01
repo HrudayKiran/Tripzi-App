@@ -16,8 +16,6 @@ import DefaultAvatar from '../components/DefaultAvatar';
 import { pickAndUploadImage } from '../utils/imageUpload';
 
 import NotificationService from '../utils/notificationService';
-import { useAgeGate } from '../hooks/useAgeGate';
-import AgeVerificationModal from '../components/AgeVerificationModal';
 
 import ReportTripModal from '../components/ReportTripModal';
 
@@ -61,7 +59,6 @@ const UserProfileScreen = ({ route, navigation }) => {
 
     const [hostRating, setHostRating] = useState<{ average: number; count: number } | null>(null);
     const [showFullImage, setShowFullImage] = useState(false);
-    const [showAgeModal, setShowAgeModal] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
 
     // Hoisted Modal State
@@ -76,9 +73,11 @@ const UserProfileScreen = ({ route, navigation }) => {
     const headerTranslateY = useRef(new Animated.Value(0)).current;
     const HEADER_HEIGHT = 60 + insets.top;
 
-    const { isAgeVerified } = useAgeGate();
-
     const isOwnProfile = userId === currentUser?.uid;
+    const formatGender = (gender?: string | null) => {
+        if (!gender) return 'Not set';
+        return `${gender.charAt(0).toUpperCase()}${gender.slice(1).toLowerCase()}`;
+    };
 
     const handleScroll = (event: any) => {
         const currentScrollY = event.nativeEvent.contentOffset.y;
@@ -115,12 +114,8 @@ const UserProfileScreen = ({ route, navigation }) => {
 
 
 
-    // Handle create trip button with age verification check
+    // Handle create trip button
     const handleCreateButtonPress = () => {
-        if (!isAgeVerified) {
-            setShowAgeModal(true);
-            return;
-        }
         setShowCreateModal(true);
     };
 
@@ -184,8 +179,9 @@ const UserProfileScreen = ({ route, navigation }) => {
 
             if (userDoc.exists) {
                 const userData = { id: userDoc.id, ...userDoc.data() };
-                setUser(userData);
-                setEditName(userData.displayName || '');
+                const normalizedDisplayName = userData.name || userData.displayName || currentUser?.displayName || 'User';
+                setUser({ ...userData, displayName: normalizedDisplayName, name: userData.name || normalizedDisplayName });
+                setEditName(normalizedDisplayName);
                 setEditBio(userData.bio || '');
                 setEditUsername(userData.username || '');
                 setProfileImage(userData.photoURL);
@@ -215,6 +211,7 @@ const UserProfileScreen = ({ route, navigation }) => {
             } else if (isOwnProfile && currentUser) {
                 setUser({
                     id: currentUser.uid,
+                    name: currentUser.displayName || 'User',
                     displayName: currentUser.displayName || 'User',
                     email: currentUser.email,
                     photoURL: currentUser.photoURL || null,
@@ -234,6 +231,7 @@ const UserProfileScreen = ({ route, navigation }) => {
             if (isOwnProfile && currentUser) {
                 setUser({
                     id: currentUser.uid,
+                    name: currentUser.displayName || 'User',
                     displayName: currentUser.displayName || 'User',
                     photoURL: currentUser.photoURL,
                     bio: '',
@@ -321,7 +319,8 @@ const UserProfileScreen = ({ route, navigation }) => {
 
         try {
             const updateData: any = {
-                displayName: editName,
+                name: editName,
+                displayName: firestore.FieldValue.delete(),
                 bio: editBio,
                 photoURL: profileImage,
             };
@@ -332,11 +331,11 @@ const UserProfileScreen = ({ route, navigation }) => {
 
             await firestore().collection('users').doc(currentUser.uid).update(updateData);
 
-            setUser(prev => ({ ...prev, displayName: editName, bio: editBio, photoURL: profileImage, username: editUsername.toLowerCase() }));
+            setUser(prev => ({ ...prev, name: editName, displayName: editName, bio: editBio, photoURL: profileImage, username: editUsername.toLowerCase() }));
             setShowEditModal(false);
             Alert.alert('Success! ✨', 'Profile updated!');
         } catch (error) {
-            setUser(prev => ({ ...prev, displayName: editName, bio: editBio, photoURL: profileImage }));
+            setUser(prev => ({ ...prev, name: editName, displayName: editName, bio: editBio, photoURL: profileImage }));
             setShowEditModal(false);
             Alert.alert('Saved!', 'Profile updated locally.');
         }
@@ -368,10 +367,10 @@ const UserProfileScreen = ({ route, navigation }) => {
     };
 
     const handleDeleteTrip = (tripId) => {
-        Alert.alert('Delete Trip', 'Are you sure? All participants will be notified.', [
+        Alert.alert('Cancel Trip', 'Are you sure? All participants will be notified and this trip will be marked as cancelled.', [
             { text: 'Cancel', style: 'cancel' },
             {
-                text: 'Delete', style: 'destructive',
+                text: 'Confirm', style: 'destructive',
                 onPress: async () => {
                     try {
                         // Fetch trip data to get participants
@@ -391,9 +390,19 @@ const UserProfileScreen = ({ route, navigation }) => {
                             }
                         }
 
-                        await firestore().collection('trips').doc(tripId).delete();
+                        await firestore().collection('trips').doc(tripId).update({
+                            status: 'cancelled',
+                            isCancelled: true,
+                            cancelledBy: currentUser?.uid || null,
+                            cancelledAt: firestore.FieldValue.serverTimestamp(),
+                            updatedAt: firestore.FieldValue.serverTimestamp(),
+                        });
                     } catch (e) { }
-                    setTrips(prev => prev.filter(t => t.id !== tripId));
+                    setTrips(prev => prev.map(t => t.id === tripId ? {
+                        ...t,
+                        status: 'cancelled',
+                        isCancelled: true,
+                    } : t));
                 }
             }
         ]);
@@ -430,7 +439,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                     participants: [currentUser.uid, userId],
                     participantDetails: {
                         [currentUser.uid]: {
-                            displayName: currentUserData?.displayName || currentUser.displayName || 'User',
+                            displayName: currentUserData?.name || currentUserData?.displayName || currentUser.displayName || 'User',
                             photoURL: currentUserData?.photoURL || currentUser.photoURL || '',
                         },
                         [userId]: {
@@ -542,12 +551,9 @@ const UserProfileScreen = ({ route, navigation }) => {
                         <Ionicons name="arrow-back" size={24} color={colors.text} />
                     </TouchableOpacity>
                     {isOwnProfile && (
-                        <View style={{ flexDirection: 'row', gap: 12 }}>
+                        <View style={{ flexDirection: 'row' }}>
                             <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={handleCreateButtonPress}>
                                 <Ionicons name="add" size={24} color={colors.text} />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={() => setShowEditModal(true)}>
-                                <Ionicons name="create-outline" size={24} color={colors.text} />
                             </TouchableOpacity>
                         </View>
                     )}
@@ -569,7 +575,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                     <View style={styles.headerProfileRow}>
 
                         {/* 1. Avatar */}
-                        <TouchableOpacity onPress={isOwnProfile ? pickProfileImage : () => (profileImage || user.photoURL) ? setShowFullImage(true) : null}>
+                        <TouchableOpacity onPress={() => (profileImage || user.photoURL) ? setShowFullImage(true) : null}>
                             <View style={styles.avatarContainer}>
                                 <View style={[styles.avatarBorder, { backgroundColor: colors.background }]}>
                                     <DefaultAvatar
@@ -677,6 +683,22 @@ const UserProfileScreen = ({ route, navigation }) => {
                             <Text style={[styles.changePhotoText, { color: colors.primary }]}>Change Photo</Text>
                         </TouchableOpacity>
 
+                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Email ID</Text>
+                        <TextInput
+                            style={[styles.input, styles.readOnlyInput, { backgroundColor: colors.inputBackground, color: colors.textSecondary, borderColor: colors.border }]}
+                            value={user?.email || currentUser?.email || ''}
+                            editable={false}
+                            selectTextOnFocus={false}
+                        />
+
+                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Gender</Text>
+                        <TextInput
+                            style={[styles.input, styles.readOnlyInput, { backgroundColor: colors.inputBackground, color: colors.textSecondary, borderColor: colors.border }]}
+                            value={formatGender(user?.gender)}
+                            editable={false}
+                            selectTextOnFocus={false}
+                        />
+
                         <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Display Name</Text>
                         <TextInput
                             style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
@@ -718,7 +740,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                         <Text style={[styles.charCount, { color: colors.textSecondary }]}>{editBio.length}/150</Text>
 
                         <TouchableOpacity onPress={handleSaveProfile} style={{ marginBottom: 40 }}>
-                            <LinearGradient colors={['#8B5CF6', '#EC4899']} style={styles.saveButton}>
+                            <LinearGradient colors={['#9d74f7', '#EC4899']} style={styles.saveButton}>
                                 <Text style={styles.saveButtonText}>Save Changes</Text>
                             </LinearGradient>
                         </TouchableOpacity>
@@ -754,7 +776,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                         />
 
                         <TouchableOpacity onPress={saveEditTrip}>
-                            <LinearGradient colors={['#8B5CF6', '#EC4899']} style={styles.saveButton}>
+                            <LinearGradient colors={['#9d74f7', '#EC4899']} style={styles.saveButton}>
                                 <Text style={styles.saveButtonText}>Save Changes</Text>
                             </LinearGradient>
                         </TouchableOpacity>
@@ -776,14 +798,6 @@ const UserProfileScreen = ({ route, navigation }) => {
                     setUser(prev => ({ ...prev, photoURL: null }));
                 }}
             />
-
-            {/* Age Verification Modal */}
-            <AgeVerificationModal
-                visible={showAgeModal}
-                onClose={() => setShowAgeModal(false)}
-                action="create or join a trip"
-            />
-
 
             <ReportTripModal
                 visible={activeModal === 'report'}
@@ -956,6 +970,7 @@ const styles = StyleSheet.create({
     changePhotoText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold, marginTop: SPACING.sm },
     inputLabel: { fontSize: FONT_SIZE.xs, marginBottom: SPACING.xs, marginTop: SPACING.md },
     input: { padding: SPACING.md, borderRadius: BORDER_RADIUS.md, borderWidth: 1, fontSize: FONT_SIZE.md },
+    readOnlyInput: { opacity: 0.85 },
     bioInput: { height: 100, textAlignVertical: 'top' },
     charCount: { fontSize: FONT_SIZE.xs, textAlign: 'right', marginTop: SPACING.xs },
     saveButton: { padding: SPACING.lg, borderRadius: BORDER_RADIUS.lg, alignItems: 'center', marginTop: SPACING.xl },

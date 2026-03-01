@@ -102,7 +102,7 @@ const WelcomeScreen = ({ navigation }) => {
                 <Image source={{ uri: item.image }} style={styles.slideImage} resizeMode="cover" />
             ) : (
                 <View style={[styles.slideImage, { backgroundColor: colors.primary }]}>
-                    <LinearGradient colors={['#8B5CF6', '#EC4899']} style={{ flex: 1 }} />
+                    <LinearGradient colors={['#9d74f7', '#EC4899']} style={{ flex: 1 }} />
                 </View>
             )}
             <LinearGradient

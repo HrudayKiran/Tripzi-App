@@ -113,7 +113,7 @@ const SettingsScreen = ({ navigation }) => {
                     <Animatable.View animation="fadeInUp" duration={400} delay={0}>
                         <View style={[styles.settingCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                             <View style={[styles.iconBox, { backgroundColor: '#EDE9FE' }]}>
-                                <Ionicons name="notifications" size={24} color="#8B5CF6" />
+                                <Ionicons name="notifications" size={24} color="#9d74f7" />
                             </View>
                             <View style={styles.settingInfo}>
                                 <Text style={[styles.settingTitle, { color: colors.text }]}>Push Notifications</Text>

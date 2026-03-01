@@ -35,7 +35,7 @@ const DefaultAvatar: React.FC<DefaultAvatarProps> = ({ uri, name = 'User', size 
 
     return (
         <LinearGradient
-            colors={['#8B5CF6', '#EC4899', '#F59E0B']}
+            colors={['#9d74f7', '#EC4899', '#F59E0B']}
             style={[
                 styles.gradient,
                 {

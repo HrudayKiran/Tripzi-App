@@ -199,7 +199,7 @@ const ChatsListScreen = ({ navigation }) => {
                     participants: [currentUser.uid, user.id],
                     participantDetails: {
                         [currentUser.uid]: {
-                            displayName: currentUserData?.displayName || currentUser.displayName || 'User',
+                            displayName: currentUserData?.name || currentUserData?.displayName || currentUser.displayName || 'User',
                             photoURL: currentUserData?.photoURL || currentUser.photoURL || '',
                         },
                         [user.id]: {

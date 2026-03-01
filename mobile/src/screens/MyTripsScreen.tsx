@@ -9,12 +9,22 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/consta
 import AppLogo from '../components/AppLogo';
 import { useFocusEffect } from '@react-navigation/native';
 
-const MyTripsScreen = ({ navigation }) => {
+const MyTripsScreen = ({ navigation, route }) => {
   const { colors } = useTheme();
   const [joinedTrips, setJoinedTrips] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('Upcoming');
+
+  useEffect(() => {
+    const requestedTab = route?.params?.initialTab;
+    if (!requestedTab) return;
+    const tabKey = String(requestedTab).toLowerCase();
+    if (tabKey === 'completed') setActiveTab('Completed');
+    if (tabKey === 'ongoing') setActiveTab('Ongoing');
+    if (tabKey === 'upcoming') setActiveTab('Upcoming');
+    if (tabKey === 'cancelled') setActiveTab('Cancelled');
+  }, [route?.params?.initialTab]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -53,7 +63,7 @@ const MyTripsScreen = ({ navigation }) => {
   );
 
   const handleLeaveTrip = async (tripId: string) => {
-    const currentUser = auth.currentUser;
+    const currentUser = auth().currentUser;
     if (!currentUser) return;
 
     try {
@@ -84,13 +94,18 @@ const MyTripsScreen = ({ navigation }) => {
       const fromDay = fromDate ? new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate()) : null;
       const toDay = toDate ? new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate()) : null;
 
+      if (activeTab === 'Cancelled') {
+        return trip.status === 'cancelled' || trip.isCancelled === true;
+      }
+
       // Completed: Only when owner has marked the trip as completed
       if (activeTab === 'Completed') {
         return trip.isCompleted === true;
       }
 
-      // Don't show completed trips in other tabs
+      // Don't show completed/cancelled trips in other tabs
       if (trip.isCompleted) return false;
+      if (trip.status === 'cancelled' || trip.isCancelled === true) return false;
 
       if (activeTab === 'Upcoming') {
         // Upcoming: start date is in future OR no dates set
@@ -142,7 +157,9 @@ const MyTripsScreen = ({ navigation }) => {
       <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
         {activeTab === 'Upcoming'
           ? 'Join some trips from the feed to see them here!'
-          : 'Your completed trips will appear here.'}
+          : activeTab === 'Cancelled'
+            ? 'Cancelled trips will appear here.'
+            : 'Your completed trips will appear here.'}
       </Text>
     </View>
   );
@@ -155,7 +172,7 @@ const MyTripsScreen = ({ navigation }) => {
           <Text style={[styles.title, { color: colors.text }]}>My Trips</Text>
         </View>
 
-        {/* Tabs - Upcoming, Ongoing, Completed */}
+        {/* Tabs - Upcoming, Ongoing, Completed, Cancelled */}
         <View style={[styles.tabContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <TouchableOpacity
             onPress={() => setActiveTab('Upcoming')}
@@ -197,6 +214,20 @@ const MyTripsScreen = ({ navigation }) => {
               { color: activeTab === 'Completed' ? '#fff' : colors.textSecondary }
             ]}>
               Completed
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setActiveTab('Cancelled')}
+            style={[
+              styles.tab,
+              activeTab === 'Cancelled' && [styles.activeTab, { backgroundColor: colors.primary }]
+            ]}
+          >
+            <Text style={[
+              styles.tabText,
+              { color: activeTab === 'Cancelled' ? '#fff' : colors.textSecondary }
+            ]}>
+              Cancelled
             </Text>
           </TouchableOpacity>
         </View>

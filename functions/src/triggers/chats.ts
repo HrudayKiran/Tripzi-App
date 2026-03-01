@@ -37,7 +37,7 @@ export const onMessageCreated = onDocumentCreated(
             senderName = "Tripzi";
         } else {
             const senderDoc = await db.collection("users").doc(senderId).get();
-            senderName = senderDoc.data()?.displayName || "Someone";
+            senderName = senderDoc.data()?.name || senderDoc.data()?.displayName || "Someone";
         }
 
         // Check for Mentions

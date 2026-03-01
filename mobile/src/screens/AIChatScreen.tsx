@@ -33,34 +33,6 @@ const AIChatScreen = ({ navigation }: any) => {
         ]);
     }, []);
 
-    const [isAgeVerified, setIsAgeVerified] = useState<boolean | null>(null);
-    const [isLoadingProfile, setIsLoadingProfile] = useState(true);
-
-    useEffect(() => {
-        const checkAgeVerification = async () => {
-            const user = auth().currentUser;
-            if (!user) return;
-
-            try {
-                const userDoc = await firestore().collection('users').doc(user.uid).get();
-                if (userDoc.exists) {
-                    setIsAgeVerified(userDoc.data()?.ageVerified === true);
-                } else {
-                    setIsAgeVerified(false);
-                }
-            } catch (error) {
-
-                setIsAgeVerified(false);
-            } finally {
-                setIsLoadingProfile(false);
-            }
-        };
-
-        const unsubscribe = navigation.addListener('focus', checkAgeVerification);
-        checkAgeVerification(); // Also check on mount
-        return unsubscribe;
-    }, [navigation]);
-
     const handleSend = async () => {
         if (!inputText.trim()) return;
 
@@ -86,43 +58,6 @@ const AIChatScreen = ({ navigation }: any) => {
             setIsTyping(false);
         }
     };
-
-    if (isLoadingProfile) {
-        return (
-            <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }]}>
-                <ActivityIndicator size="large" color={colors.primary} />
-            </View>
-        );
-    }
-
-    if (isAgeVerified === false) {
-        return (
-            <View style={[styles.container, { alignItems: 'center', justifyContent: 'center', padding: SPACING.xl }]}>
-                <LinearGradient
-                    colors={[colors.background, colors.card]}
-                    style={StyleSheet.absoluteFill}
-                />
-                <View style={{
-                    width: 120, height: 120, borderRadius: 60, backgroundColor: colors.card,
-                    justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.xl, elevation: 4
-                }}>
-                    <Ionicons name="lock-closed" size={60} color={colors.primary} />
-                </View>
-                <Text style={[styles.headerTitle, { color: colors.text, textAlign: 'center', marginBottom: SPACING.md }]}>
-                    Age Verification Required
-                </Text>
-                <Text style={[styles.messageText, { color: colors.textSecondary, textAlign: 'center', marginBottom: SPACING.xxl }]}>
-                    To use the AI Trip Planner and ensure a safe community, we need to verify your age first.
-                </Text>
-                <TouchableOpacity
-                    style={[styles.createButton, { backgroundColor: colors.primary, paddingHorizontal: SPACING.xxl, height: 50, justifyContent: 'center' }]}
-                    onPress={() => navigation.navigate('AgeVerification')}
-                >
-                    <Text style={[styles.createButtonText, { fontSize: FONT_SIZE.md }]}>Verify Age Now</Text>
-                </TouchableOpacity>
-            </View>
-        );
-    }
 
     const handleQuickReply = (text: string) => {
         setInputText(text);
@@ -448,7 +383,7 @@ const AIChatScreen = ({ navigation }: any) => {
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 16 : 0}
             >
                 {/* Chat List */}
                 <FlatList
@@ -459,6 +394,8 @@ const AIChatScreen = ({ navigation }: any) => {
                     inverted
                     style={{ flex: 1 }}
                     contentContainerStyle={styles.listContent}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
                     ListFooterComponent={
                         isTyping ? (
                             <View style={styles.typingContainer}>

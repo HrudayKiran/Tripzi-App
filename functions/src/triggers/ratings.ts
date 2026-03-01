@@ -30,7 +30,7 @@ export const onRatingCreated = onDocumentCreated(
 
             if (hostId && hostId !== raterId) {
                 const raterDoc = await db.collection("users").doc(raterId).get();
-                const raterName = raterDoc.data()?.displayName || "Someone";
+                const raterName = raterDoc.data()?.name || raterDoc.data()?.displayName || "Someone";
 
                 await createNotification({
                     recipientId: hostId,

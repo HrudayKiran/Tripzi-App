@@ -9,6 +9,8 @@ import {
     Image,
     ActivityIndicator,
     Alert,
+    KeyboardAvoidingView,
+    Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -143,7 +145,7 @@ const CreateGroupScreen = ({ navigation }) => {
             const participants = [currentUser.uid, ...selectedUsers.map((u) => u.id)];
             const participantDetails: { [key: string]: any } = {
                 [currentUser.uid]: {
-                    displayName: currentUserData?.displayName || currentUser.displayName || 'User',
+                    displayName: currentUserData?.name || currentUserData?.displayName || currentUser.displayName || 'User',
                     photoURL: currentUserData?.photoURL || currentUser.photoURL || '',
                     role: 'admin',
                 },
@@ -185,7 +187,7 @@ const CreateGroupScreen = ({ navigation }) => {
                     senderId: 'system',
                     senderName: 'System',
                     type: 'system',
-                    text: `${currentUserData?.displayName || 'Someone'} created the group "${groupName.trim()}"`,
+                    text: `${currentUserData?.name || currentUserData?.displayName || 'Someone'} created the group "${groupName.trim()}"`,
                     status: 'sent',
                     readBy: {},
                     deliveredTo: [],
@@ -196,7 +198,7 @@ const CreateGroupScreen = ({ navigation }) => {
             // Update parent chat with lastMessage
             await firestore().collection('chats').doc(chatRef.id).update({
                 lastMessage: {
-                    text: `${currentUserData?.displayName || 'Someone'} created the group "${groupName.trim()}"`,
+                    text: `${currentUserData?.name || currentUserData?.displayName || 'Someone'} created the group "${groupName.trim()}"`,
                     senderId: 'system',
                     senderName: 'System',
                     timestamp: firestore.FieldValue.serverTimestamp(),
@@ -268,151 +270,163 @@ const CreateGroupScreen = ({ navigation }) => {
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-            {/* Header */}
-            <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-                    <Ionicons name="arrow-back" size={24} color={colors.text} />
-                </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: colors.text }]}>
-                    {step === 'select' ? 'New Group' : 'Group Details'}
-                </Text>
-                {step === 'select' && selectedUsers.length > 0 && (
-                    <TouchableOpacity
-                        style={[styles.nextButton, { backgroundColor: colors.primary }]}
-                        onPress={() => setStep('details')}
-                    >
-                        <Text style={styles.nextButtonText}>Next</Text>
+            <KeyboardAvoidingView
+                style={styles.keyboardContainer}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 18 : 0}
+            >
+                {/* Header */}
+                <View style={[styles.header, { borderBottomColor: colors.border }]}>
+                    <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+                        <Ionicons name="arrow-back" size={24} color={colors.text} />
                     </TouchableOpacity>
-                )}
-                {step === 'details' && (
-                    <TouchableOpacity
-                        style={[styles.nextButton, { backgroundColor: creating ? colors.border : colors.primary }]}
-                        onPress={createGroup}
-                        disabled={creating}
-                    >
-                        {creating ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                            <Text style={styles.nextButtonText}>Create</Text>
-                        )}
-                    </TouchableOpacity>
-                )}
-            </View>
+                    <Text style={[styles.headerTitle, { color: colors.text }]}>
+                        {step === 'select' ? 'New Group' : 'Group Details'}
+                    </Text>
+                    {step === 'select' && selectedUsers.length > 0 && (
+                        <TouchableOpacity
+                            style={[styles.nextButton, { backgroundColor: colors.primary }]}
+                            onPress={() => setStep('details')}
+                        >
+                            <Text style={styles.nextButtonText}>Next</Text>
+                        </TouchableOpacity>
+                    )}
+                    {step === 'details' && (
+                        <TouchableOpacity
+                            style={[styles.nextButton, { backgroundColor: creating ? colors.border : colors.primary }]}
+                            onPress={createGroup}
+                            disabled={creating}
+                        >
+                            {creating ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <Text style={styles.nextButtonText}>Create</Text>
+                            )}
+                        </TouchableOpacity>
+                    )}
+                </View>
 
-            {step === 'select' ? (
-                <>
-                    {/* Search */}
-                    <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
-                        <Ionicons name="search" size={20} color={colors.textSecondary} />
-                        <TextInput
-                            style={[styles.searchInput, { color: colors.text }]}
-                            placeholder="Search users..."
-                            placeholderTextColor={colors.textSecondary}
-                            value={searchQuery}
-                            onChangeText={handleSearch}
-                        />
-                    </View>
-
-                    {/* Selected users */}
-                    {selectedUsers.length > 0 && (
-                        <View style={styles.selectedContainer}>
-                            <FlatList
-                                data={selectedUsers}
-                                renderItem={renderSelectedUser}
-                                keyExtractor={(item) => item.id}
-                                horizontal
-                                showsHorizontalScrollIndicator={false}
-                                contentContainerStyle={styles.selectedList}
+                {step === 'select' ? (
+                    <>
+                        {/* Search */}
+                        <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
+                            <Ionicons name="search" size={20} color={colors.textSecondary} />
+                            <TextInput
+                                style={[styles.searchInput, { color: colors.text }]}
+                                placeholder="Search users..."
+                                placeholderTextColor={colors.textSecondary}
+                                value={searchQuery}
+                                onChangeText={handleSearch}
                             />
                         </View>
-                    )}
 
-                    {/* User list */}
-                    {searching ? (
-                        <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="small" color={colors.primary} />
-                        </View>
-                    ) : (
-                        <FlatList
-                            data={searchResults}
-                            renderItem={renderUserItem}
-                            keyExtractor={(item) => item.id}
-                            contentContainerStyle={styles.userList}
-                            ListHeaderComponent={
-                                <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-                                    {searchQuery.length > 0 ? 'Search Results' : 'Search users to add'}
-                                </Text>
-                            }
-                            ListEmptyComponent={
-                                <View style={styles.emptyContainer}>
-                                    <Ionicons name="people-outline" size={48} color={colors.textSecondary} style={{ marginBottom: 12 }} />
-                                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                                        {searchQuery.length > 0 ? 'No users found' : 'Start typing to find people'}
-                                    </Text>
-                                    {searchQuery.length === 0 && (
-                                        <Text style={[styles.emptyHint, { color: colors.textSecondary }]}>
-                                            Use the search bar above to find users
-                                        </Text>
-                                    )}
-                                </View>
-                            }
-                        />
-                    )}
-                </>
-            ) : (
-                /* Group Details Step */
-                <View style={styles.detailsContainer}>
-                    <TouchableOpacity style={styles.iconPicker} onPress={pickGroupIcon}>
-                        {groupIcon ? (
-                            <Image source={{ uri: groupIcon }} style={styles.groupIconPreview} />
+                        {/* Selected users */}
+                        {selectedUsers.length > 0 && (
+                            <View style={styles.selectedContainer}>
+                                <FlatList
+                                    data={selectedUsers}
+                                    renderItem={renderSelectedUser}
+                                    keyExtractor={(item) => item.id}
+                                    horizontal
+                                    showsHorizontalScrollIndicator={false}
+                                    contentContainerStyle={styles.selectedList}
+                                    keyboardShouldPersistTaps="handled"
+                                />
+                            </View>
+                        )}
+
+                        {/* User list */}
+                        {searching ? (
+                            <View style={styles.loadingContainer}>
+                                <ActivityIndicator size="small" color={colors.primary} />
+                            </View>
                         ) : (
-                            <View style={[styles.iconPlaceholder, { backgroundColor: colors.card }]}>
-                                <Ionicons name="camera" size={32} color={colors.textSecondary} />
-                            </View>
-                        )}
-                        <View style={[styles.editIconBadge, { backgroundColor: colors.primary }]}>
-                            <Ionicons name="pencil" size={12} color="#fff" />
-                        </View>
-                    </TouchableOpacity>
-
-                    <TextInput
-                        style={[styles.groupNameInput, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
-                        placeholder="Group Name"
-                        placeholderTextColor={colors.textSecondary}
-                        value={groupName}
-                        onChangeText={setGroupName}
-                        maxLength={50}
-                    />
-
-                    <Text style={[styles.membersLabel, { color: colors.textSecondary }]}>
-                        {selectedUsers.length + 1} members (including you)
-                    </Text>
-
-                    <FlatList
-                        data={selectedUsers}
-                        renderItem={({ item }) => (
-                            <View style={[styles.memberItem, { backgroundColor: colors.card }]}>
-                                {item.photoURL ? (
-                                    <Image source={{ uri: item.photoURL }} style={styles.memberAvatar} />
-                                ) : (
-                                    <View style={[styles.memberAvatarPlaceholder, { backgroundColor: colors.primary }]}>
-                                        <Text style={styles.memberAvatarText}>{item.displayName?.charAt(0)?.toUpperCase()}</Text>
+                            <FlatList
+                                data={searchResults}
+                                renderItem={renderUserItem}
+                                keyExtractor={(item) => item.id}
+                                contentContainerStyle={styles.userList}
+                                keyboardShouldPersistTaps="handled"
+                                keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                                ListHeaderComponent={
+                                    <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+                                        {searchQuery.length > 0 ? 'Search Results' : 'Search users to add'}
+                                    </Text>
+                                }
+                                ListEmptyComponent={
+                                    <View style={styles.emptyContainer}>
+                                        <Ionicons name="people-outline" size={48} color={colors.textSecondary} style={{ marginBottom: 12 }} />
+                                        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                                            {searchQuery.length > 0 ? 'No users found' : 'Start typing to find people'}
+                                        </Text>
+                                        {searchQuery.length === 0 && (
+                                            <Text style={[styles.emptyHint, { color: colors.textSecondary }]}>
+                                                Use the search bar above to find users
+                                            </Text>
+                                        )}
                                     </View>
-                                )}
-                                <Text style={[styles.memberName, { color: colors.text }]}>{item.displayName}</Text>
-                            </View>
+                                }
+                            />
                         )}
-                        keyExtractor={(item) => item.id}
-                        contentContainerStyle={styles.membersList}
-                    />
-                </View>
-            )}
+                    </>
+                ) : (
+                    /* Group Details Step */
+                    <View style={styles.detailsContainer}>
+                        <TouchableOpacity style={styles.iconPicker} onPress={pickGroupIcon}>
+                            {groupIcon ? (
+                                <Image source={{ uri: groupIcon }} style={styles.groupIconPreview} />
+                            ) : (
+                                <View style={[styles.iconPlaceholder, { backgroundColor: colors.card }]}>
+                                    <Ionicons name="camera" size={32} color={colors.textSecondary} />
+                                </View>
+                            )}
+                            <View style={[styles.editIconBadge, { backgroundColor: colors.primary }]}>
+                                <Ionicons name="pencil" size={12} color="#fff" />
+                            </View>
+                        </TouchableOpacity>
+
+                        <TextInput
+                            style={[styles.groupNameInput, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
+                            placeholder="Group Name"
+                            placeholderTextColor={colors.textSecondary}
+                            value={groupName}
+                            onChangeText={setGroupName}
+                            maxLength={50}
+                        />
+
+                        <Text style={[styles.membersLabel, { color: colors.textSecondary }]}>
+                            {selectedUsers.length + 1} members (including you)
+                        </Text>
+
+                        <FlatList
+                            data={selectedUsers}
+                            renderItem={({ item }) => (
+                                <View style={[styles.memberItem, { backgroundColor: colors.card }]}>
+                                    {item.photoURL ? (
+                                        <Image source={{ uri: item.photoURL }} style={styles.memberAvatar} />
+                                    ) : (
+                                        <View style={[styles.memberAvatarPlaceholder, { backgroundColor: colors.primary }]}>
+                                            <Text style={styles.memberAvatarText}>{item.displayName?.charAt(0)?.toUpperCase()}</Text>
+                                        </View>
+                                    )}
+                                    <Text style={[styles.memberName, { color: colors.text }]}>{item.displayName}</Text>
+                                </View>
+                            )}
+                            keyExtractor={(item) => item.id}
+                            contentContainerStyle={styles.membersList}
+                            keyboardShouldPersistTaps="handled"
+                            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                        />
+                    </View>
+                )}
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
+    keyboardContainer: { flex: 1 },
     header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: SPACING.md, borderBottomWidth: 1 },
     backButton: { padding: SPACING.sm },
     headerTitle: { flex: 1, fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, marginLeft: SPACING.sm },
@@ -439,7 +453,7 @@ const styles = StyleSheet.create({
     userName: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
     userUsername: { fontSize: FONT_SIZE.sm, marginTop: 2 },
     checkbox: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, justifyContent: 'center', alignItems: 'center' },
-    checkboxSelected: { backgroundColor: '#8B5CF6', borderColor: '#8B5CF6' },
+    checkboxSelected: { backgroundColor: '#9d74f7', borderColor: '#9d74f7' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     emptyContainer: { padding: SPACING.xl, alignItems: 'center' },
     emptyText: { fontSize: FONT_SIZE.md, textAlign: 'center' },

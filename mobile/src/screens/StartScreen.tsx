@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import functions from '@react-native-firebase/functions';
 import * as Animatable from 'react-native-animatable';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
@@ -25,8 +26,14 @@ const StartScreen = ({ navigation }) => {
   };
 
   useEffect(() => {
+    const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+    if (!webClientId) {
+      Alert.alert('Configuration Error', 'Missing Google Web Client ID. Please set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in .env.');
+      return;
+    }
+
     GoogleSignin.configure({
-      webClientId: '334857280812-mb7tsrfd5q53ubachdlftnmogmskqu2c.apps.googleusercontent.com',
+      webClientId,
       offlineAccess: true,
       scopes: ['profile', 'email'],
     });
@@ -51,53 +58,60 @@ const StartScreen = ({ navigation }) => {
       // Attempt to sign in
       const signInResult = await GoogleSignin.signIn();
       const idToken = (signInResult as any)?.data?.idToken || (signInResult as any)?.idToken;
+      const googleUser = (signInResult as any)?.data?.user || (signInResult as any)?.user;
+      const googleEmail = googleUser?.email;
+      const googleDisplayName = googleUser?.name || googleUser?.displayName || '';
+      const googlePhotoURL = googleUser?.photo || googleUser?.photoURL || null;
 
       if (!idToken) throw new Error('No idToken received');
+      if (!googleEmail) throw new Error('No email received from Google');
 
-      // Create Firebase Credential
-      const googleCredential = auth.GoogleAuthProvider.credential(idToken);
+      // Check whether this Google account is already an existing Tripzi user.
+      const checkGoogleUserStatus = functions().httpsCallable('checkGoogleUserStatus');
+      const statusResult = await checkGoogleUserStatus({ email: googleEmail });
+      const isExistingUser = !!statusResult?.data?.existing;
 
-      // Sign in to Firebase
-      const userCredential = await auth().signInWithCredential(googleCredential);
-      const user = userCredential.user;
-      
+      if (isExistingUser) {
+        // Existing users: now sign in to Firebase Auth and proceed directly.
+        const googleCredential = auth.GoogleAuthProvider.credential(idToken);
+        const userCredential = await auth().signInWithCredential(googleCredential);
+        const user = userCredential.user;
+        const userDocRef = firestore().collection('users').doc(user.uid);
+        const userDoc = await userDocRef.get();
+        const docExists = typeof userDoc.exists === 'function' ? userDoc.exists() : userDoc.exists;
 
-      // Check Firestore for User Profile
-      const userDocRef = firestore().collection('users').doc(user.uid);
-      const userDoc = await userDocRef.get();
+        if (!docExists) {
+          navigation.navigate('CompleteProfile');
+          return;
+        }
 
-      // Handle both Firebase API versions for exists
-      const docExists = typeof userDoc.exists === 'function' ? userDoc.exists() : userDoc.exists;
-
-      if (docExists) {
-        // EXISTING USER: Login
-        
-        await userDocRef.update({
-          lastLoginAt: firestore.FieldValue.serverTimestamp(),
-        });
-        showToast('Welcome back! 🎉');
-      } else {
-        // NEW USER: Create Profile
-        
-        const { email, displayName, photoURL, uid } = user;
-        // Generate a simple username
-        const username = email ? email.split('@')[0] : `user_${uid.substring(0, 5)}`;
+        const userData = userDoc.data ? userDoc.data() : {};
+        const resolvedName = userData?.name || userData?.displayName || user.displayName || 'User';
 
         await userDocRef.set({
-          userId: uid,
-          email,
-          displayName: displayName || 'Traveler',
-          photoURL,
-          username,
-          createdAt: firestore.FieldValue.serverTimestamp(),
-          ageVerified: false,
+          name: resolvedName,
+          displayName: firestore.FieldValue.delete(),
           lastLoginAt: firestore.FieldValue.serverTimestamp(),
-        });
-        showToast('Account Created! Welcome to Tripzi 🎉');
-      }
+        }, { merge: true });
 
-      // Navigate to App
-      navigation.reset({ index: 0, routes: [{ name: 'App' }] });
+        try {
+          if (auth().currentUser) {
+            await auth().currentUser?.updateProfile({ displayName: resolvedName });
+          }
+        } catch (e) { }
+
+        showToast('Welcome back! 🎉');
+        navigation.reset({ index: 0, routes: [{ name: 'App' }] });
+      } else {
+        // New users: DO NOT create Firebase Auth yet. Go to profile completion first.
+        navigation.navigate('CompleteProfile', {
+          idToken,
+          email: googleEmail,
+          displayName: googleDisplayName,
+          photoURL: googlePhotoURL,
+        });
+        return;
+      }
 
     } catch (error: any) {
       

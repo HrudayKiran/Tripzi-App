@@ -25,7 +25,7 @@ const getNotificationStyle = (type: NotificationType): { icon: string; color: st
         case 'comment':
             return { icon: 'chatbubble', color: '#3B82F6' };
         case 'message':
-            return { icon: 'mail', color: '#8B5CF6' };
+            return { icon: 'mail', color: '#9d74f7' };
         case 'join_trip':
         case 'join_success':
         case 'trip_join':
@@ -44,7 +44,7 @@ const getNotificationStyle = (type: NotificationType): { icon: string; color: st
         case 'kyc_rejected':
             return { icon: 'alert-circle', color: '#EF4444' };
         case 'trip_full':
-            return { icon: 'people', color: '#8B5CF6' };
+            return { icon: 'people', color: '#9d74f7' };
         case 'report_submitted':
         case 'trip_report':
             return { icon: 'flag', color: '#F97316' };

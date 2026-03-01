@@ -109,14 +109,8 @@ service cloud.firestore {
       // Private user profile (owner-only read/write; sensitive fields live here).
       allow read: if isOwner(userId);
 
-      allow create: if isOwner(userId) &&
-        request.resource.data.userId == request.auth.uid &&
-        (!('ageVerified' in request.resource.data) || request.resource.data.ageVerified == false) &&
-        !('ageVerifiedAt' in request.resource.data) &&
-        !('dateOfBirth' in request.resource.data) &&
-        !('role' in request.resource.data) &&
-        !('kyc' in request.resource.data) &&
-        !('kycStatus' in request.resource.data);
+      // Creation is server-only (Cloud Functions/Admin SDK) to enforce onboarding + age gate.
+      allow create: if false;
 
       allow update: if isOwner(userId) &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny([

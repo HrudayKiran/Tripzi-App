@@ -62,7 +62,7 @@ const getUserSummary = async (uid: string) => {
 
   const data = userDoc.data() || {};
   return {
-    displayName: data.displayName || "User",
+    displayName: data.name || data.displayName || "User",
     photoURL: data.photoURL || "",
   };
 };

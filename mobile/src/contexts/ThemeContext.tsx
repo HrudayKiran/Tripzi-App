@@ -32,8 +32,8 @@ const lightColors: ColorScheme = {
     text: '#1a1a1a',
     textSecondary: '#666666',
     border: '#F3F4F6',
-    primary: '#8B5CF6',       // Vibrant purple
-    primaryLight: '#EDE9FE',
+    primary: '#9d74f7',
+    primaryLight: '#EEE6FF',
     secondary: '#06B6D4',     // Cyan
     accent: '#F59E0B',        // Amber
     success: '#10B981',       // Emerald
@@ -41,7 +41,7 @@ const lightColors: ColorScheme = {
     error: '#EF4444',         // Red
     inputBackground: '#F9FAFB',
     headerBackground: '#FFFFFF',
-    gradientStart: '#8B5CF6',
+    gradientStart: '#9d74f7',
     gradientEnd: '#EC4899',   // Pink
 };
 
@@ -51,8 +51,8 @@ const darkColors: ColorScheme = {
     text: '#FFFFFF',
     textSecondary: '#A0A0A0',
     border: '#2A2A2A',
-    primary: '#A78BFA',       // Light purple
-    primaryLight: '#2D2A3E',
+    primary: '#9d74f7',
+    primaryLight: '#2D2145',
     secondary: '#22D3EE',     // Light cyan
     accent: '#FBBF24',        // Light amber
     success: '#34D399',       // Light emerald
@@ -60,7 +60,7 @@ const darkColors: ColorScheme = {
     error: '#F87171',         // Light red
     inputBackground: '#1F1F1F',
     headerBackground: '#1A1A1A',
-    gradientStart: '#A78BFA',
+    gradientStart: '#9d74f7',
     gradientEnd: '#F472B6',   // Light pink
 };
 

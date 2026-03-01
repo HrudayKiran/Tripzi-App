@@ -75,6 +75,13 @@ const ProfilePictureViewer = ({
                 await firestore().collection('users').doc(userId).update({
                     photoURL: null,
                 });
+
+                // Keep Firebase Auth profile in sync so no stale fallback avatar remains.
+                try {
+                    await auth().currentUser?.updateProfile({ photoURL: null });
+                } catch (e) {
+                    
+                }
             }
 
             onDeleted?.();

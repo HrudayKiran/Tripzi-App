@@ -105,7 +105,7 @@ export function useChats(): UseChatsReturn {
                 participants: [currentUser.uid, otherUserId],
                 participantDetails: {
                     [currentUser.uid]: {
-                        displayName: currentUserData?.displayName || currentUser.displayName || 'User',
+                        displayName: currentUserData?.name || currentUserData?.displayName || currentUser.displayName || 'User',
                         photoURL: currentUserData?.photoURL || currentUser.photoURL || '',
                     },
                     [otherUserId]: otherUserDetails,

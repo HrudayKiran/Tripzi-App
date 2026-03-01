@@ -441,7 +441,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 .collection('messages')
                 .add({
                     senderId: currentUser.uid,
-                    senderName: userData?.displayName || currentUser.displayName || 'User',
+                    senderName: userData?.name || userData?.displayName || currentUser.displayName || 'User',
                     type: 'image',
                     mediaUrl: downloadUrl,
                     status: 'sent',
@@ -458,7 +458,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     lastMessage: {
                         text: '📷 Photo',
                         senderId: currentUser.uid,
-                        senderName: userData?.displayName || currentUser.displayName || 'User',
+                        senderName: userData?.name || userData?.displayName || currentUser.displayName || 'User',
                         timestamp: firestore.FieldValue.serverTimestamp(),
                         type: 'image',
                     },
@@ -536,7 +536,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 .collection('messages')
                 .add({
                     senderId: currentUser.uid,
-                    senderName: userData?.displayName || currentUser.displayName || 'User',
+                    senderName: userData?.name || userData?.displayName || currentUser.displayName || 'User',
                     type: 'location',
                     location: {
                         latitude: locationData.coords.latitude,
@@ -557,7 +557,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     lastMessage: {
                         text: '📍 Location',
                         senderId: currentUser.uid,
-                        senderName: userData?.displayName || currentUser.displayName || 'User',
+                        senderName: userData?.name || userData?.displayName || currentUser.displayName || 'User',
                         timestamp: firestore.FieldValue.serverTimestamp(),
                         type: 'location',
                     },
@@ -602,7 +602,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                                     isActive: true,
                                     validUntil: firestore.Timestamp.fromDate(addMinutes(new Date(), durationMinutes)),
                                     timestamp: firestore.FieldValue.serverTimestamp(),
-                                    displayName: userData?.displayName || currentUser?.displayName || 'User',
+                                    displayName: userData?.name || userData?.displayName || currentUser?.displayName || 'User',
                                     photoURL: userData?.photoURL || userData?.image || currentUser?.photoURL || null,
                                     latitude: 0, // Placeholder
                                     longitude: 0 // Placeholder
@@ -617,7 +617,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                                     senderId: currentUser?.uid,
                                     senderName: 'System',
                                     type: 'system',
-                                    text: `${userData?.displayName || 'User'} started sharing live location.`,
+                                    text: `${userData?.name || userData?.displayName || 'User'} started sharing live location.`,
                                     createdAt: firestore.FieldValue.serverTimestamp(),
                                 });
 
@@ -1363,7 +1363,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
 
                         <View style={styles.attachmentOptions}>
                             <TouchableOpacity style={styles.attachmentOption} onPress={() => pickImage(true)}>
-                                <View style={[styles.attachmentIcon, { backgroundColor: '#8B5CF6' }]}>
+                                <View style={[styles.attachmentIcon, { backgroundColor: '#9d74f7' }]}>
                                     <Ionicons name="camera" size={28} color="#fff" />
                                 </View>
                                 <Text style={[styles.attachmentLabel, { color: colors.text }]}>Camera</Text>

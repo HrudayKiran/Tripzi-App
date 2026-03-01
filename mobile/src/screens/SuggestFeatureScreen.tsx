@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
@@ -10,6 +10,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
 
 const SuggestFeatureScreen = ({ navigation }) => {
+  const MAX_ATTACHMENTS = 5;
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState('suggest');
   const [featureTitle, setFeatureTitle] = useState('');
@@ -19,10 +20,18 @@ const SuggestFeatureScreen = ({ navigation }) => {
   const [bugDescription, setBugDescription] = useState('');
   const [bugCategory, setBugCategory] = useState('');
   const [bugSeverity, setBugSeverity] = useState('');
-  const [featureImage, setFeatureImage] = useState(null);
-  const [bugImage, setBugImage] = useState(null);
+  const [featureImages, setFeatureImages] = useState<string[]>([]);
+  const [bugImages, setBugImages] = useState<string[]>([]);
 
-  const pickImage = async (setImage) => {
+  const pickImage = async (
+    currentImages: string[],
+    setImages: React.Dispatch<React.SetStateAction<string[]>>
+  ) => {
+    if (currentImages.length >= MAX_ATTACHMENTS) {
+      Alert.alert('Limit Reached', `You can upload up to ${MAX_ATTACHMENTS} images.`);
+      return;
+    }
+
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission needed', 'Please grant camera roll permissions.');
@@ -34,13 +43,21 @@ const SuggestFeatureScreen = ({ navigation }) => {
       quality: 0.7,
     });
     if (!result.canceled && result.assets[0]) {
-      setImage(result.assets[0].uri);
+      const uri = result.assets[0].uri;
+      setImages((prev) => (prev.length >= MAX_ATTACHMENTS ? prev : [...prev, uri]));
     }
+  };
+
+  const removeImage = (
+    index: number,
+    setImages: React.Dispatch<React.SetStateAction<string[]>>
+  ) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
   const featureCategories = [
     { id: 'trip', label: 'Trip Planning', icon: 'map', color: '#3B82F6' },
-    { id: 'messaging', label: 'Messaging', icon: 'chatbubble', color: '#8B5CF6' },
+    { id: 'messaging', label: 'Messaging', icon: 'chatbubble', color: '#9d74f7' },
     { id: 'profile', label: 'Profile', icon: 'person', color: '#6B7280' },
     { id: 'other', label: 'Other', icon: 'ellipsis-horizontal', color: '#F59E0B' },
   ];
@@ -65,7 +82,8 @@ const SuggestFeatureScreen = ({ navigation }) => {
         title: featureTitle,
         description: featureDescription,
         category: featureCategory,
-        imageUri: featureImage,
+        imageUris: featureImages,
+        imageUri: featureImages[0] || null,
         userId: currentUser?.uid,
         createdAt: firestore.FieldValue.serverTimestamp(),
       });
@@ -89,7 +107,8 @@ const SuggestFeatureScreen = ({ navigation }) => {
         description: bugDescription,
         category: bugCategory,
         severity: bugSeverity,
-        imageUri: bugImage,
+        imageUris: bugImages,
+        imageUri: bugImages[0] || null,
         userId: currentUser?.uid,
         createdAt: firestore.FieldValue.serverTimestamp(),
       });
@@ -103,7 +122,11 @@ const SuggestFeatureScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
-      <View style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 18 : 0}
+      >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
@@ -142,7 +165,12 @@ const SuggestFeatureScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        >
           <Animatable.View animation="fadeIn" duration={300} key={activeTab}>
             {activeTab === 'suggest' ? (
               <>
@@ -191,20 +219,34 @@ const SuggestFeatureScreen = ({ navigation }) => {
                   textAlignVertical="top"
                 />
 
-                <Text style={[styles.label, { color: colors.text }]}>Screenshot (Optional)</Text>
+                <Text style={[styles.label, { color: colors.text }]}>Screenshots (Optional)</Text>
                 <TouchableOpacity
                   style={[styles.imageUpload, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => pickImage(setFeatureImage)}
+                  onPress={() => pickImage(featureImages, setFeatureImages)}
                 >
-                  {featureImage ? (
-                    <Image source={{ uri: featureImage }} style={styles.uploadedImage} />
-                  ) : (
-                    <View style={styles.uploadPlaceholder}>
-                      <Ionicons name="image-outline" size={32} color={colors.primary} />
-                      <Text style={[styles.uploadText, { color: colors.textSecondary }]}>Add screenshot</Text>
-                    </View>
-                  )}
+                  <View style={styles.uploadPlaceholder}>
+                    <Ionicons name="images-outline" size={32} color={colors.primary} />
+                    <Text style={[styles.uploadText, { color: colors.textSecondary }]}>
+                      Add screenshot ({featureImages.length}/{MAX_ATTACHMENTS})
+                    </Text>
+                  </View>
                 </TouchableOpacity>
+                {featureImages.length > 0 && (
+                  <View style={styles.previewGrid}>
+                    {featureImages.map((uri, index) => (
+                      <View key={`${uri}-${index}`} style={styles.previewItem}>
+                        <Image source={{ uri }} style={styles.uploadedImage} />
+                        <TouchableOpacity
+                          style={styles.removeImageBtn}
+                          onPress={() => removeImage(index, setFeatureImages)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="close" size={14} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
 
                 <TouchableOpacity
                   style={[styles.submitButton, { backgroundColor: colors.primary }]}
@@ -281,20 +323,34 @@ const SuggestFeatureScreen = ({ navigation }) => {
                   textAlignVertical="top"
                 />
 
-                <Text style={[styles.label, { color: colors.text }]}>Screenshot (Optional)</Text>
+                <Text style={[styles.label, { color: colors.text }]}>Screenshots (Optional)</Text>
                 <TouchableOpacity
                   style={[styles.imageUpload, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => pickImage(setBugImage)}
+                  onPress={() => pickImage(bugImages, setBugImages)}
                 >
-                  {bugImage ? (
-                    <Image source={{ uri: bugImage }} style={styles.uploadedImage} />
-                  ) : (
-                    <View style={styles.uploadPlaceholder}>
-                      <Ionicons name="image-outline" size={32} color={colors.primary} />
-                      <Text style={[styles.uploadText, { color: colors.textSecondary }]}>Add screenshot</Text>
-                    </View>
-                  )}
+                  <View style={styles.uploadPlaceholder}>
+                    <Ionicons name="images-outline" size={32} color={colors.primary} />
+                    <Text style={[styles.uploadText, { color: colors.textSecondary }]}>
+                      Add screenshot ({bugImages.length}/{MAX_ATTACHMENTS})
+                    </Text>
+                  </View>
                 </TouchableOpacity>
+                {bugImages.length > 0 && (
+                  <View style={styles.previewGrid}>
+                    {bugImages.map((uri, index) => (
+                      <View key={`${uri}-${index}`} style={styles.previewItem}>
+                        <Image source={{ uri }} style={styles.uploadedImage} />
+                        <TouchableOpacity
+                          style={styles.removeImageBtn}
+                          onPress={() => removeImage(index, setBugImages)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="close" size={14} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
 
                 <TouchableOpacity
                   style={[styles.submitButton, { backgroundColor: colors.primary }]}
@@ -309,7 +365,7 @@ const SuggestFeatureScreen = ({ navigation }) => {
           </Animatable.View>
           <View style={{ height: SPACING.xxxl }} />
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -416,9 +472,29 @@ const styles = StyleSheet.create({
     minHeight: 100,
   },
   uploadedImage: {
-    width: 100,
-    height: 100,
+    width: 84,
+    height: 84,
     borderRadius: BORDER_RADIUS.md,
+  },
+  previewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
+  },
+  previewItem: {
+    position: 'relative',
+  },
+  removeImageBtn: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   uploadPlaceholder: {
     alignItems: 'center',

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
@@ -32,7 +32,11 @@ const HelpSupportScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
-      <View style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 18 : 0}
+      >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
@@ -47,10 +51,15 @@ const HelpSupportScreen = ({ navigation }) => {
           <View style={styles.placeholder} />
         </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        >
           {/* Contact Options */}
           <Animatable.View animation="fadeInUp" duration={400} style={styles.contactContainer}>
-            <ContactCard icon="mail-outline" label="Email" iconColor="#8B5CF6" bgColor="#EDE9FE" colors={colors} />
+            <ContactCard icon="mail-outline" label="Email" iconColor="#9d74f7" bgColor="#EDE9FE" colors={colors} />
             <ContactCard icon="chatbubble-ellipses-outline" label="Live Chat" iconColor="#10B981" bgColor="#D1FAE5" colors={colors} />
             <ContactCard icon="call-outline" label="Call Us" iconColor="#6B7280" bgColor="#F3F4F6" colors={colors} />
           </Animatable.View>
@@ -120,7 +129,7 @@ const HelpSupportScreen = ({ navigation }) => {
 
           <View style={{ height: SPACING.xxxl }} />
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };

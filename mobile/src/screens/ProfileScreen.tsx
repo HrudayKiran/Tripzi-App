@@ -23,8 +23,13 @@ const ProfileScreen = ({ navigation }) => {
     if (!currentUser) return;
 
     // Configure Google Signin
+    const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+    if (!webClientId) {
+      return;
+    }
+
     GoogleSignin.configure({
-      webClientId: '334857280812-mb7tsrfd5q53ubachdlftnmogmskqu2c.apps.googleusercontent.com',
+      webClientId,
     });
 
     const unsubscribe = firestore()
@@ -33,7 +38,12 @@ const ProfileScreen = ({ navigation }) => {
       .doc(currentUser.uid)
       .onSnapshot((doc) => {
         if (doc.exists) {
-          setUser({ id: doc.id, ...doc.data() });
+          const data = doc.data() || {};
+          setUser({
+            id: doc.id,
+            ...data,
+            displayName: data.name || data.displayName || currentUser.displayName || 'User',
+          });
         } else {
           setUser({
             displayName: currentUser.displayName,
@@ -84,10 +94,6 @@ const ProfileScreen = ({ navigation }) => {
 
 
             await auth().signOut();
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'Start' }],
-            });
           }
         },
       ]
@@ -95,17 +101,32 @@ const ProfileScreen = ({ navigation }) => {
   };
 
 
-  const MenuItem = ({ icon, iconColor, iconBg, text, badge = null, onPress, isDestructive = false, disabled = false }) => (
+  const MenuItem = ({
+    icon,
+    iconColor,
+    iconBg,
+    text,
+    badge = null,
+    onPress,
+    isDestructive = false,
+    disabled = false,
+    centered = false,
+    showChevron = true,
+    hideIcon = false,
+    largeText = false,
+  }) => (
     <TouchableOpacity
-      style={[styles.menuItem, { backgroundColor: colors.card }, disabled && { opacity: 0.8 }]}
+      style={[styles.menuItem, { backgroundColor: colors.card }, centered && styles.menuItemCentered, disabled && { opacity: 0.8 }]}
       onPress={disabled ? undefined : onPress}
       activeOpacity={disabled ? 1 : 0.7}
       disabled={disabled}
     >
-      <View style={[styles.menuIconBox, { backgroundColor: iconBg }]}>
-        <Ionicons name={icon} size={22} color={iconColor} />
-      </View>
-      <Text style={[styles.menuItemText, { color: isDestructive ? colors.error : colors.text }]}>
+      {!hideIcon && (
+        <View style={[styles.menuIconBox, { backgroundColor: iconBg }]}>
+          <Ionicons name={icon} size={22} color={iconColor} />
+        </View>
+      )}
+      <Text style={[styles.menuItemText, centered && styles.menuItemTextCentered, largeText && styles.menuItemTextLarge, { color: isDestructive ? colors.error : colors.text }]}>
         {text}
       </Text>
       {badge && (
@@ -113,7 +134,7 @@ const ProfileScreen = ({ navigation }) => {
           <Text style={styles.badgeText}>{badge}</Text>
         </View>
       )}
-      {!disabled && <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />}
+      {showChevron && !disabled && <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />}
     </TouchableOpacity>
   );
 
@@ -134,15 +155,15 @@ const ProfileScreen = ({ navigation }) => {
 
         {/* User Profile Card - Tappable to view full profile */}
         <TouchableOpacity
-          onPress={() => navigation.navigate('UserProfile', { userId: auth.currentUser?.uid })}
+          onPress={() => navigation.navigate('UserProfile', { userId: auth().currentUser?.uid })}
           activeOpacity={0.8}
         >
           <Animatable.View animation="fadeInUp" duration={400} style={[styles.profileCard, { backgroundColor: colors.card }]}>
             <View style={styles.avatarContainer}>
               <View style={[styles.avatarBorder, { backgroundColor: colors.background }]}>
                 <DefaultAvatar
-                  uri={user?.photoURL || auth.currentUser?.photoURL}
-                  name={user?.displayName || auth.currentUser?.displayName}
+                  uri={user && 'photoURL' in user ? user.photoURL : auth().currentUser?.photoURL}
+                  name={user?.displayName || auth().currentUser?.displayName}
                   size={80}
                   style={styles.avatar} // Ensure styles.avatar doesn't conflict, mainly size
                 />
@@ -152,7 +173,7 @@ const ProfileScreen = ({ navigation }) => {
 
             <View style={styles.profileInfo}>
               <Text style={[styles.userName, { color: colors.text }]}>
-                {user?.displayName || auth.currentUser?.displayName || 'User'}
+                {user?.displayName || auth().currentUser?.displayName || 'User'}
               </Text>
               <Text style={[styles.userEmail, { color: colors.textSecondary }]}>
                 {user?.email || auth().currentUser?.email}
@@ -186,17 +207,15 @@ const ProfileScreen = ({ navigation }) => {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>GENERAL</Text>
 
           <MenuItem
-            icon="calendar-outline"
-            iconColor="#10B981"
-            iconBg="#D1FAE5"
-            text="Age Verification"
-            badge={user?.ageVerified === true ? 'Verified' : 'Required'}
-            onPress={() => navigation.navigate('AgeVerification')}
-            disabled={user?.ageVerified === true}
+            icon="create-outline"
+            iconColor="#F59E0B"
+            iconBg="#FEF3C7"
+            text="Edit Profile"
+            onPress={() => navigation.navigate('EditProfile')}
           />
           <MenuItem
             icon="document-text-outline"
-            iconColor="#8B5CF6"
+            iconColor="#9d74f7"
             iconBg="#EDE9FE"
             text="Terms of Service"
             onPress={() => navigation.navigate('Terms')}
@@ -239,7 +258,11 @@ const ProfileScreen = ({ navigation }) => {
             text="Log Out"
             onPress={handleLogout}
             isDestructive
+            centered
+            showChevron={false}
+            largeText
           />
+          <Text style={[styles.versionText, { color: colors.textSecondary }]}>Tripzi Version 1.0.0</Text>
         </Animatable.View>
 
         <View style={{ height: SPACING.xxxl * 2 }} />
@@ -312,6 +335,9 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     borderRadius: BORDER_RADIUS.md,
   },
+  menuItemCentered: {
+    justifyContent: 'center',
+  },
   menuIconBox: {
     width: 40,
     height: 40,
@@ -321,6 +347,8 @@ const styles = StyleSheet.create({
     marginRight: SPACING.md,
   },
   menuItemText: { flex: 1, fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.medium },
+  menuItemTextCentered: { flex: 0, textAlign: 'center' },
+  menuItemTextLarge: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold },
   badge: {
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
@@ -359,6 +387,7 @@ const styles = StyleSheet.create({
   accountEmail: { fontSize: FONT_SIZE.sm },
   addAccountBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: SPACING.lg, borderRadius: BORDER_RADIUS.lg, borderWidth: 1, borderStyle: 'dashed', marginTop: SPACING.md, gap: SPACING.sm },
   addAccountText: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
+  versionText: { textAlign: 'center', marginTop: SPACING.md, fontSize: FONT_SIZE.xs },
 });
 
 export default ProfileScreen;

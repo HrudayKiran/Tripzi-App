@@ -163,7 +163,7 @@ export function useChatMessages(chatId: string | undefined, clearedAt?: Firestor
 
                 const messageData: Omit<Message, 'id'> & { mentions?: string[] } = {
                     senderId: currentUser.uid,
-                    senderName: userData?.displayName || currentUser.displayName || 'User',
+                    senderName: userData?.name || userData?.displayName || currentUser.displayName || 'User',
                     type: 'text',
                     text: text.trim(),
                     status: 'sent',
@@ -196,7 +196,7 @@ export function useChatMessages(chatId: string | undefined, clearedAt?: Firestor
                         lastMessage: {
                             text: text.trim(),
                             senderId: currentUser.uid,
-                            senderName: userData?.displayName || currentUser.displayName || 'User',
+                            senderName: userData?.name || userData?.displayName || currentUser.displayName || 'User',
                             timestamp: firestore.FieldValue.serverTimestamp(),
                             type: 'text',
                         },

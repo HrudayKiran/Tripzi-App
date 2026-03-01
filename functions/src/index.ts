@@ -9,6 +9,7 @@ export * from './triggers/auth';
 export * from './callable/account';
 export * from './callable/ai';
 export * from './callable/verification';
+export * from './callable/onboarding';
 export * from './callable/groups';
 export * from './triggers/users';
 export * from './triggers/config';

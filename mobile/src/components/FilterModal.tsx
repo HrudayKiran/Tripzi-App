@@ -25,7 +25,7 @@ export type FilterOptions = {
 };
 
 const SORT_OPTIONS = [
-    { id: 'newest', label: 'Newest First', icon: 'time-outline', color: '#8B5CF6' },
+    { id: 'newest', label: 'Newest First', icon: 'time-outline', color: '#9d74f7' },
     { id: 'oldest', label: 'Oldest First', icon: 'hourglass-outline', color: '#6B7280' },
     { id: 'budget', label: 'Budget (Low to High)', icon: 'wallet-outline', color: '#10B981' },
     { id: 'popular', label: 'Most Popular', icon: 'flame-outline', color: '#F59E0B' },
@@ -222,7 +222,7 @@ const FilterModal = ({ visible, onClose, onApply }: FilterModalProps) => {
                             {/* Custom Budget Input */}
                             <View style={styles.section}>
                                 <View style={styles.sectionHeader}>
-                                    <Ionicons name="cash-outline" size={20} color="#8B5CF6" />
+                                    <Ionicons name="cash-outline" size={20} color="#9d74f7" />
                                     <Text style={[styles.sectionTitle, { color: colors.text }]}>Custom Budget</Text>
                                 </View>
                                 <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
@@ -319,7 +319,7 @@ const FilterModal = ({ visible, onClose, onApply }: FilterModalProps) => {
                             {/* Transport Mode */}
                             <View style={styles.section}>
                                 <View style={styles.sectionHeader}>
-                                    <Ionicons name="train-outline" size={20} color="#8B5CF6" />
+                                    <Ionicons name="train-outline" size={20} color="#9d74f7" />
                                     <Text style={[styles.sectionTitle, { color: colors.text }]}>Transport Mode</Text>
                                 </View>
                                 <View style={styles.optionsRow}>
@@ -329,8 +329,8 @@ const FilterModal = ({ visible, onClose, onApply }: FilterModalProps) => {
                                             style={[
                                                 styles.optionChip,
                                                 {
-                                                    backgroundColor: transportMode === option.id ? '#8B5CF6' : colors.card,
-                                                    borderColor: transportMode === option.id ? '#8B5CF6' : colors.border,
+                                                    backgroundColor: transportMode === option.id ? '#9d74f7' : colors.card,
+                                                    borderColor: transportMode === option.id ? '#9d74f7' : colors.border,
                                                 }
                                             ]}
                                             onPress={() => setTransportMode(transportMode === option.id ? undefined : option.id)}

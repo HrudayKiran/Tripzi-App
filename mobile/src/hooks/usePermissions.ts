@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Platform, Alert, Linking, PermissionsAndroid } from 'react-native';
+import { Platform, PermissionsAndroid } from 'react-native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { getMessaging, requestPermission, AuthorizationStatus } from '@react-native-firebase/messaging';
@@ -21,8 +21,8 @@ interface UsePermissionsReturn {
 }
 
 /**
- * Custom hook to manage all app permissions.
- * Requests permissions on first app launch and provides methods to request individual permissions.
+ * Custom hook to manage app permissions.
+ * Requests only notifications on app launch. Camera/media/location are requested on-demand.
  */
 export function usePermissions(): UsePermissionsReturn {
     const [permissions, setPermissions] = useState<PermissionStatus>({
@@ -32,32 +32,18 @@ export function usePermissions(): UsePermissionsReturn {
         mediaLibrary: false,
     });
 
-    // Request all permissions on mount
+    // Request only notifications on mount for a smoother first-launch UX.
     useEffect(() => {
-        const checkAndRequestPermissions = async () => {
-            // Small delay to let the app initialize
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            await requestAllPermissions();
+        const checkAndRequestNotifications = async () => {
+            await new Promise(resolve => setTimeout(resolve, 1200));
+            await requestNotificationPermission();
         };
 
-        checkAndRequestPermissions();
+        checkAndRequestNotifications();
     }, []);
 
     const requestAllPermissions = async () => {
-
-
-        // Request notification permission first (most important)
-        const notifResult = await requestNotificationPermission();
-
-        // Request location permission
-        const locResult = await requestLocationPermission();
-
-        // Request camera and media permissions
-        const camResult = await requestCameraPermission();
-        const mediaResult = await requestMediaLibraryPermission();
-
-
-
+        await requestNotificationPermission();
     };
 
     const requestNotificationPermission = async (): Promise<boolean> => {
