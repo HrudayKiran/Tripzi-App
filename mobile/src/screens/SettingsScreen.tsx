@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
 
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, STATUS, NEUTRAL, CATEGORY, ICONS } from '../styles';
 
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
@@ -79,7 +79,7 @@ const SettingsScreen = ({ navigation }) => {
 
 
                             // Sign out locally after successful deletion
-                            await auth().signOut();
+                            try { await auth().signOut(); } catch (e) { }
                             Alert.alert("Account Deleted", "Your account has been successfully deleted.");
                         } catch (error: any) {
 
@@ -102,7 +102,7 @@ const SettingsScreen = ({ navigation }) => {
                         activeOpacity={0.7}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
-                        <Ionicons name="chevron-back" size={28} color={colors.text} />
+                        <Ionicons name={ICONS.back} size={28} color={colors.text} />
                     </TouchableOpacity>
                     <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
                     <View style={styles.placeholder} />
@@ -112,8 +112,8 @@ const SettingsScreen = ({ navigation }) => {
                     {/* Push Notifications */}
                     <Animatable.View animation="fadeInUp" duration={400} delay={0}>
                         <View style={[styles.settingCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                            <View style={[styles.iconBox, { backgroundColor: '#EDE9FE' }]}>
-                                <Ionicons name="notifications" size={24} color="#9d74f7" />
+                            <View style={[styles.iconBox, { backgroundColor: CATEGORY.purple }]}>
+                                <Ionicons name={ICONS.notifications} size={24} color={BRAND.primary} />
                             </View>
                             <View style={styles.settingInfo}>
                                 <Text style={[styles.settingTitle, { color: colors.text }]}>Push Notifications</Text>
@@ -124,8 +124,8 @@ const SettingsScreen = ({ navigation }) => {
                             <Switch
                                 value={pushEnabled}
                                 onValueChange={handlePushToggle}
-                                trackColor={{ false: '#E5E7EB', true: '#10B981' }}
-                                thumbColor={'#fff'}
+                                trackColor={{ false: NEUTRAL.gray200, true: STATUS.success }}
+                                thumbColor={NEUTRAL.white}
                             />
                         </View>
                     </Animatable.View>
@@ -133,7 +133,7 @@ const SettingsScreen = ({ navigation }) => {
                     {/* Native Push Info */}
                     <Animatable.View animation="fadeInUp" duration={400} delay={50}>
                         <View style={[styles.infoCard, { backgroundColor: colors.inputBackground }]}>
-                            <Ionicons name="information-circle-outline" size={20} color={colors.textSecondary} />
+                            <Ionicons name={ICONS.info} size={20} color={colors.textSecondary} />
                             <Text style={[styles.infoText, { color: colors.textSecondary }]}>
                                 Full push notification support is available in the iOS and Android app versions.
                             </Text>
@@ -144,7 +144,7 @@ const SettingsScreen = ({ navigation }) => {
                     <Animatable.View animation="fadeInUp" duration={400} delay={100}>
                         <View style={[styles.settingCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                             <View style={[styles.iconBox, { backgroundColor: '#FEF3C7' }]}>
-                                <Ionicons name="moon" size={24} color="#F59E0B" />
+                                <Ionicons name={ICONS.moon} size={24} color={STATUS.warning} />
                             </View>
                             <View style={styles.settingInfo}>
                                 <Text style={[styles.settingTitle, { color: colors.text }]}>Dark Mode</Text>
@@ -155,8 +155,8 @@ const SettingsScreen = ({ navigation }) => {
                             <Switch
                                 value={isDarkMode}
                                 onValueChange={toggleTheme}
-                                trackColor={{ false: '#E5E7EB', true: '#10B981' }}
-                                thumbColor={'#fff'}
+                                trackColor={{ false: NEUTRAL.gray200, true: STATUS.success }}
+                                thumbColor={NEUTRAL.white}
                             />
                         </View>
                     </Animatable.View>
@@ -169,15 +169,15 @@ const SettingsScreen = ({ navigation }) => {
                             activeOpacity={0.7}
                         >
                             <View style={[styles.iconBox, { backgroundColor: '#FEF2F2' }]}>
-                                <Ionicons name="trash-outline" size={24} color="#DC2626" />
+                                <Ionicons name={ICONS.delete} size={24} color={STATUS.errorDark} />
                             </View>
                             <View style={styles.settingInfo}>
-                                <Text style={[styles.settingTitle, { color: '#DC2626' }]}>Delete Account</Text>
-                                <Text style={[styles.settingDescription, { color: '#EF4444' }]}>
+                                <Text style={[styles.settingTitle, { color: STATUS.errorDark }]}>Delete Account</Text>
+                                <Text style={[styles.settingDescription, { color: STATUS.error }]}>
                                     Permanently remove your account and data
                                 </Text>
                             </View>
-                            <Ionicons name="chevron-forward" size={20} color="#DC2626" />
+                            <Ionicons name={ICONS.forward} size={20} color={STATUS.errorDark} />
                         </TouchableOpacity>
                     </Animatable.View>
                 </ScrollView>
@@ -262,3 +262,4 @@ const styles = StyleSheet.create({
 });
 
 export default SettingsScreen;
+

@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
@@ -79,7 +79,7 @@ const CreateGroupScreen = ({ navigation }) => {
 
             setSearchResults(results);
         } catch (error) {
-            
+
         } finally {
             setSearching(false);
         }
@@ -112,7 +112,7 @@ const CreateGroupScreen = ({ navigation }) => {
                 setGroupIcon(result.assets[0].uri);
             }
         } catch (error) {
-            
+
         }
     };
 
@@ -209,7 +209,7 @@ const CreateGroupScreen = ({ navigation }) => {
 
             navigation.replace('Chat', { chatId: chatRef.id });
         } catch (error) {
-            
+
             Alert.alert('Error', 'Failed to create group. Please try again.');
         } finally {
             setCreating(false);

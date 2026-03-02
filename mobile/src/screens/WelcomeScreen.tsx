@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Image, FlatList, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, NEUTRAL } from '../styles';
 import storage from '@react-native-firebase/storage';
 import firestore from '@react-native-firebase/firestore';
 import AppLogo from '../components/AppLogo';
@@ -102,7 +102,7 @@ const WelcomeScreen = ({ navigation }) => {
                 <Image source={{ uri: item.image }} style={styles.slideImage} resizeMode="cover" />
             ) : (
                 <View style={[styles.slideImage, { backgroundColor: colors.primary }]}>
-                    <LinearGradient colors={['#9d74f7', '#EC4899']} style={{ flex: 1 }} />
+                    <LinearGradient colors={[...BRAND.gradient]} style={{ flex: 1 }} />
                 </View>
             )}
             <LinearGradient
@@ -202,14 +202,14 @@ const styles = StyleSheet.create({
     slideImage: { width: '100%', height: '100%', borderRadius: BORDER_RADIUS.xl, overflow: 'hidden' },
     slideOverlay: { position: 'absolute', bottom: 0, left: SPACING.lg, right: SPACING.lg, height: '50%', borderBottomLeftRadius: BORDER_RADIUS.xl, borderBottomRightRadius: BORDER_RADIUS.xl },
     slideContent: { position: 'absolute', bottom: SPACING.xl, left: SPACING.xl * 1.5, right: SPACING.xl * 1.5 },
-    slideTitle: { fontSize: FONT_SIZE.xxl, fontWeight: 'bold', color: '#fff', marginBottom: 4 },
+    slideTitle: { fontSize: FONT_SIZE.xxl, fontWeight: 'bold', color: NEUTRAL.white, marginBottom: 4 },
     slideSubtitle: { fontSize: FONT_SIZE.md, color: 'rgba(255,255,255,0.9)', marginBottom: SPACING.md },
     locationBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: SPACING.md, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start' },
-    locationText: { fontSize: FONT_SIZE.xs, color: '#fff', marginLeft: 4, fontWeight: '600' },
+    locationText: { fontSize: FONT_SIZE.xs, color: NEUTRAL.white, marginLeft: 4, fontWeight: '600' },
     locationIcon: { fontSize: 12 },
     buttonSection: { height: height * 0.20, justifyContent: 'center', paddingHorizontal: SPACING.xl },
-    button: { width: '100%', paddingVertical: SPACING.lg, borderRadius: BORDER_RADIUS.xl, alignItems: 'center', shadowColor: '#895af6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
-    buttonText: { color: '#fff', fontSize: FONT_SIZE.lg, fontWeight: 'bold' },
+    button: { width: '100%', paddingVertical: SPACING.lg, borderRadius: BORDER_RADIUS.xl, alignItems: 'center', shadowColor: BRAND.primaryDark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
+    buttonText: { color: NEUTRAL.white, fontSize: FONT_SIZE.lg, fontWeight: 'bold' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     pagination: { flexDirection: 'row', position: 'absolute', bottom: -20, alignSelf: 'center', gap: 6 },
     dot: { height: 8, borderRadius: 4 },

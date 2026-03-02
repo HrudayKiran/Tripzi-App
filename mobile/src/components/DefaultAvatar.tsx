@@ -3,7 +3,7 @@ import { View, Text, Image, StyleSheet, ViewStyle, ImageStyle } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
-import { FONT_WEIGHT } from '../styles/constants';
+import { FONT_WEIGHT } from '../styles';
 
 interface DefaultAvatarProps {
     uri?: string | null;

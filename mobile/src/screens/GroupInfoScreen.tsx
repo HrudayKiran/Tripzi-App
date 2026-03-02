@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, STATUS, NEUTRAL } from '../styles';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
@@ -98,7 +98,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
 
             setMembers(memberList);
         } catch (error) {
-            
+
         } finally {
             setLoading(false);
         }
@@ -165,7 +165,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
 
             setSearchResults(results);
         } catch (error) {
-            
+
         } finally {
             setSearching(false);
         }

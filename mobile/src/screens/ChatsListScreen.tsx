@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, NEUTRAL } from '../styles';
 import { useChats, Chat } from '../hooks/useChats';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
@@ -161,7 +161,7 @@ const ChatsListScreen = ({ navigation }) => {
                 }))
             );
         } catch (error) {
-            
+
         } finally {
             setSearching(false);
         }
@@ -230,7 +230,7 @@ const ChatsListScreen = ({ navigation }) => {
                 otherUserPhoto: user.photoURL,
             });
         } catch (error) {
-            
+
             Alert.alert('Error', 'Could not start chat. Please try again.');
         } finally {
             setStartingChat(false);

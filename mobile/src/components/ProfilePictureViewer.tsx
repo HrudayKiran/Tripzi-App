@@ -16,7 +16,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { deleteFromStorage } from '../utils/imageUpload';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
-import { SPACING, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import { SPACING, FONT_SIZE, FONT_WEIGHT } from '../styles';
 
 const { width, height } = Dimensions.get('window');
 
@@ -65,7 +65,7 @@ const ProfilePictureViewer = ({
                 try {
                     await deleteFromStorage(imageUrl);
                 } catch (e) {
-                    
+
                 }
             }
 
@@ -80,7 +80,7 @@ const ProfilePictureViewer = ({
                 try {
                     await auth().currentUser?.updateProfile({ photoURL: null });
                 } catch (e) {
-                    
+
                 }
             }
 
@@ -90,7 +90,7 @@ const ProfilePictureViewer = ({
             return; // Exit early as we manually handled success
 
         } catch (error) {
-            
+
             Alert.alert('Error', 'Failed to delete image. Please try again.');
         } finally {
             setIsDeleting(false);

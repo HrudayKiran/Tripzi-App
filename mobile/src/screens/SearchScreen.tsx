@@ -7,8 +7,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import FilterModal, { FilterOptions } from '../components/FilterModal';
 import DefaultAvatar from '../components/DefaultAvatar';
 import TripCard from '../components/TripCard';
-import useTrips from '../api/useTrips';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import useTrips from '../hooks/useTrips';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { searchUsersByPrefix } from '../utils/searchUsers';
 
 const { width } = Dimensions.get('window');

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { useNetwork } from '../contexts/NetworkContext';
 import { Ionicons } from '@expo/vector-icons';
-import { SPACING, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import { SPACING, FONT_SIZE, FONT_WEIGHT } from '../styles';
 
 const OfflineBanner: React.FC = () => {
     const { isConnected, isInternetReachable } = useNetwork();

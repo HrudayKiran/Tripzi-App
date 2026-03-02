@@ -5,6 +5,9 @@ import { StatusBar } from 'expo-status-bar';
 import { useNavigation } from '@react-navigation/native';
 import AppLogo from '../components/AppLogo';
 import * as Animatable from 'react-native-animatable';
+import { BRAND, NEUTRAL } from '../styles';
+
+import { useIsFocused } from '@react-navigation/native';
 
 const { width, height } = Dimensions.get('window');
 
@@ -12,21 +15,35 @@ const MAP_PATTERN_URL = 'https://lh3.googleusercontent.com/aida-public/AB6AXuC2z
 
 const LaunchScreen = () => {
   const navigation = useNavigation();
+  const isFocused = useIsFocused();
   const progress = useRef(new Animated.Value(0)).current;
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     // Animate the loading bar
-    Animated.timing(progress, {
+    const anim = Animated.timing(progress, {
       toValue: 1,
       duration: 3500, // Slightly longer for dramatic effect
       useNativeDriver: false,
       easing: Easing.out(Easing.cubic),
-    }).start(() => {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Welcome' } as any],
-      });
     });
+
+    anim.start(({ finished }) => {
+      // Only navigate if animation completed naturally AND screen is still mounted/focused
+      if (finished && isMountedRef.current) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Welcome' } as any],
+        });
+      }
+    });
+
+    return () => {
+      isMountedRef.current = false;
+      anim.stop(); // Cancel animation on unmount
+    };
   }, []);
 
   const widthInterpolation = progress.interpolate({
@@ -41,7 +58,7 @@ const LaunchScreen = () => {
       {/* Main Gradient Background */}
       <LinearGradient
         // from-[#9d74f7] via-primary (#895af6) to-[#6d28d9]
-        colors={['#9d74f7', '#895af6', '#6d28d9']}
+        colors={[...BRAND.authGradient]}
         locations={[0, 0.5, 1]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -148,7 +165,7 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 48, // text-5xl
     fontWeight: '800', // font-extrabold
-    color: '#fff',
+    color: NEUTRAL.white,
     letterSpacing: -1, // tracking-tight
     textShadowColor: 'rgba(0,0,0,0.1)',
     textShadowOffset: { width: 0, height: 2 },
@@ -177,9 +194,9 @@ const styles = StyleSheet.create({
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#fff',
+    backgroundColor: NEUTRAL.white,
     borderRadius: 999,
-    shadowColor: '#fff',
+    shadowColor: NEUTRAL.white,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
     shadowRadius: 10,

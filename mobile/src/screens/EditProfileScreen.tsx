@@ -17,7 +17,7 @@ import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, STATUS, NEUTRAL } from '../styles';
 import DefaultAvatar from '../components/DefaultAvatar';
 import { pickAndUploadImage } from '../utils/imageUpload';
 
@@ -232,71 +232,71 @@ const EditProfileScreen = ({ navigation }) => {
                         </TouchableOpacity>
                     </View>
 
-                <Text style={[styles.label, { color: colors.textSecondary }]}>Email ID</Text>
-                <TextInput
-                    style={[styles.input, styles.readOnlyInput, { backgroundColor: colors.inputBackground, color: colors.textSecondary, borderColor: colors.border }]}
-                    value={user?.email || currentUser?.email || ''}
-                    editable={false}
-                    selectTextOnFocus={false}
-                />
+                    <Text style={[styles.label, { color: colors.textSecondary }]}>Email ID</Text>
+                    <TextInput
+                        style={[styles.input, styles.readOnlyInput, { backgroundColor: colors.inputBackground, color: colors.textSecondary, borderColor: colors.border }]}
+                        value={user?.email || currentUser?.email || ''}
+                        editable={false}
+                        selectTextOnFocus={false}
+                    />
 
-                <Text style={[styles.label, { color: colors.textSecondary }]}>Gender</Text>
-                <TextInput
-                    style={[styles.input, styles.readOnlyInput, { backgroundColor: colors.inputBackground, color: colors.textSecondary, borderColor: colors.border }]}
-                    value={formatGender(user?.gender)}
-                    editable={false}
-                    selectTextOnFocus={false}
-                />
+                    <Text style={[styles.label, { color: colors.textSecondary }]}>Gender</Text>
+                    <TextInput
+                        style={[styles.input, styles.readOnlyInput, { backgroundColor: colors.inputBackground, color: colors.textSecondary, borderColor: colors.border }]}
+                        value={formatGender(user?.gender)}
+                        editable={false}
+                        selectTextOnFocus={false}
+                    />
 
-                <Text style={[styles.label, { color: colors.textSecondary }]}>Age Verification</Text>
-                <TextInput
-                    style={[styles.input, styles.readOnlyInput, { backgroundColor: colors.inputBackground, color: colors.textSecondary, borderColor: colors.border }]}
-                    value={user?.ageVerified === true ? 'Verified' : 'Not verified'}
-                    editable={false}
-                    selectTextOnFocus={false}
-                />
+                    <Text style={[styles.label, { color: colors.textSecondary }]}>Age Verification</Text>
+                    <TextInput
+                        style={[styles.input, styles.readOnlyInput, { backgroundColor: colors.inputBackground, color: colors.textSecondary, borderColor: colors.border }]}
+                        value={user?.ageVerified === true ? 'Verified' : 'Not verified'}
+                        editable={false}
+                        selectTextOnFocus={false}
+                    />
 
-                <Text style={[styles.label, { color: colors.textSecondary }]}>Name *</Text>
-                <TextInput
-                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                    value={name}
-                    onChangeText={setName}
-                    placeholder="Your name"
-                    placeholderTextColor={colors.textSecondary}
-                />
+                    <Text style={[styles.label, { color: colors.textSecondary }]}>Name *</Text>
+                    <TextInput
+                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                        value={name}
+                        onChangeText={setName}
+                        placeholder="Your name"
+                        placeholderTextColor={colors.textSecondary}
+                    />
 
-                <Text style={[styles.label, { color: colors.textSecondary }]}>Username *</Text>
-                <TextInput
-                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: usernameError ? '#EF4444' : colors.border }]}
-                    value={username}
-                    onChangeText={(value) => setUsername(sanitizeUsername(value))}
-                    placeholder="username"
-                    placeholderTextColor={colors.textSecondary}
-                    autoCapitalize="none"
-                    maxLength={20}
-                />
-                {checkingUsername ? (
-                    <Text style={[styles.hintText, { color: colors.textSecondary }]}>Checking availability...</Text>
-                ) : usernameError ? (
-                    <Text style={styles.errorText}>{usernameError}</Text>
-                ) : usernameOk ? (
-                    <Text style={styles.okText}>Username available</Text>
-                ) : null}
+                    <Text style={[styles.label, { color: colors.textSecondary }]}>Username *</Text>
+                    <TextInput
+                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: usernameError ? STATUS.error : colors.border }]}
+                        value={username}
+                        onChangeText={(value) => setUsername(sanitizeUsername(value))}
+                        placeholder="username"
+                        placeholderTextColor={colors.textSecondary}
+                        autoCapitalize="none"
+                        maxLength={20}
+                    />
+                    {checkingUsername ? (
+                        <Text style={[styles.hintText, { color: colors.textSecondary }]}>Checking availability...</Text>
+                    ) : usernameError ? (
+                        <Text style={styles.errorText}>{usernameError}</Text>
+                    ) : usernameOk ? (
+                        <Text style={styles.okText}>Username available</Text>
+                    ) : null}
 
-                <Text style={[styles.label, { color: colors.textSecondary }]}>Bio</Text>
-                <TextInput
-                    style={[styles.input, styles.bioInput, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                    value={bio}
-                    onChangeText={setBio}
-                    placeholder="Tell people about yourself..."
-                    placeholderTextColor={colors.textSecondary}
-                    multiline
-                    maxLength={150}
-                />
+                    <Text style={[styles.label, { color: colors.textSecondary }]}>Bio</Text>
+                    <TextInput
+                        style={[styles.input, styles.bioInput, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                        value={bio}
+                        onChangeText={setBio}
+                        placeholder="Tell people about yourself..."
+                        placeholderTextColor={colors.textSecondary}
+                        multiline
+                        maxLength={150}
+                    />
 
                     <TouchableOpacity onPress={handleSave} disabled={!canSave} style={styles.saveWrap}>
                         <LinearGradient
-                            colors={canSave ? ['#9d74f7', '#EC4899'] : ['#9CA3AF', '#9CA3AF']}
+                            colors={canSave ? [...BRAND.gradient] : ['#9CA3AF', '#9CA3AF']}
                             style={styles.saveButton}
                         >
                             {saving ? (
@@ -376,12 +376,12 @@ const styles = StyleSheet.create({
     errorText: {
         fontSize: FONT_SIZE.xs,
         marginTop: SPACING.xs,
-        color: '#EF4444',
+        color: STATUS.error,
     },
     okText: {
         fontSize: FONT_SIZE.xs,
         marginTop: SPACING.xs,
-        color: '#10B981',
+        color: STATUS.success,
     },
     saveWrap: {
         marginTop: SPACING.xl,
@@ -392,7 +392,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     saveText: {
-        color: '#fff',
+        color: NEUTRAL.white,
         fontSize: FONT_SIZE.md,
         fontWeight: FONT_WEIGHT.bold,
     },

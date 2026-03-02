@@ -6,9 +6,10 @@ import firestore from '@react-native-firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, STATUS, NEUTRAL } from '../styles';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import DefaultAvatar from '../components/DefaultAvatar';
+import { navigationRef } from '../navigation/RootNavigation';
 
 
 
@@ -30,6 +31,8 @@ const ProfileScreen = ({ navigation }) => {
 
     GoogleSignin.configure({
       webClientId,
+      offlineAccess: true,
+      scopes: ['profile', 'email'],
     });
 
     const unsubscribe = firestore()
@@ -75,25 +78,37 @@ const ProfileScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               if (auth().currentUser) {
-                await firestore().collection('users').doc(auth().currentUser.uid).update({
+                firestore().collection('users').doc(auth().currentUser.uid).update({
                   lastLogoutAt: firestore.FieldValue.serverTimestamp(),
-                });
+                }).catch(() => { });
               }
             } catch (e) { }
 
             try {
-              // Vital for showing the account picker next time
               await GoogleSignin.revokeAccess();
-              await GoogleSignin.signOut();
             } catch (error: any) {
-              // Ignore "SIGN_IN_REQUIRED" error as it just means we're already signed out
-              if (error.code !== 'SIGN_IN_REQUIRED' && error.message !== 'SIGN_IN_REQUIRED') {
-                
-              }
+              // Ignore if already revoked
             }
 
+            try {
+              await GoogleSignin.signOut();
+            } catch (error: any) {
+              // Ignore if already signed out
+            }
 
-            await auth().signOut();
+            try {
+              await auth().signOut();
+            } catch (e: any) {
+              // Ignore sign out errors
+            }
+
+            // Use root navigationRef to reset to Start
+            if (navigationRef.isReady()) {
+              navigationRef.reset({
+                index: 0,
+                routes: [{ name: 'Start' }],
+              });
+            }
           }
         },
       ]
@@ -307,7 +322,7 @@ const styles = StyleSheet.create({
     padding: 4,
     borderRadius: 50,
     elevation: 4,
-    shadowColor: '#000',
+    shadowColor: NEUTRAL.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
   },
@@ -355,7 +370,7 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.lg,
     marginRight: SPACING.sm,
   },
-  badgeText: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold, color: '#10B981' },
+  badgeText: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold, color: STATUS.success },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -378,7 +393,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   accountSwitchModal: { borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, padding: SPACING.xl },
-  modalHandle: { width: 40, height: 4, backgroundColor: '#ddd', borderRadius: 2, alignSelf: 'center', marginBottom: SPACING.lg },
+  modalHandle: { width: 40, height: 4, backgroundColor: NEUTRAL.gray200, borderRadius: 2, alignSelf: 'center', marginBottom: SPACING.lg },
   modalTitle: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold, textAlign: 'center', marginBottom: SPACING.xl },
   accountCard: { flexDirection: 'row', alignItems: 'center', padding: SPACING.lg, borderRadius: BORDER_RADIUS.lg, marginBottom: SPACING.md },
   accountAvatar: { width: 50, height: 50, borderRadius: 25, marginRight: SPACING.md },

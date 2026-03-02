@@ -8,7 +8,7 @@ import functions from '@react-native-firebase/functions';
 import * as Animatable from 'react-native-animatable';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING } from '../styles/constants';
+import { SPACING, BRAND, NEUTRAL } from '../styles';
 import AppLogo from '../components/AppLogo';
 
 const { width } = Dimensions.get('window');
@@ -45,7 +45,7 @@ const StartScreen = ({ navigation }) => {
     setLoading(true);
 
     try {
-      
+
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
       // Force account picker by ensuring previous session is cleared
@@ -55,7 +55,6 @@ const StartScreen = ({ navigation }) => {
         // Ignore if already signed out
       }
 
-      // Attempt to sign in
       const signInResult = await GoogleSignin.signIn();
       const idToken = (signInResult as any)?.data?.idToken || (signInResult as any)?.idToken;
       const googleUser = (signInResult as any)?.data?.user || (signInResult as any)?.user;
@@ -72,7 +71,7 @@ const StartScreen = ({ navigation }) => {
       const isExistingUser = !!statusResult?.data?.existing;
 
       if (isExistingUser) {
-        // Existing users: now sign in to Firebase Auth and proceed directly.
+        // Existing users: sign in to Firebase Auth and proceed directly.
         const googleCredential = auth.GoogleAuthProvider.credential(idToken);
         const userCredential = await auth().signInWithCredential(googleCredential);
         const user = userCredential.user;
@@ -85,23 +84,25 @@ const StartScreen = ({ navigation }) => {
           return;
         }
 
+        // Navigate immediately — don't block on non-critical Firestore updates
+        showToast('Welcome back! 🎉');
+        navigation.reset({ index: 0, routes: [{ name: 'App' }] });
+
+        // Fire-and-forget: update last login and consolidate name in background
         const userData = userDoc.data ? userDoc.data() : {};
         const resolvedName = userData?.name || userData?.displayName || user.displayName || 'User';
 
-        await userDocRef.set({
+        userDocRef.set({
           name: resolvedName,
           displayName: firestore.FieldValue.delete(),
           lastLoginAt: firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
+        }, { merge: true }).catch(() => { });
 
         try {
           if (auth().currentUser) {
-            await auth().currentUser?.updateProfile({ displayName: resolvedName });
+            auth().currentUser?.updateProfile({ displayName: resolvedName }).catch(() => { });
           }
         } catch (e) { }
-
-        showToast('Welcome back! 🎉');
-        navigation.reset({ index: 0, routes: [{ name: 'App' }] });
       } else {
         // New users: DO NOT create Firebase Auth yet. Go to profile completion first.
         navigation.navigate('CompleteProfile', {
@@ -114,11 +115,10 @@ const StartScreen = ({ navigation }) => {
       }
 
     } catch (error: any) {
-      
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        
+        // User cancelled, do nothing
       } else if (error.code === statusCodes.IN_PROGRESS) {
-        
+        // Sign in already in progress
       } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
         Alert.alert('Error', 'Google Play Services not available or outdated.');
       } else {
@@ -133,7 +133,7 @@ const StartScreen = ({ navigation }) => {
     <View style={styles.container}>
       {/* Full Screen Gradient Background */}
       <LinearGradient
-        colors={['#9d74f7', '#895af6', '#6d28d9']}
+        colors={[...BRAND.authGradient]}
         locations={[0, 0.4, 1]}
         style={StyleSheet.absoluteFillObject}
       />
@@ -169,7 +169,7 @@ const StartScreen = ({ navigation }) => {
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color="#1f2937" />
+                <ActivityIndicator color={NEUTRAL.dark} />
               ) : (
                 <>
                   <View style={styles.iconContainer}>
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 56,
     fontWeight: '800',
-    color: '#fff',
+    color: NEUTRAL.white,
     letterSpacing: -1,
     textShadowColor: 'rgba(0,0,0,0.2)',
     textShadowOffset: { width: 0, height: 4 },
@@ -245,13 +245,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: NEUTRAL.white,
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 30, // Pill shape
     width: '100%',
     maxWidth: 320,
-    shadowColor: '#000',
+    shadowColor: NEUTRAL.black,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
     resizeMode: 'contain',
   },
   googleButtonText: {
-    color: '#1f2937',
+    color: NEUTRAL.dark,
     fontSize: 18,
     fontWeight: '600',
   },
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
     maxWidth: 280,
   },
   linkText: {
-    color: '#fff',
+    color: NEUTRAL.white,
     fontWeight: '700',
     textDecorationLine: 'underline',
   },

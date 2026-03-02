@@ -3,13 +3,13 @@ import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Activity
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import TripCard from '../components/TripCard';
 import DefaultAvatar from '../components/DefaultAvatar';
-import useTrips from '../api/useTrips';
+import useTrips from '../hooks/useTrips';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
 import NotificationsModal from '../components/NotificationsModal';
 import FilterModal, { FilterOptions } from '../components/FilterModal';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, NEUTRAL } from '../styles';
 import AppLogo from '../components/AppLogo';
 import ReportTripModal from '../components/ReportTripModal'; // Imported
 import { searchUsersByPrefix } from '../utils/searchUsers';
@@ -465,7 +465,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: SPACING.lg,
         paddingBottom: SPACING.sm,
-        shadowColor: '#000',
+        shadowColor: NEUTRAL.black,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
@@ -580,7 +580,7 @@ const styles = StyleSheet.create({
         borderRadius: BORDER_RADIUS.lg,
     },
     clearButtonText: {
-        color: '#fff',
+        color: NEUTRAL.white,
         fontSize: FONT_SIZE.sm,
         fontWeight: FONT_WEIGHT.bold,
     },

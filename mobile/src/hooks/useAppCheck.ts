@@ -8,9 +8,6 @@ const WEB_SITE_KEY = process.env.EXPO_PUBLIC_APPCHECK_WEB_SITE_KEY?.trim() || un
 
 export const initializeAppCheck = async () => {
     if (!SHOULD_ENABLE) {
-        if (__DEV__) {
-            console.log('[AppCheck] Disabled in dev. Set EXPO_PUBLIC_ENABLE_APPCHECK=true to enable.');
-        }
         return;
     }
 

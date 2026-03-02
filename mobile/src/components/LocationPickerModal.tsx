@@ -4,7 +4,7 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 
 interface LocationPickerModalProps {
     visible: boolean;
@@ -49,7 +49,7 @@ const LocationPickerModal = ({ visible, onClose, onSelectLocation }: LocationPic
             });
             await fetchAddress(location.coords.latitude, location.coords.longitude);
         } catch (error) {
-            
+
         } finally {
             setLoading(false);
         }

@@ -17,7 +17,7 @@ import {
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 
 interface ReportTripModalProps {
     visible: boolean;
@@ -72,7 +72,7 @@ const ReportTripModal: React.FC<ReportTripModalProps> = ({ visible, trip, onClos
             setDescription('');
             setReportType('cancellation');
         } catch (error) {
-            
+
             Alert.alert('Error', 'Failed to submit report');
         } finally {
             setSubmitting(false);

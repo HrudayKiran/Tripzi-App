@@ -5,7 +5,7 @@ import firestore from '@react-native-firebase/firestore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
-import { SPACING, FONT_SIZE, FONT_WEIGHT, BORDER_RADIUS } from '../styles/constants';
+import { SPACING, FONT_SIZE, FONT_WEIGHT, BORDER_RADIUS, NEUTRAL } from '../styles';
 import { aiService, AIMessage } from '../services/AIService';
 import * as Animatable from 'react-native-animatable';
 import { LinearGradient } from 'expo-linear-gradient';

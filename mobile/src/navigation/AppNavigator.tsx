@@ -204,7 +204,7 @@ const AppTabs = () => {
 
 const AppNavigator = () => {
     const [initialRoute, setInitialRoute] = React.useState<string | null>(null);
-    const [user, setUser] = React.useState(auth().currentUser);
+    const userRef = React.useRef(auth().currentUser);
     const wasLoggedInRef = React.useRef<boolean>(!!auth().currentUser);
 
     React.useEffect(() => {
@@ -241,61 +241,12 @@ const AppNavigator = () => {
 
         checkAuthAndProfile();
 
-        // Also listen for auth changes during runtime
-        const unsubscribe = auth().onAuthStateChanged(async (userState) => {
-            setUser(userState);
-
-            // If user just signed in, verify they have a Firestore profile
-            if (userState && navigationRef.current) {
-                try {
-                    const firestore = require('@react-native-firebase/firestore').default;
-
-                    // Retry logic to handle race condition during sign-up
-                    // The Firestore document might not exist immediately after creation
-                    let docExists = false;
-                    const maxRetries = 3;
-                    const retryDelay = 1000; // 1 second
-
-                    for (let attempt = 0; attempt < maxRetries; attempt++) {
-                        const userDoc = await firestore().collection('users').doc(userState.uid).get();
-                        docExists = typeof userDoc.exists === 'function' ? userDoc.exists() : userDoc.exists;
-
-                        if (docExists) break;
-
-                        // Wait before retrying (but not after the last attempt)
-                        if (attempt < maxRetries - 1) {
-                            await new Promise(resolve => setTimeout(resolve, retryDelay));
-                        }
-                    }
-
-                    if (!docExists) {
-                        const currentRoute = navigationRef.current.getCurrentRoute?.()?.name;
-                        const isOnboardingRoute = currentRoute === 'Start' || currentRoute === 'CompleteProfile';
-
-                        if (isOnboardingRoute) {
-                            return;
-                        }
-
-                        // User has no Firestore profile after retries outside onboarding flow
-                        await auth().signOut();
-                        return;
-                    }
-
-                } catch (error: any) {
-                    // Error checking - sign out to be safe
-                    await auth().signOut();
-                    return;
-                }
-            }
-
-            // Handle runtime logout
-            if (!userState && wasLoggedInRef.current && navigationRef.current) {
-                navigationRef.current.reset({
-                    index: 0,
-                    routes: [{ name: 'Start' }],
-                });
-            }
-
+        // Listen for auth changes during runtime (login/logout)
+        // Navigation is handled explicitly by StartScreen (login) and ProfileScreen (logout).
+        // This listener only tracks auth state via ref — NO setState to avoid
+        // re-rendering AppNavigator which would remount NavigationContainer.
+        const unsubscribe = auth().onAuthStateChanged((userState) => {
+            userRef.current = userState;
             wasLoggedInRef.current = !!userState;
         });
 

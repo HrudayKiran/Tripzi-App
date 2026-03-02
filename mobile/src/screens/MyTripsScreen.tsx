@@ -5,7 +5,7 @@ import * as Animatable from 'react-native-animatable';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, NEUTRAL } from '../styles';
 import AppLogo from '../components/AppLogo';
 import { useFocusEffect } from '@react-navigation/native';
 

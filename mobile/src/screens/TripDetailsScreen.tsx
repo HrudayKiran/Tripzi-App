@@ -9,7 +9,7 @@ import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
 
 import DefaultAvatar from '../components/DefaultAvatar';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
 import NotificationService from '../utils/notificationService';
 import ReportTripModal from '../components/ReportTripModal';
 import { pickAndUploadImage } from '../utils/imageUpload';
@@ -384,7 +384,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
             const ref = storage().refFromURL(imageUrl);
             await ref.delete();
           } catch (error) {
-            
+
           }
         }));
       }

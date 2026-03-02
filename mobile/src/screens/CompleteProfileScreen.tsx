@@ -19,7 +19,7 @@ import functions from '@react-native-firebase/functions';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
 
 const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/;
 
@@ -220,112 +220,112 @@ const CompleteProfileScreen = ({ navigation, route }) => {
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 18 : 0}
             >
-            <ScrollView
-                contentContainerStyle={styles.content}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-                showsVerticalScrollIndicator={false}
-            >
-                <Text style={[styles.title, { color: colors.text }]}>Complete your profile</Text>
-                <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Required to continue to Tripzi.</Text>
-
-                <Text style={[styles.label, { color: colors.textSecondary }]}>Full Name *</Text>
-                <TextInput
-                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                    value={fullName}
-                    onChangeText={setFullName}
-                    placeholder="Your full name"
-                    placeholderTextColor={colors.textSecondary}
-                />
-
-                <Text style={[styles.label, { color: colors.textSecondary }]}>Username *</Text>
-                <TextInput
-                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: usernameError ? '#EF4444' : colors.border }]}
-                    value={username}
-                    onChangeText={(value) => setUsername(sanitizeUsername(value))}
-                    autoCapitalize="none"
-                    maxLength={20}
-                    placeholder="username"
-                    placeholderTextColor={colors.textSecondary}
-                />
-                {checkingUsername ? (
-                    <Text style={[styles.hintText, { color: colors.textSecondary }]}>Checking availability...</Text>
-                ) : usernameError ? (
-                    <Text style={styles.errorText}>{usernameError}</Text>
-                ) : usernameOk ? (
-                    <Text style={styles.okText}>Username available</Text>
-                ) : null}
-
-                <Text style={[styles.label, { color: colors.textSecondary }]}>Gender *</Text>
-                <View style={styles.genderRow}>
-                    <TouchableOpacity
-                        style={[
-                            styles.genderOption,
-                            { borderColor: colors.border, backgroundColor: colors.inputBackground },
-                            gender === 'male' && styles.genderSelected,
-                        ]}
-                        onPress={() => setGender('male')}
-                    >
-                        <Text style={[styles.genderText, gender === 'male' && styles.genderTextSelected]}>Male</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[
-                            styles.genderOption,
-                            { borderColor: colors.border, backgroundColor: colors.inputBackground },
-                            gender === 'female' && styles.genderSelected,
-                        ]}
-                        onPress={() => setGender('female')}
-                    >
-                        <Text style={[styles.genderText, gender === 'female' && styles.genderTextSelected]}>Female</Text>
-                    </TouchableOpacity>
-                </View>
-
-                <Text style={[styles.label, { color: colors.textSecondary }]}>Date of Birth *</Text>
-                <TouchableOpacity
-                    style={[styles.input, styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
-                    onPress={() => setShowDatePicker(true)}
+                <ScrollView
+                    contentContainerStyle={styles.content}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                    showsVerticalScrollIndicator={false}
                 >
-                    <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} />
-                    <Text style={[styles.dateText, { color: dob ? colors.text : colors.textSecondary }]}>
-                        {dob ? dob.toLocaleDateString('en-IN') : 'Select your date of birth'}
-                    </Text>
-                </TouchableOpacity>
+                    <Text style={[styles.title, { color: colors.text }]}>Complete your profile</Text>
+                    <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Required to continue to Tripzi.</Text>
 
-                {showDatePicker && (
-                    <DateTimePicker
-                        value={dob || new Date(2000, 0, 1)}
-                        mode="date"
-                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                        onChange={handleDateChange}
-                        maximumDate={new Date()}
-                        minimumDate={new Date(1920, 0, 1)}
+                    <Text style={[styles.label, { color: colors.textSecondary }]}>Full Name *</Text>
+                    <TextInput
+                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                        value={fullName}
+                        onChangeText={setFullName}
+                        placeholder="Your full name"
+                        placeholderTextColor={colors.textSecondary}
                     />
-                )}
 
-                <Text style={[styles.label, { color: colors.textSecondary }]}>Bio (Optional)</Text>
-                <TextInput
-                    style={[styles.input, styles.bioInput, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                    value={bio}
-                    onChangeText={setBio}
-                    placeholder="Tell people about yourself..."
-                    placeholderTextColor={colors.textSecondary}
-                    multiline
-                    maxLength={150}
-                />
+                    <Text style={[styles.label, { color: colors.textSecondary }]}>Username *</Text>
+                    <TextInput
+                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: usernameError ? STATUS.error : colors.border }]}
+                        value={username}
+                        onChangeText={(value) => setUsername(sanitizeUsername(value))}
+                        autoCapitalize="none"
+                        maxLength={20}
+                        placeholder="username"
+                        placeholderTextColor={colors.textSecondary}
+                    />
+                    {checkingUsername ? (
+                        <Text style={[styles.hintText, { color: colors.textSecondary }]}>Checking availability...</Text>
+                    ) : usernameError ? (
+                        <Text style={styles.errorText}>{usernameError}</Text>
+                    ) : usernameOk ? (
+                        <Text style={styles.okText}>Username available</Text>
+                    ) : null}
 
-                <TouchableOpacity disabled={!canSubmit} onPress={handleSubmit} style={styles.submitWrap}>
-                    <LinearGradient
-                        colors={canSubmit ? ['#9d74f7', '#EC4899'] : ['#9CA3AF', '#9CA3AF']}
-                        style={styles.submitBtn}
+                    <Text style={[styles.label, { color: colors.textSecondary }]}>Gender *</Text>
+                    <View style={styles.genderRow}>
+                        <TouchableOpacity
+                            style={[
+                                styles.genderOption,
+                                { borderColor: colors.border, backgroundColor: colors.inputBackground },
+                                gender === 'male' && styles.genderSelected,
+                            ]}
+                            onPress={() => setGender('male')}
+                        >
+                            <Text style={[styles.genderText, gender === 'male' && styles.genderTextSelected]}>Male</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[
+                                styles.genderOption,
+                                { borderColor: colors.border, backgroundColor: colors.inputBackground },
+                                gender === 'female' && styles.genderSelected,
+                            ]}
+                            onPress={() => setGender('female')}
+                        >
+                            <Text style={[styles.genderText, gender === 'female' && styles.genderTextSelected]}>Female</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    <Text style={[styles.label, { color: colors.textSecondary }]}>Date of Birth *</Text>
+                    <TouchableOpacity
+                        style={[styles.input, styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
+                        onPress={() => setShowDatePicker(true)}
                     >
-                        {submitting ? (
-                            <ActivityIndicator color="#fff" />
-                        ) : (
-                            <Text style={styles.submitText}>Submit</Text>
-                        )}
-                    </LinearGradient>
-                </TouchableOpacity>
-            </ScrollView>
+                        <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} />
+                        <Text style={[styles.dateText, { color: dob ? colors.text : colors.textSecondary }]}>
+                            {dob ? dob.toLocaleDateString('en-IN') : 'Select your date of birth'}
+                        </Text>
+                    </TouchableOpacity>
+
+                    {showDatePicker && (
+                        <DateTimePicker
+                            value={dob || new Date(2000, 0, 1)}
+                            mode="date"
+                            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                            onChange={handleDateChange}
+                            maximumDate={new Date()}
+                            minimumDate={new Date(1920, 0, 1)}
+                        />
+                    )}
+
+                    <Text style={[styles.label, { color: colors.textSecondary }]}>Bio (Optional)</Text>
+                    <TextInput
+                        style={[styles.input, styles.bioInput, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                        value={bio}
+                        onChangeText={setBio}
+                        placeholder="Tell people about yourself..."
+                        placeholderTextColor={colors.textSecondary}
+                        multiline
+                        maxLength={150}
+                    />
+
+                    <TouchableOpacity disabled={!canSubmit} onPress={handleSubmit} style={styles.submitWrap}>
+                        <LinearGradient
+                            colors={canSubmit ? [...BRAND.gradient] : ['#9CA3AF', '#9CA3AF']}
+                            style={styles.submitBtn}
+                        >
+                            {submitting ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <Text style={styles.submitText}>Submit</Text>
+                            )}
+                        </LinearGradient>
+                    </TouchableOpacity>
+                </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
@@ -369,12 +369,12 @@ const styles = StyleSheet.create({
     errorText: {
         fontSize: FONT_SIZE.xs,
         marginTop: SPACING.xs,
-        color: '#EF4444',
+        color: STATUS.error,
     },
     okText: {
         fontSize: FONT_SIZE.xs,
         marginTop: SPACING.xs,
-        color: '#10B981',
+        color: STATUS.success,
     },
     genderRow: {
         flexDirection: 'row',
@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     submitText: {
-        color: '#fff',
+        color: NEUTRAL.white,
         fontSize: FONT_SIZE.md,
         fontWeight: FONT_WEIGHT.bold,
     },

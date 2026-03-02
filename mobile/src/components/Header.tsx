@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Platform, StatusBar } from 'r
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, TOUCH_TARGET, HEADER, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import { SPACING, TOUCH_TARGET, HEADER, FONT_SIZE, FONT_WEIGHT } from '../styles';
 
 type HeaderProps = {
     title: string;

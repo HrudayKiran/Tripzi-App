@@ -22,7 +22,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
 import { useChatMessages, Message, ReplyTo } from '../hooks/useChatMessages';
 import { useChats } from '../hooks/useChats';
 import LocationPickerModal from '../components/LocationPickerModal';
@@ -378,7 +378,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             await sendMessage(textToSend, replyingTo || undefined, mentions);
             setReplyingTo(null);
         } catch (error) {
-            
+
             setInputText(textToSend); // Restore on error
         } finally {
             setSending(false);
@@ -417,7 +417,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 setPreviewImage(result.assets[0].uri);
             }
         } catch (error) {
-            
+
             Alert.alert('Error', 'Failed to pick image.');
         }
     };
@@ -466,7 +466,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     [`unreadCount.${currentUser.uid}`]: 0,
                 });
         } catch (error) {
-            
+
             Alert.alert('Error', 'Failed to send image.');
         } finally {
             setUploading(false);
@@ -567,7 +567,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
 
 
         } catch (error) {
-            
+
             Alert.alert('Error', 'Failed to get location.');
         } finally {
             setGettingLocation(false);
@@ -624,7 +624,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                             startLocationWatcher();
 
                         } catch (error) {
-                            
+
                             setIsSharingLive(false);
                         }
                     }
@@ -670,7 +670,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             });
             locationSubscription.current = sub;
         } catch (e) {
-            
+
         }
     };
 
@@ -770,7 +770,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                                 });
                             }
                         } catch (error) {
-                            
+
                         }
                     },
                 },
@@ -797,7 +797,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             setEditingMessage(null);
             setEditText('');
         } catch (error) {
-            
+
             Alert.alert('Error', 'Failed to edit message.');
         }
     };
@@ -831,7 +831,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                             await batch.commit();
                             setShowChatMenu(false);
                         } catch (error) {
-                            
+
                             Alert.alert('Error', 'Failed to clear chat.');
                         }
                     },
@@ -895,7 +895,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                             setSelectedMessages(new Set());
                             setIsSelectionMode(false);
                         } catch (error) {
-                            
+
                             Alert.alert('Error', 'Failed to delete messages.');
                         }
                     },

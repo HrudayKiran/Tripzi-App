@@ -6,7 +6,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import DefaultAvatar from './DefaultAvatar';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles/constants';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, STATUS, NEUTRAL } from '../styles';
 import { DEFAULT_TRIP_IMAGE, isValidImageUrl } from '../constants/defaults';
 import NotificationService from '../utils/notificationService';
 
