@@ -10,12 +10,13 @@ interface DefaultAvatarProps {
     name?: string;
     size?: number;
     style?: ViewStyle | ImageStyle;
+    isGroup?: boolean;
 }
 
 /**
  * A smart avatar component that shows the user's photo or a gradient with initials.
  */
-const DefaultAvatar: React.FC<DefaultAvatarProps> = ({ uri, name = 'User', size = 40, style }) => {
+const DefaultAvatar: React.FC<DefaultAvatarProps> = ({ uri, name = 'User', size = 40, style, isGroup }) => {
     const { colors } = useTheme();
 
     const isValidUrl = uri && (uri.startsWith('https://') || uri.startsWith('http://') || uri.startsWith('file://'));
@@ -46,7 +47,11 @@ const DefaultAvatar: React.FC<DefaultAvatarProps> = ({ uri, name = 'User', size 
                 style
             ]}
         >
-            <Text style={[styles.text, { fontSize }]}>{initial}</Text>
+            {isGroup ? (
+                <Ionicons name="people" size={size * 0.5} color="#fff" />
+            ) : (
+                <Text style={[styles.text, { fontSize }]}>{initial}</Text>
+            )}
         </LinearGradient>
     );
 };

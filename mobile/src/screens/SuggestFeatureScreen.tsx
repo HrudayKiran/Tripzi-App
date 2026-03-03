@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, KeyboardAvoidingView, Platform, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
@@ -9,8 +9,10 @@ import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, STATUS, NEUTRAL } from '../styles';
 
+const TAWKTO_TICKET_EMAIL = 'tickets@tripzi.p.tawk.email';
+
 const SuggestFeatureScreen = ({ navigation }) => {
-  const MAX_ATTACHMENTS = 5;
+  const MAX_ATTACHMENTS = 3;
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState('suggest');
   const [featureTitle, setFeatureTitle] = useState('');
@@ -87,7 +89,8 @@ const SuggestFeatureScreen = ({ navigation }) => {
         userId: currentUser?.uid,
         createdAt: firestore.FieldValue.serverTimestamp(),
       });
-      Alert.alert('Thank You! 🎉', 'Your suggestion has been submitted.');
+
+      Alert.alert('Ticket Received ✅', 'Thank you! Your feature suggestion has been received. Our team will review it shortly. A confirmation has been sent to your email.');
       navigation.goBack();
     } catch (error) {
       Alert.alert('Thank You! 🎉', 'Your suggestion has been saved locally.');
@@ -112,7 +115,8 @@ const SuggestFeatureScreen = ({ navigation }) => {
         userId: currentUser?.uid,
         createdAt: firestore.FieldValue.serverTimestamp(),
       });
-      Alert.alert('Thank You! 🎉', 'Your bug report has been submitted.');
+
+      Alert.alert('Ticket Received ✅', 'Thank you! Your bug report has been received. Our team will investigate it shortly. A confirmation has been sent to your email.');
       navigation.goBack();
     } catch (error) {
       Alert.alert('Thank You! 🎉', 'Your bug report has been saved locally.');

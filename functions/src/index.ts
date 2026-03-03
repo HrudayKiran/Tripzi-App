@@ -13,6 +13,7 @@ export * from './callable/onboarding';
 export * from './callable/groups';
 export * from './triggers/users';
 export * from './triggers/config';
+export * from './triggers/tickets';
 
 // Export utils if needed (usually not triggers)
 // export * from './utils/notifications';

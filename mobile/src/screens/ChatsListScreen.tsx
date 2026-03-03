@@ -23,6 +23,7 @@ import firestore from '@react-native-firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 import { LinearGradient } from 'expo-linear-gradient';
 import { searchUsersByPrefix } from '../utils/searchUsers';
+import DefaultAvatar from '../components/DefaultAvatar';
 
 interface SearchUser {
     id: string;
@@ -256,15 +257,7 @@ const ChatsListScreen = ({ navigation }) => {
                 >
                     {/* Avatar */}
                     <View style={styles.avatarContainer}>
-                        {displayPhoto ? (
-                            <Image source={{ uri: displayPhoto }} style={styles.avatar} />
-                        ) : (
-                            <View style={[styles.avatarPlaceholder, { backgroundColor: colors.primary }]}>
-                                <Text style={styles.avatarText}>
-                                    {displayName?.charAt(0)?.toUpperCase() || 'U'}
-                                </Text>
-                            </View>
-                        )}
+                        <DefaultAvatar uri={displayPhoto} name={displayName} size={52} />
                     </View>
 
                     {/* Chat Info */}
@@ -311,15 +304,7 @@ const ChatsListScreen = ({ navigation }) => {
             activeOpacity={0.7}
             disabled={startingChat}
         >
-            {item.photoURL ? (
-                <Image source={{ uri: item.photoURL }} style={styles.searchAvatar} />
-            ) : (
-                <View style={[styles.searchAvatarPlaceholder, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.avatarText}>
-                        {item.displayName?.charAt(0)?.toUpperCase() || 'U'}
-                    </Text>
-                </View>
-            )}
+            <DefaultAvatar uri={item.photoURL} name={item.displayName} size={48} style={{ marginRight: SPACING.md }} />
             <View style={styles.searchUserInfo}>
                 <View style={styles.searchNameRow}>
                     <Text style={[styles.searchUserName, { color: colors.text }]}>

@@ -20,6 +20,7 @@ import StartScreen from '../screens/StartScreen';
 import CompleteProfileScreen from '../screens/CompleteProfileScreen';
 import FeedScreen from '../screens/FeedScreen';
 import MyTripsScreen from '../screens/MyTripsScreen';
+import AIPlannerScreen from '../screens/AIPlannerScreen';
 import AIChatScreen from '../screens/AIChatScreen';
 
 import ChatsListScreen from '../screens/ChatsListScreen';
@@ -98,7 +99,7 @@ const AppTabs = () => {
                 />
                 <Tab.Screen
                     name="AITripPlanner"
-                    component={AIChatScreen}
+                    component={AIPlannerScreen}
                     options={{
                         tabBarLabel: 'AI Planner',
                         tabBarIcon: ({ color, size }) => (
@@ -115,21 +116,21 @@ const AppTabs = () => {
                         tabBarLabel: '',
                         tabBarIcon: () => null,
                         tabBarButton: (props) => (
-                            <TouchableOpacity
-                                {...props}
-                                style={[
-                                    props.style,
-                                    styles.createTripFab,
-                                    {
-                                        backgroundColor: '#9d74f7',
-                                        borderColor: colors.card,
-                                    },
-                                ]}
-                                onPress={() => handleCreateTripPress(navigation)}
-                                activeOpacity={0.88}
-                            >
-                                <Ionicons name="add" size={30} color="#fff" />
-                            </TouchableOpacity>
+                            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.createTripFab,
+                                        {
+                                            backgroundColor: '#9d74f7',
+                                            borderColor: colors.card,
+                                        },
+                                    ]}
+                                    onPress={() => handleCreateTripPress(navigation)}
+                                    activeOpacity={0.88}
+                                >
+                                    <Text style={{ fontSize: 40, fontWeight: '900', color: '#fff', lineHeight: 42 }}>+</Text>
+                                </TouchableOpacity>
+                            </View>
                         ),
                     })}
                 />

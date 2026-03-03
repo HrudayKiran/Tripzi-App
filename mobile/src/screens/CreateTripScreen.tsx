@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
@@ -138,6 +139,27 @@ const CreateTripScreen = ({ navigation, route }: any) => {
 
     const formatDate = (date: Date) => {
         return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
+
+    const handleFromDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+        if (Platform.OS === 'android') setShowDateModal(null);
+        if (event.type === 'set' && selectedDate) {
+            setFromDate(selectedDate);
+            if (selectedDate > toDate) {
+                setToDate(new Date(selectedDate.getTime() + 24 * 60 * 60 * 1000));
+            }
+        }
+    };
+
+    const handleToDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+        if (Platform.OS === 'android') setShowDateModal(null);
+        if (event.type === 'set' && selectedDate) {
+            if (selectedDate >= fromDate) {
+                setToDate(selectedDate);
+            } else {
+                Alert.alert('Invalid Date', 'End date cannot be earlier than start date.');
+            }
+        }
     };
 
     const getDuration = () => {
@@ -442,73 +464,33 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                             </Animatable.View>
                         )}
 
-                        {/* Date Selection Modal */}
-                        <Modal visible={showDateModal !== null} transparent animationType="fade">
-                            <View style={styles.dateModalOverlay}>
-                                <View style={[styles.dateModalContent, { backgroundColor: colors.background }]}>
-                                    <View style={styles.dateModalHeader}>
-                                        <Text style={[styles.dateModalTitle, { color: colors.text }]}>
-                                            Select {showDateModal === 'from' ? 'Start' : 'End'} Date
-                                        </Text>
-                                        <TouchableOpacity onPress={() => setShowDateModal(null)}>
-                                            <Ionicons name="close" size={24} color={colors.text} />
-                                        </TouchableOpacity>
-                                    </View>
-
-                                    <ScrollView style={styles.dateList} showsVerticalScrollIndicator={false}>
-                                        {Array.from({ length: 60 }, (_, i) => {
-                                            const date = new Date();
-                                            date.setDate(date.getDate() + i);
-                                            const isSelected = showDateModal === 'from'
-                                                ? date.toDateString() === fromDate.toDateString()
-                                                : date.toDateString() === toDate.toDateString();
-                                            const isDisabled = showDateModal === 'to' && date.getTime() < fromDate.getTime();
-
-                                            return (
-                                                <TouchableOpacity
-                                                    key={i}
-                                                    style={[
-                                                        styles.dateOption,
-                                                        { backgroundColor: isSelected ? colors.primary : colors.card },
-                                                        isDisabled && { opacity: 0.5 }
-                                                    ]}
-                                                    onPress={() => {
-                                                        if (isDisabled) return;
-                                                        if (showDateModal === 'from') {
-                                                            setFromDate(date);
-                                                            if (date.getTime() > toDate.getTime()) setToDate(new Date(date.getTime() + 24 * 60 * 60 * 1000));
-                                                        } else {
-                                                            setToDate(date);
-                                                        }
-                                                        setShowDateModal(null);
-                                                    }}
-                                                    disabled={isDisabled}
-                                                >
-                                                    <Text style={[
-                                                        styles.dateOptionDay,
-                                                        { color: isSelected ? '#fff' : colors.text }
-                                                    ]}>
-                                                        {date.toLocaleDateString('en-IN', { weekday: 'short' })}
-                                                    </Text>
-                                                    <Text style={[
-                                                        styles.dateOptionDate,
-                                                        { color: isSelected ? '#fff' : colors.text }
-                                                    ]}>
-                                                        {date.getDate()}
-                                                    </Text>
-                                                    <Text style={[
-                                                        styles.dateOptionMonth,
-                                                        { color: isSelected ? '#fff' : colors.textSecondary }
-                                                    ]}>
-                                                        {date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            );
-                                        })}
-                                    </ScrollView>
-                                </View>
+                        {/* DateTimePicker Support */}
+                        {showDateModal === 'from' && (
+                            <DateTimePicker
+                                value={fromDate}
+                                mode="date"
+                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                minimumDate={new Date()}
+                                onChange={handleFromDateChange}
+                            />
+                        )}
+                        {showDateModal === 'to' && (
+                            <DateTimePicker
+                                value={toDate}
+                                mode="date"
+                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                minimumDate={fromDate}
+                                onChange={handleToDateChange}
+                            />
+                        )}
+                        {/* iOS close button for inline picker */}
+                        {Platform.OS === 'ios' && showDateModal !== null && (
+                            <View style={{ alignItems: 'flex-end', paddingRight: SPACING.md, marginTop: -SPACING.sm, marginBottom: SPACING.sm }}>
+                                <TouchableOpacity onPress={() => setShowDateModal(null)}>
+                                    <Text style={{ color: colors.primary, fontWeight: 'bold' }}>Done</Text>
+                                </TouchableOpacity>
                             </View>
-                        </Modal>
+                        )}
 
                         {/* Step 3: Trip Details */}
                         {step === 3 && (

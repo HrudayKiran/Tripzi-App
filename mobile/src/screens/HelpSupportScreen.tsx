@@ -12,7 +12,7 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, NE
 const TAWKTO_PROPERTY_ID = process.env.EXPO_PUBLIC_TAWKTO_PROPERTY_ID || '';
 const TAWKTO_WIDGET_ID = process.env.EXPO_PUBLIC_TAWKTO_WIDGET_ID || '';
 
-const SUPPORT_EMAIL = 'support@tripzi.com';
+const SUPPORT_EMAIL = 'tickets@tripzi.p.tawk.email';
 
 const HelpSupportScreen = ({ navigation }) => {
   const { colors } = useTheme();
@@ -97,14 +97,6 @@ const HelpSupportScreen = ({ navigation }) => {
               bgColor="#D1FAE5"
               colors={colors}
               onPress={openLiveChat}
-            />
-            <ContactCard
-              icon="call-outline"
-              label="Call Us"
-              iconColor="#6B7280"
-              bgColor="#F3F4F6"
-              colors={colors}
-              onPress={() => Linking.openURL('tel:+911234567890')}
             />
           </Animatable.View>
 

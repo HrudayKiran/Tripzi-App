@@ -28,9 +28,10 @@ interface TripCardProps {
     isVisible?: boolean;
     onReportPress: (trip: any) => void;
     showOptions?: boolean;
+    mode?: 'chat' | 'join';
 }
 
-const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOptions = true }: TripCardProps) => {
+const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOptions = true, mode = 'chat' }: TripCardProps) => {
 
     const { colors } = useTheme();
     const navigation = useNavigation();
@@ -145,6 +146,22 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                 });
                 setHasJoined(false);
 
+                // Also remove user from associated group chat
+                try {
+                    const groupChats = await firestore()
+                        .collection('chats')
+                        .where('type', '==', 'group')
+                        .where('tripId', '==', trip.id)
+                        .where('participants', 'array-contains', currentUser.uid)
+                        .get();
+                    for (const chatDoc of groupChats.docs) {
+                        await chatDoc.ref.update({
+                            participants: firestore.FieldValue.arrayRemove(currentUser.uid),
+                            [`participantDetails.${currentUser.uid}`]: firestore.FieldValue.delete(),
+                        });
+                    }
+                } catch { /* silently handle */ }
+
                 if (trip.userId && trip.userId !== currentUser.uid) {
                     await NotificationService.onLeaveTrip(currentUser.uid, userName, trip.id, trip.userId, tripTitle);
                 }
@@ -155,6 +172,27 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                     Alert.alert('Trip Full', 'Sorry, this trip is already full.');
                     return;
                 }
+
+                // Gender check
+                const tripGender = trip.genderPreference?.toLowerCase();
+                if (tripGender && tripGender !== 'anyone') {
+                    // Get current user's gender from public_users
+                    try {
+                        const userDoc = await firestore().collection('public_users').doc(currentUser.uid).get();
+                        const userGender = userDoc.data()?.gender?.toLowerCase();
+                        if (userGender && userGender !== tripGender) {
+                            const genderLabel = tripGender === 'male' ? 'Male' : 'Female';
+                            Alert.alert(
+                                'Gender Restriction',
+                                `This trip is for ${genderLabel} travelers only. Try joining trips with your gender or trips open to Anyone.`
+                            );
+                            return;
+                        }
+                    } catch {
+                        // If we can't check gender, allow join
+                    }
+                }
+
                 // Join trip
                 await firestore().collection('trips').doc(trip.id).update({
                     participants: firestore.FieldValue.arrayUnion(currentUser.uid),
@@ -166,14 +204,79 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                     await NotificationService.onJoinTrip(currentUser.uid, userName, trip.id, trip.userId, tripTitle);
                 }
             }
-        } catch {
-            // Keep previous state on error
+        } catch (error: any) {
+            console.warn('Join trip error:', error?.message || error);
+            Alert.alert('Error', 'Could not join/leave this trip. Please try again.');
+        }
+    };
+
+    const handleChatWithUser = async () => {
+        if (!currentUser) {
+            Alert.alert('Sign In Required', 'Please sign in to chat.');
+            return;
+        }
+        if (!trip.userId) {
+            Alert.alert('Error', 'Cannot chat with this user.');
+            return;
+        }
+        try {
+            const chatQuery = await firestore()
+                .collection('chats')
+                .where('type', '==', 'direct')
+                .where('participants', 'array-contains', currentUser.uid)
+                .get();
+
+            let chatId = null;
+            for (const doc of chatQuery.docs) {
+                const data = doc.data();
+                if (data.participants && data.participants.includes(trip.userId)) {
+                    chatId = doc.id;
+                    break;
+                }
+            }
+
+            if (!chatId) {
+                const newChatRef = await firestore().collection('chats').add({
+                    type: 'direct',
+                    createdBy: currentUser.uid,
+                    participants: [currentUser.uid, trip.userId],
+                    participantDetails: {
+                        [currentUser.uid]: {
+                            displayName: currentUser.displayName || 'User',
+                            photoURL: currentUser.photoURL || '',
+                        },
+                        [trip.userId]: {
+                            displayName: trip.user?.displayName || trip.user?.name || 'User',
+                            photoURL: trip.user?.photoURL || '',
+                        },
+                    },
+                    unreadCount: {
+                        [currentUser.uid]: 0,
+                        [trip.userId]: 0,
+                    },
+                    mutedBy: [],
+                    pinnedBy: [],
+                    createdAt: firestore.FieldValue.serverTimestamp(),
+                    updatedAt: firestore.FieldValue.serverTimestamp(),
+                });
+                chatId = newChatRef.id;
+            }
+
+            navigation.navigate('Chat' as never, {
+                chatId,
+                otherUserId: trip.userId,
+                otherUserName: trip.user?.displayName || trip.user?.name || 'User',
+                otherUserPhoto: trip.user?.photoURL || '',
+            } as never);
+        } catch (error: any) {
+            console.warn('TripCard chat error:', error?.message || error);
+            Alert.alert('Error', 'Could not start chat. Please try again.');
         }
     };
 
     // Check if trip is completed (marked by owner)
     const isCompleted = trip.isCompleted === true;
-    const isOwnTrip = trip.userId === currentUser?.uid;
+    const isOwnTrip = trip.userId === currentUser?.uid || trip.user?.uid === currentUser?.uid;
 
     const transport = TRANSPORT_ICONS[trip.transportMode?.toLowerCase()] || TRANSPORT_ICONS.mixed;
     const spotsLeft = Math.max(0, (trip.maxTravelers || 8) - (trip.participants?.length || trip.currentTravelers || 1));
@@ -210,14 +313,33 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
 
                     {/* Actions in header */}
                     <View style={styles.headerActions}>
-                        {/* Join Button */}
-                        {!isOwnTrip && !isCompleted && (
+                        {/* Chat Button (home feed mode) */}
+                        {mode === 'chat' && !isOwnTrip && !isCompleted && (
+                            <TouchableOpacity
+                                style={[
+                                    styles.joinButton,
+                                    {
+                                        backgroundColor: colors.primary,
+                                        borderColor: colors.primary,
+                                    },
+                                ]}
+                                onPress={handleChatWithUser}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={[styles.joinButtonText, { color: '#fff' }]}>
+                                    Chat
+                                </Text>
+                            </TouchableOpacity>
+                        )}
+
+                        {/* Join Button (profile mode) */}
+                        {mode === 'join' && !isOwnTrip && !isCompleted && (
                             <TouchableOpacity
                                 style={[
                                     styles.joinButton,
                                     {
                                         backgroundColor: hasJoined ? 'transparent' : colors.primary,
-                                        borderColor: hasJoined ? colors.primary : colors.primary,
+                                        borderColor: colors.primary,
                                     },
                                 ]}
                                 onPress={handleJoinTrip}

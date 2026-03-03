@@ -23,6 +23,7 @@ import storage from '@react-native-firebase/storage';
 import functions from '@react-native-firebase/functions';
 import { searchUsersByPrefix } from '../utils/searchUsers';
 import { getPublicProfilesByIds } from '../utils/publicProfiles';
+import DefaultAvatar from '../components/DefaultAvatar';
 
 interface Member {
     id: string;
@@ -301,13 +302,11 @@ const GroupInfoScreen = ({ navigation, route }) => {
                 }}
                 activeOpacity={0.7}
             >
-                {item.photoURL ? (
-                    <Image source={{ uri: item.photoURL }} style={styles.memberAvatar} />
-                ) : (
-                    <View style={[styles.memberAvatarPlaceholder, { backgroundColor: colors.primary }]}>
-                        <Text style={styles.memberAvatarText}>{item.displayName?.charAt(0)?.toUpperCase()}</Text>
-                    </View>
-                )}
+                <DefaultAvatar
+                    uri={item.photoURL}
+                    name={item.displayName}
+                    size={44}
+                />
                 <View style={styles.memberInfo}>
                     <Text style={[styles.memberName, { color: colors.text }]}>
                         {item.displayName} {isMe && '(You)'}
@@ -345,13 +344,12 @@ const GroupInfoScreen = ({ navigation, route }) => {
                 {/* Group Icon & Name */}
                 <View style={styles.groupHeader}>
                     <TouchableOpacity onPress={isAdmin ? updateGroupIcon : undefined}>
-                        {group?.groupIcon ? (
-                            <Image source={{ uri: group.groupIcon }} style={styles.groupIcon} />
-                        ) : (
-                            <View style={[styles.groupIconPlaceholder, { backgroundColor: colors.primary }]}>
-                                <Ionicons name="people" size={40} color="#fff" />
-                            </View>
-                        )}
+                        <DefaultAvatar
+                            uri={group?.groupIcon}
+                            name={group?.groupName || 'Group'}
+                            size={100}
+                            isGroup={true}
+                        />
                         {isAdmin && (
                             <View style={[styles.editIconBadge, { backgroundColor: colors.primary }]}>
                                 <Ionicons name="camera" size={14} color="#fff" />
@@ -453,13 +451,11 @@ const GroupInfoScreen = ({ navigation, route }) => {
                                         style={[styles.searchResultItem, { backgroundColor: colors.card }]}
                                         onPress={() => addMember(item)}
                                     >
-                                        {item.photoURL ? (
-                                            <Image source={{ uri: item.photoURL }} style={styles.searchAvatar} />
-                                        ) : (
-                                            <View style={[styles.searchAvatarPlaceholder, { backgroundColor: colors.primary }]}>
-                                                <Text style={styles.searchAvatarText}>{item.displayName?.charAt(0)?.toUpperCase()}</Text>
-                                            </View>
-                                        )}
+                                        <DefaultAvatar
+                                            uri={item.photoURL}
+                                            name={item.displayName}
+                                            size={40}
+                                        />
                                         <Text style={[styles.searchName, { color: colors.text }]}>{item.displayName}</Text>
                                         <Ionicons name="add-circle" size={24} color={colors.primary} />
                                     </TouchableOpacity>

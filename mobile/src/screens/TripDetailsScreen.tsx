@@ -260,6 +260,31 @@ const TripDetailsScreen = ({ route, navigation }) => {
           await NotificationService.onLeaveTrip(user.uid, userName, tripId, trip.userId, tripTitle);
         }
       } else {
+        // Check spots
+        if (spotsLeft <= 0) {
+          Alert.alert('Trip Full', 'Sorry, this trip is already full.');
+          return;
+        }
+
+        // Gender check
+        const tripGender = trip?.genderPreference?.toLowerCase();
+        if (tripGender && tripGender !== 'anyone') {
+          try {
+            const userDoc = await firestore().collection('public_users').doc(user.uid).get();
+            const userGender = userDoc.data()?.gender?.toLowerCase();
+            if (userGender && userGender !== tripGender) {
+              const genderLabel = tripGender === 'male' ? 'Male' : 'Female';
+              Alert.alert(
+                'Gender Restriction',
+                `This trip is for ${genderLabel} travelers only. Try joining trips with your gender or trips open to Anyone.`
+              );
+              return;
+            }
+          } catch {
+            // If gender check fails, allow join
+          }
+        }
+
         // Join trip - instant toggle
         await firestore().collection('trips').doc(tripId).update({
           participants: firestore.FieldValue.arrayUnion(user.uid),
@@ -273,8 +298,70 @@ const TripDetailsScreen = ({ route, navigation }) => {
         }
       }
     } catch (error) {
-      // Error handled silently
       // Keep previous state on error
+    }
+  };
+
+  // Direct chat with trip organizer (1-on-1)
+  const handleDirectChat = async () => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to chat.');
+      return;
+    }
+    if (!trip?.userId || trip.userId === user.uid) return;
+
+    try {
+      const chatQuery = await firestore()
+        .collection('chats')
+        .where('type', '==', 'direct')
+        .where('participants', 'array-contains', user.uid)
+        .get();
+
+      let chatId = null;
+      for (const doc of chatQuery.docs) {
+        const data = doc.data();
+        if (data.participants && data.participants.includes(trip.userId)) {
+          chatId = doc.id;
+          break;
+        }
+      }
+
+      if (!chatId) {
+        const newChatRef = await firestore().collection('chats').add({
+          type: 'direct',
+          createdBy: user.uid,
+          participants: [user.uid, trip.userId],
+          participantDetails: {
+            [user.uid]: {
+              displayName: user.displayName || 'User',
+              photoURL: user.photoURL || '',
+            },
+            [trip.userId]: {
+              displayName: trip.user?.displayName || 'User',
+              photoURL: trip.user?.photoURL || '',
+            },
+          },
+          unreadCount: {
+            [user.uid]: 0,
+            [trip.userId]: 0,
+          },
+          mutedBy: [],
+          pinnedBy: [],
+          createdAt: firestore.FieldValue.serverTimestamp(),
+          updatedAt: firestore.FieldValue.serverTimestamp(),
+        });
+        chatId = newChatRef.id;
+      }
+
+      navigation.navigate('Chat', {
+        chatId,
+        otherUserId: trip.userId,
+        otherUserName: trip.user?.displayName || 'User',
+        otherUserPhoto: trip.user?.photoURL || '',
+      });
+    } catch (error: any) {
+      console.warn('DirectChat error:', error?.message || error);
+      Alert.alert('Error', 'Could not start chat. Please try again.');
     }
   };
 
@@ -697,6 +784,16 @@ const TripDetailsScreen = ({ route, navigation }) => {
                 >
                   <Ionicons name="chatbubble-ellipses-outline" size={20} color="#fff" />
                   <Text style={styles.smallMessageBtnText}>Group Chat</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Direct Chat with organizer (for non-owners) */}
+              {!isOwner && (
+                <TouchableOpacity
+                  style={[styles.directChatBtn, { borderColor: colors.primary }]}
+                  onPress={handleDirectChat}
+                >
+                  <Text style={[styles.directChatBtnText, { color: colors.primary }]}>Chat</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -1424,6 +1521,8 @@ const styles = StyleSheet.create({
   destinationInfoCol: { flex: 1, marginRight: SPACING.md },
   compactMapBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: 8, borderRadius: BORDER_RADIUS.md, gap: 6 },
   compactMapBtnText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
+  directChatBtn: { borderWidth: 1.5, paddingHorizontal: SPACING.md, paddingVertical: 6, borderRadius: BORDER_RADIUS.md, marginLeft: SPACING.sm },
+  directChatBtnText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
 
 });
 

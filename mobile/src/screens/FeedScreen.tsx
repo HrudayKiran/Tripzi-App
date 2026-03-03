@@ -128,31 +128,59 @@ const FeedScreen = ({ navigation }) => {
         if (filters) {
             if (filters.destination) {
                 result = result.filter(trip =>
-                    trip.location?.toLowerCase().includes(filters.destination.toLowerCase())
+                    trip.location?.toLowerCase().includes(filters.destination.toLowerCase()) ||
+                    trip.toLocation?.toLowerCase().includes(filters.destination.toLowerCase())
+                );
+            }
+            if (filters.startingFrom) {
+                result = result.filter(trip =>
+                    trip.fromLocation?.toLowerCase().includes(filters.startingFrom!.toLowerCase())
                 );
             }
             if (filters.maxCost) {
                 result = result.filter(trip => (trip.cost || 0) <= filters.maxCost);
             }
-            if (filters.maxTravelers) {
-                result = result.filter(trip => (trip.travelers || 1) <= filters.maxTravelers);
+            if (filters.maxTravelers && filters.maxTravelers < 50) {
+                result = result.filter(trip => (trip.maxTravelers || 1) <= filters.maxTravelers);
             }
             if (filters.minDays && filters.minDays > 1) {
                 result = result.filter(trip => (trip.duration || 1) >= filters.minDays);
             }
-            if (filters.tripType) {
+            // Multi-select trip types
+            if (filters.tripTypes && filters.tripTypes.length > 0) {
                 result = result.filter(trip =>
-                    trip.tripTypes?.some(t => t.toLowerCase().includes(filters.tripType.toLowerCase()))
+                    trip.tripTypes?.some((t: string) => filters.tripTypes!.includes(t.toLowerCase())) ||
+                    filters.tripTypes!.includes(trip.tripType?.toLowerCase())
+                );
+            } else if (filters.tripType) {
+                result = result.filter(trip =>
+                    trip.tripTypes?.some((t: string) => t.toLowerCase().includes(filters.tripType!.toLowerCase()))
                 );
             }
-            if (filters.transportMode) {
+            // Multi-select transport modes
+            if (filters.transportModes && filters.transportModes.length > 0) {
                 result = result.filter(trip =>
-                    trip.transportModes?.some(t => t.toLowerCase().includes(filters.transportMode.toLowerCase()))
+                    trip.transportModes?.some((t: string) => filters.transportModes!.includes(t.toLowerCase())) ||
+                    filters.transportModes!.includes(trip.transportMode?.toLowerCase())
+                );
+            } else if (filters.transportMode) {
+                result = result.filter(trip =>
+                    trip.transportModes?.some((t: string) => t.toLowerCase().includes(filters.transportMode!.toLowerCase()))
                 );
             }
             if (filters.genderPreference && filters.genderPreference !== 'anyone') {
                 result = result.filter(trip =>
                     trip.genderPreference === filters.genderPreference || trip.genderPreference === 'anyone'
+                );
+            }
+            if (filters.accommodationType) {
+                result = result.filter(trip =>
+                    trip.accommodationType?.toLowerCase() === filters.accommodationType
+                );
+            }
+            if (filters.bookingStatus) {
+                result = result.filter(trip =>
+                    trip.bookingStatus?.toLowerCase() === filters.bookingStatus
                 );
             }
             if (filters.sortBy) {
@@ -367,6 +395,7 @@ const FeedScreen = ({ navigation }) => {
                                     >
                                         <DefaultAvatar
                                             uri={user.photoURL}
+                                            name={user.displayName || user.name || 'User'}
                                             size={40}
                                             style={styles.userResultAvatar}
                                         />
@@ -430,6 +459,7 @@ const FeedScreen = ({ navigation }) => {
                 visible={filterVisible}
                 onClose={() => setFilterVisible(false)}
                 onApply={handleApplyFilters}
+                currentFilters={filters}
             />
 
             {/* Hoisted Report Modal */}

@@ -411,7 +411,18 @@ const UserProfileScreen = ({ route, navigation }) => {
 
 
     const handleMessage = async () => {
-        if (!currentUser || !user) return;
+        if (!currentUser) {
+            Alert.alert('Sign In Required', 'Please sign in to send messages.');
+            return;
+        }
+        if (!userId || !user) {
+            Alert.alert('Error', 'User profile not loaded. Please try again.');
+            return;
+        }
+        if (userId === currentUser.uid) {
+            return; // Can't message yourself
+        }
+
         try {
             // Create or get existing chat using Firestore directly
             const chatQuery = await firestore()
@@ -423,27 +434,40 @@ const UserProfileScreen = ({ route, navigation }) => {
             let chatId = null;
             for (const doc of chatQuery.docs) {
                 const data = doc.data();
-                if (data.participants.includes(userId)) {
+                if (data.participants && data.participants.includes(userId)) {
                     chatId = doc.id;
                     break;
                 }
             }
 
             if (!chatId) {
-                // Create new chat
-                const currentUserDoc = await firestore().collection('users').doc(currentUser.uid).get();
-                const currentUserData = currentUserDoc.data();
+                // Get current user data with fallback
+                let currentUserName = currentUser.displayName || 'User';
+                let currentUserPhoto = currentUser.photoURL || '';
 
+                try {
+                    const currentUserDoc = await firestore().collection('users').doc(currentUser.uid).get();
+                    if (currentUserDoc.exists) {
+                        const currentUserData = currentUserDoc.data();
+                        currentUserName = currentUserData?.name || currentUserData?.displayName || currentUser.displayName || 'User';
+                        currentUserPhoto = currentUserData?.photoURL || currentUser.photoURL || '';
+                    }
+                } catch {
+                    // Use auth profile data as fallback
+                }
+
+                // Create new chat
                 const newChatRef = await firestore().collection('chats').add({
                     type: 'direct',
+                    createdBy: currentUser.uid,
                     participants: [currentUser.uid, userId],
                     participantDetails: {
                         [currentUser.uid]: {
-                            displayName: currentUserData?.name || currentUserData?.displayName || currentUser.displayName || 'User',
-                            photoURL: currentUserData?.photoURL || currentUser.photoURL || '',
+                            displayName: currentUserName,
+                            photoURL: currentUserPhoto,
                         },
                         [userId]: {
-                            displayName: user.displayName || 'User',
+                            displayName: user.displayName || user.name || 'User',
                             photoURL: user.photoURL || '',
                         },
                     },
@@ -462,13 +486,12 @@ const UserProfileScreen = ({ route, navigation }) => {
             navigation.navigate('Chat', {
                 chatId,
                 otherUserId: userId,
-                otherUserName: user.displayName,
-                otherUserPhoto: user.photoURL,
+                otherUserName: user.displayName || user.name || 'User',
+                otherUserPhoto: user.photoURL || '',
             });
-        } catch (error) {
-            // Error starting chat
-
-            Alert.alert('Error', 'Could not start chat. Please try again.');
+        } catch (error: any) {
+            console.warn('handleMessage error:', error?.message || error);
+            Alert.alert('Error', 'Could not start chat. Please check your connection and try again.');
         }
     };
 
@@ -498,6 +521,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                         setActiveModal('report');
                     }}
                     showOptions={false}
+                    mode="join"
                 />
 
 

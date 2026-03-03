@@ -25,6 +25,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
 import { useChatMessages, Message, ReplyTo } from '../hooks/useChatMessages';
 import { useChats } from '../hooks/useChats';
+import { getPublicProfilesByIds } from '../utils/publicProfiles';
+import DefaultAvatar from '../components/DefaultAvatar';
 import LocationPickerModal from '../components/LocationPickerModal';
 import LiveLocationMapModal from '../components/LiveLocationMapModal';
 import auth from '@react-native-firebase/auth';
@@ -94,8 +96,6 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     const locationSubscription = useRef<Location.LocationSubscription | null>(null);
     const [activeSharersCount, setActiveSharersCount] = useState(0);
 
-
-
     // Typing indicator state
     const [isTyping, setIsTyping] = useState(false);
     const [otherUserTyping, setOtherUserTyping] = useState(false);
@@ -112,6 +112,11 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     const [mentionQuery, setMentionQuery] = useState<string | null>(null);
     const [filteredMembers, setFilteredMembers] = useState<any[]>([]);
 
+    // Last seen / online status
+    const [lastSeenText, setLastSeenText] = useState('');
+    // Live profile photo from public_users
+    const [livePhoto, setLivePhoto] = useState<string | null>(null);
+
     const groupMembers = React.useMemo(() => {
         if (chat?.type !== 'group' || !chat.participantDetails) return [];
         return Object.entries(chat.participantDetails).map(([uid, details]: [string, any]) => ({
@@ -121,16 +126,15 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     }, [chat]);
 
     // Get chat details
-    // Get chat details (already retrieved above)
     const otherParticipantUid = chat?.participants.find((uid) => uid !== currentUser?.uid) || otherUserId;
     const otherParticipant = chat?.participantDetails?.[otherParticipantUid || ''];
 
     const displayName = chat?.type === 'group'
-        ? chat.groupName
+        ? (chat.groupName || route.params?.tripTitle || 'Group Chat')
         : otherParticipant?.displayName || otherUserName || 'User';
-    const displayPhoto = chat?.type === 'group'
+    const displayPhoto = livePhoto || (chat?.type === 'group'
         ? chat.groupIcon
-        : otherParticipant?.photoURL || otherUserPhoto;
+        : otherParticipant?.photoURL || otherUserPhoto);
 
 
 
@@ -187,7 +191,40 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         }
     }, [messages.length]);
 
-    // Typing indicator listener
+    // Fetch last seen + live profile photo for direct chats
+    useEffect(() => {
+        if (!otherParticipantUid || chat?.type === 'group') return;
+        const unsub = firestore()
+            .collection('public_users')
+            .doc(otherParticipantUid)
+            .onSnapshot((doc) => {
+                if (!doc.exists) return;
+                const data = doc.data();
+                // Live photo
+                if (data?.photoURL) setLivePhoto(data.photoURL);
+                // Last seen
+                if (data?.lastSeen) {
+                    try {
+                        const ts = data.lastSeen.toDate ? data.lastSeen.toDate() : new Date(data.lastSeen);
+                        const diffMs = Date.now() - ts.getTime();
+                        if (diffMs < 2 * 60 * 1000) {
+                            setLastSeenText('Online');
+                        } else if (diffMs < 60 * 60 * 1000) {
+                            setLastSeenText(`last seen ${Math.floor(diffMs / 60000)} min ago`);
+                        } else if (diffMs < 24 * 60 * 60 * 1000) {
+                            setLastSeenText(`last seen ${Math.floor(diffMs / 3600000)}h ago`);
+                        } else {
+                            setLastSeenText(`last seen ${format(ts, 'MMM d, h:mm a')}`);
+                        }
+                    } catch { setLastSeenText(''); }
+                } else {
+                    setLastSeenText('');
+                }
+            }, () => { });
+        return () => unsub();
+    }, [otherParticipantUid, chat?.type]);
+
+    // Typing indicator listener (throttled — only reads typing field)
     useEffect(() => {
         if (!chatId || !currentUser) return;
 
@@ -195,23 +232,23 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             .collection('chats')
             .doc(chatId)
             .onSnapshot((doc) => {
-                // Guard against null doc
                 if (!doc || !doc.exists) {
                     setOtherUserTyping(false);
                     return;
                 }
-
                 const data = doc.data();
                 if (data?.typing) {
                     const typingUsers = Object.entries(data.typing)
                         .filter(([uid, timestamp]: [string, any]) => {
                             if (uid === currentUser.uid) return false;
                             const ts = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
-                            return Date.now() - ts.getTime() < 5000; // 5 second timeout
+                            return Date.now() - ts.getTime() < 5000;
                         });
                     setOtherUserTyping(typingUsers.length > 0);
+                } else {
+                    setOtherUserTyping(false);
                 }
-            });
+            }, () => { });
 
         return () => unsubscribe();
     }, [chatId, currentUser]);
@@ -914,7 +951,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         if (!timestamp) return '';
         try {
             const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-            return format(date, 'HH:mm');
+            return format(date, 'h:mm a');
         } catch {
             return '';
         }
@@ -1156,7 +1193,6 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     onPress={() => {
                         const isGroup = chat?.type === 'group' || route.params?.isGroupChat;
                         if (isGroup) {
-                            // Navigate to GroupInfo (assuming it exists and takes chatId)
                             navigation.navigate('GroupInfo', { chatId });
                         } else if (otherParticipantUid) {
                             navigation.navigate('UserProfile', { userId: otherParticipantUid });
@@ -1164,20 +1200,33 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     }}
                     activeOpacity={0.7}
                 >
-                    {displayPhoto ? (
-                        <Image source={{ uri: displayPhoto }} style={styles.headerAvatar} />
-                    ) : (
-                        <View style={[styles.headerAvatarPlaceholder, { backgroundColor: colors.primary }]}>
-                            <Text style={styles.headerAvatarText}>{displayName?.charAt(0)?.toUpperCase() || 'U'}</Text>
-                        </View>
-                    )}
+                    <DefaultAvatar
+                        uri={displayPhoto}
+                        name={displayName}
+                        size={40}
+                        style={styles.headerAvatar}
+                        isGroup={chat?.type === 'group' || route.params?.isGroupChat}
+                    />
                     <View style={styles.headerTextContainer}>
                         <Text style={[styles.headerName, { color: colors.text }]} numberOfLines={1}>{displayName}</Text>
-                        <Text style={[styles.headerStatus, { color: otherUserTyping ? colors.primary : colors.textSecondary }]}>
-                            {otherUserTyping ? 'typing...' : 'Online'}
+                        <Text style={[styles.headerStatus, { color: otherUserTyping ? colors.primary : colors.textSecondary }]} numberOfLines={1}>
+                            {otherUserTyping ? 'typing...' : (
+                                (chat?.type === 'group' || route.params?.isGroupChat)
+                                    ? `${chat?.participants?.length || 0} members`
+                                    : (lastSeenText || '')
+                            )}
                         </Text>
                     </View>
                 </TouchableOpacity>
+
+                {(chat?.type === 'group' || route.params?.isGroupChat) && (
+                    <TouchableOpacity
+                        style={styles.infoButton}
+                        onPress={() => navigation.navigate('GroupInfo', { chatId })}
+                    >
+                        <Ionicons name="information-circle-outline" size={24} color={colors.text} />
+                    </TouchableOpacity>
+                )}
 
                 <TouchableOpacity style={styles.moreButton} activeOpacity={0.7} onPress={() => setShowChatMenu(true)}>
                     <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
@@ -1223,7 +1272,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             {/* Messages */}
             <KeyboardAvoidingView
                 style={styles.messagesContainer}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
             >
                 <FlatList
@@ -1542,13 +1591,17 @@ const styles = StyleSheet.create({
     header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderBottomWidth: 1 },
     backButton: { padding: SPACING.sm },
     headerInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: SPACING.sm },
+    infoButton: {
+        padding: SPACING.sm,
+        marginRight: SPACING.xs,
+    },
+    moreButton: { padding: SPACING.sm },
     headerAvatar: { width: 40, height: 40, borderRadius: 20 },
     headerAvatarPlaceholder: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
     headerAvatarText: { color: '#fff', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
     headerTextContainer: { marginLeft: SPACING.md, flex: 1 },
     headerName: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
     headerStatus: { fontSize: FONT_SIZE.xs },
-    moreButton: { padding: SPACING.sm },
     uploadingBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: SPACING.sm, gap: SPACING.sm },
     uploadingText: { color: '#fff', fontSize: FONT_SIZE.sm },
     recordingBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: SPACING.sm, paddingHorizontal: SPACING.lg },
