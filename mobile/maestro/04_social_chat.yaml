@@ -1,0 +1,7 @@
+appId: com.tripzi.mobile
+---
+# Assumes User is logged in
+- launchApp
+- tapOn: "Messages"
+- assertVisible: "Chats"
+# Cannot guarantee there are existing chats, but we can verify the empty state or list state

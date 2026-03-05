@@ -1,0 +1,10 @@
+appId: com.tripzi.mobile
+---
+- tapOn: '+'
+- assertVisible: "Create New Trip"
+- assertVisible: "Create a Trip Manually"
+- assertVisible: "Create with Tripzi AI"
+- tapOn: "Create a Trip Manually"
+- assertVisible: "Let's Start! 🚀"
+- tapOn:
+    text: "" # Back button

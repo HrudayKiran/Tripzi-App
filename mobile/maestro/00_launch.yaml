@@ -1,0 +1,6 @@
+appId: com.tripzi.mobile
+---
+- launchApp:
+    clearState: true
+- assertVisible:
+    text: ".*" # Just wait for any text to be visible on the first screen

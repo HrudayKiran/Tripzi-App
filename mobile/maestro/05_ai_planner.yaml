@@ -1,0 +1,7 @@
+appId: com.tripzi.mobile
+---
+# Assumes User is logged in
+- launchApp
+- tapOn: "AI Planner"
+- assertVisible: "Tripzi AI Planner"
+- assertVisible: "Where do you want to go\?" # Checking if input appears

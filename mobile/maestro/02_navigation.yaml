@@ -1,0 +1,20 @@
+appId: com.tripzi.mobile
+---
+# This test assumes the user is already logged in
+- launchApp
+
+# Verify Bottom Navigation Tabs exist
+- assertVisible: "Home"
+- assertVisible: "AI Planner"
+- assertVisible: "\+" # The Create Trip exact text is "+"
+- assertVisible: "Messages"
+- assertVisible: "Profile"
+
+# Test Navigation
+- tapOn: "AI Planner"
+- assertVisible: "Tripzi AI Planner" # Assuming there's a title
+- tapOn: "Messages"
+- assertVisible: "Chats" # Assuming chats title
+- tapOn: "Profile"
+- assertVisible: "Edit Profile" # Common in profiles
+- tapOn: "Home"

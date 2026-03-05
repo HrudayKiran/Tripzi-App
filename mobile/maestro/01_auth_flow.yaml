@@ -1,0 +1,15 @@
+appId: com.tripzi.mobile
+---
+- launchApp
+# Assuming we are on the Welcome Screen (first launch) or logged out
+- assertVisible: "Join the Journey"
+- tapOn: "Join the Journey"
+
+# Start Screen
+- assertVisible:
+    text: "Tripzi"
+- assertVisible:
+    text: "Continue with Google"
+    
+# We stop here because Google Sign-In requires interacting with system dialogs 
+# and a configured test account on the emulator.
