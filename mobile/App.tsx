@@ -2,6 +2,9 @@
 import React from 'react';
 import { Alert, Linking } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
+import analytics from '@react-native-firebase/analytics';
+import crashlytics from '@react-native-firebase/crashlytics';
+import perf from '@react-native-firebase/perf';
 import AppNavigator from './src/navigation/AppNavigator';
 import { initializeAppCheck } from './src/hooks/useAppCheck';
 import { compareVersions } from './src/utils/version';
@@ -13,6 +16,18 @@ export default function App() {
 
   // Check for App Updates
   React.useEffect(() => {
+    const initFirebase = async () => {
+      try {
+        await analytics().logAppOpen();
+        const trace = await perf().startTrace('app_start');
+        trace.stop();
+        crashlytics().log('App started');
+      } catch (e) {
+        console.error('Firebase services init error:', e);
+      }
+    };
+
+    initFirebase();
     initializeAppCheck().catch(() => { });
 
     const checkAppVersion = async () => {

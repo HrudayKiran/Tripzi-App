@@ -78,6 +78,8 @@ module.exports = {
       '@react-native-firebase/auth',
       '@react-native-firebase/messaging',
       '@react-native-firebase/app-check',
+      '@react-native-firebase/crashlytics',
+      '@react-native-firebase/perf',
       [
         'expo-build-properties',
         {
