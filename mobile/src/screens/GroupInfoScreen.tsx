@@ -36,8 +36,8 @@ interface GroupData {
     id: string;
     groupName: string;
     groupIcon?: string;
+    groupDescription?: string;
     participants: string[];
-    admins: string[];
     createdBy: string;
     participantDetails?: { [uid: string]: { displayName?: string; photoURL?: string } };
 }
@@ -57,7 +57,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [searching, setSearching] = useState(false);
 
-    const isAdmin = group?.admins.includes(currentUser?.uid || '');
+    const isAdmin = group?.createdBy === currentUser?.uid;
     const isCreator = group?.createdBy === currentUser?.uid;
 
     useEffect(() => {
@@ -66,7 +66,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
 
     const loadGroup = async () => {
         try {
-            const doc = await firestore().collection('chats').doc(chatId).get();
+            const doc = await firestore().collection('group_chats').doc(chatId).get();
             if (!doc.exists) {
                 Alert.alert('Error', 'Group not found.');
                 navigation.goBack();
@@ -86,7 +86,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
                     id: uid,
                     displayName: profile?.displayName || fallback.displayName || 'User',
                     photoURL: profile?.photoURL || fallback.photoURL || undefined,
-                    role: data.admins.includes(uid) ? 'admin' : 'member',
+                    role: data.createdBy === uid ? 'admin' : 'member',
                 };
             });
 
@@ -108,7 +108,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
     const updateGroupName = async () => {
         if (!editName.trim() || !isAdmin) return;
         try {
-            await firestore().collection('chats').doc(chatId).update({
+            await firestore().collection('group_chats').doc(chatId).update({
                 groupName: editName.trim(),
             });
             setGroup((prev) => prev ? { ...prev, groupName: editName.trim() } : null);
@@ -140,7 +140,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
                 await storageRef.putFile(result.assets[0].uri);
                 const downloadUrl = await storageRef.getDownloadURL();
 
-                await firestore().collection('chats').doc(chatId).update({
+                await firestore().collection('group_chats').doc(chatId).update({
                     groupIcon: downloadUrl,
                 });
                 setGroup((prev) => prev ? { ...prev, groupIcon: downloadUrl } : null);

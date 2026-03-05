@@ -129,7 +129,8 @@ const CompleteProfileScreen = ({ navigation, route }) => {
         if (Platform.OS !== 'ios') {
             setShowDatePicker(false);
         }
-        if (selectedDate) {
+        // Only set date when user presses OK, not on cancel/dismiss
+        if (_event.type === 'set' && selectedDate) {
             setDob(selectedDate);
         }
     };

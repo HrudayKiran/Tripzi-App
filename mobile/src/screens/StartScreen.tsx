@@ -62,8 +62,8 @@ const StartScreen = ({ navigation }) => {
       const googleDisplayName = googleUser?.name || googleUser?.displayName || '';
       const googlePhotoURL = googleUser?.photo || googleUser?.photoURL || null;
 
-      if (!idToken) throw new Error('No idToken received');
-      if (!googleEmail) throw new Error('No email received from Google');
+      // If no idToken or email, user likely cancelled — just return silently
+      if (!idToken || !googleEmail) return;
 
       // Check whether this Google account is already an existing Tripzi user.
       const checkGoogleUserStatus = functions().httpsCallable('checkGoogleUserStatus');

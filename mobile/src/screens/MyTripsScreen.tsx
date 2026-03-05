@@ -98,13 +98,17 @@ const MyTripsScreen = ({ navigation, route }) => {
         return trip.status === 'cancelled' || trip.isCancelled === true;
       }
 
-      // Completed: Only when owner has marked the trip as completed
+      // Completed: isCompleted flag OR trip end date has passed (and not cancelled)
       if (activeTab === 'Completed') {
-        return trip.isCompleted === true;
+        if (trip.isCompleted === true) return true;
+        // Auto-complete: if toDate is in the past and trip isn't cancelled
+        if (toDay && toDay < today && trip.status !== 'cancelled' && trip.isCancelled !== true) return true;
+        return false;
       }
 
-      // Don't show completed/cancelled trips in other tabs
+      // Don't show completed/past-end-date/cancelled trips in other tabs
       if (trip.isCompleted) return false;
+      if (toDay && toDay < today) return false;
       if (trip.status === 'cancelled' || trip.isCancelled === true) return false;
 
       if (activeTab === 'Upcoming') {

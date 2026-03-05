@@ -55,6 +55,14 @@ service firebase.storage {
         ).data.participants;
     }
 
+    function isGroupChatParticipant(chatId) {
+      return isAuthenticated() &&
+        firestore.exists(/databases/(default)/documents/group_chats/$(chatId)) &&
+        request.auth.uid in firestore.get(
+          /databases/(default)/documents/group_chats/$(chatId)
+        ).data.participants;
+    }
+
     function isReportOwner(reportId) {
       return isAuthenticated() &&
         firestore.exists(/databases/(default)/documents/reports/$(reportId)) &&
@@ -112,6 +120,14 @@ service firebase.storage {
       allow read: if isChatParticipant(chatId);
       allow create, update: if isChatParticipant(chatId) && isMediaFile() && isValidMediaSize();
       allow delete: if isChatParticipant(chatId);
+    }
+
+    // ==================== GROUP CHAT MEDIA ====================
+
+    match /group_chats/{chatId}/{allPaths=**} {
+      allow read: if isGroupChatParticipant(chatId);
+      allow create, update: if isGroupChatParticipant(chatId) && isMediaFile() && isValidMediaSize();
+      allow delete: if isGroupChatParticipant(chatId);
     }
 
     // ==================== REPORT EVIDENCE ====================

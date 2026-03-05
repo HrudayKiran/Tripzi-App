@@ -84,12 +84,23 @@ const useTrips = () => {
                                 // Store all trips (for profile pages etc.)
                                 setAllTrips(tripsData);
 
-                                // For home feed: Filter out current user's trips AND full trips
-                                const feedTrips = tripsData.filter(trip => {
+                                // For home feed: Filter out current user's trips, full trips, expired/cancelled/past trips
+                                const now = new Date();
+                                const feedTrips = tripsData.filter((trip: any) => {
                                     // Exclude current user's trips
                                     if (currentUser && trip.userId === currentUser.uid) {
                                         return false;
                                     }
+                                    // Exclude expired trips
+                                    if (trip.isExpired === true) return false;
+                                    // Exclude cancelled trips
+                                    if (trip.status === 'cancelled' || trip.isCancelled === true) return false;
+                                    // Exclude completed trips
+                                    if (trip.isCompleted === true) return false;
+                                    // Exclude trips past their start date
+                                    const fromDate = trip.fromDate?.toDate ? trip.fromDate.toDate() :
+                                        trip.fromDate ? new Date(trip.fromDate) : null;
+                                    if (fromDate && fromDate < now) return false;
                                     // Exclude full trips
                                     const participants = trip.participants?.length || trip.currentTravelers || 1;
                                     const maxTravelers = trip.maxTravelers || 10;

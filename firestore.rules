@@ -119,8 +119,7 @@ service cloud.firestore {
           'ageVerified',
           'ageVerifiedAt',
           'dateOfBirth',
-          'kyc',
-          'kycStatus',
+          'gender',
           'rating',
           'emailVerified',
           'phoneVerified'
@@ -203,6 +202,42 @@ service cloud.firestore {
       match /live_shares/{shareId} {
         allow read, write: if isAuthenticated() &&
           request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+      }
+    }
+
+    // ==================== GROUP CHATS ====================
+
+    match /group_chats/{chatId} {
+      allow read: if isAuthenticated() &&
+        request.auth.uid in resource.data.participants;
+
+      // Group chats are created by Cloud Functions (trip join trigger)
+      allow create: if false;
+
+      allow update: if isAuthenticated() &&
+        request.auth.uid in resource.data.participants;
+
+      allow delete: if isAuthenticated() &&
+        resource.data.createdBy == request.auth.uid;
+
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() &&
+          request.auth.uid in get(/databases/$(database)/documents/group_chats/$(chatId)).data.participants;
+
+        allow create: if isAuthenticated() &&
+          request.auth.uid in get(/databases/$(database)/documents/group_chats/$(chatId)).data.participants &&
+          request.resource.data.senderId == request.auth.uid;
+
+        allow update: if isAuthenticated() &&
+          request.auth.uid in get(/databases/$(database)/documents/group_chats/$(chatId)).data.participants;
+
+        allow delete: if isAuthenticated() &&
+          resource.data.senderId == request.auth.uid;
+      }
+
+      match /live_shares/{shareId} {
+        allow read, write: if isAuthenticated() &&
+          request.auth.uid in get(/databases/$(database)/documents/group_chats/$(chatId)).data.participants;
       }
     }
 

@@ -129,31 +129,41 @@ export const wipeUserData = async (uid: string) => {
             });
         });
 
-        // ==================== D. CHATS ====================
+        // ==================== D. DIRECT CHATS ====================
 
-        const chatsSnapshot = await db.collection('chats').where('participants', 'array-contains', uid).get();
-        for (const chatDoc of chatsSnapshot.docs) {
-            const chatData = chatDoc.data();
+        const directChatsSnapshot = await db.collection('chats').where('participants', 'array-contains', uid).get();
+        for (const chatDoc of directChatsSnapshot.docs) {
             const chatId = chatDoc.id;
+            await safeDeleteStoragePrefix(bucket, `chats/${chatId}/`);
+            await deleteSubcollectionDocs(chatDoc.ref.collection('messages'), bulkWriter);
+            await deleteSubcollectionDocs(chatDoc.ref.collection('live_shares'), bulkWriter);
+            bulkWriter.delete(chatDoc.ref);
+        }
 
-            if (chatData.type === 'direct') {
-                await safeDeleteStoragePrefix(bucket, `chats/${chatId}/`);
-                await deleteSubcollectionDocs(chatDoc.ref.collection('messages'), bulkWriter);
-                await deleteSubcollectionDocs(chatDoc.ref.collection('live_shares'), bulkWriter);
-                bulkWriter.delete(chatDoc.ref);
-                continue;
-            }
+        // ==================== E. GROUP CHATS ====================
 
+        const groupChatsSnapshot = await db.collection('group_chats').where('participants', 'array-contains', uid).get();
+        for (const chatDoc of groupChatsSnapshot.docs) {
+
+            // Remove user from group
             bulkWriter.update(chatDoc.ref, {
                 participants: admin.firestore.FieldValue.arrayRemove(uid),
-                admins: admin.firestore.FieldValue.arrayRemove(uid),
-                deletedBy: admin.firestore.FieldValue.arrayRemove(uid),
                 [`participantDetails.${uid}`]: admin.firestore.FieldValue.delete(),
                 [`unreadCount.${uid}`]: admin.firestore.FieldValue.delete(),
                 [`clearedAt.${uid}`]: admin.firestore.FieldValue.delete(),
             });
 
-            // Full delete policy for account wipe: remove authored messages.
+            // Add system message about user leaving
+            const userName = (await db.collection('users').doc(uid).get()).data()?.name || 'A user';
+            await chatDoc.ref.collection('messages').add({
+                text: `${userName} has been removed from the group.`,
+                senderId: 'system',
+                senderName: 'System',
+                type: 'system',
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+
+            // Delete user's media from group
             const authoredMessages = await chatDoc.ref.collection('messages').where('senderId', '==', uid).get();
             for (const messageDoc of authoredMessages.docs) {
                 const mediaUrl = messageDoc.data()?.mediaUrl;

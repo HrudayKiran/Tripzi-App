@@ -56,34 +56,78 @@ export const onTripJoin = onDocumentUpdated(
             let chatId: string | null = null;
             let isNewChat = false;
 
-            const chatsQuery = await db.collection('chats')
+            // Fetch profile details for new joiners
+            const joinerDetailsMap: { [uid: string]: any } = {};
+            await Promise.all(newJoiners.map(async (uid: string) => {
+                try {
+                    const pubDoc = await db.collection('public_users').doc(uid).get();
+                    const pubData = pubDoc.data();
+                    joinerDetailsMap[uid] = {
+                        displayName: pubData?.displayName || pubData?.name || 'Traveler',
+                        photoURL: pubData?.photoURL || '',
+                        role: 'member',
+                    };
+                } catch {
+                    joinerDetailsMap[uid] = { displayName: 'Traveler', photoURL: '', role: 'member' };
+                }
+            }));
+
+            const chatsQuery = await db.collection('group_chats')
                 .where('tripId', '==', tripId)
-                .where('type', '==', 'group')
                 .limit(1)
                 .get();
 
             if (!chatsQuery.empty) {
-                // Add to existing chat
+                // Add to existing chat — update participants and participantDetails
                 const chatDoc = chatsQuery.docs[0];
                 chatId = chatDoc.id;
+
+                const detailsUpdate: { [key: string]: any } = {};
+                for (const uid of newJoiners) {
+                    detailsUpdate[`participantDetails.${uid}`] = joinerDetailsMap[uid];
+                }
+
                 await chatDoc.ref.update({
                     participants: admin.firestore.FieldValue.arrayUnion(...newJoiners),
+                    ...detailsUpdate,
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 });
                 console.log(`[JoinTrigger] Added joiners to existing chat ${chatId}`);
             } else if (hostId) {
-                // Create new chat
+                // Create new chat with full details
                 isNewChat = true;
-                const newChatRef = db.collection('chats').doc();
+                const newChatRef = db.collection('group_chats').doc();
                 chatId = newChatRef.id;
+
+                // Fetch host details
+                let hostDetails: any = { displayName: 'Host', photoURL: '', role: 'admin' };
+                try {
+                    const hostDoc = await db.collection('public_users').doc(hostId).get();
+                    const hostData = hostDoc.data();
+                    hostDetails = {
+                        displayName: hostData?.displayName || hostData?.name || 'Host',
+                        photoURL: hostData?.photoURL || '',
+                        role: 'admin',
+                    };
+                } catch { /* use defaults */ }
+
+                // Build participantDetails map
+                const participantDetails: { [uid: string]: any } = {
+                    [hostId]: hostDetails,
+                    ...joinerDetailsMap,
+                };
+
+                const groupIcon = tripData.coverImage || tripData.images?.[0] || null;
 
                 await newChatRef.set({
                     tripId,
-                    type: 'group',
                     groupName: tripTitle,
+                    groupDescription: tripData.description || '',
+                    groupIcon,
+                    tripImage: groupIcon,
                     participants: [hostId, ...newJoiners],
+                    participantDetails,
                     createdBy: hostId,
-                    tripImage: tripData.coverImage || tripData.images?.[0] || null,
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                     lastMessage: {
@@ -93,7 +137,7 @@ export const onTripJoin = onDocumentUpdated(
                         type: 'system',
                     }
                 });
-                console.log(`[JoinTrigger] Created new group chat ${chatId}`);
+                console.log(`[JoinTrigger] Created new group chat ${chatId} with full details`);
             }
 
             // 2. Notify & Message
@@ -115,7 +159,6 @@ export const onTripJoin = onDocumentUpdated(
                     deepLinkParams: chatId ? { chatId } : { tripId },
                 });
 
-                // Correcting the deepLinkRoute based on chat existence
                 if (chatId) {
                     await sendPushToUser(joinerId, {
                         title: "You're Going! 🎒",
@@ -135,8 +178,8 @@ export const onTripJoin = onDocumentUpdated(
                     await createNotification({
                         recipientId: hostId,
                         type: "join_trip",
-                        title: "New Traveler 🚗",
-                        message: `${joinerName} joined "${tripTitle}" and the group chat.`,
+                        title: "New Trip Mate! 🎉",
+                        message: `${joinerName} joined "${tripTitle}". Say hello in the group chat!`,
                         entityId: tripId,
                         entityType: "trip",
                         actorId: joinerId,
@@ -146,7 +189,7 @@ export const onTripJoin = onDocumentUpdated(
                     });
 
                     await sendPushToUser(hostId, {
-                        title: "New Traveler 🚗",
+                        title: "New Trip Mate! 🎉",
                         body: `${joinerName} joined "${tripTitle}"`,
                         data: { route: chatId ? "Chat" : "TripDetails", chatId, tripId },
                     });
@@ -159,7 +202,7 @@ export const onTripJoin = onDocumentUpdated(
                         : `${joinerName} joined the trip.`;
 
                     if (!isNewChat) {
-                        await db.collection('chats').doc(chatId).collection('messages').add({
+                        await db.collection('group_chats').doc(chatId).collection('messages').add({
                             text: systemText,
                             senderId: 'system',
                             senderName: 'System',
@@ -226,9 +269,7 @@ export const onTripUpdated = onDocumentUpdated(
         // 2. Check for Critical Detail Updates
 
         const isDifferent = (a: any, b: any) => {
-            // Treat undefined and null as equal
             if ((a === undefined || a === null) && (b === undefined || b === null)) return false;
-            // Compare stringified for objects/arrays, strict for primitives
             if (typeof a === 'object' || typeof b === 'object') {
                 return JSON.stringify(a) !== JSON.stringify(b);
             }
@@ -275,7 +316,7 @@ export const onTripUpdated = onDocumentUpdated(
                 : `Host updated details for "${tripTitle}"`;
 
             const recipients = afterParticipants.filter((uid: string) => uid !== hostId);
-            console.log(`[TripUpdate] Sending notifications to ${recipients.length} recipients: ${recipients}`);
+            console.log(`[TripUpdate] Sending notifications to ${recipients.length} recipients`);
 
             await Promise.all(recipients.map(async (recipientId: string) => {
                 await createNotification({
@@ -325,7 +366,7 @@ export const onTripDeleted = onDocumentDeleted(
                 message: `The trip "${tripTitle}" has been cancelled by the host.`,
                 entityId: event.params.tripId,
                 entityType: "trip",
-                deepLinkRoute: "CreateTrip", // Fallback
+                deepLinkRoute: "Home",
             });
 
             await sendPushToUser(recipientId, {

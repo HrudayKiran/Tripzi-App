@@ -69,7 +69,7 @@ const usePushNotifications = () => {
         // Handle notification when app is in foreground - Just log it now, system handles UI
         unsubscribeOnMessage = onMessage(messaging,
           async (remoteMessage) => {
-            
+
             // System notification will show automatically due to setForegroundNotificationPresentationOptions
           }
         );
@@ -115,21 +115,21 @@ const usePushNotifications = () => {
 
     const getAndSaveToken = async (user: any, freshToken?: string) => {
       try {
-        
+
         const messaging = getMessaging();
         const token = freshToken || await getToken(messaging);
 
         if (!token) {
-          
+
           return;
         }
 
-        
+
 
         await saveTokenToFirestore(user, token);
 
       } catch (error: any) {
-        
+
       }
     };
 
@@ -152,7 +152,7 @@ const usePushNotifications = () => {
           );
 
           if (existingDeviceId) {
-            
+
             deviceId = existingDeviceId; // Reuse the existing key
           }
         }
@@ -168,9 +168,9 @@ const usePushNotifications = () => {
           }
         }, { merge: true });
 
-        
+
       } catch (error: any) {
-        
+
       }
     };
 
@@ -184,7 +184,7 @@ const usePushNotifications = () => {
   }, []);
 
   const handleNotificationNavigation = (data: NotificationData) => {
-    
+
     const route = data.route;
     if (!route) return;
 
@@ -193,7 +193,7 @@ const usePushNotifications = () => {
       try {
         RootNavigation.navigate(name, params);
       } catch (e) {
-        
+
       }
     };
 
@@ -222,8 +222,19 @@ const usePushNotifications = () => {
           Linking.openURL(data.url).catch(() => { });
         }
         break;
+      case 'Home':
+        navigate('Home', {});
+        break;
+      case 'Notifications':
+        navigate('Notifications', {});
+        break;
+      case 'GroupInfo':
+        if (data.chatId) {
+          navigate('GroupInfo', { chatId: data.chatId });
+        }
+        break;
       default:
-        
+
         break;
     }
   };

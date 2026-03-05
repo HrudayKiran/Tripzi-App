@@ -51,14 +51,16 @@ interface ChatScreenProps {
 }
 
 const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
-    const { chatId, otherUserId, otherUserName, otherUserPhoto } = route.params;
+    const { chatId, otherUserId, otherUserName, otherUserPhoto, isGroupChat: isGroupParam } = route.params;
     const { colors } = useTheme();
     const { chats } = useChats();
     const currentUser = auth().currentUser;
     const chat = chats.find((c) => c.id === chatId);
+    const isGroupChat = isGroupParam || chat?.type === 'group';
+    const chatCollection = isGroupChat ? 'group_chats' : 'chats';
     const clearedAt = currentUser ? chat?.clearedAt?.[currentUser.uid] : undefined;
 
-    const { messages, loading, sendMessage, markAsRead } = useChatMessages(chatId, clearedAt);
+    const { messages, loading, sendMessage, markAsRead } = useChatMessages(chatId, clearedAt, chatCollection);
     const [inputText, setInputText] = useState('');
     const [sending, setSending] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -224,12 +226,25 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         return () => unsub();
     }, [otherParticipantUid, chat?.type]);
 
+    // Write lastSeen to own profile so other users can see it
+    useEffect(() => {
+        if (!currentUser) return;
+        const updateLastSeen = () => {
+            firestore().collection('users').doc(currentUser.uid).update({
+                lastSeen: firestore.FieldValue.serverTimestamp(),
+            }).catch(() => { });
+        };
+        updateLastSeen();
+        const interval = setInterval(updateLastSeen, 60000); // Update every 60s
+        return () => clearInterval(interval);
+    }, [currentUser?.uid]);
+
     // Typing indicator listener (throttled — only reads typing field)
     useEffect(() => {
         if (!chatId || !currentUser) return;
 
         const unsubscribe = firestore()
-            .collection('chats')
+            .collection(chatCollection)
             .doc(chatId)
             .onSnapshot((doc) => {
                 if (!doc || !doc.exists) {
@@ -257,7 +272,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     useEffect(() => {
         if (!chatId) return;
         const unsubscribe = firestore()
-            .collection('chats')
+            .collection(chatCollection)
             .doc(chatId)
             .collection('live_shares')
             .where('isActive', '==', true)
@@ -309,7 +324,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
 
         if (isTyping) {
             firestore()
-                .collection('chats')
+                .collection(chatCollection)
                 .doc(chatId)
                 .update({
                     [`typing.${currentUser.uid}`]: firestore.FieldValue.serverTimestamp(),
@@ -322,7 +337,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             }, 3000);
         } else {
             firestore()
-                .collection('chats')
+                .collection(chatCollection)
                 .doc(chatId)
                 .update({
                     [`typing.${currentUser.uid}`]: firestore.FieldValue.delete(),
@@ -473,7 +488,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             const userData = userDoc.data();
 
             await firestore()
-                .collection('chats')
+                .collection(chatCollection)
                 .doc(chatId)
                 .collection('messages')
                 .add({
@@ -489,7 +504,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 });
 
             await firestore()
-                .collection('chats')
+                .collection(chatCollection)
                 .doc(chatId)
                 .update({
                     lastMessage: {
@@ -568,7 +583,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             const userData = userDoc.data();
 
             await firestore()
-                .collection('chats')
+                .collection(chatCollection)
                 .doc(chatId)
                 .collection('messages')
                 .add({
@@ -588,7 +603,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 });
 
             await firestore()
-                .collection('chats')
+                .collection(chatCollection)
                 .doc(chatId)
                 .update({
                     lastMessage: {
@@ -631,7 +646,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                             const userData = userDoc.data();
 
                             await firestore()
-                                .collection('chats')
+                                .collection(chatCollection)
                                 .doc(chatId)
                                 .collection('live_shares')
                                 .doc(currentUser?.uid)
@@ -647,7 +662,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
 
                             // Send system message
                             await firestore()
-                                .collection('chats')
+                                .collection(chatCollection)
                                 .doc(chatId)
                                 .collection('messages')
                                 .add({
@@ -692,7 +707,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 // Update Firestore
                 if (currentUser && chatId) {
                     await firestore()
-                        .collection('chats')
+                        .collection(chatCollection)
                         .doc(chatId)
                         .collection('live_shares')
                         .doc(currentUser.uid)
@@ -720,7 +735,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
 
         if (updateDoc && currentUser && chatId) {
             await firestore()
-                .collection('chats')
+                .collection(chatCollection)
                 .doc(chatId)
                 .collection('live_shares')
                 .doc(currentUser.uid)
@@ -790,7 +805,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     onPress: async () => {
                         try {
                             const msgRef = firestore()
-                                .collection('chats')
+                                .collection(chatCollection)
                                 .doc(chatId)
                                 .collection('messages')
                                 .doc(selectedMessage.id);
@@ -823,7 +838,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
 
         try {
             await firestore()
-                .collection('chats')
+                .collection(chatCollection)
                 .doc(chatId)
                 .collection('messages')
                 .doc(editingMessage.id)
@@ -852,7 +867,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     onPress: async () => {
                         try {
                             const messagesRef = firestore()
-                                .collection('chats')
+                                .collection(chatCollection)
                                 .doc(chatId)
                                 .collection('messages');
 
@@ -910,7 +925,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
 
                             selectedMessages.forEach((msgId) => {
                                 const msgRef = firestore()
-                                    .collection('chats')
+                                    .collection(chatCollection)
                                     .doc(chatId)
                                     .collection('messages')
                                     .doc(msgId);
@@ -1212,7 +1227,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                         <Text style={[styles.headerStatus, { color: otherUserTyping ? colors.primary : colors.textSecondary }]} numberOfLines={1}>
                             {otherUserTyping ? 'typing...' : (
                                 (chat?.type === 'group' || route.params?.isGroupChat)
-                                    ? `${chat?.participants?.length || 0} members`
+                                    ? `${chat?.participants?.length || 0} members${chat?.groupDescription ? ' · ' + chat.groupDescription.substring(0, 30) : ''}`
                                     : (lastSeenText || '')
                             )}
                         </Text>

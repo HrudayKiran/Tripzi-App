@@ -25,7 +25,10 @@ export interface Chat {
     participants: string[];
     participantDetails: { [uid: string]: ChatParticipant };
     groupName?: string;
+    groupDescription?: string;
     groupIcon?: string;
+    tripImage?: string;
+    tripId?: string;
     createdBy?: string;
     lastMessage?: LastMessage;
     unreadCount: { [uid: string]: number };
@@ -46,17 +49,21 @@ interface UseChatsReturn {
 }
 
 export function useChats(): UseChatsReturn {
-    const [chats, setChats] = useState<Chat[]>([]);
+    const [directChats, setDirectChats] = useState<Chat[]>([]);
+    const [groupChats, setGroupChats] = useState<Chat[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
     const [refreshKey, setRefreshKey] = useState(0);
+    const [directLoaded, setDirectLoaded] = useState(false);
+    const [groupLoaded, setGroupLoaded] = useState(false);
 
     const currentUser = auth().currentUser;
 
+    // Listen to direct chats (chats collection)
     useEffect(() => {
         if (!currentUser) {
-            setChats([]);
-            setLoading(false);
+            setDirectChats([]);
+            setDirectLoaded(true);
             return;
         }
 
@@ -67,31 +74,94 @@ export function useChats(): UseChatsReturn {
             .onSnapshot(
                 (snapshot) => {
                     if (!snapshot) {
-                        setChats([]);
-                        setLoading(false);
+                        setDirectChats([]);
+                        setDirectLoaded(true);
                         return;
                     }
 
                     const chatsList: Chat[] = snapshot.docs
                         .map((doc) => ({
                             id: doc.id,
+                            type: 'direct' as const,
                             ...doc.data(),
                         }))
                         .filter((chat: any) => !chat.deletedBy?.includes(currentUser.uid)) as Chat[];
 
-                    setChats(chatsList);
-                    setLoading(false);
+                    setDirectChats(chatsList);
+                    setDirectLoaded(true);
                     setError(null);
                 },
                 (err) => {
-                    
                     setError(err as Error);
-                    setLoading(false);
+                    setDirectLoaded(true);
                 }
             );
 
         return () => unsubscribe();
     }, [currentUser?.uid, refreshKey]);
+
+    // Listen to group chats (group_chats collection)
+    useEffect(() => {
+        if (!currentUser) {
+            setGroupChats([]);
+            setGroupLoaded(true);
+            return;
+        }
+
+        const unsubscribe = firestore()
+            .collection('group_chats')
+            .where('participants', 'array-contains', currentUser.uid)
+            .orderBy('updatedAt', 'desc')
+            .onSnapshot(
+                (snapshot) => {
+                    if (!snapshot) {
+                        setGroupChats([]);
+                        setGroupLoaded(true);
+                        return;
+                    }
+
+                    const chatsList: Chat[] = snapshot.docs
+                        .map((doc) => ({
+                            id: doc.id,
+                            type: 'group' as const,
+                            ...doc.data(),
+                        }))
+                        .filter((chat: any) => !chat.deletedBy?.includes(currentUser.uid)) as Chat[];
+
+                    setGroupChats(chatsList);
+                    setGroupLoaded(true);
+                    setError(null);
+                },
+                (err) => {
+                    setError(err as Error);
+                    setGroupLoaded(true);
+                }
+            );
+
+        return () => unsubscribe();
+    }, [currentUser?.uid, refreshKey]);
+
+    // Track overall loading state
+    useEffect(() => {
+        if (directLoaded && groupLoaded) {
+            setLoading(false);
+        }
+    }, [directLoaded, groupLoaded]);
+
+    // Merge and sort by updatedAt
+    const chats = [...directChats, ...groupChats].sort((a, b) => {
+        const aTime = a.updatedAt
+            ? (typeof (a.updatedAt as any).toDate === 'function'
+                ? (a.updatedAt as any).toDate().getTime()
+                : new Date(a.updatedAt as any).getTime())
+            : 0;
+        const bTime = b.updatedAt
+            ? (typeof (b.updatedAt as any).toDate === 'function'
+                ? (b.updatedAt as any).toDate().getTime()
+                : new Date(b.updatedAt as any).getTime())
+            : 0;
+        return bTime - aTime;
+    });
 
     const createDirectChat = useCallback(
         async (otherUserId: string, otherUserDetails: ChatParticipant): Promise<string> => {
@@ -114,7 +184,6 @@ export function useChats(): UseChatsReturn {
                     [currentUser.uid]: 0,
                     [otherUserId]: 0,
                 },
-
                 deletedBy: [],
                 clearedAt: {},
                 createdAt: firestore.FieldValue.serverTimestamp() as any,
@@ -122,7 +191,6 @@ export function useChats(): UseChatsReturn {
             };
 
             const chatRef = await firestore().collection('chats').add(chatData);
-
             return chatRef.id;
         },
         [currentUser]
@@ -132,15 +200,14 @@ export function useChats(): UseChatsReturn {
         async (otherUserId: string, otherUserDetails: ChatParticipant): Promise<string> => {
             if (!currentUser) throw new Error('Not authenticated');
 
-            const existingChat = chats.find(
+            // Check in memory first (direct chats only)
+            const existingChat = directChats.find(
                 (chat) =>
-                    chat.type === 'direct' &&
                     chat.participants.includes(currentUser.uid) &&
                     chat.participants.includes(otherUserId)
             );
 
             if (existingChat) {
-                // If it was deleted, restore it (optimization: only if needed, but safe to always do)
                 if (existingChat.deletedBy?.includes(currentUser.uid)) {
                     await firestore().collection('chats').doc(existingChat.id).update({
                         deletedBy: firestore.FieldValue.arrayRemove(currentUser.uid)
@@ -149,9 +216,9 @@ export function useChats(): UseChatsReturn {
                 return existingChat.id;
             }
 
+            // Query Firestore for existing direct chat
             const querySnapshot = await firestore()
                 .collection('chats')
-                .where('type', '==', 'direct')
                 .where('participants', 'array-contains', currentUser.uid)
                 .get();
 
@@ -161,7 +228,6 @@ export function useChats(): UseChatsReturn {
             });
 
             if (foundChat) {
-                // Restore if deleted
                 const data = foundChat.data();
                 if (data.deletedBy?.includes(currentUser.uid)) {
                     await foundChat.ref.update({
@@ -173,24 +239,26 @@ export function useChats(): UseChatsReturn {
 
             return createDirectChat(otherUserId, otherUserDetails);
         },
-        [currentUser, chats, createDirectChat]
+        [currentUser, directChats, createDirectChat]
     );
 
     const deleteChat = useCallback(async (chatId: string) => {
         if (!currentUser) return;
         try {
+            // Check if it's a group chat
+            const isGroup = groupChats.some((c) => c.id === chatId);
+            const collection = isGroup ? 'group_chats' : 'chats';
+
             await firestore()
-                .collection('chats')
+                .collection(collection)
                 .doc(chatId)
                 .update({
                     deletedBy: firestore.FieldValue.arrayUnion(currentUser.uid),
-                    // [`clearedAt.${currentUser.uid}`]: firestore.FieldValue.serverTimestamp()
                 });
-        } catch (error) {
-            
-            throw error;
+        } catch (err) {
+            throw err;
         }
-    }, [currentUser]);
+    }, [currentUser, groupChats]);
 
     const refreshChats = useCallback(() => {
         setRefreshKey((prev) => prev + 1);

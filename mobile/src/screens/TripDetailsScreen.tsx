@@ -266,22 +266,33 @@ const TripDetailsScreen = ({ route, navigation }) => {
           return;
         }
 
-        // Gender check
-        const tripGender = trip?.genderPreference?.toLowerCase();
+        // Gender check — read from 'users' where gender is stored
+        const tripGender = (trip?.genderPreference || '').trim().toLowerCase();
         if (tripGender && tripGender !== 'anyone') {
           try {
-            const userDoc = await firestore().collection('public_users').doc(user.uid).get();
-            const userGender = userDoc.data()?.gender?.toLowerCase();
-            if (userGender && userGender !== tripGender) {
-              const genderLabel = tripGender === 'male' ? 'Male' : 'Female';
+            const userDoc = await firestore().collection('users').doc(user.uid).get();
+            const userData = userDoc.data();
+            const userGender = (userData?.gender || '').trim().toLowerCase();
+
+            if (!userGender) {
               Alert.alert(
-                'Gender Restriction',
-                `This trip is for ${genderLabel} travelers only. Try joining trips with your gender or trips open to Anyone.`
+                'Gender Not Set',
+                'Your gender is required to join gender-restricted trips. Please update your profile.'
               );
               return;
             }
-          } catch {
-            // If gender check fails, allow join
+
+            if (userGender !== tripGender) {
+              const genderLabel = tripGender === 'male' ? 'Male' : 'Female';
+              Alert.alert(
+                'Gender Restriction',
+                `This trip is for ${genderLabel} travelers only. Try joining other trips that match your gender or are open to Anyone! 🌍`
+              );
+              return;
+            }
+          } catch (e) {
+            Alert.alert('Error', 'Could not verify your gender. Please try again.');
+            return;
           }
         }
 

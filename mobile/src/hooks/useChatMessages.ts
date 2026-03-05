@@ -59,7 +59,11 @@ interface UseChatMessagesReturn {
 
 const PAGE_SIZE = 50;
 
-export function useChatMessages(chatId: string | undefined, clearedAt?: FirestoreTimestamp): UseChatMessagesReturn {
+export function useChatMessages(
+    chatId: string | undefined,
+    clearedAt?: FirestoreTimestamp,
+    collectionName: string = 'chats'
+): UseChatMessagesReturn {
     const [messages, setMessages] = useState<Message[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
@@ -78,7 +82,7 @@ export function useChatMessages(chatId: string | undefined, clearedAt?: Firestor
 
 
         const unsubscribe = firestore()
-            .collection('chats')
+            .collection(collectionName)
             .doc(chatId)
             .collection('messages')
             .orderBy('createdAt', 'desc')
@@ -122,7 +126,7 @@ export function useChatMessages(chatId: string | undefined, clearedAt?: Firestor
 
                 },
                 (err) => {
-                    
+
                     setError(err as Error);
                     setLoading(false);
                 }
@@ -183,14 +187,14 @@ export function useChatMessages(chatId: string | undefined, clearedAt?: Firestor
 
                 // Create message
                 await firestore()
-                    .collection('chats')
+                    .collection(collectionName)
                     .doc(chatId)
                     .collection('messages')
                     .add(messageData);
 
                 // Update chat's lastMessage and updatedAt AND unhide chat (remove from deletedBy)
                 await firestore()
-                    .collection('chats')
+                    .collection(collectionName)
                     .doc(chatId)
                     .update({
                         lastMessage: {
@@ -238,7 +242,7 @@ export function useChatMessages(chatId: string | undefined, clearedAt?: Firestor
         try {
             // Reset unread count for current user
             await firestore()
-                .collection('chats')
+                .collection(collectionName)
                 .doc(chatId)
                 .update({
                     [`unreadCount.${currentUser.uid}`]: 0,
@@ -252,7 +256,7 @@ export function useChatMessages(chatId: string | undefined, clearedAt?: Firestor
             const batch = firestore().batch();
             unreadMessages.forEach((msg) => {
                 const msgRef = firestore()
-                    .collection('chats')
+                    .collection(collectionName)
                     .doc(chatId)
                     .collection('messages')
                     .doc(msg.id);
@@ -265,7 +269,7 @@ export function useChatMessages(chatId: string | undefined, clearedAt?: Firestor
             await batch.commit();
 
         } catch (err) {
-            
+
         }
     }, [chatId, currentUser, messages]);
 

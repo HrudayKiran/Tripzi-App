@@ -11,9 +11,11 @@ const buildPublicProfile = (userId: string, afterData: any) => {
     username: afterData?.username || null,
     photoURL: afterData?.photoURL || null,
     bio: afterData?.bio || "",
+    gender: afterData?.gender || null,
     ageVerified: afterData?.ageVerified === true,
     totalRating: afterData?.totalRating || 0,
     ratingCount: afterData?.ratingCount || 0,
+    lastSeen: afterData?.lastSeen || null,
     createdAt: afterData?.createdAt || admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
@@ -38,7 +40,7 @@ export const onUserUpdated = onDocumentWritten(
 
     // Handle deletes: remove public mirror.
     if (!afterExists || !afterData) {
-      updates.push(db.collection("public_users").doc(userId).delete().catch(() => {}));
+      updates.push(db.collection("public_users").doc(userId).delete().catch(() => { }));
       await Promise.all(updates);
       return;
     }

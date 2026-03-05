@@ -63,7 +63,7 @@ const SettingsScreen = ({ navigation }) => {
     const handleDeleteAccount = () => {
         Alert.alert(
             "Delete Account",
-            "Are you sure? This will permanently delete your profile, trips, photos, and messages. This action cannot be undone.",
+            "Are you sure? This will permanently delete your profile, trips, photos, chats, and messages. You will be removed from all group chats. This action cannot be undone.",
             [
                 { text: "Cancel", style: "cancel" },
                 {
@@ -71,18 +71,16 @@ const SettingsScreen = ({ navigation }) => {
                     style: "destructive",
                     onPress: async () => {
                         try {
-                            // Use the callable Cloud Function (no reauthentication needed!)
-                            // Region must match where the function is deployed (us-central1 for v1)
                             const deleteMyAccount = functions().httpsCallable('deleteMyAccount');
-
-                            const result = await deleteMyAccount();
-
-
-                            // Sign out locally after successful deletion
+                            await deleteMyAccount();
+                            // Sign out locally
                             try { await auth().signOut(); } catch (e) { }
-                            Alert.alert("Account Deleted", "Your account has been successfully deleted.");
+                            // Navigate to auth screen
+                            navigation.reset({
+                                index: 0,
+                                routes: [{ name: 'Auth' }],
+                            });
                         } catch (error: any) {
-
                             Alert.alert("Error", error.message || "Could not delete account. Please try again later.");
                         }
                     }
