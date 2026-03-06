@@ -1,0 +1,29 @@
+appId: com.tripzi.mobile
+---
+- assertVisible: "Tripzi"
+# Test Filters
+- tapOn:
+    id: "filter-button"
+- assertVisible: "Filters"
+- tapOn: "Budget (Low)"
+- tapOn: "Apply Filters"
+# Ensure we map back
+- assertVisible: "Tripzi"
+# Scroll native view
+- scroll
+- scroll
+- swipe:
+    direction: DOWN
+# Test Search Modal
+- tapOn:
+    id: "search-button"
+- assertVisible: "Search trips, places, people..."
+- inputText: "Paris"
+- tapOn: "Cancel"
+# Reset Filters
+- tapOn:
+    id: "filter-button"
+- assertVisible: "Filters"
+- tapOn: "Reset"
+- tapOn: "Apply Filters"
+- assertVisible: "Tripzi"

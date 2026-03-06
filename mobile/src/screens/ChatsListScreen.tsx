@@ -369,6 +369,7 @@ const ChatsListScreen = ({ navigation }) => {
                             style={[styles.headerButton, { backgroundColor: colors.card }]}
                             onPress={() => setShowSearch(true)}
                             activeOpacity={0.7}
+                            testID="chats-search-button"
                         >
                             <Ionicons name="search-outline" size={22} color={colors.text} />
                         </TouchableOpacity>
@@ -376,6 +377,7 @@ const ChatsListScreen = ({ navigation }) => {
                             style={[styles.headerButton, { backgroundColor: colors.card }]}
                             onPress={() => setShowMessagesSettings(true)}
                             activeOpacity={0.7}
+                            testID="chats-menu-button"
                         >
                             <Ionicons name="ellipsis-vertical" size={22} color={colors.text} />
                         </TouchableOpacity>

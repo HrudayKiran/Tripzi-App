@@ -163,6 +163,7 @@ const ProfileScreen = ({ navigation }) => {
             style={[styles.settingsButton, { backgroundColor: colors.card }]}
             onPress={() => navigation.navigate('Settings')}
             activeOpacity={0.7}
+            testID="profile-settings-btn"
           >
             <Ionicons name="settings-outline" size={22} color={colors.text} />
           </TouchableOpacity>

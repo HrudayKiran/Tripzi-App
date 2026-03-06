@@ -1,0 +1,23 @@
+appId: com.tripzi.mobile
+---
+# From the profile (navigated to in step 07), tap on the newly created trip
+- tapOn: "Maestro Goa Trip"
+- assertVisible: "Organizer"
+- scroll
+- scroll
+- swipe:
+    direction: UP
+# Go to chat
+- tapOn: "Group Chat"
+- back # from chat back to details
+- assertVisible: "Maestro Goa Trip"
+# Open Edit Menu
+- tapOn:
+    id: "trip-menu-button"
+- assertVisible: "Edit Trip"
+- assertVisible: "Cancel Trip"
+- assertVisible: "Delete Trip"
+# Close menu by tapping outside or re-tapping
+- tapOn:
+    id: "trip-menu-button"
+- back # from details back to where we started

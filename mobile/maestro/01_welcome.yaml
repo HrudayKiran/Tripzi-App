@@ -1,0 +1,11 @@
+appId: com.tripzi.mobile
+---
+- assertVisible: "Tripzi"
+- swipe:
+    direction: RIGHT
+- swipe:
+    direction: RIGHT
+- swipe:
+    direction: RIGHT
+- tapOn: "Join the Journey"
+- assertVisible: "Sign in with Google"

@@ -1,0 +1,18 @@
+appId: com.tripzi.mobile
+---
+- assertVisible: "Complete your profile"
+- tapOn: "Your full name"
+- inputText: "Maestro Tester"
+- tapOn: "username"
+# Delete existing text if any before typing
+- eraseText: 20
+- inputText: "maestro_test123"
+- tapOn: "Male"
+- tapOn: "Select your date of birth"
+# Handing datetime picker in emulators:
+- tapOn: "OK" # Android default date picker acceptance
+- scroll
+- tapOn: "Tell people about yourself..."
+- inputText: "I am an automated tester navigating the world."
+- tapOn: "Submit"
+- assertVisible: "Tripzi" # Verifying successful redirection to Feed

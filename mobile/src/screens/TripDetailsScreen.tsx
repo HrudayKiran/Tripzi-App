@@ -673,6 +673,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
                 <TouchableOpacity
                   style={[styles.headerButton, { backgroundColor: colors.card }]}
                   onPress={() => setShowMenu(!showMenu)}
+                  testID="trip-menu-button"
                 >
                   <Ionicons name="ellipsis-vertical" size={24} color={colors.text} />
                 </TouchableOpacity>

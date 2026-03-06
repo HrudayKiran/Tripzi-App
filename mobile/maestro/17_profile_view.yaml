@@ -1,0 +1,30 @@
+appId: com.tripzi.mobile
+---
+- tapOn: "Profile"
+# Verify user sections are present
+- assertVisible: "MY TRIPS"
+- assertVisible: "GENERAL"
+- assertVisible: "SUPPORT"
+- assertVisible: "ACCOUNT"
+
+# Edit Profile
+- tapOn: "Edit Profile"
+- assertVisible: "Edit Profile"
+- tapOn: "Save Changes" # Usually there's a save or back button
+
+# Terms and Privacy
+- tapOn: "Terms of Service"
+- pressKey: back
+- tapOn: "Privacy Policy"
+- pressKey: back
+
+# Settings
+- tapOn:
+    id: "profile-settings-btn"
+- assertVisible: "Settings"
+- pressKey: back
+
+# Log out (we shouldn't actually tap logout if we want to run more tests, but we will tap it and cancel)
+- tapOn: "Log Out"
+- assertVisible: "Are you sure you want to logout?"
+- tapOn: "Cancel"

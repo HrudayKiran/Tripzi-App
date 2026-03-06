@@ -1,0 +1,15 @@
+appId: com.tripzi.mobile
+---
+# We should start from the bottom tabs, ideally Home/Feed or Profile
+- tapOn: "Profile"
+- scroll
+- tapOn: "Total Trips"
+- assertVisible: "My Trips"
+# Tab 'Upcoming' is default
+- assertVisible: "Upcoming"
+# Check all tabs
+- tapOn: "Ongoing"
+- tapOn: "Completed"
+- tapOn: "Cancelled"
+- back
+- assertVisible: "Total Trips"

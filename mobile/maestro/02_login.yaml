@@ -1,0 +1,10 @@
+appId: com.tripzi.mobile
+---
+- assertVisible: "Sign in with Google"
+- tapOn: "Sign in with Google"
+- assertVisible: "Choose an account" # Standard Google prompt
+- tapOn:
+    id: ".*" # Regex match any account ID or email if logged into emulator
+    index: 0 # Picks the first account
+# The app should redirect to Complete Profile or Home depends on user
+- assertVisible: ".*"

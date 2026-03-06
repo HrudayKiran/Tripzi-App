@@ -1,0 +1,17 @@
+appId: com.tripzi.mobile
+---
+# Assumes starting from Home tab or any main tab
+- tapOn: "Messages"
+- assertVisible: "Messages"
+- tapOn:
+    id: "chats-search-button"
+- inputText: "Test User"
+- hideKeyboard
+- pressKey: back
+- tapOn:
+    id: "chats-menu-button"
+- assertVisible: "Settings"
+- tapOn: "Settings"
+- assertVisible: "Messages Settings" # Update this to match screen header
+- pressKey: back
+- assertVisible: "Messages"

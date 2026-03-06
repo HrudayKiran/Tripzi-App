@@ -242,6 +242,7 @@ const FeedScreen = ({ navigation }) => {
                 <TouchableOpacity
                     style={[styles.iconButton, { backgroundColor: colors.card }]}
                     onPress={() => setSearchVisible(true)}
+                    testID="search-button"
                 >
                     <Ionicons name="search-outline" size={22} color={colors.text} />
                 </TouchableOpacity>
@@ -249,6 +250,7 @@ const FeedScreen = ({ navigation }) => {
                 <TouchableOpacity
                     style={[styles.iconButton, { backgroundColor: colors.card }]}
                     onPress={() => setFilterVisible(true)}
+                    testID="filter-button"
                 >
                     <Ionicons name="options-outline" size={22} color={colors.text} />
                 </TouchableOpacity>
@@ -257,6 +259,7 @@ const FeedScreen = ({ navigation }) => {
                     style={[styles.notifyButton, { backgroundColor: colors.card }]}
                     onPress={() => setNotificationsVisible(true)}
                     activeOpacity={0.7}
+                    testID="notifications-button"
                 >
                     <Ionicons name="notifications-outline" size={22} color={colors.text} />
                     {hasNotifications && <View style={[styles.notificationDot, { backgroundColor: colors.error }]} />}

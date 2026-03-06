@@ -685,6 +685,7 @@ const AIChatScreen = ({ navigation, route }: any) => {
                         style={[styles.sendButton, { backgroundColor: inputText.trim() ? colors.primary : colors.border }]}
                         onPress={handleSend}
                         disabled={!inputText.trim() || isTyping}
+                        testID="ai-send-btn"
                     >
                         {isTyping ? (
                             <ActivityIndicator size="small" color="#fff" />

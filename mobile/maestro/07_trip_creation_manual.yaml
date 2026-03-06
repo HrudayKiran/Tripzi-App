@@ -1,0 +1,41 @@
+appId: com.tripzi.mobile
+---
+- tapOn: "+"
+- assertVisible: "Create a Trip Manually"
+- tapOn: "Create a Trip Manually"
+- assertVisible: "Let's Start! 🚀"
+# Step 1
+- tapOn: "e.g., Mystical Ladakh Adventure"
+- inputText: "Maestro Goa Trip"
+- tapOn: "Next"
+# Step 2
+- tapOn: "e.g., Bangalore, Karnataka"
+- inputText: "Delhi"
+- tapOn: "e.g., Leh, Ladakh"
+- inputText: "Goa"
+- scroll
+- tapOn: "Next"
+# Step 3
+- tapOn: "Adventure"
+- tapOn: "Flight"
+- tapOn: "e.g., 5000"
+- inputText: "25000"
+- tapOn: "Next"
+# Step 4
+- tapOn: "Hotel"
+- tapOn: "e.g., 5"
+- inputText: "4"
+- tapOn: "Male Only"
+- tapOn: "Next"
+# Step 5
+- tapOn: "Describe your trip in detail"
+- inputText: "Automated test trip description."
+- tapOn: "e.g., ID proof"
+- inputText: "ID proof"
+- tapOn: "e.g., Pangong Lake"
+- inputText: "Baga Beach"
+- tapOn: "Post Trip"
+# Should navigate away, likely to the profile or feed
+- extendedWaitUntil:
+    visible: "Tripzi" # Or profile if it navigates there as the code says `UserProfile`
+    timeout: 10000
