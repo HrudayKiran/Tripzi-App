@@ -341,31 +341,6 @@ const UserProfileScreen = ({ route, navigation }) => {
         }
     };
 
-    // Edit trip
-    const openEditTrip = (trip) => {
-        setCurrentTrip(trip);
-        setEditTripTitle(trip.title || '');
-        setEditTripLocation(trip.location || '');
-        setShowEditTripModal(true);
-    };
-
-    const saveEditTrip = async () => {
-        if (!currentTrip) return;
-        try {
-            await firestore().collection('trips').doc(currentTrip.id).update({
-                title: editTripTitle,
-                location: editTripLocation,
-            });
-            setTrips(prev => prev.map(t => t.id === currentTrip.id ? { ...t, title: editTripTitle, location: editTripLocation } : t));
-            setShowEditTripModal(false);
-            Alert.alert('Updated! ✨', 'Trip updated successfully.');
-        } catch (error) {
-            setTrips(prev => prev.map(t => t.id === currentTrip.id ? { ...t, title: editTripTitle, location: editTripLocation } : t));
-            setShowEditTripModal(false);
-            Alert.alert('Saved!', 'Trip updated locally.');
-        }
-    };
-
     const handleDeleteTrip = (tripId) => {
         Alert.alert('Cancel Trip', 'Are you sure? All participants will be notified and this trip will be marked as cancelled.', [
             { text: 'Cancel', style: 'cancel' },
@@ -772,41 +747,6 @@ const UserProfileScreen = ({ route, navigation }) => {
                 </SafeAreaView>
             </Modal>
 
-            {/* Edit Trip Modal */}
-            <Modal visible={showEditTripModal} transparent animationType="slide">
-                <View style={styles.modalOverlay}>
-                    <Animatable.View animation="slideInUp" style={[styles.modalContent, { backgroundColor: colors.background }]}>
-                        <View style={styles.modalHeader}>
-                            <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Post</Text>
-                            <TouchableOpacity onPress={() => setShowEditTripModal(false)}><Ionicons name="close" size={24} color={colors.text} /></TouchableOpacity>
-                        </View>
-
-                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Title</Text>
-                        <TextInput
-                            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                            value={editTripTitle}
-                            onChangeText={setEditTripTitle}
-                            placeholder="Trip title"
-                            placeholderTextColor={colors.textSecondary}
-                        />
-
-                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Location</Text>
-                        <TextInput
-                            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                            value={editTripLocation}
-                            onChangeText={setEditTripLocation}
-                            placeholder="Location"
-                            placeholderTextColor={colors.textSecondary}
-                        />
-
-                        <TouchableOpacity onPress={saveEditTrip}>
-                            <LinearGradient colors={['#9d74f7', '#EC4899']} style={styles.saveButton}>
-                                <Text style={styles.saveButtonText}>Save Changes</Text>
-                            </LinearGradient>
-                        </TouchableOpacity>
-                    </Animatable.View>
-                </View>
-            </Modal>
 
 
 

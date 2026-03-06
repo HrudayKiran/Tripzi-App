@@ -39,6 +39,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import MessageSettingsScreen from '../screens/MessageSettingsScreen';
+import EditTripScreen from '../screens/EditTripScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -356,6 +357,7 @@ const AppNavigator = () => {
                     <Stack.Screen name="Settings" component={SettingsScreen} />
                     <Stack.Screen name="UserProfile" component={UserProfileScreen} />
                     <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+                    <Stack.Screen name="EditTrip" component={EditTripScreen} />
 
                 </Stack.Navigator>
             </NavigationContainer>

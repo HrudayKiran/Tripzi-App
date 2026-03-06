@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Animated, Dimensions, FlatList, Linking, Alert, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Animated, Dimensions, FlatList, Linking, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, TouchableWithoutFeedback } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
@@ -16,40 +16,7 @@ import { pickAndUploadImage } from '../utils/imageUpload';
 
 const { width } = Dimensions.get('window');
 
-// Trip type options for editing
-const TRIP_TYPES = [
-  { id: 'adventure', label: 'Adventure' },
-  { id: 'trekking', label: 'Trekking' },
-  { id: 'bike_ride', label: 'Bike Ride' },
-  { id: 'road_trip', label: 'Road Trip' },
-  { id: 'camping', label: 'Camping' },
-  { id: 'sightseeing', label: 'Sightseeing' },
-  { id: 'beach', label: 'Beach' },
-  { id: 'pilgrimage', label: 'Pilgrimage' },
-];
-
-const TRANSPORT_MODES = [
-  { id: 'train', label: 'Train' },
-  { id: 'bus', label: 'Bus' },
-  { id: 'car', label: 'Car' },
-  { id: 'flight', label: 'Flight' },
-  { id: 'bike', label: 'Bike' },
-  { id: 'mixed', label: 'Mixed' },
-];
-
-const ACCOMMODATION_TYPES = [
-  { id: 'hotel', label: 'Hotel' },
-  { id: 'hostel', label: 'Hostel' },
-  { id: 'camping', label: 'Camping' },
-  { id: 'homestay', label: 'Homestay' },
-  { id: 'none', label: 'Not Needed' },
-];
-
-const GENDER_PREFERENCES = [
-  { id: 'anyone', label: 'Anyone' },
-  { id: 'male', label: 'Male Only' },
-  { id: 'female', label: 'Female Only' },
-];
+// Unused constants removed
 
 const TripDetailsScreen = ({ route, navigation }) => {
   const { colors } = useTheme();
@@ -69,25 +36,6 @@ const TripDetailsScreen = ({ route, navigation }) => {
 
   // Edit/Delete states
   const [showReportModal, setShowReportModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editTitle, setEditTitle] = useState('');
-  const [editFromLocation, setEditFromLocation] = useState('');
-  const [editLocation, setEditLocation] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editCost, setEditCost] = useState('');
-  const [editMaxTravelers, setEditMaxTravelers] = useState('');
-  const [editTripTypes, setEditTripTypes] = useState<string[]>([]);
-  const [editTransportModes, setEditTransportModes] = useState<string[]>([]);
-  const [editMandatoryItems, setEditMandatoryItems] = useState('');
-  const [editPlacesToVisit, setEditPlacesToVisit] = useState('');
-  const [editAccommodation, setEditAccommodation] = useState('');
-  const [editGenderPreference, setEditGenderPreference] = useState('anyone');
-  const [editFromDate, setEditFromDate] = useState(new Date());
-  const [editToDate, setEditToDate] = useState(new Date());
-  const [editAccommodationDays, setEditAccommodationDays] = useState('');
-  const [editImages, setEditImages] = useState<string[]>([]);
-  const [showDateModal, setShowDateModal] = useState<'from' | 'to' | null>(null);
-  const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [participantsData, setParticipantsData] = useState<any[]>([]);
   const [showMenu, setShowMenu] = useState(false);
@@ -415,132 +363,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
     return `₹${cost}`;
   };
 
-  const openEditModal = () => {
-    setEditTitle(trip?.title || '');
-    setEditFromLocation(trip?.fromLocation || '');
-    setEditLocation(trip?.location || trip?.toLocation || '');
-    setEditDescription(trip?.description || '');
-    setEditCost(trip?.costPerPerson?.toString() || trip?.cost?.toString() || '');
-    setEditMaxTravelers(trip?.maxTravelers?.toString() || '8');
-    setEditTripTypes(trip?.tripTypes || []);
-    setEditTransportModes(trip?.transportModes || []);
-    setEditMandatoryItems(trip?.mandatoryItems?.join(', ') || '');
-    setEditPlacesToVisit(trip?.placesToVisit?.join(', ') || '');
-    setEditAccommodation(trip?.accommodationType || '');
-    setEditGenderPreference(trip?.genderPreference || 'anyone');
-    // Parse dates from Firestore timestamps
-    const fromDateValue = trip?.fromDate?.toDate ? trip.fromDate.toDate() : new Date();
-    const toDateValue = trip?.toDate?.toDate ? trip.toDate.toDate() : new Date();
-    setEditFromDate(fromDateValue);
-    setEditToDate(toDateValue);
-    setEditAccommodationDays(trip?.accommodationDays?.toString() || '');
-    setEditImages(trip?.images || []);
-    setShowEditModal(true);
-  };
 
-  const formatEditDate = (date: Date) => {
-    return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-  };
-
-  const getEditDuration = () => {
-    const diff = Math.ceil((editToDate.getTime() - editFromDate.getTime()) / (1000 * 60 * 60 * 24));
-    return diff > 0 ? `${diff} day${diff > 1 ? 's' : ''}` : '1 day';
-  };
-
-  const generateMapsLink = (destination: string) => {
-    const encoded = encodeURIComponent(destination);
-    return `https://www.google.com/maps/search/?api=1&query=${encoded}`;
-  };
-
-  const toggleEditTripType = (id: string) => {
-    setEditTripTypes(prev =>
-      prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]
-    );
-  };
-
-  const toggleEditTransport = (id: string) => {
-    setEditTransportModes(prev =>
-      prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]
-    );
-  };
-
-  const handleSaveTrip = async () => {
-    if (!editTitle.trim()) {
-      Alert.alert('Error', 'Title is required');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      // Delete removed images from Storage
-      const originalImages = trip?.images || [];
-      const imagesToDelete = originalImages.filter((img: string) => !editImages.includes(img) && img.includes('firebasestorage'));
-
-      if (imagesToDelete.length > 0) {
-        await Promise.all(imagesToDelete.map(async (imageUrl: string) => {
-          try {
-            const ref = storage().refFromURL(imageUrl);
-            await ref.delete();
-          } catch (error) {
-
-          }
-        }));
-      }
-
-      await firestore().collection('trips').doc(tripId).update({
-        title: editTitle.trim(),
-        fromLocation: editFromLocation.trim(),
-        location: editLocation.trim(),
-        toLocation: editLocation.trim(),
-        description: editDescription.trim(),
-        costPerPerson: parseInt(editCost) || 0,
-        cost: parseInt(editCost) || 0,
-        maxTravelers: parseInt(editMaxTravelers) || 8,
-        tripTypes: editTripTypes,
-        transportModes: editTransportModes,
-        mandatoryItems: editMandatoryItems.split(',').map(i => i.trim()).filter(Boolean),
-        placesToVisit: editPlacesToVisit.split(',').map(i => i.trim()).filter(Boolean),
-        accommodationType: editAccommodation,
-        genderPreference: editGenderPreference,
-        fromDate: firestore.Timestamp.fromDate(editFromDate),
-        toDate: firestore.Timestamp.fromDate(editToDate),
-        duration: getEditDuration(),
-        accommodationDays: editAccommodationDays ? parseInt(editAccommodationDays) : null,
-        mapsLink: generateMapsLink(editLocation),
-        images: editImages, // Update images
-      });
-      setShowEditModal(false);
-      Alert.alert('Success', 'Trip updated successfully!');
-    } catch (error: any) {
-      // Error handled silently
-      Alert.alert('Error', 'Failed to update trip. Please try again.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleAddImage = async () => {
-    try {
-      if (!trip?.userId) return;
-
-      const result = await pickAndUploadImage({
-        folder: 'trips',
-        userId: trip.userId,
-        subfolder: tripId,
-        quality: 0.8,
-      });
-
-      if (result.success && result.url) {
-        setEditImages(prev => [...prev, result.url!]);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to upload image');
-    }
-  };
-
-  const handleRemoveImage = (index: number) => {
-    setEditImages(prev => prev.filter((_, i) => i !== index));
-  };
 
   // Soft Cancel - Marks as cancelled
   const handleCancelTrip = () => {
@@ -624,6 +447,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
   );
 
   const images = trip.images?.length > 0 ? trip.images : [trip.coverImage || 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800'];
+  const imageLocations = trip.imageLocations || [];
   const spotsLeft = Math.max(0, (trip.maxTravelers || 8) - (trip.participants?.length || trip.currentTravelers || 1));
 
 
@@ -672,30 +496,56 @@ const TripDetailsScreen = ({ route, navigation }) => {
               <View>
                 <TouchableOpacity
                   style={[styles.headerButton, { backgroundColor: colors.card }]}
-                  onPress={() => setShowMenu(!showMenu)}
+                  onPress={() => setShowMenu(true)}
                   testID="trip-menu-button"
                 >
                   <Ionicons name="ellipsis-vertical" size={24} color={colors.text} />
                 </TouchableOpacity>
 
-                {/* Dropdown Menu */}
-                {showMenu && (
-                  <View style={[styles.dropdownMenu, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                    <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); openEditModal(); }}>
-                      <Ionicons name="create-outline" size={20} color={colors.text} />
-                      <Text style={[styles.menuText, { color: colors.text }]}>Edit Trip</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); handleCancelTrip(); }}>
-                      <Ionicons name="close-circle-outline" size={20} color={colors.text} />
-                      <Text style={[styles.menuText, { color: colors.text }]}>Cancel Trip</Text>
-                    </TouchableOpacity>
-                    <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-                    <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); handleDeleteTrip(); }}>
-                      <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                      <Text style={[styles.menuText, { color: '#EF4444' }]}>Delete Trip</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                <Modal
+                  visible={showMenu}
+                  transparent={true}
+                  animationType="fade"
+                  onRequestClose={() => setShowMenu(false)}
+                >
+                  <TouchableWithoutFeedback onPress={() => setShowMenu(false)}>
+                    <View style={styles.modalOverlay}>
+                      <View style={[styles.dropdownMenu, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <TouchableOpacity
+                          style={styles.menuItem}
+                          onPress={() => {
+                            setShowMenu(false);
+                            navigation.navigate('EditTrip', { tripId });
+                          }}
+                        >
+                          <Ionicons name="create-outline" size={20} color={colors.text} />
+                          <Text style={[styles.menuText, { color: colors.text }]}>Edit Trip</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.menuItem}
+                          onPress={() => {
+                            setShowMenu(false);
+                            handleCancelTrip();
+                          }}
+                        >
+                          <Ionicons name="close-circle-outline" size={20} color={colors.text} />
+                          <Text style={[styles.menuText, { color: colors.text }]}>Cancel Trip</Text>
+                        </TouchableOpacity>
+                        <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+                        <TouchableOpacity
+                          style={styles.menuItem}
+                          onPress={() => {
+                            setShowMenu(false);
+                            handleDeleteTrip();
+                          }}
+                        >
+                          <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                          <Text style={[styles.menuText, { color: '#EF4444' }]}>Delete Trip</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </TouchableWithoutFeedback>
+                </Modal>
               </View>
             )}
 
@@ -739,6 +589,14 @@ const TripDetailsScreen = ({ route, navigation }) => {
                   style={styles.carouselImage}
                   resizeMode="cover"
                 />
+                {imageLocations[index] && (
+                  <View style={styles.imageOverlay}>
+                    <View style={styles.overlayLocationRow}>
+                      <Ionicons name="location" size={16} color="#fff" />
+                      <Text style={styles.overlayLocation}>{imageLocations[index]}</Text>
+                    </View>
+                  </View>
+                )}
               </View>
             ))}
           </ScrollView>
@@ -865,7 +723,14 @@ const TripDetailsScreen = ({ route, navigation }) => {
             <DetailRow icon="📅" label="Start Date" value={formatDate(trip.fromDate)} colors={colors} />
             <DetailRow icon="📅" label="End Date" value={formatDate(trip.toDate)} colors={colors} />
             <DetailRow icon="🚗" label="Transport" value={trip.transportModes?.join(', ') || trip.transportMode || 'TBD'} colors={colors} />
+            <DetailRow icon="🎭" label="Activities" value={trip.tripTypes?.join(', ') || 'TBD'} colors={colors} />
             <DetailRow icon="🏨" label="Stay" value={trip.accommodationType || 'TBD'} colors={colors} />
+            {trip.accommodationDays && (
+              <DetailRow icon="⌛" label="Stay Duration" value={`${trip.accommodationDays} days`} colors={colors} />
+            )}
+            {trip.bookingStatus && (
+              <DetailRow icon="✅" label="Booking" value={trip.bookingStatus === 'booked' ? 'Already Booked' : trip.bookingStatus === 'to_book' ? 'Yet to Book' : 'Not Needed'} colors={colors} />
+            )}
             <DetailRow icon="👥" label="Group" value={`${trip.genderPreference === 'male' ? 'Male only' : trip.genderPreference === 'female' ? 'Female only' : 'Anyone can join'}`} colors={colors} />
           </Animatable.View>
 
@@ -1046,309 +911,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
       {/* Footer Removed (Message button moved to creator row) */}
 
       {/* ... (Keep Modal Rendering - same as before) ... */}
-      <Modal visible={showEditModal} animationType="slide" transparent>
-        {/* ... */}
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.modalContainer}
-          >
-            <View style={[styles.editModal, { backgroundColor: colors.card }]}>
-              <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Trip</Text>
-                <TouchableOpacity onPress={() => setShowEditModal(false)}>
-                  <Ionicons name="close" size={28} color={colors.text} />
-                </TouchableOpacity>
-              </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} style={styles.editForm}>
-                <Text style={[styles.editLabel, { color: colors.text }]}>Title *</Text>
-                <TextInput
-                  style={[styles.editInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
-                  value={editTitle}
-                  onChangeText={setEditTitle}
-                  placeholder="Trip title"
-                  placeholderTextColor={colors.textSecondary}
-                />
-
-                <Text style={[styles.editLabel, { color: colors.text }]}>Trip Images</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.md }}>
-                  <TouchableOpacity
-                    style={{
-                      width: 80, height: 80, borderRadius: 8, backgroundColor: colors.inputBackground,
-                      justifyContent: 'center', alignItems: 'center', marginRight: SPACING.sm
-                    }}
-                    onPress={handleAddImage}
-                  >
-                    <Ionicons name="add" size={32} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                  {editImages.map((img, idx) => (
-                    <View key={idx} style={{ marginRight: SPACING.sm, position: 'relative' }}>
-                      <Image source={{ uri: img }} style={{ width: 80, height: 80, borderRadius: 8 }} />
-                      <TouchableOpacity
-                        style={{
-                          position: 'absolute', top: -4, right: -4, backgroundColor: 'rgba(0,0,0,0.5)',
-                          borderRadius: 10, width: 20, height: 20, justifyContent: 'center', alignItems: 'center'
-                        }}
-                        onPress={() => handleRemoveImage(idx)}
-                      >
-                        <Ionicons name="close" size={14} color="#fff" />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </ScrollView>
-
-                <Text style={[styles.editLabel, { color: colors.text }]}>Starting From</Text>
-                <TextInput
-                  style={[styles.editInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
-                  value={editFromLocation}
-                  onChangeText={setEditFromLocation}
-                  placeholder="e.g., Bangalore"
-                  placeholderTextColor={colors.textSecondary}
-                />
-
-                <Text style={[styles.editLabel, { color: colors.text }]}>Destination</Text>
-                <TextInput
-                  style={[styles.editInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
-                  value={editLocation}
-                  onChangeText={setEditLocation}
-                  placeholder="e.g., Leh, Ladakh"
-                  placeholderTextColor={colors.textSecondary}
-                />
-                {editLocation.length > 3 && (
-                  <Text style={{ fontSize: 12, color: colors.primary, marginTop: 4 }}>📍 Maps link will be auto-generated</Text>
-                )}
-
-                {/* Date Selection */}
-                <View style={{ flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.md }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.editLabel, { color: colors.text, marginTop: 0 }]}>From Date</Text>
-                    <TouchableOpacity
-                      style={[styles.editInput, { backgroundColor: colors.inputBackground, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm }]}
-                      onPress={() => setShowDateModal('from')}
-                    >
-                      <Ionicons name="calendar" size={18} color={colors.primary} />
-                      <Text style={{ color: colors.text, flex: 1 }}>{formatEditDate(editFromDate)}</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.editLabel, { color: colors.text, marginTop: 0 }]}>To Date</Text>
-                    <TouchableOpacity
-                      style={[styles.editInput, { backgroundColor: colors.inputBackground, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm }]}
-                      onPress={() => setShowDateModal('to')}
-                    >
-                      <Ionicons name="calendar" size={18} color={colors.primary} />
-                      <Text style={{ color: colors.text, flex: 1 }}>{formatEditDate(editToDate)}</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                <Text style={{ fontSize: 12, color: colors.primary, marginTop: 4 }}>Duration: {getEditDuration()}</Text>
-
-                <Text style={[styles.editLabel, { color: colors.text }]}>Description</Text>
-                <TextInput
-                  style={[styles.editInput, styles.editTextArea, { backgroundColor: colors.inputBackground, color: colors.text }]}
-                  value={editDescription}
-                  onChangeText={setEditDescription}
-                  placeholder="Trip description"
-                  placeholderTextColor={colors.textSecondary}
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                />
-
-                <Text style={[styles.editLabel, { color: colors.text }]}>Trip Type</Text>
-                <View style={styles.chipGrid}>
-                  {TRIP_TYPES.map((type) => (
-                    <TouchableOpacity
-                      key={type.id}
-                      style={[styles.chip, { backgroundColor: editTripTypes.includes(type.id) ? colors.primary : colors.inputBackground }]}
-                      onPress={() => toggleEditTripType(type.id)}
-                    >
-                      <Text style={[styles.chipText, { color: editTripTypes.includes(type.id) ? '#fff' : colors.text }]}>{type.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <Text style={[styles.editLabel, { color: colors.text }]}>Transport Mode</Text>
-                <View style={styles.chipGrid}>
-                  {TRANSPORT_MODES.map((mode) => (
-                    <TouchableOpacity
-                      key={mode.id}
-                      style={[styles.chip, { backgroundColor: editTransportModes.includes(mode.id) ? colors.primary : colors.inputBackground }]}
-                      onPress={() => toggleEditTransport(mode.id)}
-                    >
-                      <Text style={[styles.chipText, { color: editTransportModes.includes(mode.id) ? '#fff' : colors.text }]}>{mode.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <Text style={[styles.editLabel, { color: colors.text }]}>Cost per Person (₹)</Text>
-                <TextInput
-                  style={[styles.editInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
-                  value={editCost}
-                  onChangeText={setEditCost}
-                  placeholder="0"
-                  placeholderTextColor={colors.textSecondary}
-                  keyboardType="numeric"
-                />
-
-                <Text style={[styles.editLabel, { color: colors.text }]}>Max Travelers</Text>
-                <TextInput
-                  style={[styles.editInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
-                  value={editMaxTravelers}
-                  onChangeText={setEditMaxTravelers}
-                  placeholder="8"
-                  placeholderTextColor={colors.textSecondary}
-                  keyboardType="numeric"
-                />
-
-                <Text style={[styles.editLabel, { color: colors.text }]}>Mandatory Items</Text>
-                <TextInput
-                  style={[styles.editInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
-                  value={editMandatoryItems}
-                  onChangeText={setEditMandatoryItems}
-                  placeholder="ID proof, warm clothes (comma separated)"
-                  placeholderTextColor={colors.textSecondary}
-                />
-
-                <Text style={[styles.editLabel, { color: colors.text }]}>Places to Visit</Text>
-                <TextInput
-                  style={[styles.editInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
-                  value={editPlacesToVisit}
-                  onChangeText={setEditPlacesToVisit}
-                  placeholder="Pangong Lake, Nubra Valley (comma separated)"
-                  placeholderTextColor={colors.textSecondary}
-                />
-
-                <Text style={[styles.editLabel, { color: colors.text }]}>Accommodation</Text>
-                <View style={styles.chipGrid}>
-                  {ACCOMMODATION_TYPES.map((type) => (
-                    <TouchableOpacity
-                      key={type.id}
-                      style={[styles.chip, { backgroundColor: editAccommodation === type.id ? '#10B981' : colors.inputBackground }]}
-                      onPress={() => setEditAccommodation(type.id)}
-                    >
-                      <Text style={[styles.chipText, { color: editAccommodation === type.id ? '#fff' : colors.text }]}>{type.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                {editAccommodation && editAccommodation !== 'none' && (
-                  <>
-                    <Text style={[styles.editLabel, { color: colors.text }]}>Accommodation Days</Text>
-                    <TextInput
-                      style={[styles.editInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
-                      value={editAccommodationDays}
-                      onChangeText={setEditAccommodationDays}
-                      placeholder="e.g., 3"
-                      placeholderTextColor={colors.textSecondary}
-                      keyboardType="numeric"
-                    />
-                  </>
-                )}
-
-                <Text style={[styles.editLabel, { color: colors.text }]}>Who Can Join?</Text>
-                <View style={styles.chipGrid}>
-                  {GENDER_PREFERENCES.map((pref) => (
-                    <TouchableOpacity
-                      key={pref.id}
-                      style={[styles.chip, { backgroundColor: editGenderPreference === pref.id ? '#9d74f7' : colors.inputBackground }]}
-                      onPress={() => setEditGenderPreference(pref.id)}
-                    >
-                      <Text style={[styles.chipText, { color: editGenderPreference === pref.id ? '#fff' : colors.text }]}>{pref.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <View style={{ height: SPACING.xl }} />
-
-                <View style={{ height: SPACING.xl }} />
-              </ScrollView>
-
-              <View style={styles.editActions}>
-                <TouchableOpacity
-                  style={[styles.cancelButton, { borderColor: colors.border }]}
-                  onPress={() => setShowEditModal(false)}
-                >
-                  <Text style={[styles.cancelButtonText, { color: colors.text }]}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.saveButton, { backgroundColor: colors.primary, opacity: saving ? 0.6 : 1 }]}
-                  onPress={handleSaveTrip}
-                  disabled={saving}
-                >
-                  {saving ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.saveButtonText}>Save Changes</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
-
-      {/* Date Selection Modal */}
-      <Modal visible={showDateModal !== null} transparent animationType="fade">
-        <View style={styles.dateModalOverlay}>
-          <View style={[styles.dateModalContent, { backgroundColor: colors.background }]}>
-            <View style={styles.dateModalHeader}>
-              <Text style={[styles.dateModalTitle, { color: colors.text }]}>
-                Select {showDateModal === 'from' ? 'Start' : 'End'} Date
-              </Text>
-              <TouchableOpacity onPress={() => setShowDateModal(null)}>
-                <Ionicons name="close" size={24} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.dateList} showsVerticalScrollIndicator={false}>
-              {Array.from({ length: 90 }, (_, i) => {
-                const date = new Date();
-                date.setDate(date.getDate() + i);
-                const isSelected = showDateModal === 'from'
-                  ? date.toDateString() === editFromDate.toDateString()
-                  : date.toDateString() === editToDate.toDateString();
-                const isDisabled = showDateModal === 'to' && date.getTime() < editFromDate.getTime();
-
-                return (
-                  <TouchableOpacity
-                    key={i}
-                    style={[
-                      styles.dateOption,
-                      { backgroundColor: isSelected ? colors.primary : colors.card },
-                      isDisabled && { opacity: 0.5 }
-                    ]}
-                    onPress={() => {
-                      if (isDisabled) return;
-                      if (showDateModal === 'from') {
-                        setEditFromDate(date);
-                        if (date.getTime() > editToDate.getTime()) {
-                          setEditToDate(new Date(date.getTime() + 24 * 60 * 60 * 1000));
-                        }
-                      } else {
-                        setEditToDate(date);
-                      }
-                      setShowDateModal(null);
-                    }}
-                    disabled={isDisabled}
-                  >
-                    <Text style={[styles.dateOptionDay, { color: isSelected ? '#fff' : colors.text }]}>
-                      {date.toLocaleDateString('en-IN', { weekday: 'short' })}
-                    </Text>
-                    <Text style={[styles.dateOptionDate, { color: isSelected ? '#fff' : colors.text }]}>
-                      {date.getDate()}
-                    </Text>
-                    <Text style={[styles.dateOptionMonth, { color: isSelected ? '#fff' : colors.textSecondary }]}>
-                      {date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
       {/* Report Trip Modal */}
       <ReportTripModal
         visible={showReportModal}
@@ -1458,39 +1021,7 @@ const styles = StyleSheet.create({
   reviewName: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold },
   reviewStars: { flexDirection: 'row', marginTop: 2 },
   reviewText: { fontSize: FONT_SIZE.sm, lineHeight: 20 },
-  // Edit Modal styles
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContainer: { flex: 1, justifyContent: 'flex-end' },
-  editModal: { borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, padding: SPACING.xl, maxHeight: '85%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },
-  modalTitle: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold },
-  editForm: { marginBottom: SPACING.lg },
-  editLabel: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold, marginBottom: SPACING.sm, marginTop: SPACING.md },
-  editInput: { borderRadius: BORDER_RADIUS.md, padding: SPACING.md, fontSize: FONT_SIZE.md },
-  editTextArea: { minHeight: 100 },
-  editActions: { flexDirection: 'row', gap: SPACING.md },
-  cancelButton: { flex: 1, paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.md, alignItems: 'center', borderWidth: 1 },
-  cancelButtonText: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
-  saveButton: { flex: 1, paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.md, alignItems: 'center' },
-  saveButtonText: { color: '#fff', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
-  // Action buttons below title
-  actionButtonsRow: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.md, marginBottom: SPACING.sm },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.lg, gap: SPACING.xs },
-  actionBtnText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold },
-  // Chip styles for edit modal
-  chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-  chip: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.lg },
-  chipText: { fontSize: FONT_SIZE.sm },
-  // Date picker modal styles
-  dateModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  dateModalContent: { width: '85%', maxHeight: '70%', borderRadius: BORDER_RADIUS.xl, padding: SPACING.lg },
-  dateModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },
-  dateModalTitle: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold },
-  dateList: { maxHeight: 400 },
-  dateOption: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, borderRadius: BORDER_RADIUS.md, marginBottom: SPACING.sm, gap: SPACING.md },
-  dateOptionDay: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold, width: 40 },
-  dateOptionDate: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold, width: 40 },
-  dateOptionMonth: { fontSize: FONT_SIZE.sm, flex: 1 },
+  // Image Overlay Styles
 
   // Image Overlay Styles
   imageWrapper: { position: 'relative' },
@@ -1523,7 +1054,25 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 4,
   },
-  dropdownMenu: { position: 'absolute', top: 50, right: 20, width: 200, padding: SPACING.sm, borderRadius: BORDER_RADIUS.md, borderWidth: 1, elevation: 5, zIndex: 1000 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 140 : 100, // Increased gap from top
+    right: 20,
+    width: 220,
+    padding: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    elevation: 8, // More prominent shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    zIndex: 1000
+  },
   menuItem: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, gap: SPACING.sm },
   menuText: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
   menuDivider: { height: 1, marginVertical: SPACING.xs },
