@@ -43,8 +43,8 @@ const TripziAnimatedLogo = ({ size = 80, showGlow = false }: TripziAnimatedLogoP
     });
 
     const spreadWidth = size * 2.5;
-    const stepX = spreadWidth / 5;
-    const startX = -spreadWidth / 2;
+    const stepX = spreadWidth / 8;
+    const startX = -spreadWidth / 5;
 
     const xT = startX;
     const xr = startX + stepX * 1;
@@ -58,7 +58,7 @@ const TripziAnimatedLogo = ({ size = 80, showGlow = false }: TripziAnimatedLogoP
     const stemHeight = iconSize * 0.75;
     const sharedDotY = -size * 0.25;
 
-    // 1. 'T' - Plane rotated to exactly 160deg
+    // 1. 'T' - Plane rotated to exactly 200deg
     const plane1X = progress.interpolate({
         inputRange: [0, 10, 20, 85, 95, 100],
         outputRange: [0, 0, xT, xT, 0, 0],
@@ -72,7 +72,7 @@ const TripziAnimatedLogo = ({ size = 80, showGlow = false }: TripziAnimatedLogoP
         outputRange: ['0deg', '0deg', '200deg', '200deg', '0deg', '0deg'],
     });
 
-    // 2. 'r' - Plane rotated to exactly -100deg
+    // 2. 'r' - Plane rotated to exactly 90deg
     const plane2Opacity = progress.interpolate({
         inputRange: [0, 15, 25, 85, 95, 100],
         outputRange: [0, 0, 1, 1, 0, 0],
@@ -87,7 +87,7 @@ const TripziAnimatedLogo = ({ size = 80, showGlow = false }: TripziAnimatedLogoP
     });
     const plane2Rot = progress.interpolate({
         inputRange: [0, 100],
-        outputRange: ['105deg', '105deg'],
+        outputRange: ['90deg', '90deg'],
     });
     const plane2Scale = progress.interpolate({
         inputRange: [0, 100],
