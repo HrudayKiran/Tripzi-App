@@ -159,14 +159,6 @@ const ProfileScreen = ({ navigation }) => {
         {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
-          <TouchableOpacity
-            style={[styles.settingsButton, { backgroundColor: colors.card }]}
-            onPress={() => navigation.navigate('Settings')}
-            activeOpacity={0.7}
-            testID="profile-settings-btn"
-          >
-            <Ionicons name="settings-outline" size={22} color={colors.text} />
-          </TouchableOpacity>
         </View>
 
         {/* User Profile Card - Tappable to view full profile */}
@@ -174,8 +166,8 @@ const ProfileScreen = ({ navigation }) => {
           onPress={() => navigation.navigate('UserProfile', { userId: auth().currentUser?.uid })}
           activeOpacity={0.8}
         >
-          <Animatable.View animation="fadeInUp" duration={400} style={[styles.profileCard, { backgroundColor: colors.card }]}>
-            <View style={styles.avatarContainer}>
+          <Animatable.View animation="fadeInUp" duration={400} style={[styles.profileCard, { backgroundColor: colors.card }, { flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }]}>
+            <View style={[styles.avatarContainer, { marginRight: 0 }]}>
               <View style={[styles.avatarBorder, { backgroundColor: colors.background }]}>
                 <DefaultAvatar
                   uri={user && 'photoURL' in user ? user.photoURL : auth().currentUser?.photoURL}
@@ -186,22 +178,9 @@ const ProfileScreen = ({ navigation }) => {
               </View>
             </View>
 
-
-            <View style={styles.profileInfo}>
-              <Text style={[styles.userName, { color: colors.text }]}>
-                {user?.displayName || auth().currentUser?.displayName || 'User'}
-              </Text>
-              <Text style={[styles.userEmail, { color: colors.textSecondary }]}>
-                {user?.email || auth().currentUser?.email}
-              </Text>
-              {user?.username && (
-                <Text style={[styles.username, { color: colors.primary }]}>@{user.username}</Text>
-              )}
-              <Text style={[styles.viewProfileText, { color: colors.primary }]}>
-                View profile →
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
+            <Text style={[styles.viewProfileText, { color: colors.primary, marginTop: SPACING.sm }]}>
+              View profile
+            </Text>
           </Animatable.View>
         </TouchableOpacity>
 
@@ -228,6 +207,13 @@ const ProfileScreen = ({ navigation }) => {
             iconBg="#FEF3C7"
             text="Edit Profile"
             onPress={() => navigation.navigate('EditProfile')}
+          />
+          <MenuItem
+            icon="settings-outline"
+            iconColor="#6B7280"
+            iconBg="#F3F4F6"
+            text="Settings"
+            onPress={() => navigation.navigate('Settings')}
           />
           <MenuItem
             icon="document-text-outline"
@@ -281,7 +267,7 @@ const ProfileScreen = ({ navigation }) => {
           <Text style={[styles.versionText, { color: colors.textSecondary }]}>Tripzi Version 1.0.0</Text>
         </Animatable.View>
 
-        <View style={{ height: SPACING.xxxl * 2 }} />
+        <View style={{ height: SPACING.sm * 2 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -296,7 +282,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: SPACING.xl,
     paddingTop: SPACING.md,
-    paddingBottom: SPACING.lg,
   },
   headerTitle: { fontSize: FONT_SIZE.xxl, fontWeight: FONT_WEIGHT.bold },
   settingsButton: {

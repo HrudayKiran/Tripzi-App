@@ -128,15 +128,6 @@ const SettingsScreen = ({ navigation }) => {
                         </View>
                     </Animatable.View>
 
-                    {/* Native Push Info */}
-                    <Animatable.View animation="fadeInUp" duration={400} delay={50}>
-                        <View style={[styles.infoCard, { backgroundColor: colors.inputBackground }]}>
-                            <Ionicons name={ICONS.info} size={20} color={colors.textSecondary} />
-                            <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-                                Full push notification support is available in the iOS and Android app versions.
-                            </Text>
-                        </View>
-                    </Animatable.View>
 
                     {/* Dark Mode */}
                     <Animatable.View animation="fadeInUp" duration={400} delay={100}>
@@ -175,7 +166,6 @@ const SettingsScreen = ({ navigation }) => {
                                     Permanently remove your account and data
                                 </Text>
                             </View>
-                            <Ionicons name={ICONS.forward} size={20} color={STATUS.errorDark} />
                         </TouchableOpacity>
                     </Animatable.View>
                 </ScrollView>

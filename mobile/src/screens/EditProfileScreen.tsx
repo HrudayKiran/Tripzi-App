@@ -202,7 +202,7 @@ const EditProfileScreen = ({ navigation }) => {
             >
                 <View style={styles.header}>
                     <TouchableOpacity
-                        style={[styles.headerBtn, { backgroundColor: colors.card }]}
+                        style={[styles.headerBtn]}
                         onPress={() => navigation.goBack()}
                         activeOpacity={0.8}
                     >
@@ -326,7 +326,6 @@ const styles = StyleSheet.create({
     headerBtn: {
         width: TOUCH_TARGET.min,
         height: TOUCH_TARGET.min,
-        borderRadius: TOUCH_TARGET.min / 2,
         justifyContent: 'center',
         alignItems: 'center',
     },

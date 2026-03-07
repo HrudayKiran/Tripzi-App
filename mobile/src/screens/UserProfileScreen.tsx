@@ -497,6 +497,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                     }}
                     showOptions={false}
                     mode="join"
+                    hideProfileInfo={true}
                 />
 
 
@@ -872,8 +873,8 @@ const styles = StyleSheet.create({
     secondaryBtn: { flex: 1, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
     secondaryBtnText: { fontSize: 15, fontWeight: '600' },
 
-    contentSection: { marginTop: 24, paddingBottom: 40 },
-    tabsHeader: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f0f0f0', marginBottom: 16 },
+    contentSection: { marginTop: 24 },
+    tabsHeader: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f0f0f0', marginBottom: 2 },
     activeTab: { paddingBottom: 12, borderBottomWidth: 2, width: 60, alignItems: 'center' },
 
     emptyState: { alignItems: 'center', marginTop: 40 },

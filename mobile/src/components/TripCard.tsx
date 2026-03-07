@@ -19,7 +19,7 @@ const TRANSPORT_ICONS = {
     bus: { icon: '🚌', label: 'Bus' },
     train: { icon: '🚂', label: 'Train' },
     flight: { icon: '✈️', label: 'Flight' },
-    mixed: { icon: '🚀', label: 'Mixed' },
+    mixed: { icon: '🚀', label: 'Mixed Travel' },
 };
 
 interface TripCardProps {
@@ -29,9 +29,10 @@ interface TripCardProps {
     onReportPress: (trip: any) => void;
     showOptions?: boolean;
     mode?: 'chat' | 'join';
+    hideProfileInfo?: boolean;
 }
 
-const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOptions = true, mode = 'chat' }: TripCardProps) => {
+const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOptions = true, mode = 'chat', hideProfileInfo = false }: TripCardProps) => {
 
     const { colors } = useTheme();
     const navigation = useNavigation();
@@ -292,100 +293,85 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
 
     return (
         <>
-            <View style={[styles.card, { backgroundColor: colors.card }]}>
+            <View style={[styles.card, { backgroundColor: colors.card }, hideProfileInfo && styles.profileCardElevated]}>
                 {/* User Header — avatar, name, join, view details, 3-dots */}
-                <View style={styles.userHeader}>
-                    <TouchableOpacity style={styles.userInfo} onPress={handleUserPress}>
-                        <DefaultAvatar
-                            uri={trip.user?.photoURL || trip.user?.image}
-                            name={trip.user?.displayName || trip.user?.name || 'Traveler'}
-                            size={38}
-                            style={styles.avatar}
-                        />
-                        <View style={styles.userInfoText}>
-                            <View style={styles.nameRow}>
-                                <Text style={[styles.userName, { color: colors.text }]}>
-                                    {trip.user?.displayName || trip.user?.name || 'Traveler'}
+                {!hideProfileInfo && (
+                    <View style={styles.userHeader}>
+                        <TouchableOpacity style={styles.userInfo} onPress={handleUserPress}>
+                            <DefaultAvatar
+                                uri={trip.user?.photoURL || trip.user?.image}
+                                name={trip.user?.displayName || trip.user?.name || 'Traveler'}
+                                size={38}
+                                style={styles.avatar}
+                            />
+                            <View style={styles.userInfoText}>
+                                <View style={styles.nameRow}>
+                                    <Text style={[styles.userName, { color: colors.text }]}>
+                                        {trip.user?.displayName || trip.user?.name || 'Traveler'}
+                                    </Text>
+                                    {userRating && (
+                                        <View style={styles.ratingBadge}>
+                                            <Ionicons name="star" size={10} color="#F59E0B" />
+                                            <Text style={styles.ratingText}>{userRating.avg}</Text>
+                                        </View>
+                                    )}
+                                </View>
+                                <Text style={[styles.postTime, { color: colors.textSecondary }]}>
+                                    {getTimeAgo(trip.createdAt)}
                                 </Text>
-                                {userRating && (
-                                    <View style={styles.ratingBadge}>
-                                        <Ionicons name="star" size={10} color="#F59E0B" />
-                                        <Text style={styles.ratingText}>{userRating.avg}</Text>
-                                    </View>
-                                )}
                             </View>
-                            <Text style={[styles.postTime, { color: colors.textSecondary }]}>
-                                {getTimeAgo(trip.createdAt)}
-                            </Text>
-                        </View>
-                    </TouchableOpacity>
+                        </TouchableOpacity>
 
-                    {/* Actions in header */}
-                    <View style={styles.headerActions}>
-                        {/* Chat Button (home feed mode) */}
-                        {mode === 'chat' && !isOwnTrip && !isCompleted && (
-                            <TouchableOpacity
-                                style={[
-                                    styles.joinButton,
-                                    {
-                                        backgroundColor: colors.primary,
-                                        borderColor: colors.primary,
-                                    },
-                                ]}
-                                onPress={handleChatWithUser}
-                                activeOpacity={0.7}
-                            >
-                                <Text style={[styles.joinButtonText, { color: '#fff' }]}>
-                                    Chat
-                                </Text>
-                            </TouchableOpacity>
-                        )}
-
-                        {/* Join Button (profile mode) */}
-                        {mode === 'join' && !isOwnTrip && !isCompleted && (
-                            <TouchableOpacity
-                                style={[
-                                    styles.joinButton,
-                                    {
-                                        backgroundColor: hasJoined ? 'transparent' : colors.primary,
-                                        borderColor: colors.primary,
-                                    },
-                                ]}
-                                onPress={handleJoinTrip}
-                                disabled={spotsLeft <= 0 && !hasJoined}
-                                activeOpacity={0.7}
-                            >
-                                <Text style={[styles.joinButtonText, { color: hasJoined ? colors.primary : '#fff' }]}>
-                                    {hasJoined ? 'Joined' : spotsLeft <= 0 ? 'Full' : 'Join'}
-                                </Text>
-                            </TouchableOpacity>
-                        )}
-
-                        {isCompleted && (
-                            <View style={styles.completedBadge}>
-                                <Ionicons name="checkmark-circle" size={14} color="#10B981" />
-                                <Text style={styles.completedText}>Done</Text>
-                            </View>
-                        )}
-
-                        {/* Three dots menu */}
-                        {showOptions && (
-                            <View ref={moreButtonRef} collapsable={false}>
+                        {/* Actions in header */}
+                        <View style={styles.headerActions}>
+                            {/* Chat Button (home feed mode) */}
+                            {mode === 'chat' && !isOwnTrip && !isCompleted && (
                                 <TouchableOpacity
-                                    style={styles.moreButton}
-                                    onPress={() => {
-                                        moreButtonRef.current?.measure((x, y, w, h, pageX, pageY) => {
-                                            setMenuPosition({ top: pageY + h + 4, right: Dimensions.get('window').width - (pageX + w) });
-                                            setShowMenu(true);
-                                        });
-                                    }}
+                                    style={[
+                                        styles.joinButton,
+                                        {
+                                            backgroundColor: colors.primary,
+                                            borderColor: colors.primary,
+                                        },
+                                    ]}
+                                    onPress={handleChatWithUser}
+                                    activeOpacity={0.7}
                                 >
-                                    <Ionicons name="ellipsis-vertical" size={20} color={colors.textSecondary} />
+                                    <Text style={[styles.joinButtonText, { color: '#fff' }]}>
+                                        Chat
+                                    </Text>
                                 </TouchableOpacity>
-                            </View>
-                        )}
+                            )}
+
+                            {/* Join Button (profile mode) */}
+                            {mode === 'join' && !isOwnTrip && !isCompleted && (
+                                <TouchableOpacity
+                                    style={[
+                                        styles.joinButton,
+                                        {
+                                            backgroundColor: hasJoined ? 'transparent' : colors.primary,
+                                            borderColor: colors.primary,
+                                        },
+                                    ]}
+                                    onPress={handleJoinTrip}
+                                    disabled={spotsLeft <= 0 && !hasJoined}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={[styles.joinButtonText, { color: hasJoined ? colors.primary : '#fff' }]}>
+                                        {hasJoined ? 'Joined' : spotsLeft <= 0 ? 'Full' : 'Join'}
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+
+                            {isCompleted && (
+                                <View style={styles.completedBadge}>
+                                    <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                                    <Text style={styles.completedText}>Done</Text>
+                                </View>
+                            )}
+                        </View>
                     </View>
-                </View>
+                )}
 
                 {/* Trip Images Carousel */}
                 <View>
@@ -417,6 +403,16 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                                                     source={{ uri: item }}
                                                     resizeMode="contain"
                                                 />
+                                                {(trip.imageLocations?.[index] || trip?.toLocation || trip?.location) ? (
+                                                    <View style={styles.imageOverlay}>
+                                                        <View style={styles.overlayLocationRow}>
+                                                            <Ionicons name="location" size={12} color="#fff" />
+                                                            <Text style={styles.overlayLocation} numberOfLines={1}>
+                                                                {trip.imageLocations?.[index] || trip?.toLocation || trip?.location}
+                                                            </Text>
+                                                        </View>
+                                                    </View>
+                                                ) : null}
                                             </View>
                                         ))}
                                     </ScrollView>
@@ -455,25 +451,51 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                     </View>
                 </View>
 
+                {/* Bottom Time Ago For Profile Cards */}
+                {hideProfileInfo && (
+                    <View style={{ paddingHorizontal: SPACING.md, paddingTop: 0 }}>
+                        <Text style={[styles.postTime, { color: colors.textSecondary }]}>
+                            {getTimeAgo(trip.createdAt)}
+                        </Text>
+                    </View>
+                )}
+
                 {/* Title + Location + Description */}
-                <View style={styles.contentSection}>
+                <View style={[styles.contentSection, hideProfileInfo && { paddingTop: SPACING.xs }]}>
                     <Text style={[styles.tripTitle, { color: colors.text }]}>{trip.title}</Text>
 
-                    <TouchableOpacity
-                        style={styles.locationRow}
-                        onPress={() => {
-                            const query = trip.location || trip.toLocation;
-                            if (query) {
-                                Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`);
-                            }
-                        }}
-                        activeOpacity={0.7}
-                    >
-                        <Ionicons name="location" size={18} color={colors.primary} />
-                        <Text style={[styles.locationText, { color: colors.primary }]} numberOfLines={1}>
-                            {trip.location || trip.toLocation || 'TBD'}
-                        </Text>
-                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <TouchableOpacity
+                            style={[styles.locationRow, { marginBottom: 0, flex: 1, marginRight: 8 }]}
+                            onPress={() => {
+                                const query = trip.location || trip.toLocation;
+                                if (query) {
+                                    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`);
+                                }
+                            }}
+                            activeOpacity={0.7}
+                        >
+                            <Ionicons name="location" size={16} color={colors.primary} />
+                            <Text style={[styles.locationText, { color: colors.primary }]} numberOfLines={1}>
+                                {trip.location || trip.toLocation || 'TBD'}
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.viewDetailsButton, {
+                                borderColor: colors.primary,
+                                backgroundColor: colors.primary + '10', // 10% opacity 
+                                paddingHorizontal: 12,
+                                paddingVertical: 6,
+                                marginLeft: 0
+                            }]}
+                            onPress={onPress}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={[styles.viewDetailsText, { color: colors.primary, fontSize: 12 }]}>View Details</Text>
+                            <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+                        </TouchableOpacity>
+                    </View>
 
                     {trip.description && (
                         <View style={styles.descriptionContainer}>
@@ -495,7 +517,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                 </View>
 
                 {/* Trip Details Row */}
-                <View style={[styles.detailsRow, { borderTopColor: colors.border }]}>
+                <View style={[styles.detailsRow, { borderTopColor: colors.border }, hideProfileInfo && { borderTopWidth: 0 }]}>
                     <View style={styles.detailItem}>
                         <Text style={styles.detailEmoji}>💰</Text>
                         <Text style={[styles.detailValue, { color: colors.text }]}>₹{formatCost(trip.cost || trip.totalCost)}</Text>
@@ -512,102 +534,45 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                         <Text style={styles.detailEmoji}>👥</Text>
                         <Text style={[styles.detailValue, { color: colors.text }]}>{spotsLeft} left</Text>
                     </View>
-                </View>
-
-                {/* Tags + View Details */}
-                <View style={[styles.bottomRow, { paddingVertical: SPACING.md }]}>
-                    <View style={styles.tagsRow}>
-                        <View style={[styles.tag, {
-                            backgroundColor: trip.genderPreference === 'male' ? '#DBEAFE' :
-                                trip.genderPreference === 'female' ? '#FCE7F3' : '#D1FAE5'
-                        }]}>
-                            <Text style={[styles.tagText, {
-                                color: trip.genderPreference === 'male' ? '#3B82F6' :
-                                    trip.genderPreference === 'female' ? '#EC4899' : '#10B981'
-                            }]}>
-                                {trip.genderPreference === 'male' ? '👨 Male only' :
-                                    trip.genderPreference === 'female' ? '👩 Female only' : '👥 Anyone'}
-                            </Text>
-                        </View>
-                        {trip.tripTypes?.slice(0, 1).map((type: string, index: number) => (
-                            <View key={index} style={[styles.tag, { backgroundColor: '#FEF3C7' }]}>
-                                <Text style={[styles.tagText, { color: '#F59E0B' }]}>🎯 {type.replace('_', ' ')}</Text>
-                            </View>
-                        ))}
+                    <View style={styles.detailItem}>
+                        <Text style={styles.detailEmoji}>
+                            {trip.genderPreference === 'male' ? '👨' : trip.genderPreference === 'female' ? '👩' : '👥'}
+                        </Text>
+                        <Text style={[styles.detailValue, { color: colors.text }]}>
+                            {trip.genderPreference === 'male' ? 'Male' : trip.genderPreference === 'female' ? 'Female' : 'Any'}
+                        </Text>
                     </View>
-
-                    <TouchableOpacity
-                        style={[styles.viewDetailsButton, {
-                            borderColor: colors.primary,
-                            backgroundColor: colors.primary + '10', // 10% opacity 
-                            paddingHorizontal: 20,
-                            paddingVertical: 10,
-                        }]}
-                        onPress={onPress}
-                        activeOpacity={0.7}
-                    >
-                        <Text style={[styles.viewDetailsText, { color: colors.primary, fontSize: FONT_SIZE.md }]}>View Details</Text>
-                        <Ionicons name="chevron-forward" size={16} color={colors.primary} />
-                    </TouchableOpacity>
+                    {trip.tripTypes?.slice(0, 1).map((type: string, index: number) => (
+                        <View key={index} style={styles.detailItem}>
+                            <Text style={styles.detailEmoji}>🎯</Text>
+                            <Text style={[styles.detailValue, { color: colors.text }]}>{type.replace('_', ' ')}</Text>
+                        </View>
+                    ))}
                 </View>
             </View>
-
-
-            {/* Three Dots Menu — Report only */}
-            <Modal visible={showMenu} transparent animationType="fade" onRequestClose={() => setShowMenu(false)}>
-                <TouchableOpacity
-                    style={styles.menuOverlay}
-                    activeOpacity={1}
-                    onPress={() => setShowMenu(false)}
-                >
-                    {menuPosition && (
-                        <View style={[
-                            styles.menuPopup,
-                            {
-                                backgroundColor: colors.card,
-                                top: menuPosition.top,
-                                right: menuPosition.right,
-                            }
-                        ]}>
-                            {/* Report */}
-                            {!isOwnTrip && (
-                                <TouchableOpacity
-                                    style={styles.menuOption}
-                                    onPress={() => {
-                                        setShowMenu(false);
-                                        onReportPress(trip);
-                                    }}
-                                >
-                                    <Ionicons name="flag-outline" size={18} color="#EF4444" />
-                                    <Text style={[styles.menuOptionText, { color: '#EF4444' }]}>Report</Text>
-                                </TouchableOpacity>
-                            )}
-
-                            {/* View Details (fallback for own trips) */}
-                            {isOwnTrip && (
-                                <TouchableOpacity
-                                    style={styles.menuOption}
-                                    onPress={() => {
-                                        setShowMenu(false);
-                                        onPress && onPress();
-                                    }}
-                                >
-                                    <Ionicons name="eye-outline" size={18} color={colors.text} />
-                                    <Text style={[styles.menuOptionText, { color: colors.text }]}>View Details</Text>
-                                </TouchableOpacity>
-                            )}
-                        </View>
-                    )}
-                </TouchableOpacity>
-            </Modal>
         </>
     );
 });
 
 const styles = StyleSheet.create({
     card: {
-        marginBottom: 1,
+        marginBottom: SPACING.md,
+        borderRadius: BORDER_RADIUS.sm,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 6,
         overflow: 'hidden',
+    },
+    profileCardElevated: {
+        marginBottom: SPACING.xs,
+        borderRadius: BORDER_RADIUS.sm,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 6,
     },
     // Header
     userHeader: {
@@ -701,6 +666,25 @@ const styles = StyleSheet.create({
         width,
         aspectRatio: 4 / 5,
     },
+    imageOverlay: {
+        position: 'absolute',
+        bottom: SPACING.md,
+        left: SPACING.md,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        paddingHorizontal: SPACING.xs,
+        paddingVertical: 3,
+        borderRadius: BORDER_RADIUS.md,
+    },
+    overlayLocationRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    overlayLocation: {
+        color: '#fff',
+        fontSize: FONT_SIZE.xs,
+        fontWeight: FONT_WEIGHT.semibold,
+    },
     mediaFooter: {
         position: 'relative',
         flexDirection: 'row',
@@ -773,7 +757,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-around',
         paddingVertical: SPACING.sm + 2,
         paddingHorizontal: SPACING.md,
-        borderTopWidth: 1,
+        borderTopWidth: 0,
     },
     detailItem: {
         alignItems: 'center',

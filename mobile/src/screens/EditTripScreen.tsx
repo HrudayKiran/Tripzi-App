@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Image, Platform, ActivityIndicator, KeyboardAvoidingView, LayoutAnimation, PanResponder, Animated, Vibration } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Dimensions, Image, Platform, ActivityIndicator, KeyboardAvoidingView, Vibration, LayoutAnimation } from 'react-native';
+import { GestureHandlerRootView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
+import { ScaleDecorator, NestableScrollContainer, NestableDraggableFlatList } from 'react-native-draggable-flatlist';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
@@ -98,49 +100,7 @@ const EditTripScreen = ({ navigation, route }: any) => {
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
     const [isPosting, setIsPosting] = useState(false);
     const [fetching, setFetching] = useState(!initialData && !!tripId);
-    const [reorderMode, setReorderMode] = useState(false);
-    const [scrollEnabled, setScrollEnabled] = useState(true);
-    const draggingIndex = React.useRef<number | null>(null);
-    const panY = React.useRef(new Animated.Value(0)).current;
 
-    // Using useMemo for PanResponder to avoid recreation on every render
-    const createPanResponder = (index: number) => PanResponder.create({
-        onStartShouldSetPanResponder: () => reorderMode,
-        onMoveShouldSetPanResponder: () => reorderMode,
-        onPanResponderGrant: () => {
-            setScrollEnabled(false);
-            draggingIndex.current = index;
-            panY.setValue(0);
-        },
-        onPanResponderMove: (_, gestureState) => {
-            panY.setValue(gestureState.dy);
-
-            const dragThreshold = 70; // Threshold for swapping
-            if (gestureState.dy < -dragThreshold && index > 0) {
-                moveImage(index, 'up');
-                // Adjust panY slightly to keep the item under the finger after swap
-                panY.setValue(gestureState.dy + dragThreshold);
-            } else if (gestureState.dy > dragThreshold && index < tripImages.length - 1) {
-                moveImage(index, 'down');
-                panY.setValue(gestureState.dy - dragThreshold);
-            }
-        },
-        onPanResponderRelease: () => {
-            setScrollEnabled(true);
-            draggingIndex.current = null;
-            Animated.spring(panY, {
-                toValue: 0,
-                useNativeDriver: false,
-                tension: 40,
-                friction: 7
-            }).start();
-        },
-        onPanResponderTerminate: () => {
-            setScrollEnabled(true);
-            draggingIndex.current = null;
-            panY.setValue(0);
-        },
-    });
     useEffect(() => {
         if (!initialData && tripId) {
             const fetchTrip = async () => {
@@ -198,18 +158,19 @@ const EditTripScreen = ({ navigation, route }: any) => {
 
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsMultipleSelection: true,
+            allowsEditing: true,
+            aspect: [4, 5],
             quality: 0.7,
-            selectionLimit: 5 - tripImages.length,
+            allowsMultipleSelection: false,
         });
 
-        if (!result.canceled) {
-            const newImages = result.assets.map((asset, i) => ({
-                id: `img-new-${Date.now()}-${i}`,
-                uri: asset.uri,
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+            const newImage = {
+                id: `img-new-${Date.now()}`,
+                uri: result.assets[0].uri,
                 location: ''
-            }));
-            setTripImages(prev => [...prev, ...newImages].slice(0, 5));
+            };
+            setTripImages(prev => [...prev, newImage].slice(0, 5));
         }
     };
 
@@ -416,7 +377,7 @@ const EditTripScreen = ({ navigation, route }: any) => {
     );
 
     return (
-        <View style={{ flex: 1 }}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
             <LinearGradient
                 colors={[colors.background, colors.card]}
                 style={StyleSheet.absoluteFill}
@@ -435,11 +396,10 @@ const EditTripScreen = ({ navigation, route }: any) => {
                             <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading trip details...</Text>
                         </View>
                     ) : (
-                        <ScrollView
+                        <NestableScrollContainer
                             contentContainerStyle={styles.content}
                             showsVerticalScrollIndicator={false}
                             keyboardShouldPersistTaps="handled"
-                            scrollEnabled={scrollEnabled}
                         >
                             <Animatable.View animation="fadeInUp" style={styles.formSection}>
 
@@ -458,82 +418,74 @@ const EditTripScreen = ({ navigation, route }: any) => {
 
                                 <View style={styles.sectionHeaderRow}>
                                     <Text style={[styles.label, { color: colors.text, marginTop: 0 }]}>Trip Images (Max 5)</Text>
-                                    {tripImages.length > 1 && (
-                                        <TouchableOpacity onPress={() => setReorderMode(!reorderMode)}>
-                                            <Text style={[styles.reorderToggle, { color: colors.primary }]}>
-                                                {reorderMode ? 'Done' : 'Long Press to Reorder'}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    )}
                                 </View>
-                                <View style={[styles.imagesContainer, reorderMode && styles.reorderContainerVertical]}>
-                                    {tripImages.map((img, index) => {
-                                        const panResponder = createPanResponder(index);
-                                        return (
-                                            <Animated.View
-                                                key={img.id}
-                                                style={[
-                                                    styles.imageWrapper,
-                                                    reorderMode ? styles.reorderItemVertical : styles.thumbnailWrapper,
-                                                    reorderMode && draggingIndex.current === index ? {
-                                                        transform: [{ translateY: panY }],
-                                                        zIndex: 10,
-                                                        elevation: 5,
-                                                        shadowColor: '#000',
-                                                        shadowOffset: { width: 0, height: 4 },
-                                                        shadowOpacity: 0.3,
-                                                        shadowRadius: 5,
-                                                    } : { zIndex: 1 }
-                                                ]}
-                                            >
-                                                <TouchableOpacity
-                                                    onLongPress={() => setReorderMode(true)}
-                                                    activeOpacity={0.7}
-                                                    style={reorderMode ? styles.reorderImageVertical : styles.thumbnailImageContainer}
-                                                >
-                                                    <Image source={{ uri: img.uri }} style={styles.tripImage} />
-                                                </TouchableOpacity>
 
-                                                {!reorderMode ? (
-                                                    <TouchableOpacity style={styles.removeImage} onPress={() => removeImage(img.id)}>
-                                                        <Ionicons name="close-circle" size={24} color="#EF4444" />
-                                                    </TouchableOpacity>
-                                                ) : (
-                                                    <View style={styles.verticalReorderControls}>
-                                                        <View style={styles.reorderInfo}>
-                                                            <Text style={[styles.reorderIndexText, { color: colors.text }]}>Image {index + 1}</Text>
+                                <NestableDraggableFlatList
+                                    data={tripImages}
+                                    onDragEnd={({ data }) => setTripImages(data)}
+                                    keyExtractor={(item) => item.id}
+                                    renderItem={({ item, drag, isActive }) => (
+                                        <GHTouchableOpacity
+                                            activeOpacity={0.9}
+                                            onLongPress={drag}
+                                            disabled={isActive}
+                                            delayLongPress={200}
+                                            style={[
+                                                styles.reorderItemVertical,
+                                                isActive && {
+                                                    elevation: 8,
+                                                    shadowColor: '#000',
+                                                    shadowOffset: { width: 0, height: 4 },
+                                                    shadowOpacity: 0.3,
+                                                    shadowRadius: 5,
+                                                    backgroundColor: colors.card,
+                                                    transform: [{ scale: 1.02 }]
+                                                }
+                                            ]}
+                                        >
+                                            <View style={[styles.reorderImageVertical, { overflow: 'hidden' }]}>
+                                                <Image source={{ uri: item.uri }} style={styles.tripImage} />
+                                            </View>
+
+                                            <View style={styles.verticalReorderControls}>
+                                                <View style={styles.reorderInfo}>
+                                                    <Text style={[styles.reorderIndexText, { color: colors.text }]} numberOfLines={1}>
+                                                        Long press to move
+                                                    </Text>
+                                                </View>
+                                                <View style={styles.reorderActionArea}>
+                                                    <View style={styles.dragHandleContainer}>
+                                                        <View style={styles.dragHandleColumn}>
+                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
                                                         </View>
-
-                                                        <View style={styles.reorderActionArea}>
-                                                            {/* 6-dot Drag Handle (2x3 grid) */}
-                                                            <View
-                                                                style={styles.dragHandleContainer}
-                                                                {...panResponder.panHandlers}
-                                                            >
-                                                                <View style={styles.dragHandleColumn}>
-                                                                    <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                                    <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                                    <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                                </View>
-                                                                <View style={styles.dragHandleColumn}>
-                                                                    <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                                    <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                                    <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                                </View>
-                                                            </View>
+                                                        <View style={styles.dragHandleColumn}>
+                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
                                                         </View>
                                                     </View>
-                                                )}
-                                            </Animated.View>
-                                        );
-                                    })}
-                                    {tripImages.length < 5 && !reorderMode && (
-                                        <TouchableOpacity style={[styles.addImageButton, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={pickImages}>
-                                            <Ionicons name="add" size={32} color={colors.primary} />
-                                            <Text style={[styles.addImageText, { color: colors.textSecondary }]}>Add</Text>
-                                        </TouchableOpacity>
+                                                    <TouchableOpacity
+                                                        style={[styles.removeImage, { position: 'relative', top: 0, right: 0, marginLeft: 10, elevation: 0, backgroundColor: 'transparent' }]}
+                                                        onPress={() => removeImage(item.id)}
+                                                    >
+                                                        <Ionicons name="close-circle" size={24} color="#EF4444" />
+                                                    </TouchableOpacity>
+                                                </View>
+                                            </View>
+                                        </GHTouchableOpacity>
                                     )}
-                                </View>
+                                />
+
+                                {tripImages.length < 5 && (
+                                    <TouchableOpacity style={[styles.addImageButton, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10, alignSelf: 'flex-start', width: 'auto', paddingHorizontal: 20, height: 40, borderStyle: 'dashed' }]} onPress={pickImages}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <Ionicons name="add" size={20} color={colors.primary} />
+                                            <Text style={[styles.addImageText, { color: colors.primary, marginTop: 0, marginLeft: 5 }]}>Add Images</Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                )}
 
                                 <View style={styles.divider} />
 
@@ -781,11 +733,11 @@ const EditTripScreen = ({ navigation, route }: any) => {
 
                             </Animatable.View>
                             <View style={{ height: 150 }} />
-                        </ScrollView>
+                        </NestableScrollContainer>
                     )}
                 </KeyboardAvoidingView>
             </SafeAreaView>
-        </View>
+        </GestureHandlerRootView>
     );
 };
 

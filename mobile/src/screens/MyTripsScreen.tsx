@@ -5,7 +5,8 @@ import * as Animatable from 'react-native-animatable';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, NEUTRAL } from '../styles';
+import { Ionicons } from '@expo/vector-icons';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, NEUTRAL, TOUCH_TARGET } from '../styles';
 import AppLogo from '../components/AppLogo';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -171,9 +172,18 @@ const MyTripsScreen = ({ navigation, route }) => {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {/* Header - No plus button */}
+        {/* Header */}
         <View style={[styles.header, { backgroundColor: colors.headerBackground }]}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="chevron-back" size={28} color={colors.text} />
+          </TouchableOpacity>
           <Text style={[styles.title, { color: colors.text }]}>My Trips</Text>
+          <View style={styles.placeholder} />
         </View>
 
         {/* Tabs - Upcoming, Ongoing, Completed, Cancelled */}
@@ -270,14 +280,26 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   container: { flex: 1 },
   header: {
-    paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.lg,
-    paddingTop: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
     marginBottom: SPACING.lg,
+    paddingTop: 25,
+  },
+  backButton: {
+    width: TOUCH_TARGET.min,
+    height: TOUCH_TARGET.min,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   title: {
-    fontSize: FONT_SIZE.xxl,
-    fontWeight: FONT_WEIGHT.bold,
+    fontSize: FONT_SIZE.lg,
+    fontWeight: FONT_WEIGHT.semibold,
+  },
+  placeholder: {
+    width: TOUCH_TARGET.min,
   },
   tabContainer: {
     flexDirection: 'row',

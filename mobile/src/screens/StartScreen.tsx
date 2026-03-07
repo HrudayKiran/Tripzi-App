@@ -10,6 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BRAND, NEUTRAL } from '../styles';
 import AppLogo from '../components/AppLogo';
+import TripziAnimatedLogo from '../components/TripziAnimatedLogo';
 
 const { width } = Dimensions.get('window');
 
@@ -147,7 +148,7 @@ const StartScreen = ({ navigation }) => {
             delay={300}
             style={styles.logoSection}
           >
-            <AppLogo size={140} showDot={true} showGlow={true} />
+            <TripziAnimatedLogo size={140} showGlow={true} />
             <View style={styles.textContainer}>
               <Text style={styles.appName}>Tripzi</Text>
               <Text style={styles.tagline}>CONNECT. PLAN. TRAVEL.</Text>

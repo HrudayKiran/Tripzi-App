@@ -14,11 +14,11 @@ const DESTINATIONS = [
     { name: 'Manali', image: 'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?w=600', tag: '🏔️ Mountains' },
     { name: 'Goa', image: 'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=600', tag: '🏖️ Beach' },
     { name: 'Jaipur', image: 'https://images.unsplash.com/photo-1477587458883-47145ed94245?w=600', tag: '🏰 Heritage' },
-    { name: 'Leh Ladakh', image: 'https://images.unsplash.com/photo-1623073284788-0d846f75e329?w=600', tag: '🏍️ Road Trip' },
+    { name: 'Leh Ladakh', image: 'https://images.unsplash.com/photo-1581793745862-99fde7fa73d2?w=600', tag: '🏍️ Road Trip' },
     { name: 'Kerala', image: 'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=600', tag: '🌴 Backwaters' },
     { name: 'Varanasi', image: 'https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=600', tag: '🛕 Spiritual' },
     { name: 'Rishikesh', image: 'https://images.unsplash.com/photo-1588083949404-c4f1ed1323b3?w=600', tag: '🧘 Adventure' },
-    { name: 'Udaipur', image: 'https://images.unsplash.com/photo-1602301346610-ee4fd5a3e3f0?w=600', tag: '🏛️ Lakes' },
+    { name: 'Udaipur', image: 'https://images.unsplash.com/photo-1599661046289-e31897846e41?w=600', tag: '🏛️ Fort' },
 ];
 
 const SEASONAL_SUGGESTIONS = [

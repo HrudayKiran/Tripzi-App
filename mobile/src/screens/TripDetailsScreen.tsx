@@ -39,6 +39,21 @@ const TripDetailsScreen = ({ route, navigation }) => {
   const [deleting, setDeleting] = useState(false);
   const [participantsData, setParticipantsData] = useState<any[]>([]);
   const [showMenu, setShowMenu] = useState(false);
+  const [mediaAspectRatio, setMediaAspectRatio] = useState(4 / 5);
+
+  useEffect(() => {
+    const firstMedia = trip?.images?.[0] || trip?.coverImage;
+    if (firstMedia && typeof firstMedia === 'string' && firstMedia.startsWith('http')) {
+      Image.getSize(firstMedia, (width, height) => {
+        if (width && height) {
+          const ratio = width / height;
+          setMediaAspectRatio(Math.min(Math.max(ratio, 0.8), 1.91));
+        }
+      }, () => {
+        setMediaAspectRatio(4 / 5);
+      });
+    }
+  }, [trip?.images, trip?.coverImage]);
 
   const scrollY = useRef(new Animated.Value(0)).current;
   const isOwner = trip?.userId === user?.uid;
@@ -568,61 +583,69 @@ const TripDetailsScreen = ({ route, navigation }) => {
         scrollEventThrottle={16}
       >
 
-        {/* ... (Image Carousel - unchanged) ... */}
-        <View style={styles.imageCarousel}>
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            scrollEventThrottle={16}
-            decelerationRate="fast"
-            onMomentumScrollEnd={(e) => {
-              const index = Math.round(e.nativeEvent.contentOffset.x / width);
-              setActiveImageIndex(index);
-            }}
-          >
-            {images.map((item, index) => (
-              <View key={`img_container_${index}`} style={styles.imageWrapper}>
-                <Image
-                  key={`img_${index}`}
-                  source={{ uri: item }}
-                  style={styles.carouselImage}
-                  resizeMode="cover"
-                />
-                {imageLocations[index] && (
-                  <View style={styles.imageOverlay}>
-                    <View style={styles.overlayLocationRow}>
-                      <Ionicons name="location" size={16} color="#fff" />
-                      <Text style={styles.overlayLocation}>{imageLocations[index]}</Text>
+        {/* Trip Images Carousel (matching TripCard) */}
+        <View>
+          <View style={[styles.imageContainer, { aspectRatio: mediaAspectRatio }]}>
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              scrollEventThrottle={16}
+              decelerationRate="fast"
+              style={StyleSheet.absoluteFill}
+              contentContainerStyle={{ width: width * images.length }}
+              onMomentumScrollEnd={(e) => {
+                const index = Math.round(e.nativeEvent.contentOffset.x / width);
+                setActiveImageIndex(index);
+              }}
+            >
+              {images.map((item, index) => (
+                <View key={`img_container_${index}`} style={{ position: 'relative' }}>
+                  <Image
+                    key={`img_${index}`}
+                    source={{ uri: item }}
+                    style={[styles.tripImage, { aspectRatio: mediaAspectRatio }]}
+                    resizeMode="contain"
+                  />
+                  {(imageLocations[index] || trip?.toLocation || trip?.location) ? (
+                    <View style={styles.imageOverlay}>
+                      <View style={styles.overlayLocationRow}>
+                        <Ionicons name="location" size={14} color="#fff" />
+                        <Text style={styles.overlayLocation}>{imageLocations[index] || trip?.toLocation || trip?.location}</Text>
+                      </View>
                     </View>
-                  </View>
-                )}
+                  ) : null}
+                </View>
+              ))}
+            </ScrollView>
+
+            {images.length > 1 && (
+              <View style={styles.imageCountBadge}>
+                <Text style={styles.imageCountText}>{activeImageIndex + 1}/{images.length}</Text>
               </View>
-            ))}
-          </ScrollView>
-          {/* ... (Dots and Count - unchanged) ... */}
-          {images.length > 1 && (
+            )}
+          </View>
+        </View>
+
+        {/* Media Footer: Dots Outside Images */}
+        {images.length > 1 && (
+          <View style={styles.mediaFooter}>
             <View style={styles.imageDotsContainer}>
               {images.map((_, index) => (
                 <View
                   key={index}
                   style={[
                     styles.imageDot,
-                    { backgroundColor: index === activeImageIndex ? '#fff' : 'rgba(255,255,255,0.5)' }
+                    { backgroundColor: index === activeImageIndex ? colors.primary : colors.border }
                   ]}
                 />
               ))}
             </View>
-          )}
-          {images.length > 1 && (
-            <View style={styles.imageCountBadge}>
-              <Text style={styles.imageCountText}>{activeImageIndex + 1}/{images.length}</Text>
-            </View>
-          )}
-        </View>
+          </View>
+        )}
 
         {/* Content */}
-        <View style={[styles.contentContainer, { backgroundColor: colors.background }]}>
+        <View style={[styles.contentContainer, { backgroundColor: colors.background, borderRadius: 0 }]}>
           {/* Title removed - moved to header */}
           <Animatable.View animation="fadeInUp" delay={100}>
 
@@ -906,7 +929,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
           {/* Spacer for scroll */}
           <View style={{ height: 40 }} />
         </View>
-      </ScrollView >
+      </ScrollView>
 
       {/* Footer Removed (Message button moved to creator row) */}
 
@@ -935,20 +958,21 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   centeredContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   headerInScroll: { marginBottom: SPACING.sm },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingBottom: SPACING.sm, paddingTop: 2 },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, paddingHorizontal: SPACING.sm },
   headerButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
   headerJoinButton: { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 22, borderWidth: 1.5 },
   headerJoinText: { fontSize: 14, fontWeight: '700' },
   headerCompletedBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#D1FAE5', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, gap: 4 },
   headerCompletedText: { color: '#10B981', fontSize: 12, fontWeight: '700' },
-  imageCarousel: { aspectRatio: 4 / 5, overflow: 'hidden' },
-  carouselImage: { width: width, aspectRatio: 4 / 5 },
-  imageDotsContainer: { position: 'absolute', bottom: 20, alignSelf: 'center', flexDirection: 'row', gap: SPACING.xs },
-  imageDot: { width: 8, height: 8, borderRadius: 4 },
-  imageCountBadge: { position: 'absolute', top: SPACING.md, right: SPACING.md, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.sm },
+  imageContainer: { position: 'relative' },
+  tripImage: { width: width },
+  mediaFooter: { position: 'relative', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACING.md, paddingTop: 4, paddingBottom: SPACING.sm, minHeight: 24 },
+  imageDotsContainer: { flexDirection: 'row', gap: SPACING.xs, alignItems: 'center' },
+  imageDot: { width: 6, height: 6, borderRadius: 3 },
+  imageCountBadge: { position: 'absolute', top: SPACING.md, left: SPACING.md, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.sm },
   imageCountText: { color: '#fff', fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.semibold },
-  contentContainer: { borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, marginTop: -20, padding: SPACING.xl },
+  contentContainer: { marginTop: 0, paddingHorizontal: SPACING.xl, paddingBottom: SPACING.xl },
   title: { fontSize: 28, fontWeight: FONT_WEIGHT.bold, marginBottom: SPACING.md },
   creatorRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACING.lg },
   creatorInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
@@ -1023,14 +1047,15 @@ const styles = StyleSheet.create({
   reviewText: { fontSize: FONT_SIZE.sm, lineHeight: 20 },
   // Image Overlay Styles
 
-  // Image Overlay Styles
   imageWrapper: { position: 'relative' },
   imageOverlay: {
     position: 'absolute',
     bottom: SPACING.md,
-    left: SPACING.lg,
-    // Removed gradient/background as requested
-    // backgroundColor: 'transparent',
+    left: SPACING.md,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: 3,
+    borderRadius: BORDER_RADIUS.md,
   },
   overlayTitle: {
     color: '#fff',
@@ -1044,15 +1069,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 4
   },
   overlayLocation: {
     color: '#fff',
-    fontSize: FONT_SIZE.md,
-    fontWeight: FONT_WEIGHT.bold,
-    textShadowColor: 'rgba(0,0,0,0.9)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 4,
+    fontSize: FONT_SIZE.xs,
+    fontWeight: FONT_WEIGHT.semibold,
   },
   modalOverlay: {
     flex: 1,
@@ -1060,7 +1081,7 @@ const styles = StyleSheet.create({
   },
   dropdownMenu: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 140 : 100, // Increased gap from top
+    top: Platform.OS === 'ios' ? 70 : 60, // Fixed gap above three dots
     right: 20,
     width: 220,
     padding: SPACING.sm,
