@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Image, Platform, Modal, ActivityIndicator, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Image, Platform, Modal, ActivityIndicator, KeyboardAvoidingView, Vibration } from 'react-native';
+import { GestureHandlerRootView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
+import { ScaleDecorator, NestableScrollContainer, NestableDraggableFlatList } from 'react-native-draggable-flatlist';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
@@ -65,9 +67,14 @@ const CreateTripScreen = ({ navigation, route }: any) => {
 
     // Step 1: Basic Info
     const [title, setTitle] = useState(initialData?.title || '');
-    // Initialize images from AI data if available (passed as 'images' array of URLs)
-    const [images, setImages] = useState<string[]>(initialData?.images || []);
-    const [imageLocations, setImageLocations] = useState<string[]>([]); // To store specific place names
+    // Unified Image & Location state with stable IDs (from EditTripScreen)
+    const [tripImages, setTripImages] = useState<{ id: string, uri: string, location: string }[]>(
+        initialData?.images?.map((uri: string, i: number) => ({
+            id: `img-${Date.now()}-${i}`,
+            uri,
+            location: initialData?.imageLocations?.[i] || ''
+        })) || []
+    );
 
     // ... (existing code) ...
 
@@ -110,23 +117,25 @@ const CreateTripScreen = ({ navigation, route }: any) => {
             Alert.alert('Permission needed', 'Please grant camera roll permissions.');
             return;
         }
-
         const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: ['images'],
             allowsMultipleSelection: true,
-            quality: 0.7,
-            selectionLimit: 5,
+            selectionLimit: 5 - tripImages.length,
+            quality: 0.8,
         });
 
-        if (!result.canceled) {
-            const newImages = result.assets.map(asset => asset.uri);
-            setImages(prev => [...prev, ...newImages].slice(0, 5));
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+            const newImages = result.assets.map((asset, i) => ({
+                id: `img-new-${Date.now()}-${i}`,
+                uri: asset.uri,
+                location: ''
+            }));
+            setTripImages(prev => [...prev, ...newImages].slice(0, 5));
         }
     };
 
-    const removeImage = (index: number) => {
-        setImages(prev => prev.filter((_, i) => i !== index));
-        setImageLocations(prev => prev.filter((_, i) => i !== index));
+    const removeImage = (imgId: string) => {
+        setTripImages(prev => prev.filter(img => img.id !== imgId));
     };
 
     const toggleSelection = (id: string, list: string[], setList: (val: string[]) => void) => {
@@ -226,14 +235,15 @@ const CreateTripScreen = ({ navigation, route }: any) => {
             const currentUserData = currentUserDoc.data() || {};
 
             // Upload images to Firebase Storage first
-            let uploadedImageUrls: string[] = [];
-            if (images.length > 0) {
-                for (let i = 0; i < images.length; i++) {
-                    const imageUri = images[i];
+            let uploadedImageData: { uri: string, location: string }[] = [];
+            if (tripImages.length > 0) {
+                for (let i = 0; i < tripImages.length; i++) {
+                    const img = tripImages[i];
+                    const imageUri = img.uri;
 
                     // Check if it's already a remote URL (e.g. from AI)
                     if (imageUri.startsWith('http') || imageUri.startsWith('https')) {
-                        uploadedImageUrls.push(imageUri);
+                        uploadedImageData.push({ uri: imageUri, location: img.location });
                         continue;
                     }
 
@@ -243,22 +253,25 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                     try {
                         await reference.putFile(imageUri, { contentType: 'image/jpeg' });
                         const downloadUrl = await reference.getDownloadURL();
-                        uploadedImageUrls.push(downloadUrl);
+                        uploadedImageData.push({ uri: downloadUrl, location: img.location });
                     } catch (uploadError) {
-
+                        console.error('Image upload failed', uploadError);
                     }
                 }
             }
 
-            // Use uploaded URLs or fallback image
-            const finalImages = uploadedImageUrls.length > 0
-                ? uploadedImageUrls
-                : ['https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800'];
+            const finalImages = uploadedImageData.map(d => d.uri);
+            const finalLocations = uploadedImageData.map(d => d.location);
+
+            if (finalImages.length === 0) {
+                finalImages.push('https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800');
+                finalLocations.push('');
+            }
 
             const tripData = {
                 title,
                 images: finalImages,
-                imageLocations: imageLocations.slice(0, finalImages.length), // Save specific place names
+                imageLocations: finalLocations, // Save specific place names
                 fromLocation,
                 toLocation,
                 mapsLink: generateMapsLink(toLocation),
@@ -347,363 +360,406 @@ const CreateTripScreen = ({ navigation, route }: any) => {
     const renderEmpty = () => null;
 
     return (
-        <View style={{ flex: 1 }}>
-            <LinearGradient
-                colors={[colors.background, colors.card]}
-                style={StyleSheet.absoluteFill}
-            />
-            <SafeAreaView style={styles.container}>
-                <KeyboardAvoidingView
-                    style={styles.keyboardContainer}
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                    keyboardVerticalOffset={Platform.OS === 'ios' ? 18 : 0}
-                >
-                    {renderHeader()}
-
-                    <ScrollView
-                        contentContainerStyle={styles.content}
-                        showsVerticalScrollIndicator={false}
-                        keyboardShouldPersistTaps="handled"
-                        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        <GestureHandlerRootView style={{ flex: 1 }}>
+            <View style={{ flex: 1 }}>
+                <LinearGradient
+                    colors={[colors.background, colors.card]}
+                    style={StyleSheet.absoluteFill}
+                />
+                <SafeAreaView style={styles.container}>
+                    <KeyboardAvoidingView
+                        style={styles.keyboardContainer}
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                        keyboardVerticalOffset={Platform.OS === 'ios' ? 18 : 0}
                     >
-                        {/* Step 1: Basic Info */}
-                        {step === 1 && (
-                            <Animatable.View animation="fadeInRight" style={styles.stepContent}>
-                                <Text style={[styles.stepTitle, { color: colors.text }]}>Let's Start! 🚀</Text>
-                                <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Give your trip an exciting title</Text>
+                        {renderHeader()}
 
-                                <Text style={[styles.label, { color: colors.text }]}>Trip Title <Text style={styles.required}>*</Text></Text>
-                                <TextInput
-                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.title ? '#EF4444' : colors.border }]}
-                                    placeholder="e.g., Mystical Ladakh Adventure"
-                                    placeholderTextColor={colors.textSecondary}
-                                    value={title}
-                                    onChangeText={setTitle}
-                                />
-                                {errors.title && <Text style={styles.errorText}>{errors.title}</Text>}
+                        <NestableScrollContainer
+                            contentContainerStyle={styles.content}
+                            showsVerticalScrollIndicator={false}
+                            keyboardShouldPersistTaps="handled"
+                            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                        >
+                            {/* Step 1: Basic Info */}
+                            {step === 1 && (
+                                <Animatable.View animation="fadeInRight" style={styles.stepContent}>
+                                    <Text style={[styles.stepTitle, { color: colors.text }]}>Let's Start! 🚀</Text>
+                                    <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Give your trip an exciting title</Text>
 
-                                <Text style={[styles.label, { color: colors.text }]}>Trip Images (Optional - Max 5)</Text>
-                                <View style={styles.imagesContainer}>
-                                    {images.map((uri, index) => (
-                                        <View key={index} style={styles.imageWrapper}>
-                                            <Image source={{ uri }} style={styles.tripImage} />
-                                            <TouchableOpacity style={styles.removeImage} onPress={() => removeImage(index)}>
-                                                <Ionicons name="close-circle" size={24} color="#EF4444" />
-                                            </TouchableOpacity>
-                                        </View>
-                                    ))}
-                                    {images.length < 5 && (
-                                        <TouchableOpacity style={[styles.addImageButton, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={pickImages}>
-                                            <Ionicons name="add" size={32} color={colors.primary} />
-                                            <Text style={[styles.addImageText, { color: colors.textSecondary }]}>Add</Text>
+                                    <Text style={[styles.label, { color: colors.text }]}>Trip Title <Text style={styles.required}>*</Text></Text>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.title ? '#EF4444' : colors.border }]}
+                                        placeholder="e.g., Mystical Ladakh Adventure"
+                                        placeholderTextColor={colors.textSecondary}
+                                        value={title}
+                                        onChangeText={setTitle}
+                                    />
+                                    {errors.title && <Text style={styles.errorText}>{errors.title}</Text>}
+
+                                    <Text style={[styles.label, { color: colors.text }]}>Trip Images (Optional - Max 5)</Text>
+                                    <NestableDraggableFlatList
+                                        data={tripImages}
+                                        onDragEnd={({ data }) => setTripImages(data)}
+                                        keyExtractor={(item) => item.id}
+                                        renderItem={({ item, drag, isActive }) => (
+                                            <GHTouchableOpacity
+                                                activeOpacity={0.9}
+                                                onLongPress={drag}
+                                                disabled={isActive}
+                                                delayLongPress={200}
+                                                style={[
+                                                    styles.reorderItemVertical,
+                                                    isActive && {
+                                                        elevation: 8,
+                                                        shadowColor: '#000',
+                                                        shadowOffset: { width: 0, height: 4 },
+                                                        shadowOpacity: 0.3,
+                                                        shadowRadius: 5,
+                                                        backgroundColor: colors.card,
+                                                        transform: [{ scale: 1.02 }]
+                                                    }
+                                                ]}
+                                            >
+                                                <View style={[styles.reorderImageVertical, { overflow: 'hidden' }]}>
+                                                    <Image source={{ uri: item.uri }} style={styles.tripImage} />
+                                                </View>
+
+                                                <View style={styles.verticalReorderControls}>
+                                                    <View style={styles.reorderInfo}>
+                                                        <Text style={[styles.reorderIndexText, { color: colors.text }]} numberOfLines={1}>
+                                                            Long press to move
+                                                        </Text>
+                                                    </View>
+                                                    <View style={styles.reorderActionArea}>
+                                                        <View style={styles.dragHandleContainer}>
+                                                            <View style={styles.dragHandleColumn}>
+                                                                <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                                <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                                <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                            </View>
+                                                            <View style={styles.dragHandleColumn}>
+                                                                <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                                <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                                <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                            </View>
+                                                        </View>
+                                                        <TouchableOpacity
+                                                            style={[styles.removeImage, { position: 'relative', top: 0, right: 0, marginLeft: 10, elevation: 0, backgroundColor: 'transparent' }]}
+                                                            onPress={() => removeImage(item.id)}
+                                                        >
+                                                            <Ionicons name="close-circle" size={24} color="#EF4444" />
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                </View>
+                                            </GHTouchableOpacity>
+                                        )}
+                                    />
+
+                                    {tripImages.length < 5 && (
+                                        <TouchableOpacity style={[styles.addImageButton, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10, alignSelf: 'flex-start', width: 'auto', paddingHorizontal: 20, height: 40, borderStyle: 'dashed' }]} onPress={pickImages}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                <Ionicons name="add" size={20} color={colors.primary} />
+                                                <Text style={[styles.addImageText, { color: colors.primary, marginTop: 0, marginLeft: 5 }]}>Add Images</Text>
+                                            </View>
                                         </TouchableOpacity>
                                     )}
-                                </View>
 
 
 
 
-                            </Animatable.View>
-                        )}
+                                </Animatable.View>
+                            )}
 
-                        {/* Step 2: Location & Dates */}
-                        {step === 2 && (
-                            <Animatable.View animation="fadeInRight" style={styles.stepContent}>
-                                <Text style={[styles.stepTitle, { color: colors.text }]}>Where & When? 📍</Text>
-                                <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Set your journey details</Text>
+                            {/* Step 2: Location & Dates */}
+                            {step === 2 && (
+                                <Animatable.View animation="fadeInRight" style={styles.stepContent}>
+                                    <Text style={[styles.stepTitle, { color: colors.text }]}>Where & When? 📍</Text>
+                                    <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Set your journey details</Text>
 
-                                <Text style={[styles.label, { color: colors.text }]}>Starting From <Text style={styles.required}>*</Text></Text>
-                                <TextInput
-                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.fromLocation ? '#EF4444' : colors.border }]}
-                                    placeholder="e.g., Bangalore, Karnataka"
-                                    placeholderTextColor={colors.textSecondary}
-                                    value={fromLocation}
-                                    onChangeText={setFromLocation}
-                                />
-                                {errors.fromLocation && <Text style={styles.errorText}>{errors.fromLocation}</Text>}
+                                    <Text style={[styles.label, { color: colors.text }]}>Starting From <Text style={styles.required}>*</Text></Text>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.fromLocation ? '#EF4444' : colors.border }]}
+                                        placeholder="e.g., Bangalore, Karnataka"
+                                        placeholderTextColor={colors.textSecondary}
+                                        value={fromLocation}
+                                        onChangeText={setFromLocation}
+                                    />
+                                    {errors.fromLocation && <Text style={styles.errorText}>{errors.fromLocation}</Text>}
 
-                                <Text style={[styles.label, { color: colors.text }]}>Destination <Text style={styles.required}>*</Text></Text>
-                                <TextInput
-                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.toLocation ? '#EF4444' : colors.border }]}
-                                    placeholder="e.g., Leh, Ladakh"
-                                    placeholderTextColor={colors.textSecondary}
-                                    value={toLocation}
-                                    onChangeText={(text) => {
-                                        setToLocation(text);
-                                        setMapsLink(generateMapsLink(text));
-                                    }}
-                                />
-                                {errors.toLocation && <Text style={styles.errorText}>{errors.toLocation}</Text>}
-                                {toLocation.length > 3 && (
-                                    <Text style={[styles.mapsLink, { color: colors.primary }]}>📍 Maps link will be auto-generated</Text>
-                                )}
+                                    <Text style={[styles.label, { color: colors.text }]}>Destination <Text style={styles.required}>*</Text></Text>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.toLocation ? '#EF4444' : colors.border }]}
+                                        placeholder="e.g., Leh, Ladakh"
+                                        placeholderTextColor={colors.textSecondary}
+                                        value={toLocation}
+                                        onChangeText={(text) => {
+                                            setToLocation(text);
+                                            setMapsLink(generateMapsLink(text));
+                                        }}
+                                    />
+                                    {errors.toLocation && <Text style={styles.errorText}>{errors.toLocation}</Text>}
+                                    {toLocation.length > 3 && (
+                                        <Text style={[styles.mapsLink, { color: colors.primary }]}>📍 Maps link will be auto-generated</Text>
+                                    )}
 
-                                <View style={styles.dateRow}>
-                                    <View style={styles.dateField}>
-                                        <Text style={[styles.label, { color: colors.text }]}>From Date <Text style={styles.required}>*</Text></Text>
-                                        <TouchableOpacity
-                                            style={[styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
-                                            onPress={() => setShowDateModal('from')}
-                                        >
-                                            <Ionicons name="calendar" size={20} color={colors.primary} />
-                                            <Text style={[styles.dateText, { color: colors.text }]}>{formatDate(fromDate)}</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                    <View style={styles.dateField}>
-                                        <Text style={[styles.label, { color: colors.text }]}>To Date <Text style={styles.required}>*</Text></Text>
-                                        <TouchableOpacity
-                                            style={[styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
-                                            onPress={() => setShowDateModal('to')}
-                                        >
-                                            <Ionicons name="calendar" size={20} color={colors.primary} />
-                                            <Text style={[styles.dateText, { color: colors.text }]}>{formatDate(toDate)}</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                                <Text style={[styles.durationText, { color: colors.primary }]}>Duration: {getDuration()}</Text>
-                            </Animatable.View>
-                        )}
-
-                        {/* DateTimePicker Support */}
-                        {showDateModal === 'from' && (
-                            <DateTimePicker
-                                value={fromDate}
-                                mode="date"
-                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                minimumDate={new Date()}
-                                onChange={handleFromDateChange}
-                            />
-                        )}
-                        {showDateModal === 'to' && (
-                            <DateTimePicker
-                                value={toDate}
-                                mode="date"
-                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                minimumDate={fromDate}
-                                onChange={handleToDateChange}
-                            />
-                        )}
-                        {/* iOS close button for inline picker */}
-                        {Platform.OS === 'ios' && showDateModal !== null && (
-                            <View style={{ alignItems: 'flex-end', paddingRight: SPACING.md, marginTop: -SPACING.sm, marginBottom: SPACING.sm }}>
-                                <TouchableOpacity onPress={() => setShowDateModal(null)}>
-                                    <Text style={{ color: colors.primary, fontWeight: 'bold' }}>Done</Text>
-                                </TouchableOpacity>
-                            </View>
-                        )}
-
-                        {/* Step 3: Trip Details */}
-                        {step === 3 && (
-                            <Animatable.View animation="fadeInRight" style={styles.stepContent}>
-                                <Text style={[styles.stepTitle, { color: colors.text }]}>Trip Style 🎯</Text>
-                                <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>What kind of adventure is this?</Text>
-
-                                <Text style={[styles.label, { color: colors.text }]}>Trip Type <Text style={styles.required}>*</Text></Text>
-                                <View style={styles.chipGrid}>
-                                    {TRIP_TYPES.map((type) => (
-                                        <TouchableOpacity
-                                            key={type.id}
-                                            style={[styles.chip, { backgroundColor: tripTypes.includes(type.id) ? type.color : colors.card, borderColor: type.color }]}
-                                            onPress={() => toggleSelection(type.id, tripTypes, setTripTypes)}
-                                        >
-                                            <Ionicons name={type.icon as any} size={18} color={tripTypes.includes(type.id) ? '#fff' : type.color} />
-                                            <Text style={[styles.chipText, { color: tripTypes.includes(type.id) ? '#fff' : colors.text }]}>{type.label}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                                {errors.tripTypes && <Text style={styles.errorText}>{errors.tripTypes}</Text>}
-
-                                <Text style={[styles.label, { color: colors.text }]}>Transport Mode <Text style={styles.required}>*</Text></Text>
-                                <View style={styles.chipGrid}>
-                                    {TRANSPORT_MODES.map((mode) => (
-                                        <TouchableOpacity
-                                            key={mode.id}
-                                            style={[styles.chip, { backgroundColor: transportModes.includes(mode.id) ? colors.primary : colors.card, borderColor: colors.primary }]}
-                                            onPress={() => toggleSelection(mode.id, transportModes, setTransportModes)}
-                                        >
-                                            <Ionicons name={mode.icon as any} size={18} color={transportModes.includes(mode.id) ? '#fff' : colors.primary} />
-                                            <Text style={[styles.chipText, { color: transportModes.includes(mode.id) ? '#fff' : colors.text }]}>{mode.label}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                                {errors.transportModes && <Text style={styles.errorText}>{errors.transportModes}</Text>}
-
-                                <Text style={[styles.label, { color: colors.text }]}>Cost Per Person (₹) <Text style={styles.required}>*</Text></Text>
-                                <TextInput
-                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.costPerPerson ? '#EF4444' : colors.border }]}
-                                    placeholder="e.g., 5000"
-                                    placeholderTextColor={colors.textSecondary}
-                                    value={costPerPerson}
-                                    onChangeText={setCostPerPerson}
-                                    keyboardType="numeric"
-                                />
-                                {errors.costPerPerson && <Text style={styles.errorText}>{errors.costPerPerson}</Text>}
-                            </Animatable.View>
-                        )}
-
-                        {/* Step 4: Accommodation & Group */}
-                        {step === 4 && (
-                            <Animatable.View animation="fadeInRight" style={styles.stepContent}>
-                                <Text style={[styles.stepTitle, { color: colors.text }]}>Stay & Group 🏕️</Text>
-                                <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Where will you stay and who can join?</Text>
-
-                                <Text style={[styles.label, { color: colors.text }]}>Accommodation Type <Text style={styles.required}>*</Text></Text>
-                                <View style={styles.chipGrid}>
-                                    {ACCOMMODATION_TYPES.map((type) => (
-                                        <TouchableOpacity
-                                            key={type.id}
-                                            style={[styles.chip, { backgroundColor: accommodationType === type.id ? '#10B981' : colors.card, borderColor: '#10B981' }]}
-                                            onPress={() => setAccommodationType(type.id)}
-                                        >
-                                            <Ionicons name={type.icon as any} size={18} color={accommodationType === type.id ? '#fff' : '#10B981'} />
-                                            <Text style={[styles.chipText, { color: accommodationType === type.id ? '#fff' : colors.text }]}>{type.label}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                                {errors.accommodationType && <Text style={styles.errorText}>{errors.accommodationType}</Text>}
-
-                                {accommodationType && accommodationType !== 'none' && (
-                                    <>
-                                        <Text style={[styles.label, { color: colors.text }]}>Booking Status</Text>
-                                        <View style={styles.radioGroup}>
-                                            {BOOKING_STATUS.map((status) => (
-                                                <TouchableOpacity
-                                                    key={status.id}
-                                                    style={styles.radioItem}
-                                                    onPress={() => setBookingStatus(status.id)}
-                                                >
-                                                    <View style={[styles.radio, { borderColor: colors.primary }]}>
-                                                        {bookingStatus === status.id && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
-                                                    </View>
-                                                    <Text style={[styles.radioText, { color: colors.text }]}>{status.label}</Text>
-                                                </TouchableOpacity>
-                                            ))}
+                                    <View style={styles.dateRow}>
+                                        <View style={styles.dateField}>
+                                            <Text style={[styles.label, { color: colors.text }]}>From Date <Text style={styles.required}>*</Text></Text>
+                                            <TouchableOpacity
+                                                style={[styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
+                                                onPress={() => setShowDateModal('from')}
+                                            >
+                                                <Ionicons name="calendar" size={20} color={colors.primary} />
+                                                <Text style={[styles.dateText, { color: colors.text }]}>{formatDate(fromDate)}</Text>
+                                            </TouchableOpacity>
                                         </View>
+                                        <View style={styles.dateField}>
+                                            <Text style={[styles.label, { color: colors.text }]}>To Date <Text style={styles.required}>*</Text></Text>
+                                            <TouchableOpacity
+                                                style={[styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
+                                                onPress={() => setShowDateModal('to')}
+                                            >
+                                                <Ionicons name="calendar" size={20} color={colors.primary} />
+                                                <Text style={[styles.dateText, { color: colors.text }]}>{formatDate(toDate)}</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                    <Text style={[styles.durationText, { color: colors.primary }]}>Duration: {getDuration()}</Text>
+                                </Animatable.View>
+                            )}
 
-                                        <Text style={[styles.label, { color: colors.text }]}>Accommodation Days</Text>
-                                        <TextInput
-                                            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                                            placeholder="e.g., 3"
-                                            placeholderTextColor={colors.textSecondary}
-                                            value={accommodationDays}
-                                            onChangeText={setAccommodationDays}
-                                            keyboardType="numeric"
-                                        />
-                                    </>
-                                )}
-
-                                <Text style={[styles.label, { color: colors.text }]}>Max Travelers <Text style={styles.required}>*</Text></Text>
-                                <TextInput
-                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.maxTravelers ? '#EF4444' : colors.border }]}
-                                    placeholder="e.g., 5"
-                                    placeholderTextColor={colors.textSecondary}
-                                    value={maxTravelers}
-                                    onChangeText={setMaxTravelers}
-                                    keyboardType="numeric"
+                            {/* DateTimePicker Support */}
+                            {showDateModal === 'from' && (
+                                <DateTimePicker
+                                    value={fromDate}
+                                    mode="date"
+                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                    minimumDate={new Date()}
+                                    onChange={handleFromDateChange}
                                 />
-                                {errors.maxTravelers && <Text style={styles.errorText}>{errors.maxTravelers}</Text>}
-
-                                <Text style={[styles.label, { color: colors.text }]}>Who Can Join? <Text style={styles.required}>*</Text></Text>
-                                <View style={styles.chipGrid}>
-                                    {GENDER_PREFERENCES.map((pref) => (
-                                        <TouchableOpacity
-                                            key={pref.id}
-                                            style={[styles.chip, { backgroundColor: genderPreference === pref.id ? '#9d74f7' : colors.card, borderColor: '#9d74f7' }]}
-                                            onPress={() => setGenderPreference(pref.id)}
-                                        >
-                                            <Ionicons name={pref.icon as any} size={18} color={genderPreference === pref.id ? '#fff' : '#9d74f7'} />
-                                            <Text style={[styles.chipText, { color: genderPreference === pref.id ? '#fff' : colors.text }]}>{pref.label}</Text>
-                                        </TouchableOpacity>
-                                    ))}
+                            )}
+                            {showDateModal === 'to' && (
+                                <DateTimePicker
+                                    value={toDate}
+                                    mode="date"
+                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                    minimumDate={fromDate}
+                                    onChange={handleToDateChange}
+                                />
+                            )}
+                            {/* iOS close button for inline picker */}
+                            {Platform.OS === 'ios' && showDateModal !== null && (
+                                <View style={{ alignItems: 'flex-end', paddingRight: SPACING.md, marginTop: -SPACING.sm, marginBottom: SPACING.sm }}>
+                                    <TouchableOpacity onPress={() => setShowDateModal(null)}>
+                                        <Text style={{ color: colors.primary, fontWeight: 'bold' }}>Done</Text>
+                                    </TouchableOpacity>
                                 </View>
+                            )}
+
+                            {/* Step 3: Trip Details */}
+                            {step === 3 && (
+                                <Animatable.View animation="fadeInRight" style={styles.stepContent}>
+                                    <Text style={[styles.stepTitle, { color: colors.text }]}>Trip Style 🎯</Text>
+                                    <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>What kind of adventure is this?</Text>
+
+                                    <Text style={[styles.label, { color: colors.text }]}>Trip Type <Text style={styles.required}>*</Text></Text>
+                                    <View style={styles.chipGrid}>
+                                        {TRIP_TYPES.map((type) => (
+                                            <TouchableOpacity
+                                                key={type.id}
+                                                style={[styles.chip, { backgroundColor: tripTypes.includes(type.id) ? type.color : colors.card, borderColor: type.color }]}
+                                                onPress={() => toggleSelection(type.id, tripTypes, setTripTypes)}
+                                            >
+                                                <Ionicons name={type.icon as any} size={18} color={tripTypes.includes(type.id) ? '#fff' : type.color} />
+                                                <Text style={[styles.chipText, { color: tripTypes.includes(type.id) ? '#fff' : colors.text }]}>{type.label}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                    {errors.tripTypes && <Text style={styles.errorText}>{errors.tripTypes}</Text>}
+
+                                    <Text style={[styles.label, { color: colors.text }]}>Transport Mode <Text style={styles.required}>*</Text></Text>
+                                    <View style={styles.chipGrid}>
+                                        {TRANSPORT_MODES.map((mode) => (
+                                            <TouchableOpacity
+                                                key={mode.id}
+                                                style={[styles.chip, { backgroundColor: transportModes.includes(mode.id) ? colors.primary : colors.card, borderColor: colors.primary }]}
+                                                onPress={() => toggleSelection(mode.id, transportModes, setTransportModes)}
+                                            >
+                                                <Ionicons name={mode.icon as any} size={18} color={transportModes.includes(mode.id) ? '#fff' : colors.primary} />
+                                                <Text style={[styles.chipText, { color: transportModes.includes(mode.id) ? '#fff' : colors.text }]}>{mode.label}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                    {errors.transportModes && <Text style={styles.errorText}>{errors.transportModes}</Text>}
+
+                                    <Text style={[styles.label, { color: colors.text }]}>Cost Per Person (₹) <Text style={styles.required}>*</Text></Text>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.costPerPerson ? '#EF4444' : colors.border }]}
+                                        placeholder="e.g., 5000"
+                                        placeholderTextColor={colors.textSecondary}
+                                        value={costPerPerson}
+                                        onChangeText={setCostPerPerson}
+                                        keyboardType="numeric"
+                                    />
+                                    {errors.costPerPerson && <Text style={styles.errorText}>{errors.costPerPerson}</Text>}
+                                </Animatable.View>
+                            )}
+
+                            {/* Step 4: Accommodation & Group */}
+                            {step === 4 && (
+                                <Animatable.View animation="fadeInRight" style={styles.stepContent}>
+                                    <Text style={[styles.stepTitle, { color: colors.text }]}>Stay & Group 🏕️</Text>
+                                    <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Where will you stay and who can join?</Text>
+
+                                    <Text style={[styles.label, { color: colors.text }]}>Accommodation Type <Text style={styles.required}>*</Text></Text>
+                                    <View style={styles.chipGrid}>
+                                        {ACCOMMODATION_TYPES.map((type) => (
+                                            <TouchableOpacity
+                                                key={type.id}
+                                                style={[styles.chip, { backgroundColor: accommodationType === type.id ? '#10B981' : colors.card, borderColor: '#10B981' }]}
+                                                onPress={() => setAccommodationType(type.id)}
+                                            >
+                                                <Ionicons name={type.icon as any} size={18} color={accommodationType === type.id ? '#fff' : '#10B981'} />
+                                                <Text style={[styles.chipText, { color: accommodationType === type.id ? '#fff' : colors.text }]}>{type.label}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                    {errors.accommodationType && <Text style={styles.errorText}>{errors.accommodationType}</Text>}
+
+                                    {accommodationType && accommodationType !== 'none' && (
+                                        <>
+                                            <Text style={[styles.label, { color: colors.text }]}>Booking Status</Text>
+                                            <View style={styles.radioGroup}>
+                                                {BOOKING_STATUS.map((status) => (
+                                                    <TouchableOpacity
+                                                        key={status.id}
+                                                        style={styles.radioItem}
+                                                        onPress={() => setBookingStatus(status.id)}
+                                                    >
+                                                        <View style={[styles.radio, { borderColor: colors.primary }]}>
+                                                            {bookingStatus === status.id && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
+                                                        </View>
+                                                        <Text style={[styles.radioText, { color: colors.text }]}>{status.label}</Text>
+                                                    </TouchableOpacity>
+                                                ))}
+                                            </View>
+
+                                            <Text style={[styles.label, { color: colors.text }]}>Accommodation Days</Text>
+                                            <TextInput
+                                                style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                                                placeholder="e.g., 3"
+                                                placeholderTextColor={colors.textSecondary}
+                                                value={accommodationDays}
+                                                onChangeText={setAccommodationDays}
+                                                keyboardType="numeric"
+                                            />
+                                        </>
+                                    )}
+
+                                    <Text style={[styles.label, { color: colors.text }]}>Max Travelers <Text style={styles.required}>*</Text></Text>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.maxTravelers ? '#EF4444' : colors.border }]}
+                                        placeholder="e.g., 5"
+                                        placeholderTextColor={colors.textSecondary}
+                                        value={maxTravelers}
+                                        onChangeText={setMaxTravelers}
+                                        keyboardType="numeric"
+                                    />
+                                    {errors.maxTravelers && <Text style={styles.errorText}>{errors.maxTravelers}</Text>}
+
+                                    <Text style={[styles.label, { color: colors.text }]}>Who Can Join? <Text style={styles.required}>*</Text></Text>
+                                    <View style={styles.chipGrid}>
+                                        {GENDER_PREFERENCES.map((pref) => (
+                                            <TouchableOpacity
+                                                key={pref.id}
+                                                style={[styles.chip, { backgroundColor: genderPreference === pref.id ? '#9d74f7' : colors.card, borderColor: '#9d74f7' }]}
+                                                onPress={() => setGenderPreference(pref.id)}
+                                            >
+                                                <Ionicons name={pref.icon as any} size={18} color={genderPreference === pref.id ? '#fff' : '#9d74f7'} />
+                                                <Text style={[styles.chipText, { color: genderPreference === pref.id ? '#fff' : colors.text }]}>{pref.label}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
 
 
-                            </Animatable.View>
-                        )}
+                                </Animatable.View>
+                            )}
 
-                        {/* Step 5: Description */}
-                        {step === 5 && (
-                            <Animatable.View animation="fadeInRight" style={styles.stepContent}>
-                                <Text style={[styles.stepTitle, { color: colors.text }]}>Final Details ✨</Text>
-                                <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Help travelers know more about this trip</Text>
+                            {/* Step 5: Description */}
+                            {step === 5 && (
+                                <Animatable.View animation="fadeInRight" style={styles.stepContent}>
+                                    <Text style={[styles.stepTitle, { color: colors.text }]}>Final Details ✨</Text>
+                                    <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Help travelers know more about this trip</Text>
 
-                                <Text style={[styles.label, { color: colors.text }]}>Trip Description <Text style={styles.required}>*</Text></Text>
-                                <TextInput
-                                    style={[styles.textArea, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.description ? '#EF4444' : colors.border }]}
-                                    placeholder="Describe your trip in detail - what to expect, daily itinerary, activities planned..."
-                                    placeholderTextColor={colors.textSecondary}
-                                    value={description}
-                                    onChangeText={setDescription}
-                                    multiline
-                                    numberOfLines={6}
-                                    textAlignVertical="top"
-                                />
-                                {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
+                                    <Text style={[styles.label, { color: colors.text }]}>Trip Description <Text style={styles.required}>*</Text></Text>
+                                    <TextInput
+                                        style={[styles.textArea, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.description ? '#EF4444' : colors.border }]}
+                                        placeholder="Describe your trip in detail - what to expect, daily itinerary, activities planned..."
+                                        placeholderTextColor={colors.textSecondary}
+                                        value={description}
+                                        onChangeText={setDescription}
+                                        multiline
+                                        numberOfLines={6}
+                                        textAlignVertical="top"
+                                    />
+                                    {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
 
-                                <Text style={[styles.label, { color: colors.text }]}>Mandatory Items to Bring</Text>
-                                <TextInput
-                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                                    placeholder="e.g., ID proof, warm clothes, medicines"
-                                    placeholderTextColor={colors.textSecondary}
-                                    value={mandatoryItems}
-                                    onChangeText={setMandatoryItems}
-                                />
-                                <Text style={[styles.hint, { color: colors.textSecondary }]}>Separate items with commas</Text>
+                                    <Text style={[styles.label, { color: colors.text }]}>Mandatory Items to Bring</Text>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                                        placeholder="e.g., ID proof, warm clothes, medicines"
+                                        placeholderTextColor={colors.textSecondary}
+                                        value={mandatoryItems}
+                                        onChangeText={setMandatoryItems}
+                                    />
+                                    <Text style={[styles.hint, { color: colors.textSecondary }]}>Separate items with commas</Text>
 
-                                <Text style={[styles.label, { color: colors.text }]}>Places to Visit</Text>
-                                <TextInput
-                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                                    placeholder="e.g., Pangong Lake, Nubra Valley, Khardung La"
-                                    placeholderTextColor={colors.textSecondary}
-                                    value={placesToVisit}
-                                    onChangeText={setPlacesToVisit}
-                                />
-                                <Text style={[styles.hint, { color: colors.textSecondary }]}>Separate places with commas</Text>
-                            </Animatable.View>
-                        )}
+                                    <Text style={[styles.label, { color: colors.text }]}>Places to Visit</Text>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                                        placeholder="e.g., Pangong Lake, Nubra Valley, Khardung La"
+                                        placeholderTextColor={colors.textSecondary}
+                                        value={placesToVisit}
+                                        onChangeText={setPlacesToVisit}
+                                    />
+                                    <Text style={[styles.hint, { color: colors.textSecondary }]}>Separate places with commas</Text>
+                                </Animatable.View>
+                            )}
 
-                        <View style={{ height: 120 }} />
-                    </ScrollView>
+                            <View style={{ height: 120 }} />
+                        </NestableScrollContainer>
 
-                    {/* Bottom Actions */}
-                    <View style={styles.footer}>
-                        {step > 1 && (
+                        {/* Bottom Actions */}
+                        <View style={[styles.footer, { justifyContent: 'flex-end' }]}>
+
                             <TouchableOpacity
-                                style={[styles.navButton, { borderColor: colors.border, borderWidth: 1 }]}
-                                onPress={() => setStep(step - 1)}
+                                style={[styles.navButton, styles.nextButton]}
+                                onPress={step === totalSteps ? handlePostTrip : handleNext}
+                                disabled={isPosting}
                             >
-                                <Text style={[styles.navButtonText, { color: colors.text }]}>Back</Text>
+                                <LinearGradient
+                                    colors={[colors.primary, '#7C3AED']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                    style={styles.gradientButton}
+                                >
+                                    {isPosting ? (
+                                        <ActivityIndicator color="#fff" />
+                                    ) : (
+                                        <>
+                                            <Text style={styles.nextButtonText}>
+                                                {step === totalSteps ? 'Post Trip' : 'Next'}
+                                            </Text>
+                                            {step < totalSteps && <Ionicons name="arrow-forward" size={20} color="#fff" />}
+                                        </>
+                                    )}
+                                </LinearGradient>
                             </TouchableOpacity>
-                        )}
-
-                        <TouchableOpacity
-                            style={[styles.navButton, styles.nextButton]}
-                            onPress={step === totalSteps ? handlePostTrip : handleNext}
-                            disabled={isPosting}
-                        >
-                            <LinearGradient
-                                colors={[colors.primary, '#7C3AED']}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                                style={styles.gradientButton}
-                            >
-                                {isPosting ? (
-                                    <ActivityIndicator color="#fff" />
-                                ) : (
-                                    <>
-                                        <Text style={styles.nextButtonText}>
-                                            {step === totalSteps ? 'Post Trip' : 'Next'}
-                                        </Text>
-                                        {step < totalSteps && <Ionicons name="arrow-forward" size={20} color="#fff" />}
-                                    </>
-                                )}
-                            </LinearGradient>
-                        </TouchableOpacity>
-                    </View>
-                </KeyboardAvoidingView>
-            </SafeAreaView>
-
-        </View>
+                        </View>
+                    </KeyboardAvoidingView>
+                </SafeAreaView>
+            </View>
+        </GestureHandlerRootView>
     );
 };
 
@@ -813,6 +869,57 @@ const styles = StyleSheet.create({
     toggleButtonActive: { backgroundColor: '#9d74f7' },
     toggleCircle: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#fff', elevation: 2 },
     toggleCircleActive: { alignSelf: 'flex-end' },
+
+    // Reorder styles
+    reorderItemVertical: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: SPACING.sm,
+        backgroundColor: 'rgba(0,0,0,0.03)',
+        borderRadius: BORDER_RADIUS.md,
+        marginBottom: SPACING.sm,
+        width: '100%',
+        borderWidth: 1,
+        borderColor: BRAND.primary + '30',
+    },
+    reorderImageVertical: {
+        width: 60,
+        height: 60,
+        borderRadius: BORDER_RADIUS.sm,
+    },
+    verticalReorderControls: {
+        flex: 1,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingLeft: SPACING.md,
+    },
+    reorderInfo: {
+        flex: 1,
+    },
+    reorderIndexText: {
+        fontSize: FONT_SIZE.sm,
+        fontWeight: FONT_WEIGHT.bold,
+    },
+    reorderActionArea: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.md,
+    },
+    dragHandleContainer: {
+        flexDirection: 'row',
+        gap: 2,
+        padding: 4,
+    },
+    dragHandleColumn: {
+        gap: 2,
+    },
+    dragDot: {
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+        opacity: 0.6,
+    },
 });
 
 export default CreateTripScreen;
