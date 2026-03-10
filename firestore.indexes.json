@@ -13,22 +13,85 @@
                     "order": "DESCENDING"
                 }
             ]
-        }
-    ],
-    "fieldOverrides": [
+        },
         {
-            "collectionGroup": "comments",
-            "fieldPath": "userId",
-            "indexes": [
+            "collectionGroup": "group_chats",
+            "queryScope": "COLLECTION",
+            "fields": [
                 {
-                    "order": "ASCENDING",
-                    "queryScope": "COLLECTION_GROUP"
+                    "fieldPath": "participants",
+                    "arrayConfig": "CONTAINS"
                 },
                 {
-                    "order": "DESCENDING",
-                    "queryScope": "COLLECTION_GROUP"
+                    "fieldPath": "updatedAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "group_chats",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "hidden",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "updatedAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "trips",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "isExpired",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "fromDate",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "trips",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "status",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "fromDate",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "items",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "type",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "entityId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "actorId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
                 }
             ]
         }
-    ]
+    ],
+    "fieldOverrides": []
 }

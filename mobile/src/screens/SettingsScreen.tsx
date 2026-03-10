@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Switch, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
@@ -11,9 +11,22 @@ import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import functions from '@react-native-firebase/functions';
 
+const DELETE_REASONS = [
+    'I have privacy concerns',
+    'I found a better app',
+    'I don\'t use it anymore',
+    'Too many notifications',
+    'App is not working properly',
+    'Other',
+];
+
 const SettingsScreen = ({ navigation }) => {
     const { colors, isDarkMode, toggleTheme } = useTheme();
     const [pushEnabled, setPushEnabled] = useState(true);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [deleteReason, setDeleteReason] = useState('');
+    const [customReason, setCustomReason] = useState('');
+    const [deleting, setDeleting] = useState(false);
     const currentUser = auth().currentUser;
 
     // Load initial setting
@@ -23,12 +36,11 @@ const SettingsScreen = ({ navigation }) => {
             try {
                 const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
                 if (userDoc.exists) {
-                    // Default to true if not set
                     const isEnabled = userDoc.data()?.pushNotifications !== false;
                     setPushEnabled(isEnabled);
                 }
             } catch (error) {
-
+                // Silently fail
             }
         };
         loadSettings();
@@ -38,43 +50,50 @@ const SettingsScreen = ({ navigation }) => {
         setPushEnabled(value);
         if (!currentUser) return;
         try {
-            await firestore().collection('users').doc(currentUser.uid).update({
-                pushNotifications: value,
-                pushToken: value ? firestore.FieldValue.delete() : firestore.FieldValue.delete() // Just deleting token on disable for now, or re-register logic could go here
-            });
-            // If enabling, we might want to re-trigger token registration logic in AppNavigator or similar
             if (value) {
-                // In a real app, you would call your registerForPushNotificationsAsync() here
-                // For now, we update the preference which the app check on startup
                 await firestore().collection('users').doc(currentUser.uid).set({
                     pushNotifications: true
                 }, { merge: true });
             } else {
                 await firestore().collection('users').doc(currentUser.uid).update({
-                    pushNotifications: false
+                    pushNotifications: false,
+                    pushToken: firestore.FieldValue.delete(),
                 });
             }
         } catch (error) {
             // Error updating settings
-
         }
     };
 
     const handleDeleteAccount = () => {
+        setDeleteReason('');
+        setCustomReason('');
+        setShowDeleteModal(true);
+    };
+
+    const confirmDelete = async () => {
+        const reason = deleteReason === 'Other' ? customReason.trim() : deleteReason;
+        if (!reason) {
+            Alert.alert('Required', 'Please select or type a reason for deleting your account.');
+            return;
+        }
+
         Alert.alert(
-            "Delete Account",
-            "Are you sure? This will permanently delete your profile, trips, photos, chats, and messages. You will be removed from all group chats. This action cannot be undone.",
+            "Final Confirmation",
+            "This will permanently delete your profile, trips, photos, chats, and messages. This action CANNOT be undone.",
             [
                 { text: "Cancel", style: "cancel" },
                 {
-                    text: "Delete",
+                    text: "Delete Forever",
                     style: "destructive",
                     onPress: async () => {
+                        setDeleting(true);
                         try {
                             const deleteMyAccount = functions().httpsCallable('deleteMyAccount');
-                            await deleteMyAccount();
+                            await deleteMyAccount({ reason });
                             // Sign out locally
                             try { await auth().signOut(); } catch (e) { }
+                            setShowDeleteModal(false);
                             // Navigate to auth screen
                             navigation.reset({
                                 index: 0,
@@ -82,6 +101,8 @@ const SettingsScreen = ({ navigation }) => {
                             });
                         } catch (error: any) {
                             Alert.alert("Error", error.message || "Could not delete account. Please try again later.");
+                        } finally {
+                            setDeleting(false);
                         }
                     }
                 }
@@ -128,7 +149,6 @@ const SettingsScreen = ({ navigation }) => {
                         </View>
                     </Animatable.View>
 
-
                     {/* Dark Mode */}
                     <Animatable.View animation="fadeInUp" duration={400} delay={100}>
                         <View style={[styles.settingCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -170,6 +190,83 @@ const SettingsScreen = ({ navigation }) => {
                     </Animatable.View>
                 </ScrollView>
             </View>
+
+            {/* Delete Reason Modal */}
+            <Modal
+                visible={showDeleteModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => !deleting && setShowDeleteModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+                        <Text style={[styles.modalTitle, { color: colors.text }]}>Why are you leaving?</Text>
+                        <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
+                            Help us improve by telling us why you want to delete your account.
+                        </Text>
+
+                        <ScrollView style={styles.reasonList} showsVerticalScrollIndicator={false}>
+                            {DELETE_REASONS.map((reason) => (
+                                <TouchableOpacity
+                                    key={reason}
+                                    style={[
+                                        styles.reasonOption,
+                                        { borderColor: colors.border, backgroundColor: colors.inputBackground },
+                                        deleteReason === reason && styles.reasonSelected,
+                                    ]}
+                                    onPress={() => setDeleteReason(reason)}
+                                    activeOpacity={0.7}
+                                >
+                                    <View style={[
+                                        styles.radioCircle,
+                                        { borderColor: deleteReason === reason ? STATUS.errorDark : colors.border },
+                                    ]}>
+                                        {deleteReason === reason && <View style={styles.radioFill} />}
+                                    </View>
+                                    <Text style={[styles.reasonText, { color: colors.text }]}>{reason}</Text>
+                                </TouchableOpacity>
+                            ))}
+
+                            {deleteReason === 'Other' && (
+                                <TextInput
+                                    style={[styles.reasonInput, {
+                                        backgroundColor: colors.inputBackground,
+                                        color: colors.text,
+                                        borderColor: colors.border,
+                                    }]}
+                                    value={customReason}
+                                    onChangeText={setCustomReason}
+                                    placeholder="Please tell us more..."
+                                    placeholderTextColor={colors.textSecondary}
+                                    multiline
+                                    maxLength={200}
+                                />
+                            )}
+                        </ScrollView>
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity
+                                style={[styles.modalBtn, styles.modalCancelBtn, { borderColor: colors.border }]}
+                                onPress={() => setShowDeleteModal(false)}
+                                disabled={deleting}
+                            >
+                                <Text style={[styles.modalBtnText, { color: colors.text }]}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.modalBtn, styles.modalDeleteBtn]}
+                                onPress={confirmDelete}
+                                disabled={deleting || !deleteReason}
+                            >
+                                {deleting ? (
+                                    <ActivityIndicator color={NEUTRAL.white} size="small" />
+                                ) : (
+                                    <Text style={[styles.modalBtnText, { color: NEUTRAL.white }]}>Delete Account</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -234,20 +331,103 @@ const styles = StyleSheet.create({
         fontSize: FONT_SIZE.sm,
         lineHeight: 20,
     },
-    infoCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: SPACING.lg,
-        borderRadius: BORDER_RADIUS.md,
-        marginBottom: SPACING.lg,
-        gap: SPACING.md,
-    },
-    infoText: {
+    // Delete Reason Modal
+    modalOverlay: {
         flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: SPACING.xl,
+    },
+    modalContent: {
+        width: '100%',
+        maxHeight: '80%',
+        borderRadius: BORDER_RADIUS.xl,
+        padding: SPACING.xl,
+        elevation: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+    },
+    modalTitle: {
+        fontSize: FONT_SIZE.lg,
+        fontWeight: FONT_WEIGHT.bold,
+        marginBottom: SPACING.xs,
+    },
+    modalSubtitle: {
         fontSize: FONT_SIZE.sm,
         lineHeight: 20,
+        marginBottom: SPACING.lg,
+    },
+    reasonList: {
+        maxHeight: 300,
+    },
+    reasonOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: SPACING.md,
+        paddingHorizontal: SPACING.md,
+        borderRadius: BORDER_RADIUS.md,
+        borderWidth: 1,
+        marginBottom: SPACING.sm,
+    },
+    reasonSelected: {
+        borderColor: STATUS.errorDark,
+        backgroundColor: '#FEF2F2',
+    },
+    radioCircle: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        borderWidth: 2,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: SPACING.md,
+    },
+    radioFill: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: STATUS.errorDark,
+    },
+    reasonText: {
+        fontSize: FONT_SIZE.sm,
+        flex: 1,
+    },
+    reasonInput: {
+        borderWidth: 1,
+        borderRadius: BORDER_RADIUS.md,
+        paddingHorizontal: SPACING.md,
+        paddingVertical: SPACING.md,
+        fontSize: FONT_SIZE.sm,
+        minHeight: 80,
+        textAlignVertical: 'top',
+        marginBottom: SPACING.sm,
+    },
+    modalActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        gap: SPACING.md,
+        marginTop: SPACING.lg,
+    },
+    modalBtn: {
+        flex: 1,
+        paddingVertical: SPACING.md,
+        borderRadius: BORDER_RADIUS.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    modalCancelBtn: {
+        borderWidth: 1,
+    },
+    modalDeleteBtn: {
+        backgroundColor: STATUS.errorDark,
+    },
+    modalBtnText: {
+        fontSize: FONT_SIZE.sm,
+        fontWeight: FONT_WEIGHT.semibold,
     },
 });
 
 export default SettingsScreen;
-

@@ -218,6 +218,7 @@ export const onTripJoin = onDocumentUpdated(
 
 /**
  * Notify participants when a trip is updated (details changed or participant left).
+ * Also handles group chat removal when a user leaves a trip.
  */
 export const onTripUpdated = onDocumentUpdated(
     { document: "trips/{tripId}" },
@@ -238,18 +239,36 @@ export const onTripUpdated = onDocumentUpdated(
         const leftUsers = beforeParticipants.filter((uid: string) => !afterParticipants.includes(uid));
 
         if (leftUsers.length > 0) {
+            // Find the group chat for this trip
+            let groupChatDoc: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+            try {
+                const groupChatQuery = await db.collection('group_chats')
+                    .where('tripId', '==', tripId)
+                    .limit(1)
+                    .get();
+                if (!groupChatQuery.empty) {
+                    groupChatDoc = groupChatQuery.docs[0];
+                }
+            } catch (e) {
+                console.error(`[LeaveTrigger] Error finding group chat for trip ${tripId}:`, e);
+            }
+
             await Promise.all(leftUsers.map(async (leaverId: string) => {
                 if (leaverId === hostId) return;
 
                 const leaverDoc = await db.collection("users").doc(leaverId).get();
                 const leaverName = leaverDoc.data()?.name || leaverDoc.data()?.displayName || "Someone";
 
-                // Notify Host
+                // Get leave reason from trip document (stored by frontend before updating participants)
+                const leaveReason = afterData.lastLeaveReason || '';
+                const reasonText = leaveReason ? `\nReason: "${leaveReason}"` : '';
+
+                // A. Notify Host with leave reason
                 await createNotification({
                     recipientId: hostId,
                     type: "leave_trip",
                     title: "Traveler Left 😔",
-                    message: `${leaverName} left your trip "${tripTitle}"`,
+                    message: `${leaverName} left your trip "${tripTitle}"${reasonText}`,
                     entityId: tripId,
                     entityType: "trip",
                     actorId: leaverId,
@@ -260,10 +279,46 @@ export const onTripUpdated = onDocumentUpdated(
 
                 await sendPushToUser(hostId, {
                     title: "Traveler Left 😔",
-                    body: `${leaverName} left your trip "${tripTitle}"`,
+                    body: `${leaverName} left your trip "${tripTitle}"${reasonText}`,
                     data: { route: "TripDetails", tripId },
                 });
+
+                // B. Remove leaver from group chat + system message
+                if (groupChatDoc) {
+                    const chatId = groupChatDoc.id;
+                    try {
+                        await groupChatDoc.ref.update({
+                            participants: admin.firestore.FieldValue.arrayRemove(leaverId),
+                            [`participantDetails.${leaverId}`]: admin.firestore.FieldValue.delete(),
+                            [`unreadCount.${leaverId}`]: admin.firestore.FieldValue.delete(),
+                            [`clearedAt.${leaverId}`]: admin.firestore.FieldValue.delete(),
+                            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                        });
+
+                        // Add system message about user leaving
+                        await db.collection('group_chats').doc(chatId).collection('messages').add({
+                            text: `${leaverName} left the trip.`,
+                            senderId: 'system',
+                            senderName: 'System',
+                            type: 'system',
+                            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                        });
+
+                        console.log(`[LeaveTrigger] Removed ${leaverId} from group chat ${chatId}`);
+                    } catch (e) {
+                        console.error(`[LeaveTrigger] Error removing user from group chat:`, e);
+                    }
+                }
             }));
+
+            // Clean up the temporary leave reason field
+            if (afterData.lastLeaveReason) {
+                try {
+                    await db.collection('trips').doc(tripId).update({
+                        lastLeaveReason: admin.firestore.FieldValue.delete(),
+                    });
+                } catch { /* ignore cleanup errors */ }
+            }
         }
 
         // 2. Check for Critical Detail Updates
@@ -343,7 +398,8 @@ export const onTripUpdated = onDocumentUpdated(
 
 
 /**
- * Notify participants when a trip is DELETED (Cancelled) by the host.
+ * Notify participants when a trip is DELETED by the host.
+ * Includes the delete reason if provided (stored in trip doc before deletion).
  */
 export const onTripDeleted = onDocumentDeleted(
     { document: "trips/{tripId}" },
@@ -355,6 +411,8 @@ export const onTripDeleted = onDocumentDeleted(
         const hostId = tripData.userId;
         const tripTitle = tripData.title || "Trip";
         const participants = tripData.participants || [];
+        const deleteReason = tripData.deleteReason || tripData.cancelReason || '';
+        const reasonText = deleteReason ? `\nReason: "${deleteReason}"` : '';
 
         const recipients = participants.filter((uid: string) => uid !== hostId);
 
@@ -363,7 +421,7 @@ export const onTripDeleted = onDocumentDeleted(
                 recipientId,
                 type: "trip_cancelled",
                 title: "Trip Cancelled ❌",
-                message: `The trip "${tripTitle}" has been cancelled by the host.`,
+                message: `The trip "${tripTitle}" has been cancelled by the host.${reasonText}`,
                 entityId: event.params.tripId,
                 entityType: "trip",
                 deepLinkRoute: "Home",
@@ -371,7 +429,7 @@ export const onTripDeleted = onDocumentDeleted(
 
             await sendPushToUser(recipientId, {
                 title: "Trip Cancelled ❌",
-                body: `The trip "${tripTitle}" has been cancelled by the host.`,
+                body: `The trip "${tripTitle}" has been cancelled by the host.${reasonText}`,
                 data: { route: "Home" },
             });
         }));

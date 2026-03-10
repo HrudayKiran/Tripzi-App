@@ -67,7 +67,7 @@ service cloud.firestore {
 
     function isParticipantsOnlyTripUpdate() {
       return request.resource.data.diff(resource.data).affectedKeys()
-        .hasOnly(['participants', 'currentTravelers']);
+        .hasOnly(['participants', 'currentTravelers', 'lastLeaveReason']);
     }
 
     function isSelfTripJoin() {
@@ -313,6 +313,13 @@ service cloud.firestore {
       // but restricting most access for security. Cloud Functions skip these rules.
       allow create: if isAuthenticated();
       allow read, update, delete: if false; 
+    }
+
+    // ==================== DELETED USERS (Server-only) ====================
+
+    match /deleted_users/{userId} {
+      // Only Cloud Functions (Admin SDK) can write. No client access.
+      allow read, write: if false;
     }
   }
 }

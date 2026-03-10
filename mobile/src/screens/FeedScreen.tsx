@@ -221,6 +221,25 @@ const FeedScreen = ({ navigation }) => {
 
     const hasActiveFilters = filters !== null || searchQuery !== '';
 
+    // Count active filters for badge
+    const activeFilterCount = useMemo(() => {
+        if (!filters) return 0;
+        let count = 0;
+        if (filters.destination) count++;
+        if (filters.startingFrom) count++;
+        if (filters.maxCost !== undefined) count++;
+        if (filters.maxTravelers && filters.maxTravelers < 50) count++;
+        if (filters.tripTypes && filters.tripTypes.length > 0) count++;
+        if (filters.transportModes && filters.transportModes.length > 0) count++;
+        if (filters.genderPreference && filters.genderPreference !== 'anyone') count++;
+        if (filters.accommodationType) count++;
+        if (filters.bookingStatus) count++;
+        if (filters.sortBy && filters.sortBy !== 'newest') count++;
+        if (filters.startDate) count++;
+        if (filters.endDate) count++;
+        return count;
+    }, [filters]);
+
     // Sticky header - now rendered outside FlatList
     const renderStickyHeader = () => (
         <Animated.View
@@ -252,7 +271,12 @@ const FeedScreen = ({ navigation }) => {
                     onPress={() => setFilterVisible(true)}
                     testID="filter-button"
                 >
-                    <Ionicons name="options-outline" size={22} color={colors.text} />
+                    <Ionicons name="options-outline" size={22} color={activeFilterCount > 0 ? colors.primary : colors.text} />
+                    {activeFilterCount > 0 && (
+                        <View style={[styles.filterBadge, { backgroundColor: colors.primary }]}>
+                            <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+                        </View>
+                    )}
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -376,7 +400,7 @@ const FeedScreen = ({ navigation }) => {
                                     </TouchableOpacity>
                                 )}
                             </View>
-                            <TouchableOpacity onPress={() => setSearchVisible(false)} style={styles.cancelButton}>
+                            <TouchableOpacity onPress={() => { setSearchQuery(''); setSearchVisible(false); }} style={styles.cancelButton}>
                                 <Text style={[styles.cancelText, { color: colors.primary }]}>Cancel</Text>
                             </TouchableOpacity>
                         </View>
@@ -544,6 +568,22 @@ const styles = StyleSheet.create({
         width: 8,
         height: 8,
         borderRadius: 4,
+    },
+    filterBadge: {
+        position: 'absolute',
+        top: 2,
+        right: 2,
+        minWidth: 16,
+        height: 16,
+        borderRadius: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 4,
+    },
+    filterBadgeText: {
+        color: NEUTRAL.white,
+        fontSize: 10,
+        fontWeight: FONT_WEIGHT.bold,
     },
     searchModalContainer: {
         flex: 1,

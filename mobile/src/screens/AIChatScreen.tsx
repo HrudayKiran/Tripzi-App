@@ -618,7 +618,7 @@ const AIChatScreen = ({ navigation, route }: any) => {
             </Modal>
 
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 16 : 0}
             >

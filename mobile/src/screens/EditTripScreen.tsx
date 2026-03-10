@@ -385,7 +385,7 @@ const EditTripScreen = ({ navigation, route }: any) => {
             <SafeAreaView style={styles.container}>
                 <KeyboardAvoidingView
                     style={styles.keyboardContainer}
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                     keyboardVerticalOffset={Platform.OS === 'ios' ? 18 : 0}
                 >
                     {renderHeader()}

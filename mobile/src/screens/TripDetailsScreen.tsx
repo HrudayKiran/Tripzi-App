@@ -211,17 +211,32 @@ const TripDetailsScreen = ({ route, navigation }) => {
       const tripTitle = trip?.title || 'a trip';
 
       if (isJoined) {
-        // Leave trip - instant toggle
-        await firestore().collection('trips').doc(tripId).update({
-          participants: firestore.FieldValue.arrayRemove(user.uid),
-          currentTravelers: firestore.FieldValue.increment(-1),
-        });
-        setIsJoined(false);
-
-        // Send leave notification to trip owner
-        if (trip?.userId && trip.userId !== user.uid) {
-          await NotificationService.onLeaveTrip(user.uid, userName, tripId, trip.userId, tripTitle);
-        }
+        // Leave trip - ask for confirmation with reason
+        Alert.alert(
+          'Leave Trip',
+          'Are you sure you want to leave this trip?',
+          [
+            { text: 'Stay', style: 'cancel' },
+            {
+              text: 'Leave',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  // Store leave reason + remove from participants in one update
+                  await firestore().collection('trips').doc(tripId).update({
+                    lastLeaveReason: 'User chose to leave',
+                    participants: firestore.FieldValue.arrayRemove(user.uid),
+                    currentTravelers: firestore.FieldValue.increment(-1),
+                  });
+                  setIsJoined(false);
+                } catch (e) {
+                  Alert.alert('Error', 'Could not leave trip. Please try again.');
+                }
+              },
+            },
+          ]
+        );
+        return;
       } else {
         // Check spots
         if (spotsLeft <= 0) {
@@ -380,11 +395,11 @@ const TripDetailsScreen = ({ route, navigation }) => {
 
 
 
-  // Soft Cancel - Marks as cancelled
+  // Soft Cancel - Marks as cancelled (stores cancelReason for notification)
   const handleCancelTrip = () => {
     Alert.alert(
       'Cancel Trip',
-      'Are you sure you want to cancel this trip? Participants will be notified, but the trip page will remain visible as Cancelled.',
+      'Are you sure you want to cancel this trip? Participants will be notified.',
       [
         { text: 'No, Keep it', style: 'cancel' },
         {
@@ -404,10 +419,12 @@ const TripDetailsScreen = ({ route, navigation }) => {
                 }
               }
 
-              // Update status
+              // Update status with cancel reason
               await firestore().collection('trips').doc(tripId).update({
                 status: 'cancelled',
-                isCancelled: true // Legacy support
+                isCancelled: true,
+                cancelReason: 'Cancelled by host',
+                cancelledAt: firestore.FieldValue.serverTimestamp(),
               });
               Alert.alert('Cancelled', 'Trip has been marked as cancelled.');
               navigation.goBack();
@@ -422,7 +439,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
     );
   };
 
-  // Hard Delete - Removes document
+  // Hard Delete - Stores deleteReason in doc before deletion so onTripDeleted trigger can read it
   const handleDeleteTrip = () => {
     Alert.alert(
       'Delete Trip',
@@ -435,6 +452,10 @@ const TripDetailsScreen = ({ route, navigation }) => {
           onPress: async () => {
             setDeleting(true);
             try {
+              // Store delete reason before deletion so the trigger can read it
+              await firestore().collection('trips').doc(tripId).update({
+                deleteReason: 'Deleted by host',
+              });
               await firestore().collection('trips').doc(tripId).delete();
               Alert.alert('Deleted', 'Trip deleted successfully.');
               navigation.goBack();

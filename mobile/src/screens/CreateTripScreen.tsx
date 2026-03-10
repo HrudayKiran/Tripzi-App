@@ -83,8 +83,8 @@ const CreateTripScreen = ({ navigation, route }: any) => {
     const [fromLocation, setFromLocation] = useState(initialData?.fromLocation || '');
     const [toLocation, setToLocation] = useState(initialData?.toLocation || '');
     const [mapsLink, setMapsLink] = useState(initialData?.mapsLink || '');
-    const [fromDate, setFromDate] = useState(initialData?.fromDate?.toDate ? initialData.fromDate.toDate() : new Date());
-    const [toDate, setToDate] = useState(initialData?.toDate?.toDate ? initialData.toDate.toDate() : new Date(Date.now() + (initialData?.durationDays || 3) * 24 * 60 * 60 * 1000));
+    const [fromDate, setFromDate] = useState<Date | undefined>(initialData?.fromDate?.toDate ? initialData.fromDate.toDate() : undefined);
+    const [toDate, setToDate] = useState<Date | undefined>(initialData?.toDate?.toDate ? initialData.toDate.toDate() : undefined);
     const [showDateModal, setShowDateModal] = useState<'from' | 'to' | null>(null);
 
     // Step 3: Trip Details
@@ -101,7 +101,7 @@ const CreateTripScreen = ({ navigation, route }: any) => {
     const [bookingStatus, setBookingStatus] = useState(initialData?.bookingStatus || '');
     const [accommodationDays, setAccommodationDays] = useState(initialData?.accommodationDays ? String(initialData.accommodationDays) : (initialData?.durationDays ? String(initialData.durationDays) : ''));
     const [maxTravelers, setMaxTravelers] = useState(initialData?.maxTravelers ? String(initialData.maxTravelers) : '');
-    const [genderPreference, setGenderPreference] = useState(initialData?.genderPreference || 'anyone');
+    const [genderPreference, setGenderPreference] = useState(initialData?.genderPreference || '');
 
     // Step 5: Description
     const [description, setDescription] = useState(initialData?.description || '');
@@ -118,19 +118,20 @@ const CreateTripScreen = ({ navigation, route }: any) => {
             return;
         }
         const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
-            allowsMultipleSelection: true,
-            selectionLimit: 5 - tripImages.length,
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [4, 5],
             quality: 0.8,
+            allowsMultipleSelection: false,
         });
 
         if (!result.canceled && result.assets && result.assets.length > 0) {
-            const newImages = result.assets.map((asset, i) => ({
-                id: `img-new-${Date.now()}-${i}`,
-                uri: asset.uri,
+            const newImage = {
+                id: `img-new-${Date.now()}`,
+                uri: result.assets[0].uri,
                 location: ''
-            }));
-            setTripImages(prev => [...prev, ...newImages].slice(0, 5));
+            };
+            setTripImages(prev => [...prev, newImage].slice(0, 5));
         }
     };
 
@@ -146,7 +147,8 @@ const CreateTripScreen = ({ navigation, route }: any) => {
         }
     };
 
-    const formatDate = (date: Date) => {
+    const formatDate = (date?: Date) => {
+        if (!date) return 'Select Date';
         return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
     };
 
@@ -172,46 +174,34 @@ const CreateTripScreen = ({ navigation, route }: any) => {
     };
 
     const getDuration = () => {
+        if (!fromDate || !toDate) return '0 days';
         const diff = Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24));
         return diff > 0 ? `${diff} day${diff > 1 ? 's' : ''}` : '1 day';
     };
 
-    const validateStep = (currentStep: number) => {
+    const validateForm = () => {
         const newErrors: { [key: string]: string } = {};
 
-        switch (currentStep) {
-            case 1:
-                if (!title.trim()) newErrors.title = 'Trip title is required';
-                break;
-            case 2:
-                if (!fromLocation.trim()) newErrors.fromLocation = 'Starting location is required';
-                if (!toLocation.trim()) newErrors.toLocation = 'Destination is required';
-                break;
-            case 3:
-                if (tripTypes.length === 0) newErrors.tripTypes = 'Select at least one trip type';
-                if (transportModes.length === 0) newErrors.transportModes = 'Select at least one transport mode';
-                if (!costPerPerson.trim()) newErrors.costPerPerson = 'Cost per person is required';
-                break;
-            case 4:
-                if (!accommodationType) newErrors.accommodationType = 'Select accommodation type';
-                if (!maxTravelers.trim()) newErrors.maxTravelers = 'Max travelers is required';
-                break;
-            case 5:
-                if (!description.trim()) newErrors.description = 'Trip description is required';
-                break;
-        }
+        if (!title.trim()) newErrors.title = 'Trip title is required';
+        if (!fromLocation.trim()) newErrors.fromLocation = 'Starting location is required';
+        if (!toLocation.trim()) newErrors.toLocation = 'Destination is required';
+        if (!fromDate) newErrors.fromDate = 'Start date is required';
+        if (!toDate) newErrors.toDate = 'End date is required';
+        if (tripTypes.length === 0) newErrors.tripTypes = 'Select at least one trip type';
+        if (transportModes.length === 0) newErrors.transportModes = 'Select at least one transport mode';
+        if (!costPerPerson.trim()) newErrors.costPerPerson = 'Cost per person is required';
+        if (!accommodationType) newErrors.accommodationType = 'Select accommodation type';
+        if (!maxTravelers.trim()) newErrors.maxTravelers = 'Max travelers is required';
+        if (!description.trim()) newErrors.description = 'Trip description is required';
 
         setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    };
 
-    const handleNext = () => {
-        if (validateStep(step)) {
-            setStep(step + 1);
+        if (Object.keys(newErrors).length > 0) {
+            Alert.alert('Validation Error', 'Please fill in all required fields indicated by *');
+            return false;
         }
+        return true;
     };
-
-    const handleBack = () => setStep(step - 1);
 
     const generateMapsLink = (destination: string) => {
         const encoded = encodeURIComponent(destination);
@@ -219,7 +209,7 @@ const CreateTripScreen = ({ navigation, route }: any) => {
     };
 
     const handlePostTrip = async () => {
-        if (!validateStep(step)) return;
+        if (!validateForm()) return;
 
         const currentUser = auth().currentUser;
         if (!currentUser) {
@@ -334,26 +324,23 @@ const CreateTripScreen = ({ navigation, route }: any) => {
         }
     };
 
-    const progress = step / totalSteps;
-
     const renderHeader = () => (
         <View style={styles.header}>
-            <TouchableOpacity onPress={() => step > 1 ? handleBack() : navigation.goBack()} style={styles.backButton}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                 <Ionicons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>
-            <View style={styles.progressContainer}>
-                <View style={styles.progressBar}>
-                    <LinearGradient
-                        colors={[colors.primary, '#A78BFA']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={[styles.progressFill, { width: `${(step / totalSteps) * 100}%` }]}
-                    />
-                </View>
-                <Text style={[styles.stepText, { color: colors.textSecondary }]}>
-                    Step {step} of {totalSteps}
-                </Text>
-            </View>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Create Trip</Text>
+            <TouchableOpacity
+                onPress={handlePostTrip}
+                disabled={isPosting}
+                style={[styles.headerSaveButton, { opacity: isPosting ? 0.6 : 1 }]}
+            >
+                {isPosting ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                    <Text style={[styles.saveHeaderText, { color: colors.primary }]}>Post</Text>
+                )}
+            </TouchableOpacity>
         </View>
     );
 
@@ -380,382 +367,335 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                             keyboardShouldPersistTaps="handled"
                             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
                         >
-                            {/* Step 1: Basic Info */}
-                            {step === 1 && (
-                                <Animatable.View animation="fadeInRight" style={styles.stepContent}>
-                                    <Text style={[styles.stepTitle, { color: colors.text }]}>Let's Start! 🚀</Text>
-                                    <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Give your trip an exciting title</Text>
+                            <Animatable.View animation="fadeInUp" style={styles.formSection}>
+                                {/* Section 1: Basic Info */}
+                                <Text style={[styles.sectionHeading, { color: colors.primary }]}>Basic Information</Text>
 
-                                    <Text style={[styles.label, { color: colors.text }]}>Trip Title <Text style={styles.required}>*</Text></Text>
-                                    <TextInput
-                                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.title ? '#EF4444' : colors.border }]}
-                                        placeholder="e.g., Mystical Ladakh Adventure"
-                                        placeholderTextColor={colors.textSecondary}
-                                        value={title}
-                                        onChangeText={setTitle}
-                                    />
-                                    {errors.title && <Text style={styles.errorText}>{errors.title}</Text>}
+                                <Text style={[styles.label, { color: colors.text, marginTop: 0 }]}>Trip Title <Text style={styles.required}>*</Text></Text>
+                                <TextInput
+                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.title ? '#EF4444' : colors.border }]}
+                                    placeholder="e.g., Mystical Ladakh Adventure"
+                                    placeholderTextColor={colors.textSecondary}
+                                    value={title}
+                                    onChangeText={setTitle}
+                                />
+                                {errors.title && <Text style={styles.errorText}>{errors.title}</Text>}
 
-                                    <Text style={[styles.label, { color: colors.text }]}>Trip Images (Optional - Max 5)</Text>
-                                    <NestableDraggableFlatList
-                                        data={tripImages}
-                                        onDragEnd={({ data }) => setTripImages(data)}
-                                        keyExtractor={(item) => item.id}
-                                        renderItem={({ item, drag, isActive }) => (
-                                            <GHTouchableOpacity
-                                                activeOpacity={0.9}
-                                                onLongPress={drag}
-                                                disabled={isActive}
-                                                delayLongPress={200}
-                                                style={[
-                                                    styles.reorderItemVertical,
-                                                    isActive && {
-                                                        elevation: 8,
-                                                        shadowColor: '#000',
-                                                        shadowOffset: { width: 0, height: 4 },
-                                                        shadowOpacity: 0.3,
-                                                        shadowRadius: 5,
-                                                        backgroundColor: colors.card,
-                                                        transform: [{ scale: 1.02 }]
-                                                    }
-                                                ]}
-                                            >
-                                                <View style={[styles.reorderImageVertical, { overflow: 'hidden' }]}>
-                                                    <Image source={{ uri: item.uri }} style={styles.tripImage} />
-                                                </View>
-
-                                                <View style={styles.verticalReorderControls}>
-                                                    <View style={styles.reorderInfo}>
-                                                        <Text style={[styles.reorderIndexText, { color: colors.text }]} numberOfLines={1}>
-                                                            Long press to move
-                                                        </Text>
-                                                    </View>
-                                                    <View style={styles.reorderActionArea}>
-                                                        <View style={styles.dragHandleContainer}>
-                                                            <View style={styles.dragHandleColumn}>
-                                                                <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                                <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                                <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                            </View>
-                                                            <View style={styles.dragHandleColumn}>
-                                                                <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                                <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                                <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                            </View>
-                                                        </View>
-                                                        <TouchableOpacity
-                                                            style={[styles.removeImage, { position: 'relative', top: 0, right: 0, marginLeft: 10, elevation: 0, backgroundColor: 'transparent' }]}
-                                                            onPress={() => removeImage(item.id)}
-                                                        >
-                                                            <Ionicons name="close-circle" size={24} color="#EF4444" />
-                                                        </TouchableOpacity>
-                                                    </View>
-                                                </View>
-                                            </GHTouchableOpacity>
-                                        )}
-                                    />
-
-                                    {tripImages.length < 5 && (
-                                        <TouchableOpacity style={[styles.addImageButton, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10, alignSelf: 'flex-start', width: 'auto', paddingHorizontal: 20, height: 40, borderStyle: 'dashed' }]} onPress={pickImages}>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                                <Ionicons name="add" size={20} color={colors.primary} />
-                                                <Text style={[styles.addImageText, { color: colors.primary, marginTop: 0, marginLeft: 5 }]}>Add Images</Text>
+                                <Text style={[styles.label, { color: colors.text }]}>Trip Images (Optional - Max 5)</Text>
+                                <NestableDraggableFlatList
+                                    data={tripImages}
+                                    onDragEnd={({ data }) => setTripImages(data)}
+                                    keyExtractor={(item) => item.id}
+                                    renderItem={({ item, drag, isActive }) => (
+                                        <GHTouchableOpacity
+                                            activeOpacity={0.9}
+                                            onLongPress={drag}
+                                            disabled={isActive}
+                                            delayLongPress={200}
+                                            style={[
+                                                styles.reorderItemVertical,
+                                                isActive && {
+                                                    elevation: 8,
+                                                    shadowColor: '#000',
+                                                    shadowOffset: { width: 0, height: 4 },
+                                                    shadowOpacity: 0.3,
+                                                    shadowRadius: 5,
+                                                    backgroundColor: colors.card,
+                                                    transform: [{ scale: 1.02 }]
+                                                }
+                                            ]}
+                                        >
+                                            <View style={[styles.reorderImageVertical, { overflow: 'hidden' }]}>
+                                                <Image source={{ uri: item.uri }} style={styles.tripImage} />
                                             </View>
-                                        </TouchableOpacity>
-                                    )}
 
-
-
-
-                                </Animatable.View>
-                            )}
-
-                            {/* Step 2: Location & Dates */}
-                            {step === 2 && (
-                                <Animatable.View animation="fadeInRight" style={styles.stepContent}>
-                                    <Text style={[styles.stepTitle, { color: colors.text }]}>Where & When? 📍</Text>
-                                    <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Set your journey details</Text>
-
-                                    <Text style={[styles.label, { color: colors.text }]}>Starting From <Text style={styles.required}>*</Text></Text>
-                                    <TextInput
-                                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.fromLocation ? '#EF4444' : colors.border }]}
-                                        placeholder="e.g., Bangalore, Karnataka"
-                                        placeholderTextColor={colors.textSecondary}
-                                        value={fromLocation}
-                                        onChangeText={setFromLocation}
-                                    />
-                                    {errors.fromLocation && <Text style={styles.errorText}>{errors.fromLocation}</Text>}
-
-                                    <Text style={[styles.label, { color: colors.text }]}>Destination <Text style={styles.required}>*</Text></Text>
-                                    <TextInput
-                                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.toLocation ? '#EF4444' : colors.border }]}
-                                        placeholder="e.g., Leh, Ladakh"
-                                        placeholderTextColor={colors.textSecondary}
-                                        value={toLocation}
-                                        onChangeText={(text) => {
-                                            setToLocation(text);
-                                            setMapsLink(generateMapsLink(text));
-                                        }}
-                                    />
-                                    {errors.toLocation && <Text style={styles.errorText}>{errors.toLocation}</Text>}
-                                    {toLocation.length > 3 && (
-                                        <Text style={[styles.mapsLink, { color: colors.primary }]}>📍 Maps link will be auto-generated</Text>
-                                    )}
-
-                                    <View style={styles.dateRow}>
-                                        <View style={styles.dateField}>
-                                            <Text style={[styles.label, { color: colors.text }]}>From Date <Text style={styles.required}>*</Text></Text>
-                                            <TouchableOpacity
-                                                style={[styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
-                                                onPress={() => setShowDateModal('from')}
-                                            >
-                                                <Ionicons name="calendar" size={20} color={colors.primary} />
-                                                <Text style={[styles.dateText, { color: colors.text }]}>{formatDate(fromDate)}</Text>
-                                            </TouchableOpacity>
-                                        </View>
-                                        <View style={styles.dateField}>
-                                            <Text style={[styles.label, { color: colors.text }]}>To Date <Text style={styles.required}>*</Text></Text>
-                                            <TouchableOpacity
-                                                style={[styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
-                                                onPress={() => setShowDateModal('to')}
-                                            >
-                                                <Ionicons name="calendar" size={20} color={colors.primary} />
-                                                <Text style={[styles.dateText, { color: colors.text }]}>{formatDate(toDate)}</Text>
-                                            </TouchableOpacity>
-                                        </View>
-                                    </View>
-                                    <Text style={[styles.durationText, { color: colors.primary }]}>Duration: {getDuration()}</Text>
-                                </Animatable.View>
-                            )}
-
-                            {/* DateTimePicker Support */}
-                            {showDateModal === 'from' && (
-                                <DateTimePicker
-                                    value={fromDate}
-                                    mode="date"
-                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                    minimumDate={new Date()}
-                                    onChange={handleFromDateChange}
-                                />
-                            )}
-                            {showDateModal === 'to' && (
-                                <DateTimePicker
-                                    value={toDate}
-                                    mode="date"
-                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                    minimumDate={fromDate}
-                                    onChange={handleToDateChange}
-                                />
-                            )}
-                            {/* iOS close button for inline picker */}
-                            {Platform.OS === 'ios' && showDateModal !== null && (
-                                <View style={{ alignItems: 'flex-end', paddingRight: SPACING.md, marginTop: -SPACING.sm, marginBottom: SPACING.sm }}>
-                                    <TouchableOpacity onPress={() => setShowDateModal(null)}>
-                                        <Text style={{ color: colors.primary, fontWeight: 'bold' }}>Done</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            )}
-
-                            {/* Step 3: Trip Details */}
-                            {step === 3 && (
-                                <Animatable.View animation="fadeInRight" style={styles.stepContent}>
-                                    <Text style={[styles.stepTitle, { color: colors.text }]}>Trip Style 🎯</Text>
-                                    <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>What kind of adventure is this?</Text>
-
-                                    <Text style={[styles.label, { color: colors.text }]}>Trip Type <Text style={styles.required}>*</Text></Text>
-                                    <View style={styles.chipGrid}>
-                                        {TRIP_TYPES.map((type) => (
-                                            <TouchableOpacity
-                                                key={type.id}
-                                                style={[styles.chip, { backgroundColor: tripTypes.includes(type.id) ? type.color : colors.card, borderColor: type.color }]}
-                                                onPress={() => toggleSelection(type.id, tripTypes, setTripTypes)}
-                                            >
-                                                <Ionicons name={type.icon as any} size={18} color={tripTypes.includes(type.id) ? '#fff' : type.color} />
-                                                <Text style={[styles.chipText, { color: tripTypes.includes(type.id) ? '#fff' : colors.text }]}>{type.label}</Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </View>
-                                    {errors.tripTypes && <Text style={styles.errorText}>{errors.tripTypes}</Text>}
-
-                                    <Text style={[styles.label, { color: colors.text }]}>Transport Mode <Text style={styles.required}>*</Text></Text>
-                                    <View style={styles.chipGrid}>
-                                        {TRANSPORT_MODES.map((mode) => (
-                                            <TouchableOpacity
-                                                key={mode.id}
-                                                style={[styles.chip, { backgroundColor: transportModes.includes(mode.id) ? colors.primary : colors.card, borderColor: colors.primary }]}
-                                                onPress={() => toggleSelection(mode.id, transportModes, setTransportModes)}
-                                            >
-                                                <Ionicons name={mode.icon as any} size={18} color={transportModes.includes(mode.id) ? '#fff' : colors.primary} />
-                                                <Text style={[styles.chipText, { color: transportModes.includes(mode.id) ? '#fff' : colors.text }]}>{mode.label}</Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </View>
-                                    {errors.transportModes && <Text style={styles.errorText}>{errors.transportModes}</Text>}
-
-                                    <Text style={[styles.label, { color: colors.text }]}>Cost Per Person (₹) <Text style={styles.required}>*</Text></Text>
-                                    <TextInput
-                                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.costPerPerson ? '#EF4444' : colors.border }]}
-                                        placeholder="e.g., 5000"
-                                        placeholderTextColor={colors.textSecondary}
-                                        value={costPerPerson}
-                                        onChangeText={setCostPerPerson}
-                                        keyboardType="numeric"
-                                    />
-                                    {errors.costPerPerson && <Text style={styles.errorText}>{errors.costPerPerson}</Text>}
-                                </Animatable.View>
-                            )}
-
-                            {/* Step 4: Accommodation & Group */}
-                            {step === 4 && (
-                                <Animatable.View animation="fadeInRight" style={styles.stepContent}>
-                                    <Text style={[styles.stepTitle, { color: colors.text }]}>Stay & Group 🏕️</Text>
-                                    <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Where will you stay and who can join?</Text>
-
-                                    <Text style={[styles.label, { color: colors.text }]}>Accommodation Type <Text style={styles.required}>*</Text></Text>
-                                    <View style={styles.chipGrid}>
-                                        {ACCOMMODATION_TYPES.map((type) => (
-                                            <TouchableOpacity
-                                                key={type.id}
-                                                style={[styles.chip, { backgroundColor: accommodationType === type.id ? '#10B981' : colors.card, borderColor: '#10B981' }]}
-                                                onPress={() => setAccommodationType(type.id)}
-                                            >
-                                                <Ionicons name={type.icon as any} size={18} color={accommodationType === type.id ? '#fff' : '#10B981'} />
-                                                <Text style={[styles.chipText, { color: accommodationType === type.id ? '#fff' : colors.text }]}>{type.label}</Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </View>
-                                    {errors.accommodationType && <Text style={styles.errorText}>{errors.accommodationType}</Text>}
-
-                                    {accommodationType && accommodationType !== 'none' && (
-                                        <>
-                                            <Text style={[styles.label, { color: colors.text }]}>Booking Status</Text>
-                                            <View style={styles.radioGroup}>
-                                                {BOOKING_STATUS.map((status) => (
+                                            <View style={styles.verticalReorderControls}>
+                                                <View style={styles.reorderInfo}>
+                                                    <Text style={[styles.reorderIndexText, { color: colors.text }]} numberOfLines={1}>
+                                                        Long press to move
+                                                    </Text>
+                                                </View>
+                                                <View style={styles.reorderActionArea}>
+                                                    <View style={styles.dragHandleContainer}>
+                                                        <View style={styles.dragHandleColumn}>
+                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                        </View>
+                                                        <View style={styles.dragHandleColumn}>
+                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                        </View>
+                                                    </View>
                                                     <TouchableOpacity
-                                                        key={status.id}
-                                                        style={styles.radioItem}
-                                                        onPress={() => setBookingStatus(status.id)}
+                                                        style={[styles.removeImage, { position: 'relative', top: 0, right: 0, marginLeft: 10, elevation: 0, backgroundColor: 'transparent' }]}
+                                                        onPress={() => removeImage(item.id)}
                                                     >
-                                                        <View style={[styles.radio, { borderColor: colors.primary }]}>
-                                                            {bookingStatus === status.id && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
-                                                        </View>
-                                                        <Text style={[styles.radioText, { color: colors.text }]}>{status.label}</Text>
+                                                        <Ionicons name="close-circle" size={24} color="#EF4444" />
                                                     </TouchableOpacity>
-                                                ))}
+                                                </View>
                                             </View>
-
-                                            <Text style={[styles.label, { color: colors.text }]}>Accommodation Days</Text>
-                                            <TextInput
-                                                style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                                                placeholder="e.g., 3"
-                                                placeholderTextColor={colors.textSecondary}
-                                                value={accommodationDays}
-                                                onChangeText={setAccommodationDays}
-                                                keyboardType="numeric"
-                                            />
-                                        </>
+                                        </GHTouchableOpacity>
                                     )}
+                                />
 
-                                    <Text style={[styles.label, { color: colors.text }]}>Max Travelers <Text style={styles.required}>*</Text></Text>
-                                    <TextInput
-                                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.maxTravelers ? '#EF4444' : colors.border }]}
-                                        placeholder="e.g., 5"
-                                        placeholderTextColor={colors.textSecondary}
-                                        value={maxTravelers}
-                                        onChangeText={setMaxTravelers}
-                                        keyboardType="numeric"
-                                    />
-                                    {errors.maxTravelers && <Text style={styles.errorText}>{errors.maxTravelers}</Text>}
+                                {tripImages.length < 5 && (
+                                    <TouchableOpacity style={[styles.addImageButton, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10, alignSelf: 'flex-start', width: 'auto', paddingHorizontal: 20, height: 40, borderStyle: 'dashed' }]} onPress={pickImages}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <Ionicons name="add" size={20} color={colors.primary} />
+                                            <Text style={[styles.addImageText, { color: colors.primary, marginTop: 0, marginLeft: 5 }]}>Add Images</Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                )}
 
-                                    <Text style={[styles.label, { color: colors.text }]}>Who Can Join? <Text style={styles.required}>*</Text></Text>
-                                    <View style={styles.chipGrid}>
-                                        {GENDER_PREFERENCES.map((pref) => (
-                                            <TouchableOpacity
-                                                key={pref.id}
-                                                style={[styles.chip, { backgroundColor: genderPreference === pref.id ? '#9d74f7' : colors.card, borderColor: '#9d74f7' }]}
-                                                onPress={() => setGenderPreference(pref.id)}
-                                            >
-                                                <Ionicons name={pref.icon as any} size={18} color={genderPreference === pref.id ? '#fff' : '#9d74f7'} />
-                                                <Text style={[styles.chipText, { color: genderPreference === pref.id ? '#fff' : colors.text }]}>{pref.label}</Text>
-                                            </TouchableOpacity>
-                                        ))}
+                                <View style={styles.divider} />
+
+                                {/* Section 2: Location & Dates */}
+                                <Text style={[styles.sectionHeading, { color: colors.primary }]}>Location & Dates</Text>
+
+                                <Text style={[styles.label, { color: colors.text, marginTop: 0 }]}>Starting From <Text style={styles.required}>*</Text></Text>
+                                <TextInput
+                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.fromLocation ? '#EF4444' : colors.border }]}
+                                    placeholder="e.g., Bangalore, Karnataka"
+                                    placeholderTextColor={colors.textSecondary}
+                                    value={fromLocation}
+                                    onChangeText={setFromLocation}
+                                />
+                                {errors.fromLocation && <Text style={styles.errorText}>{errors.fromLocation}</Text>}
+
+                                <Text style={[styles.label, { color: colors.text }]}>Destination <Text style={styles.required}>*</Text></Text>
+                                <TextInput
+                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.toLocation ? '#EF4444' : colors.border }]}
+                                    placeholder="e.g., Leh, Ladakh"
+                                    placeholderTextColor={colors.textSecondary}
+                                    value={toLocation}
+                                    onChangeText={(text) => {
+                                        setToLocation(text);
+                                        setMapsLink(generateMapsLink(text));
+                                    }}
+                                />
+                                {errors.toLocation && <Text style={styles.errorText}>{errors.toLocation}</Text>}
+                                {toLocation.length > 3 && (
+                                    <Text style={[styles.mapsLink, { color: colors.primary }]}>📍 Maps link will be auto-generated</Text>
+                                )}
+
+                                <View style={styles.dateRow}>
+                                    <View style={styles.dateField}>
+                                        <Text style={[styles.label, { color: colors.text }]}>From Date <Text style={styles.required}>*</Text></Text>
+                                        <TouchableOpacity
+                                            style={[styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
+                                            onPress={() => setShowDateModal('from')}
+                                        >
+                                            <Ionicons name="calendar" size={20} color={colors.primary} />
+                                            <Text style={[styles.dateText, { color: colors.text }]}>{formatDate(fromDate)}</Text>
+                                        </TouchableOpacity>
                                     </View>
+                                    <View style={styles.dateField}>
+                                        <Text style={[styles.label, { color: colors.text }]}>To Date <Text style={styles.required}>*</Text></Text>
+                                        <TouchableOpacity
+                                            style={[styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
+                                            onPress={() => setShowDateModal('to')}
+                                        >
+                                            <Ionicons name="calendar" size={20} color={colors.primary} />
+                                            <Text style={[styles.dateText, { color: colors.text }]}>{formatDate(toDate)}</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                                <Text style={[styles.durationText, { color: colors.primary }]}>Duration: {getDuration()}</Text>
 
+                                <View style={styles.divider} />
 
-                                </Animatable.View>
-                            )}
+                                {/* Section 3: Trip Details */}
+                                <Text style={[styles.sectionHeading, { color: colors.primary }]}>Trip Details</Text>
 
-                            {/* Step 5: Description */}
-                            {step === 5 && (
-                                <Animatable.View animation="fadeInRight" style={styles.stepContent}>
-                                    <Text style={[styles.stepTitle, { color: colors.text }]}>Final Details ✨</Text>
-                                    <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Help travelers know more about this trip</Text>
+                                <Text style={[styles.label, { color: colors.text, marginTop: 0 }]}>Trip Type <Text style={styles.required}>*</Text></Text>
+                                <View style={styles.chipGrid}>
+                                    {TRIP_TYPES.map((type) => (
+                                        <TouchableOpacity
+                                            key={type.id}
+                                            style={[styles.chip, { backgroundColor: tripTypes.includes(type.id) ? type.color : colors.card, borderColor: type.color }]}
+                                            onPress={() => toggleSelection(type.id, tripTypes, setTripTypes)}
+                                        >
+                                            <Ionicons name={type.icon as any} size={18} color={tripTypes.includes(type.id) ? '#fff' : type.color} />
+                                            <Text style={[styles.chipText, { color: tripTypes.includes(type.id) ? '#fff' : colors.text }]}>{type.label}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                                {errors.tripTypes && <Text style={styles.errorText}>{errors.tripTypes}</Text>}
 
-                                    <Text style={[styles.label, { color: colors.text }]}>Trip Description <Text style={styles.required}>*</Text></Text>
-                                    <TextInput
-                                        style={[styles.textArea, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.description ? '#EF4444' : colors.border }]}
-                                        placeholder="Describe your trip in detail - what to expect, daily itinerary, activities planned..."
-                                        placeholderTextColor={colors.textSecondary}
-                                        value={description}
-                                        onChangeText={setDescription}
-                                        multiline
-                                        numberOfLines={6}
-                                        textAlignVertical="top"
-                                    />
-                                    {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
+                                <Text style={[styles.label, { color: colors.text }]}>Transport Mode <Text style={styles.required}>*</Text></Text>
+                                <View style={styles.chipGrid}>
+                                    {TRANSPORT_MODES.map((mode) => (
+                                        <TouchableOpacity
+                                            key={mode.id}
+                                            style={[styles.chip, { backgroundColor: transportModes.includes(mode.id) ? colors.primary : colors.card, borderColor: colors.primary }]}
+                                            onPress={() => toggleSelection(mode.id, transportModes, setTransportModes)}
+                                        >
+                                            <Ionicons name={mode.icon as any} size={18} color={transportModes.includes(mode.id) ? '#fff' : colors.primary} />
+                                            <Text style={[styles.chipText, { color: transportModes.includes(mode.id) ? '#fff' : colors.text }]}>{mode.label}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                                {errors.transportModes && <Text style={styles.errorText}>{errors.transportModes}</Text>}
 
-                                    <Text style={[styles.label, { color: colors.text }]}>Mandatory Items to Bring</Text>
-                                    <TextInput
-                                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                                        placeholder="e.g., ID proof, warm clothes, medicines"
-                                        placeholderTextColor={colors.textSecondary}
-                                        value={mandatoryItems}
-                                        onChangeText={setMandatoryItems}
-                                    />
-                                    <Text style={[styles.hint, { color: colors.textSecondary }]}>Separate items with commas</Text>
+                                <Text style={[styles.label, { color: colors.text }]}>Cost Per Person (₹) <Text style={styles.required}>*</Text></Text>
+                                <TextInput
+                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.costPerPerson ? '#EF4444' : colors.border }]}
+                                    placeholder="e.g., 5000"
+                                    placeholderTextColor={colors.textSecondary}
+                                    value={costPerPerson}
+                                    onChangeText={setCostPerPerson}
+                                    keyboardType="numeric"
+                                />
+                                {errors.costPerPerson && <Text style={styles.errorText}>{errors.costPerPerson}</Text>}
 
-                                    <Text style={[styles.label, { color: colors.text }]}>Places to Visit</Text>
-                                    <TextInput
-                                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                                        placeholder="e.g., Pangong Lake, Nubra Valley, Khardung La"
-                                        placeholderTextColor={colors.textSecondary}
-                                        value={placesToVisit}
-                                        onChangeText={setPlacesToVisit}
-                                    />
-                                    <Text style={[styles.hint, { color: colors.textSecondary }]}>Separate places with commas</Text>
-                                </Animatable.View>
-                            )}
+                                <View style={styles.divider} />
+
+                                {/* Section 4: Accommodation & Group */}
+                                <Text style={[styles.sectionHeading, { color: colors.primary }]}>Accommodation & Group</Text>
+
+                                <Text style={[styles.label, { color: colors.text, marginTop: 0 }]}>Accommodation Type <Text style={styles.required}>*</Text></Text>
+                                <View style={styles.chipGrid}>
+                                    {ACCOMMODATION_TYPES.map((type) => (
+                                        <TouchableOpacity
+                                            key={type.id}
+                                            style={[styles.chip, { backgroundColor: accommodationType === type.id ? '#10B981' : colors.card, borderColor: '#10B981' }]}
+                                            onPress={() => setAccommodationType(type.id)}
+                                        >
+                                            <Ionicons name={type.icon as any} size={18} color={accommodationType === type.id ? '#fff' : '#10B981'} />
+                                            <Text style={[styles.chipText, { color: accommodationType === type.id ? '#fff' : colors.text }]}>{type.label}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                                {errors.accommodationType && <Text style={styles.errorText}>{errors.accommodationType}</Text>}
+
+                                {accommodationType && accommodationType !== 'none' && (
+                                    <>
+                                        <Text style={[styles.label, { color: colors.text }]}>Booking Status</Text>
+                                        <View style={styles.radioGroup}>
+                                            {BOOKING_STATUS.map((status) => (
+                                                <TouchableOpacity
+                                                    key={status.id}
+                                                    style={styles.radioItem}
+                                                    onPress={() => setBookingStatus(status.id)}
+                                                >
+                                                    <View style={[styles.radio, { borderColor: colors.primary }]}>
+                                                        {bookingStatus === status.id && <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />}
+                                                    </View>
+                                                    <Text style={[styles.radioText, { color: colors.text }]}>{status.label}</Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </View>
+
+                                        <Text style={[styles.label, { color: colors.text }]}>Accommodation Days</Text>
+                                        <TextInput
+                                            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                                            placeholder="e.g., 3"
+                                            placeholderTextColor={colors.textSecondary}
+                                            value={accommodationDays}
+                                            onChangeText={setAccommodationDays}
+                                            keyboardType="numeric"
+                                        />
+                                    </>
+                                )}
+
+                                <Text style={[styles.label, { color: colors.text }]}>Max Travelers <Text style={styles.required}>*</Text></Text>
+                                <TextInput
+                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.maxTravelers ? '#EF4444' : colors.border }]}
+                                    placeholder="e.g., 5"
+                                    placeholderTextColor={colors.textSecondary}
+                                    value={maxTravelers}
+                                    onChangeText={setMaxTravelers}
+                                    keyboardType="numeric"
+                                />
+                                {errors.maxTravelers && <Text style={styles.errorText}>{errors.maxTravelers}</Text>}
+
+                                <Text style={[styles.label, { color: colors.text }]}>Who Can Join? <Text style={styles.required}>*</Text></Text>
+                                <View style={styles.chipGrid}>
+                                    {GENDER_PREFERENCES.map((pref) => (
+                                        <TouchableOpacity
+                                            key={pref.id}
+                                            style={[styles.chip, { backgroundColor: genderPreference === pref.id ? '#9d74f7' : colors.card, borderColor: '#9d74f7' }]}
+                                            onPress={() => setGenderPreference(pref.id)}
+                                        >
+                                            <Ionicons name={pref.icon as any} size={18} color={genderPreference === pref.id ? '#fff' : '#9d74f7'} />
+                                            <Text style={[styles.chipText, { color: genderPreference === pref.id ? '#fff' : colors.text }]}>{pref.label}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+
+                                <View style={styles.divider} />
+
+                                {/* Section 5: Description */}
+                                <Text style={[styles.sectionHeading, { color: colors.primary }]}>Final Details</Text>
+
+                                <Text style={[styles.label, { color: colors.text, marginTop: 0 }]}>Trip Description <Text style={styles.required}>*</Text></Text>
+                                <TextInput
+                                    style={[styles.textArea, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.description ? '#EF4444' : colors.border }]}
+                                    placeholder="Describe your trip in detail - what to expect, daily itinerary, activities planned..."
+                                    placeholderTextColor={colors.textSecondary}
+                                    value={description}
+                                    onChangeText={setDescription}
+                                    multiline
+                                    numberOfLines={6}
+                                    textAlignVertical="top"
+                                />
+                                {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
+
+                                <Text style={[styles.label, { color: colors.text }]}>Mandatory Items to Bring</Text>
+                                <TextInput
+                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                                    placeholder="e.g., ID proof, warm clothes, medicines"
+                                    placeholderTextColor={colors.textSecondary}
+                                    value={mandatoryItems}
+                                    onChangeText={setMandatoryItems}
+                                />
+                                <Text style={[styles.hint, { color: colors.textSecondary }]}>Separate items with commas</Text>
+
+                                <Text style={[styles.label, { color: colors.text }]}>Places to Visit</Text>
+                                <TextInput
+                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                                    placeholder="e.g., Pangong Lake, Nubra Valley, Khardung La"
+                                    placeholderTextColor={colors.textSecondary}
+                                    value={placesToVisit}
+                                    onChangeText={setPlacesToVisit}
+                                />
+                                <Text style={[styles.hint, { color: colors.textSecondary }]}>Separate places with commas</Text>
+                            </Animatable.View>
 
                             <View style={{ height: 120 }} />
                         </NestableScrollContainer>
 
-                        {/* Bottom Actions */}
-                        <View style={[styles.footer, { justifyContent: 'flex-end' }]}>
+                        {showDateModal && Platform.OS === 'ios' && (
+                            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }]}>
+                                <View style={[styles.dateModalContent, { backgroundColor: colors.card }]}>
+                                    <View style={styles.dateModalHeader}>
+                                        <Text style={[styles.dateModalTitle, { color: colors.text }]}>Select Date</Text>
+                                        <TouchableOpacity onPress={() => setShowDateModal(null)}>
+                                            <Ionicons name="close" size={24} color={colors.text} />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <DateTimePicker
+                                        value={(showDateModal === 'from' ? fromDate : toDate) || new Date()}
+                                        mode="date"
+                                        display="inline"
+                                        onChange={showDateModal === 'from' ? handleFromDateChange : handleToDateChange}
+                                        minimumDate={showDateModal === 'to' && fromDate ? fromDate : new Date()}
+                                    />
+                                </View>
+                            </View>
+                        )}
+                        {showDateModal && Platform.OS === 'android' && (
+                            <DateTimePicker
+                                value={(showDateModal === 'from' ? fromDate : toDate) || new Date()}
+                                mode="date"
+                                display="calendar"
+                                onChange={showDateModal === 'from' ? handleFromDateChange : handleToDateChange}
+                                minimumDate={showDateModal === 'to' && fromDate ? fromDate : new Date()}
+                            />
+                        )}
 
-                            <TouchableOpacity
-                                style={[styles.navButton, styles.nextButton]}
-                                onPress={step === totalSteps ? handlePostTrip : handleNext}
-                                disabled={isPosting}
-                            >
-                                <LinearGradient
-                                    colors={[colors.primary, '#7C3AED']}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 0 }}
-                                    style={styles.gradientButton}
-                                >
-                                    {isPosting ? (
-                                        <ActivityIndicator color="#fff" />
-                                    ) : (
-                                        <>
-                                            <Text style={styles.nextButtonText}>
-                                                {step === totalSteps ? 'Post Trip' : 'Next'}
-                                            </Text>
-                                            {step < totalSteps && <Ionicons name="arrow-forward" size={20} color="#fff" />}
-                                        </>
-                                    )}
-                                </LinearGradient>
-                            </TouchableOpacity>
-                        </View>
                     </KeyboardAvoidingView>
                 </SafeAreaView>
             </View>
@@ -812,46 +752,35 @@ const styles = StyleSheet.create({
     radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, justifyContent: 'center', alignItems: 'center' },
     radioInner: { width: 12, height: 12, borderRadius: 6 },
     radioText: { fontSize: FONT_SIZE.sm },
-    footer: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        flexDirection: 'row',
-        padding: SPACING.lg,
-        backgroundColor: 'transparent',
-        gap: SPACING.md,
+    divider: {
+        height: 1,
+        backgroundColor: '#E5E7EB',
+        marginVertical: SPACING.xl,
     },
-    navButton: {
+    sectionHeading: {
+        fontSize: FONT_SIZE.lg,
+        fontWeight: FONT_WEIGHT.bold,
+        marginBottom: SPACING.lg,
+    },
+    formSection: {
+        marginBottom: SPACING.xl,
+    },
+    headerTitle: {
+        fontSize: FONT_SIZE.xl,
+        fontWeight: FONT_WEIGHT.bold,
         flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: SPACING.md,
-        borderRadius: BORDER_RADIUS.xl,
-        gap: SPACING.sm,
-        // elevation: 2,
     },
-    navButtonText: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
-    nextButton: {
-        paddingVertical: 0, // Reset for gradient container
-        overflow: 'hidden',
-        borderWidth: 0,
-        elevation: 5,
-        shadowColor: '#7C3AED',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
+    headerSaveButton: {
+        paddingHorizontal: SPACING.md,
+        paddingVertical: 8,
+        borderRadius: BORDER_RADIUS.full,
+        backgroundColor: '#E0E7FF',
     },
-    gradientButton: {
-        flex: 1,
-        width: '100%',
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: SPACING.md,
+    saveHeaderText: {
+        color: '#4F46E5',
+        fontWeight: FONT_WEIGHT.bold,
+        fontSize: FONT_SIZE.sm,
     },
-    nextButtonText: { color: '#fff', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
     dateModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
     dateModalContent: { width: '85%', maxHeight: '70%', borderRadius: BORDER_RADIUS.xl, padding: SPACING.lg },
     dateModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },

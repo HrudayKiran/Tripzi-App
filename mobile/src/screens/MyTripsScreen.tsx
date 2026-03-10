@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, ActivityIndicator, Image, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, ActivityIndicator, Image, RefreshControl, Alert } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import * as Animatable from 'react-native-animatable';
 import firestore from '@react-native-firebase/firestore';
@@ -67,15 +67,29 @@ const MyTripsScreen = ({ navigation, route }) => {
     const currentUser = auth().currentUser;
     if (!currentUser) return;
 
-    try {
-      await firestore().collection('trips').doc(tripId).update({
-        participants: firestore.FieldValue.arrayRemove(currentUser.uid),
-        currentTravelers: firestore.FieldValue.increment(-1),
-      });
-      setJoinedTrips(prev => prev.filter(trip => trip.id !== tripId));
-    } catch {
-      // Leave trip operation failed
-    }
+    Alert.alert(
+      'Leave Trip',
+      'Are you sure you want to leave this trip?',
+      [
+        { text: 'Stay', style: 'cancel' },
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await firestore().collection('trips').doc(tripId).update({
+                lastLeaveReason: 'User chose to leave',
+                participants: firestore.FieldValue.arrayRemove(currentUser.uid),
+                currentTravelers: firestore.FieldValue.increment(-1),
+              });
+              setJoinedTrips(prev => prev.filter(trip => trip.id !== tripId));
+            } catch {
+              Alert.alert('Error', 'Could not leave trip. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
 

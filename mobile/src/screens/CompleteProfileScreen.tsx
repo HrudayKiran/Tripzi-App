@@ -47,6 +47,7 @@ const CompleteProfileScreen = ({ navigation, route }) => {
     const [checkingUsername, setCheckingUsername] = useState(false);
     const [usernameError, setUsernameError] = useState('');
     const [usernameOk, setUsernameOk] = useState(false);
+    const [agreedToTerms, setAgreedToTerms] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
     const pendingIdToken = route?.params?.idToken || null;
@@ -122,8 +123,8 @@ const CompleteProfileScreen = ({ navigation, route }) => {
     }, [username, currentUser?.uid]);
 
     const canSubmit = useMemo(() => {
-        return !!fullName.trim() && !!gender && !!dob && usernameOk && !checkingUsername && !submitting;
-    }, [fullName, gender, dob, usernameOk, checkingUsername, submitting]);
+        return !!fullName.trim() && !!gender && !!dob && usernameOk && agreedToTerms && !checkingUsername && !submitting;
+    }, [fullName, gender, dob, usernameOk, agreedToTerms, checkingUsername, submitting]);
 
     const handleDateChange = (_event: any, selectedDate?: Date) => {
         if (Platform.OS !== 'ios') {
@@ -163,6 +164,10 @@ const CompleteProfileScreen = ({ navigation, route }) => {
         }
         if (!dob) {
             Alert.alert('Missing Field', 'Please select your date of birth.');
+            return;
+        }
+        if (!agreedToTerms) {
+            Alert.alert('Required', 'You must agree to the Terms and Privacy Policy to continue.');
             return;
         }
 
@@ -314,6 +319,36 @@ const CompleteProfileScreen = ({ navigation, route }) => {
                         maxLength={150}
                     />
 
+                    <View style={styles.termsContainer}>
+                        <TouchableOpacity
+                            style={styles.checkbox}
+                            onPress={() => setAgreedToTerms(!agreedToTerms)}
+                            activeOpacity={0.7}
+                        >
+                            <Ionicons
+                                name={agreedToTerms ? 'checkbox' : 'square-outline'}
+                                size={22}
+                                color={agreedToTerms ? colors.primary : colors.textSecondary}
+                            />
+                        </TouchableOpacity>
+                        <Text style={[styles.termsText, { color: colors.textSecondary }]}>
+                            I agree to Tripzi{' '}
+                            <Text
+                                style={[styles.linkText, { color: colors.primary }]}
+                                onPress={() => navigation.navigate('Terms')}
+                            >
+                                Terms
+                            </Text>
+                            {' '}and{' '}
+                            <Text
+                                style={[styles.linkText, { color: colors.primary }]}
+                                onPress={() => navigation.navigate('PrivacyPolicy')}
+                            >
+                                Privacy Policy
+                            </Text>
+                        </Text>
+                    </View>
+
                     <TouchableOpacity disabled={!canSubmit} onPress={handleSubmit} style={styles.submitWrap}>
                         <LinearGradient
                             colors={canSubmit ? [...BRAND.gradient] : ['#9CA3AF', '#9CA3AF']}
@@ -422,6 +457,24 @@ const styles = StyleSheet.create({
         color: NEUTRAL.white,
         fontSize: FONT_SIZE.md,
         fontWeight: FONT_WEIGHT.bold,
+    },
+    termsContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: SPACING.lg,
+        paddingHorizontal: 2,
+    },
+    checkbox: {
+        marginRight: SPACING.sm,
+    },
+    termsText: {
+        flex: 1,
+        fontSize: FONT_SIZE.sm,
+        lineHeight: 20,
+    },
+    linkText: {
+        fontWeight: FONT_WEIGHT.bold,
+        textDecorationLine: 'underline',
     },
 });
 

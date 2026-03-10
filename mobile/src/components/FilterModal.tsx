@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ScrollView, Dimensions, Animated, Platform } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ScrollView, Dimensions, Animated, Platform, KeyboardAvoidingView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
@@ -47,7 +47,6 @@ const BUDGET_OPTIONS = [
     { id: 25000, label: '₹25K' },
     { id: 50000, label: '₹50K' },
     { id: 100000, label: '₹1L' },
-    { id: 200000, label: '₹2L' },
 ];
 
 const TRIP_TYPES = [
@@ -95,7 +94,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
     const [sortBy, setSortBy] = useState('newest');
     const [destination, setDestination] = useState('');
     const [startingFrom, setStartingFrom] = useState('');
-    const [maxCost, setMaxCost] = useState(200000);
+    const [maxCost, setMaxCost] = useState<number | undefined>(undefined);
     const [customBudget, setCustomBudget] = useState('');
     const [groupSize, setGroupSize] = useState('');
     const [tripTypes, setTripTypes] = useState<string[]>([]);
@@ -120,7 +119,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                 setSortBy(currentFilters.sortBy || 'newest');
                 setDestination(currentFilters.destination || '');
                 setStartingFrom(currentFilters.startingFrom || '');
-                setMaxCost(currentFilters.maxCost || 200000);
+                setMaxCost(currentFilters.maxCost);
                 setGroupSize(currentFilters.maxTravelers && currentFilters.maxTravelers < 50 ? currentFilters.maxTravelers.toString() : '');
                 setTripTypes(currentFilters.tripTypes || []);
                 setTransportModes(currentFilters.transportModes || []);
@@ -155,7 +154,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
         setSortBy('newest');
         setDestination('');
         setStartingFrom('');
-        setMaxCost(200000);
+        setMaxCost(undefined);
         setCustomBudget('');
         setGroupSize('');
         setTripTypes([]);
@@ -165,6 +164,23 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
         setBookingStatus(undefined);
         setStartDateObj(null);
         setEndDateObj(null);
+
+        onApply({
+            sortBy: 'newest',
+            maxCost: undefined,
+            maxTravelers: 50,
+            minDays: 1,
+            destination: '',
+            startingFrom: '',
+            tripTypes: undefined,
+            transportModes: undefined,
+            genderPreference: undefined,
+            accommodationType: undefined,
+            bookingStatus: undefined,
+            startDate: undefined,
+            endDate: undefined,
+        });
+        onClose();
     };
 
     const handleApply = () => {
@@ -173,7 +189,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
 
         onApply({
             sortBy,
-            maxCost: isNaN(finalBudget) ? 200000 : finalBudget,
+            maxCost: finalBudget,
             maxTravelers: isNaN(finalGroupSize) ? 50 : finalGroupSize,
             minDays: 1,
             destination,
@@ -215,11 +231,11 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
         sortBy !== 'newest',
         destination !== '',
         startingFrom !== '',
-        maxCost < 200000 || customBudget !== '',
-        groupSize !== '',
+        maxCost !== undefined || customBudget !== '',
+        groupSize !== '' && parseInt(groupSize) < 50,
         tripTypes.length > 0,
         transportModes.length > 0,
-        genderPreference !== undefined,
+        genderPreference !== undefined && genderPreference !== 'anyone',
         accommodationType !== undefined,
         bookingStatus !== undefined,
         startDateObj !== null,
@@ -237,347 +253,353 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                         { transform: [{ translateX: slideAnim }] }
                     ]}
                 >
-                    <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-                        {/* Header */}
-                        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                            <View style={styles.headerLeft}>
-                                <View style={[styles.headerIcon, { backgroundColor: colors.primaryLight }]}>
-                                    <Ionicons name="options" size={20} color={colors.primary} />
-                                </View>
-                                <Text style={[styles.title, { color: colors.text }]}>Filters</Text>
-                                {activeCount > 0 && (
-                                    <View style={[styles.filterCountBadge, { backgroundColor: colors.primary }]}>
-                                        <Text style={styles.filterCountText}>{activeCount}</Text>
+                    <KeyboardAvoidingView
+                        style={{ flex: 1 }}
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                        keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+                    >
+                        <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+                            {/* Header */}
+                            <View style={[styles.header, { borderBottomColor: colors.border }]}>
+                                <View style={styles.headerLeft}>
+                                    <View style={[styles.headerIcon, { backgroundColor: colors.primaryLight }]}>
+                                        <Ionicons name="options" size={20} color={colors.primary} />
                                     </View>
-                                )}
-                            </View>
-                            <TouchableOpacity
-                                onPress={onClose}
-                                style={styles.closeButton}
-                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                            >
-                                <Ionicons name="close" size={24} color={colors.text} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <ScrollView style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                            {/* Sort By */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Ionicons name="swap-vertical" size={20} color={colors.primary} />
-                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Sort By</Text>
+                                    <Text style={[styles.title, { color: colors.text }]}>Filters</Text>
+                                    {activeCount > 0 && (
+                                        <View style={[styles.filterCountBadge, { backgroundColor: colors.primary }]}>
+                                            <Text style={styles.filterCountText}>{activeCount}</Text>
+                                        </View>
+                                    )}
                                 </View>
-                                <View style={styles.sortGrid}>
-                                    {SORT_OPTIONS.map((option) => (
+                                <TouchableOpacity
+                                    onPress={onClose}
+                                    style={styles.closeButton}
+                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                >
+                                    <Ionicons name="close" size={24} color={colors.text} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <ScrollView style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                                {/* Sort By */}
+                                <View style={styles.section}>
+                                    <View style={styles.sectionHeader}>
+                                        <Ionicons name="swap-vertical" size={20} color={colors.primary} />
+                                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Sort By</Text>
+                                    </View>
+                                    <View style={styles.sortGrid}>
+                                        {SORT_OPTIONS.map((option) => (
+                                            <TouchableOpacity
+                                                key={option.id}
+                                                style={[
+                                                    styles.sortOption,
+                                                    {
+                                                        backgroundColor: sortBy === option.id ? option.color : colors.card,
+                                                        borderColor: sortBy === option.id ? option.color : colors.border,
+                                                    }
+                                                ]}
+                                                onPress={() => setSortBy(option.id)}
+                                                activeOpacity={0.7}
+                                            >
+                                                <Ionicons name={option.icon as any} size={18} color={sortBy === option.id ? '#fff' : option.color} />
+                                                <Text style={[styles.sortOptionText, { color: sortBy === option.id ? '#fff' : colors.text }]}>
+                                                    {option.label}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+
+                                {/* Destination */}
+                                <View style={styles.section}>
+                                    <View style={styles.sectionHeader}>
+                                        <Ionicons name="location-outline" size={20} color="#EF4444" />
+                                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Destination</Text>
+                                    </View>
+                                    <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
+                                        <Ionicons name="search-outline" size={16} color={colors.textSecondary} />
+                                        <TextInput
+                                            style={[styles.input, { color: colors.text }]}
+                                            placeholder="Search destination..."
+                                            placeholderTextColor={colors.textSecondary}
+                                            value={destination}
+                                            onChangeText={setDestination}
+                                        />
+                                        {destination !== '' && (
+                                            <TouchableOpacity onPress={() => setDestination('')}>
+                                                <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
+                                </View>
+
+                                {/* Starting From */}
+                                <View style={styles.section}>
+                                    <View style={styles.sectionHeader}>
+                                        <Ionicons name="navigate-outline" size={20} color="#6366F1" />
+                                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Starting From</Text>
+                                    </View>
+                                    <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
+                                        <Ionicons name="flag-outline" size={16} color={colors.textSecondary} />
+                                        <TextInput
+                                            style={[styles.input, { color: colors.text }]}
+                                            placeholder="Origin city..."
+                                            placeholderTextColor={colors.textSecondary}
+                                            value={startingFrom}
+                                            onChangeText={setStartingFrom}
+                                        />
+                                        {startingFrom !== '' && (
+                                            <TouchableOpacity onPress={() => setStartingFrom('')}>
+                                                <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
+                                </View>
+
+                                {/* Max Budget */}
+                                <View style={styles.section}>
+                                    <View style={styles.sectionHeader}>
+                                        <Ionicons name="wallet-outline" size={20} color="#10B981" />
+                                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Max Budget</Text>
+                                    </View>
+                                    <View style={styles.optionsRow}>
+                                        {BUDGET_OPTIONS.map((option) => (
+                                            <TouchableOpacity
+                                                key={option.id}
+                                                style={[
+                                                    styles.optionChip,
+                                                    {
+                                                        backgroundColor: maxCost === option.id && !customBudget ? '#10B981' : colors.card,
+                                                        borderColor: maxCost === option.id && !customBudget ? '#10B981' : colors.border,
+                                                    }
+                                                ]}
+                                                onPress={() => { setMaxCost(option.id); setCustomBudget(''); }}
+                                                activeOpacity={0.7}
+                                            >
+                                                <Text style={[styles.optionChipText, { color: maxCost === option.id && !customBudget ? '#fff' : colors.text }]}>
+                                                    {option.label}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                    <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border, marginTop: SPACING.sm }]}>
+                                        <Text style={{ color: colors.textSecondary }}>₹</Text>
+                                        <TextInput
+                                            style={[styles.input, { color: colors.text }]}
+                                            placeholder="Custom amount..."
+                                            placeholderTextColor={colors.textSecondary}
+                                            keyboardType="numeric"
+                                            value={customBudget}
+                                            onChangeText={(text) => {
+                                                setCustomBudget(text);
+                                                if (text) setMaxCost(0);
+                                            }}
+                                        />
+                                    </View>
+                                </View>
+
+                                {/* Group Size */}
+                                <View style={styles.section}>
+                                    <View style={styles.sectionHeader}>
+                                        <Ionicons name="people-outline" size={20} color="#F59E0B" />
+                                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Group Size (max)</Text>
+                                    </View>
+                                    <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
+                                        <Ionicons name="person-outline" size={16} color={colors.textSecondary} />
+                                        <TextInput
+                                            style={[styles.input, { color: colors.text }]}
+                                            placeholder="Enter max travelers..."
+                                            placeholderTextColor={colors.textSecondary}
+                                            keyboardType="numeric"
+                                            value={groupSize}
+                                            onChangeText={setGroupSize}
+                                            maxLength={3}
+                                        />
+                                        {groupSize !== '' && (
+                                            <TouchableOpacity onPress={() => setGroupSize('')}>
+                                                <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
+                                </View>
+
+                                {/* Date Range — Calendar Picker */}
+                                <View style={styles.section}>
+                                    <View style={styles.sectionHeader}>
+                                        <Ionicons name="calendar-outline" size={20} color="#EC4899" />
+                                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Date Range</Text>
+                                    </View>
+                                    <View style={styles.dateRow}>
                                         <TouchableOpacity
-                                            key={option.id}
-                                            style={[
-                                                styles.sortOption,
-                                                {
-                                                    backgroundColor: sortBy === option.id ? option.color : colors.card,
-                                                    borderColor: sortBy === option.id ? option.color : colors.border,
-                                                }
-                                            ]}
-                                            onPress={() => setSortBy(option.id)}
-                                            activeOpacity={0.7}
+                                            style={[styles.datePickerBtn, { backgroundColor: colors.inputBackground, borderColor: startDateObj ? '#EC4899' : colors.border }]}
+                                            onPress={() => setShowStartPicker(true)}
                                         >
-                                            <Ionicons name={option.icon as any} size={18} color={sortBy === option.id ? '#fff' : option.color} />
-                                            <Text style={[styles.sortOptionText, { color: sortBy === option.id ? '#fff' : colors.text }]}>
-                                                {option.label}
+                                            <Ionicons name="calendar-outline" size={16} color={startDateObj ? '#EC4899' : colors.textSecondary} />
+                                            <Text style={[styles.datePickerText, { color: startDateObj ? colors.text : colors.textSecondary }]}>
+                                                {formatPickedDate(startDateObj) || 'Start Date'}
                                             </Text>
                                         </TouchableOpacity>
-                                    ))}
-                                </View>
-                            </View>
-
-                            {/* Destination */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Ionicons name="location-outline" size={20} color="#EF4444" />
-                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Destination</Text>
-                                </View>
-                                <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
-                                    <Ionicons name="search-outline" size={16} color={colors.textSecondary} />
-                                    <TextInput
-                                        style={[styles.input, { color: colors.text }]}
-                                        placeholder="Search destination..."
-                                        placeholderTextColor={colors.textSecondary}
-                                        value={destination}
-                                        onChangeText={setDestination}
-                                    />
-                                    {destination !== '' && (
-                                        <TouchableOpacity onPress={() => setDestination('')}>
-                                            <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
-                                        </TouchableOpacity>
-                                    )}
-                                </View>
-                            </View>
-
-                            {/* Starting From */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Ionicons name="navigate-outline" size={20} color="#6366F1" />
-                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Starting From</Text>
-                                </View>
-                                <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
-                                    <Ionicons name="flag-outline" size={16} color={colors.textSecondary} />
-                                    <TextInput
-                                        style={[styles.input, { color: colors.text }]}
-                                        placeholder="Origin city..."
-                                        placeholderTextColor={colors.textSecondary}
-                                        value={startingFrom}
-                                        onChangeText={setStartingFrom}
-                                    />
-                                    {startingFrom !== '' && (
-                                        <TouchableOpacity onPress={() => setStartingFrom('')}>
-                                            <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
-                                        </TouchableOpacity>
-                                    )}
-                                </View>
-                            </View>
-
-                            {/* Max Budget */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Ionicons name="wallet-outline" size={20} color="#10B981" />
-                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Max Budget</Text>
-                                </View>
-                                <View style={styles.optionsRow}>
-                                    {BUDGET_OPTIONS.map((option) => (
+                                        <Text style={{ color: colors.textSecondary, fontSize: 16 }}>→</Text>
                                         <TouchableOpacity
-                                            key={option.id}
-                                            style={[
-                                                styles.optionChip,
-                                                {
-                                                    backgroundColor: maxCost === option.id && !customBudget ? '#10B981' : colors.card,
-                                                    borderColor: maxCost === option.id && !customBudget ? '#10B981' : colors.border,
-                                                }
-                                            ]}
-                                            onPress={() => { setMaxCost(option.id); setCustomBudget(''); }}
-                                            activeOpacity={0.7}
+                                            style={[styles.datePickerBtn, { backgroundColor: colors.inputBackground, borderColor: endDateObj ? '#EC4899' : colors.border }]}
+                                            onPress={() => setShowEndPicker(true)}
                                         >
-                                            <Text style={[styles.optionChipText, { color: maxCost === option.id && !customBudget ? '#fff' : colors.text }]}>
-                                                {option.label}
+                                            <Ionicons name="calendar-outline" size={16} color={endDateObj ? '#EC4899' : colors.textSecondary} />
+                                            <Text style={[styles.datePickerText, { color: endDateObj ? colors.text : colors.textSecondary }]}>
+                                                {formatPickedDate(endDateObj) || 'End Date'}
                                             </Text>
                                         </TouchableOpacity>
-                                    ))}
-                                </View>
-                                <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border, marginTop: SPACING.sm }]}>
-                                    <Text style={{ color: colors.textSecondary }}>₹</Text>
-                                    <TextInput
-                                        style={[styles.input, { color: colors.text }]}
-                                        placeholder="Custom amount..."
-                                        placeholderTextColor={colors.textSecondary}
-                                        keyboardType="numeric"
-                                        value={customBudget}
-                                        onChangeText={(text) => {
-                                            setCustomBudget(text);
-                                            if (text) setMaxCost(0);
-                                        }}
-                                    />
-                                </View>
-                            </View>
-
-                            {/* Group Size */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Ionicons name="people-outline" size={20} color="#F59E0B" />
-                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Group Size (max)</Text>
-                                </View>
-                                <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
-                                    <Ionicons name="person-outline" size={16} color={colors.textSecondary} />
-                                    <TextInput
-                                        style={[styles.input, { color: colors.text }]}
-                                        placeholder="Enter max travelers..."
-                                        placeholderTextColor={colors.textSecondary}
-                                        keyboardType="numeric"
-                                        value={groupSize}
-                                        onChangeText={setGroupSize}
-                                        maxLength={3}
-                                    />
-                                    {groupSize !== '' && (
-                                        <TouchableOpacity onPress={() => setGroupSize('')}>
-                                            <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
-                                        </TouchableOpacity>
-                                    )}
-                                </View>
-                            </View>
-
-                            {/* Date Range — Calendar Picker */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Ionicons name="calendar-outline" size={20} color="#EC4899" />
-                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Date Range</Text>
-                                </View>
-                                <View style={styles.dateRow}>
-                                    <TouchableOpacity
-                                        style={[styles.datePickerBtn, { backgroundColor: colors.inputBackground, borderColor: startDateObj ? '#EC4899' : colors.border }]}
-                                        onPress={() => setShowStartPicker(true)}
-                                    >
-                                        <Ionicons name="calendar-outline" size={16} color={startDateObj ? '#EC4899' : colors.textSecondary} />
-                                        <Text style={[styles.datePickerText, { color: startDateObj ? colors.text : colors.textSecondary }]}>
-                                            {formatPickedDate(startDateObj) || 'Start Date'}
-                                        </Text>
-                                    </TouchableOpacity>
-                                    <Text style={{ color: colors.textSecondary, fontSize: 16 }}>→</Text>
-                                    <TouchableOpacity
-                                        style={[styles.datePickerBtn, { backgroundColor: colors.inputBackground, borderColor: endDateObj ? '#EC4899' : colors.border }]}
-                                        onPress={() => setShowEndPicker(true)}
-                                    >
-                                        <Ionicons name="calendar-outline" size={16} color={endDateObj ? '#EC4899' : colors.textSecondary} />
-                                        <Text style={[styles.datePickerText, { color: endDateObj ? colors.text : colors.textSecondary }]}>
-                                            {formatPickedDate(endDateObj) || 'End Date'}
-                                        </Text>
-                                    </TouchableOpacity>
-                                </View>
-                                {(startDateObj || endDateObj) && (
-                                    <TouchableOpacity
-                                        style={{ marginTop: SPACING.xs, alignSelf: 'flex-end' }}
-                                        onPress={() => { setStartDateObj(null); setEndDateObj(null); }}
-                                    >
-                                        <Text style={{ color: '#EC4899', fontSize: FONT_SIZE.xs }}>Clear dates</Text>
-                                    </TouchableOpacity>
-                                )}
-                            </View>
-
-                            {/* Trip Type — Multi-select */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Ionicons name="compass-outline" size={20} color={colors.primary} />
-                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Trip Type</Text>
-                                    {tripTypes.length > 0 && (
-                                        <Text style={[styles.selectionCount, { color: colors.primary }]}>{tripTypes.length} selected</Text>
-                                    )}
-                                </View>
-                                <View style={styles.optionsRow}>
-                                    {TRIP_TYPES.map((option) => {
-                                        const selected = tripTypes.includes(option.id);
-                                        return (
-                                            <TouchableOpacity
-                                                key={option.id}
-                                                style={[styles.optionChip, { backgroundColor: selected ? colors.primary : colors.card, borderColor: selected ? colors.primary : colors.border }]}
-                                                onPress={() => toggleMultiSelect(tripTypes, setTripTypes, option.id)}
-                                                activeOpacity={0.7}
-                                            >
-                                                <Ionicons name={option.icon as any} size={16} color={selected ? '#fff' : colors.text} style={{ marginRight: 4 }} />
-                                                <Text style={[styles.optionChipText, { color: selected ? '#fff' : colors.text }]}>{option.label}</Text>
-                                            </TouchableOpacity>
-                                        );
-                                    })}
-                                </View>
-                            </View>
-
-                            {/* Transport Mode — Multi-select */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Ionicons name="train-outline" size={20} color="#9d74f7" />
-                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Transport Mode</Text>
-                                    {transportModes.length > 0 && (
-                                        <Text style={[styles.selectionCount, { color: '#9d74f7' }]}>{transportModes.length} selected</Text>
-                                    )}
-                                </View>
-                                <View style={styles.optionsRow}>
-                                    {TRANSPORT_MODES.map((option) => {
-                                        const selected = transportModes.includes(option.id);
-                                        return (
-                                            <TouchableOpacity
-                                                key={option.id}
-                                                style={[styles.optionChip, { backgroundColor: selected ? '#9d74f7' : colors.card, borderColor: selected ? '#9d74f7' : colors.border }]}
-                                                onPress={() => toggleMultiSelect(transportModes, setTransportModes, option.id)}
-                                                activeOpacity={0.7}
-                                            >
-                                                <Ionicons name={option.icon as any} size={16} color={selected ? '#fff' : colors.text} style={{ marginRight: 4 }} />
-                                                <Text style={[styles.optionChipText, { color: selected ? '#fff' : colors.text }]}>{option.label}</Text>
-                                            </TouchableOpacity>
-                                        );
-                                    })}
-                                </View>
-                            </View>
-
-                            {/* Accommodation Type */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Ionicons name="bed-outline" size={20} color="#0EA5E9" />
-                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Accommodation</Text>
-                                </View>
-                                <View style={styles.optionsRow}>
-                                    {ACCOMMODATION_TYPES.map((option) => {
-                                        const selected = accommodationType === option.id;
-                                        return (
-                                            <TouchableOpacity
-                                                key={option.id}
-                                                style={[styles.optionChip, { backgroundColor: selected ? '#0EA5E9' : colors.card, borderColor: selected ? '#0EA5E9' : colors.border }]}
-                                                onPress={() => setAccommodationType(selected ? undefined : option.id)}
-                                                activeOpacity={0.7}
-                                            >
-                                                <Ionicons name={option.icon as any} size={16} color={selected ? '#fff' : colors.text} style={{ marginRight: 4 }} />
-                                                <Text style={[styles.optionChipText, { color: selected ? '#fff' : colors.text }]}>{option.label}</Text>
-                                            </TouchableOpacity>
-                                        );
-                                    })}
-                                </View>
-                            </View>
-
-                            {/* Booking Status */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Ionicons name="bookmark-outline" size={20} color="#F59E0B" />
-                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Booking Status</Text>
-                                </View>
-                                <View style={styles.optionsRow}>
-                                    {BOOKING_STATUSES.map((option) => {
-                                        const selected = bookingStatus === option.id;
-                                        return (
-                                            <TouchableOpacity
-                                                key={option.id}
-                                                style={[styles.optionChip, { backgroundColor: selected ? option.color : colors.card, borderColor: selected ? option.color : colors.border }]}
-                                                onPress={() => setBookingStatus(selected ? undefined : option.id)}
-                                                activeOpacity={0.7}
-                                            >
-                                                <Ionicons name={option.icon as any} size={16} color={selected ? '#fff' : colors.text} style={{ marginRight: 4 }} />
-                                                <Text style={[styles.optionChipText, { color: selected ? '#fff' : colors.text }]}>{option.label}</Text>
-                                            </TouchableOpacity>
-                                        );
-                                    })}
-                                </View>
-                            </View>
-
-                            {/* Gender Preference */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Ionicons name="people-circle-outline" size={20} color="#EF4444" />
-                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Who can join?</Text>
-                                </View>
-                                <View style={styles.optionsRow}>
-                                    {GENDER_PREFERENCES.map((option) => (
+                                    </View>
+                                    {(startDateObj || endDateObj) && (
                                         <TouchableOpacity
-                                            key={option.id}
-                                            style={[styles.optionChip, { backgroundColor: genderPreference === option.id ? '#EF4444' : colors.card, borderColor: genderPreference === option.id ? '#EF4444' : colors.border }]}
-                                            onPress={() => setGenderPreference(genderPreference === option.id ? undefined : option.id)}
-                                            activeOpacity={0.7}
+                                            style={{ marginTop: SPACING.xs, alignSelf: 'flex-end' }}
+                                            onPress={() => { setStartDateObj(null); setEndDateObj(null); }}
                                         >
-                                            <Ionicons name={option.icon as any} size={16} color={genderPreference === option.id ? '#fff' : colors.text} style={{ marginRight: 4 }} />
-                                            <Text style={[styles.optionChipText, { color: genderPreference === option.id ? '#fff' : colors.text }]}>{option.label}</Text>
+                                            <Text style={{ color: '#EC4899', fontSize: FONT_SIZE.xs }}>Clear dates</Text>
                                         </TouchableOpacity>
-                                    ))}
+                                    )}
                                 </View>
+
+                                {/* Trip Type — Multi-select */}
+                                <View style={styles.section}>
+                                    <View style={styles.sectionHeader}>
+                                        <Ionicons name="compass-outline" size={20} color={colors.primary} />
+                                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Trip Type</Text>
+                                        {tripTypes.length > 0 && (
+                                            <Text style={[styles.selectionCount, { color: colors.primary }]}>{tripTypes.length} selected</Text>
+                                        )}
+                                    </View>
+                                    <View style={styles.optionsRow}>
+                                        {TRIP_TYPES.map((option) => {
+                                            const selected = tripTypes.includes(option.id);
+                                            return (
+                                                <TouchableOpacity
+                                                    key={option.id}
+                                                    style={[styles.optionChip, { backgroundColor: selected ? colors.primary : colors.card, borderColor: selected ? colors.primary : colors.border }]}
+                                                    onPress={() => toggleMultiSelect(tripTypes, setTripTypes, option.id)}
+                                                    activeOpacity={0.7}
+                                                >
+                                                    <Ionicons name={option.icon as any} size={16} color={selected ? '#fff' : colors.text} style={{ marginRight: 4 }} />
+                                                    <Text style={[styles.optionChipText, { color: selected ? '#fff' : colors.text }]}>{option.label}</Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </View>
+                                </View>
+
+                                {/* Transport Mode — Multi-select */}
+                                <View style={styles.section}>
+                                    <View style={styles.sectionHeader}>
+                                        <Ionicons name="train-outline" size={20} color="#9d74f7" />
+                                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Transport Mode</Text>
+                                        {transportModes.length > 0 && (
+                                            <Text style={[styles.selectionCount, { color: '#9d74f7' }]}>{transportModes.length} selected</Text>
+                                        )}
+                                    </View>
+                                    <View style={styles.optionsRow}>
+                                        {TRANSPORT_MODES.map((option) => {
+                                            const selected = transportModes.includes(option.id);
+                                            return (
+                                                <TouchableOpacity
+                                                    key={option.id}
+                                                    style={[styles.optionChip, { backgroundColor: selected ? '#9d74f7' : colors.card, borderColor: selected ? '#9d74f7' : colors.border }]}
+                                                    onPress={() => toggleMultiSelect(transportModes, setTransportModes, option.id)}
+                                                    activeOpacity={0.7}
+                                                >
+                                                    <Ionicons name={option.icon as any} size={16} color={selected ? '#fff' : colors.text} style={{ marginRight: 4 }} />
+                                                    <Text style={[styles.optionChipText, { color: selected ? '#fff' : colors.text }]}>{option.label}</Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </View>
+                                </View>
+
+                                {/* Accommodation Type */}
+                                <View style={styles.section}>
+                                    <View style={styles.sectionHeader}>
+                                        <Ionicons name="bed-outline" size={20} color="#0EA5E9" />
+                                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Accommodation</Text>
+                                    </View>
+                                    <View style={styles.optionsRow}>
+                                        {ACCOMMODATION_TYPES.map((option) => {
+                                            const selected = accommodationType === option.id;
+                                            return (
+                                                <TouchableOpacity
+                                                    key={option.id}
+                                                    style={[styles.optionChip, { backgroundColor: selected ? '#0EA5E9' : colors.card, borderColor: selected ? '#0EA5E9' : colors.border }]}
+                                                    onPress={() => setAccommodationType(selected ? undefined : option.id)}
+                                                    activeOpacity={0.7}
+                                                >
+                                                    <Ionicons name={option.icon as any} size={16} color={selected ? '#fff' : colors.text} style={{ marginRight: 4 }} />
+                                                    <Text style={[styles.optionChipText, { color: selected ? '#fff' : colors.text }]}>{option.label}</Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </View>
+                                </View>
+
+                                {/* Booking Status */}
+                                <View style={styles.section}>
+                                    <View style={styles.sectionHeader}>
+                                        <Ionicons name="bookmark-outline" size={20} color="#F59E0B" />
+                                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Booking Status</Text>
+                                    </View>
+                                    <View style={styles.optionsRow}>
+                                        {BOOKING_STATUSES.map((option) => {
+                                            const selected = bookingStatus === option.id;
+                                            return (
+                                                <TouchableOpacity
+                                                    key={option.id}
+                                                    style={[styles.optionChip, { backgroundColor: selected ? option.color : colors.card, borderColor: selected ? option.color : colors.border }]}
+                                                    onPress={() => setBookingStatus(selected ? undefined : option.id)}
+                                                    activeOpacity={0.7}
+                                                >
+                                                    <Ionicons name={option.icon as any} size={16} color={selected ? '#fff' : colors.text} style={{ marginRight: 4 }} />
+                                                    <Text style={[styles.optionChipText, { color: selected ? '#fff' : colors.text }]}>{option.label}</Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </View>
+                                </View>
+
+                                {/* Gender Preference */}
+                                <View style={styles.section}>
+                                    <View style={styles.sectionHeader}>
+                                        <Ionicons name="people-circle-outline" size={20} color="#EF4444" />
+                                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Who can join?</Text>
+                                    </View>
+                                    <View style={styles.optionsRow}>
+                                        {GENDER_PREFERENCES.map((option) => (
+                                            <TouchableOpacity
+                                                key={option.id}
+                                                style={[styles.optionChip, { backgroundColor: genderPreference === option.id ? '#EF4444' : colors.card, borderColor: genderPreference === option.id ? '#EF4444' : colors.border }]}
+                                                onPress={() => setGenderPreference(genderPreference === option.id ? undefined : option.id)}
+                                                activeOpacity={0.7}
+                                            >
+                                                <Ionicons name={option.icon as any} size={16} color={genderPreference === option.id ? '#fff' : colors.text} style={{ marginRight: 4 }} />
+                                                <Text style={[styles.optionChipText, { color: genderPreference === option.id ? '#fff' : colors.text }]}>{option.label}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+
+                                <View style={{ height: SPACING.xxl }} />
+                            </ScrollView>
+
+                            {/* Buttons */}
+                            <View style={[styles.buttonContainer, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+                                <TouchableOpacity style={[styles.resetButton, { borderColor: colors.border }]} onPress={handleReset} activeOpacity={0.7}>
+                                    <Ionicons name="refresh-outline" size={18} color={colors.textSecondary} />
+                                    <Text style={[styles.resetButtonText, { color: colors.textSecondary }]}>Reset</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={[styles.applyButton, { backgroundColor: colors.primary }]} onPress={handleApply} activeOpacity={0.8}>
+                                    <Ionicons name="checkmark" size={18} color="#fff" />
+                                    <Text style={styles.applyButtonText}>Apply Filters</Text>
+                                </TouchableOpacity>
                             </View>
-
-                            <View style={{ height: SPACING.xxl }} />
-                        </ScrollView>
-
-                        {/* Buttons */}
-                        <View style={[styles.buttonContainer, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
-                            <TouchableOpacity style={[styles.resetButton, { borderColor: colors.border }]} onPress={handleReset} activeOpacity={0.7}>
-                                <Ionicons name="refresh-outline" size={18} color={colors.textSecondary} />
-                                <Text style={[styles.resetButtonText, { color: colors.textSecondary }]}>Reset</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={[styles.applyButton, { backgroundColor: colors.primary }]} onPress={handleApply} activeOpacity={0.8}>
-                                <Ionicons name="checkmark" size={18} color="#fff" />
-                                <Text style={styles.applyButtonText}>Apply Filters</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </SafeAreaView>
+                        </SafeAreaView>
+                    </KeyboardAvoidingView>
 
                     {/* Date picker modals */}
                     {showStartPicker && (
