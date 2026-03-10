@@ -86,6 +86,7 @@ const useTrips = () => {
 
                                 // For home feed: Filter out current user's trips, full trips, expired/cancelled/past trips
                                 const now = new Date();
+                                const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
                                 const feedTrips = tripsData.filter((trip: any) => {
                                     // Exclude current user's trips
                                     if (currentUser && trip.userId === currentUser.uid) {
@@ -100,7 +101,7 @@ const useTrips = () => {
                                     // Exclude trips past their start date
                                     const fromDate = trip.fromDate?.toDate ? trip.fromDate.toDate() :
                                         trip.fromDate ? new Date(trip.fromDate) : null;
-                                    if (fromDate && fromDate < now) return false;
+                                    if (fromDate && fromDate < todayStart) return false;
                                     // Exclude full trips
                                     const participants = trip.participants?.length || trip.currentTravelers || 1;
                                     const maxTravelers = trip.maxTravelers || 10;
