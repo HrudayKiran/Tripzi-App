@@ -230,8 +230,13 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     useEffect(() => {
         if (!currentUser) return;
         const updateLastSeen = () => {
+            // Update both users and public_users collections for lastSeen
+            const timestamp = firestore.FieldValue.serverTimestamp();
             firestore().collection('users').doc(currentUser.uid).update({
-                lastSeen: firestore.FieldValue.serverTimestamp(),
+                lastSeen: timestamp,
+            }).catch(() => { });
+            firestore().collection('public_users').doc(currentUser.uid).update({
+                lastSeen: timestamp,
             }).catch(() => { });
         };
         updateLastSeen();
