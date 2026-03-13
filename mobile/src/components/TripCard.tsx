@@ -6,11 +6,20 @@ import { useTheme } from '../contexts/ThemeContext';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import DefaultAvatar from './DefaultAvatar';
+import ActionReasonModal from './ActionReasonModal';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, STATUS, NEUTRAL } from '../styles';
 import { DEFAULT_TRIP_IMAGE, isValidImageUrl } from '../constants/defaults';
-import NotificationService from '../utils/notificationService';
+import { joinTrip, leaveTrip } from '../utils/tripActions';
 
 const { width } = Dimensions.get('window');
+
+const LEAVE_REASONS = [
+    'Plans changed',
+    'Trip dates no longer work for me',
+    'Budget changed',
+    'I joined by mistake',
+    'Other',
+];
 
 // Transport mode icons
 const TRANSPORT_ICONS = {
@@ -45,6 +54,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
     const [menuPosition, setMenuPosition] = useState<{ top: number, right: number } | null>(null);
     const moreButtonRef = useRef<View>(null);
     const [mediaAspectRatio, setMediaAspectRatio] = useState(4 / 5);
+    const [showLeaveReasonModal, setShowLeaveReasonModal] = useState(false);
     const currentUser = auth().currentUser;
 
     // Detect aspect ratio of first media item
@@ -83,10 +93,10 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
             .then(doc => {
                 if (doc.exists) {
                     const data = doc.data();
-                    if (data?.totalRating && data?.ratingCount) {
+                    if ((data?.avgRating || data?.totalRatings) || (data?.totalRating && data?.ratingCount)) {
                         setUserRating({
-                            avg: parseFloat((data.totalRating / data.ratingCount).toFixed(1)),
-                            count: data.ratingCount
+                            avg: data?.avgRating || parseFloat((data.totalRating / data.ratingCount).toFixed(1)),
+                            count: data?.totalRatings || data?.ratingCount || 0,
                         });
                     }
                 }
@@ -136,87 +146,28 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
         }
 
         try {
-            const userName = currentUser.displayName || 'A traveler';
-            const tripTitle = trip.title || 'a trip';
-
             if (hasJoined) {
-                // Leave trip
-                await firestore().collection('trips').doc(trip.id).update({
-                    participants: firestore.FieldValue.arrayRemove(currentUser.uid),
-                    currentTravelers: firestore.FieldValue.increment(-1),
-                });
-                setHasJoined(false);
-
-                // Also remove user from associated group chat
-                try {
-                    const groupChats = await firestore()
-                        .collection('group_chats')
-                        .where('tripId', '==', trip.id)
-                        .where('participants', 'array-contains', currentUser.uid)
-                        .get();
-                    for (const chatDoc of groupChats.docs) {
-                        await chatDoc.ref.update({
-                            participants: firestore.FieldValue.arrayRemove(currentUser.uid),
-                            [`participantDetails.${currentUser.uid}`]: firestore.FieldValue.delete(),
-                        });
-                    }
-                } catch { /* silently handle */ }
-
-                if (trip.userId && trip.userId !== currentUser.uid) {
-                    await NotificationService.onLeaveTrip(currentUser.uid, userName, trip.id, trip.userId, tripTitle);
-                }
+                setShowLeaveReasonModal(true);
             } else {
-                // Check spots first
-                const spotsLeft = (trip.maxTravelers || 8) - (trip.participants?.length || trip.currentTravelers || 1);
-                if (spotsLeft <= 0) {
-                    Alert.alert('Trip Full', 'Sorry, this trip is already full.');
-                    return;
-                }
-
-                // Gender check — read from 'users' where gender is stored
-                const tripGender = (trip.genderPreference || '').trim().toLowerCase();
-                if (tripGender && tripGender !== 'anyone') {
-                    try {
-                        const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
-                        const userData = userDoc.data();
-                        const userGender = (userData?.gender || '').trim().toLowerCase();
-
-                        if (!userGender) {
-                            Alert.alert(
-                                'Gender Not Set',
-                                'Your gender is required to join gender-restricted trips. Please update your profile.'
-                            );
-                            return;
-                        }
-
-                        if (userGender !== tripGender) {
-                            const genderLabel = tripGender === 'male' ? 'Male' : 'Female';
-                            Alert.alert(
-                                'Gender Restriction',
-                                `This trip is for ${genderLabel} travelers only. Try joining other trips that match your gender or are open to Anyone! 🌍`
-                            );
-                            return;
-                        }
-                    } catch (e) {
-                        Alert.alert('Error', 'Could not verify your gender. Please try again.');
-                        return;
-                    }
-                }
-
-                // Join trip
-                await firestore().collection('trips').doc(trip.id).update({
-                    participants: firestore.FieldValue.arrayUnion(currentUser.uid),
-                    currentTravelers: firestore.FieldValue.increment(1),
-                });
+                await joinTrip(trip.id);
                 setHasJoined(true);
-
-                if (trip.userId && trip.userId !== currentUser.uid) {
-                    await NotificationService.onJoinTrip(currentUser.uid, userName, trip.id, trip.userId, tripTitle);
-                }
             }
         } catch (error: any) {
             console.warn('Join trip error:', error?.message || error);
-            Alert.alert('Error', 'Could not join/leave this trip. Please try again.');
+            const message = String(error?.message || '').toLowerCase();
+            if (message.includes('male travelers only') || message.includes('female travelers only')) {
+                Alert.alert('Gender Restriction', error.message);
+                return;
+            }
+            if (message.includes('full')) {
+                Alert.alert('Trip Full', error.message);
+                return;
+            }
+            if (message.includes('already started')) {
+                Alert.alert('Trip Closed', error.message);
+                return;
+            }
+            Alert.alert('Error', error?.message || 'Could not join/leave this trip. Please try again.');
         }
     };
 
@@ -550,6 +501,25 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                     ))}
                 </View>
             </View>
+
+            <ActionReasonModal
+                visible={showLeaveReasonModal}
+                title="Leave Trip"
+                subtitle="Tell the host why you are leaving this trip. The reason will be shared with them."
+                actionLabel="Leave Trip"
+                actionTone="danger"
+                reasons={LEAVE_REASONS}
+                onClose={() => setShowLeaveReasonModal(false)}
+                onSubmit={async (reason) => {
+                    try {
+                        await leaveTrip(trip.id, reason);
+                        setHasJoined(false);
+                        setShowLeaveReasonModal(false);
+                    } catch (error: any) {
+                        Alert.alert('Error', error?.message || 'Could not leave this trip. Please try again.');
+                    }
+                }}
+            />
         </>
     );
 });

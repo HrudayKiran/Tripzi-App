@@ -8,8 +8,10 @@ import {
     ScrollView,
     Alert,
     ActivityIndicator,
+    Modal,
     Platform,
     KeyboardAvoidingView,
+    Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +22,11 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
+import {
+    requestNotificationPermission,
+    syncNotificationPreference,
+} from '../utils/notificationPermissions';
+import { PREFERENCE_KEYS, setBooleanPreference } from '../utils/preferences';
 
 const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/;
 
@@ -44,6 +51,7 @@ const CompleteProfileScreen = ({ navigation, route }) => {
     const [gender, setGender] = useState<'male' | 'female' | null>(null);
     const [dob, setDob] = useState<Date | null>(null);
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [draftDob, setDraftDob] = useState<Date>(new Date(2000, 0, 1));
     const [checkingUsername, setCheckingUsername] = useState(false);
     const [usernameError, setUsernameError] = useState('');
     const [usernameOk, setUsernameOk] = useState(false);
@@ -55,17 +63,17 @@ const CompleteProfileScreen = ({ navigation, route }) => {
     const pendingDisplayName = route?.params?.displayName || currentUser?.displayName || '';
 
     useEffect(() => {
-        if (!currentUser && !pendingIdToken) {
+        if (!pendingIdToken) {
             navigation.reset({ index: 0, routes: [{ name: 'Start' }] });
             return;
         }
 
         const defaultName = pendingDisplayName || '';
-        const defaultUsername = sanitizeUsername(pendingEmail?.split('@')[0] || `user_${(currentUser?.uid || 'temp').slice(0, 5)}`);
+        const defaultUsername = sanitizeUsername(pendingEmail?.split('@')[0] || 'traveler');
 
         setFullName(defaultName);
         setUsername(defaultUsername);
-    }, [currentUser, navigation, pendingDisplayName, pendingEmail, pendingIdToken]);
+    }, [navigation, pendingDisplayName, pendingEmail, pendingIdToken]);
 
     useEffect(() => {
         let active = true;
@@ -92,7 +100,7 @@ const CompleteProfileScreen = ({ navigation, route }) => {
                 const checkUsernameAvailability = functions().httpsCallable('checkUsernameAvailability');
                 const result = await checkUsernameAvailability({
                     username: value,
-                    excludeUid: currentUser?.uid || '',
+                    excludeUid: '',
                 });
                 const available = !!result?.data?.available;
 
@@ -120,19 +128,37 @@ const CompleteProfileScreen = ({ navigation, route }) => {
             active = false;
             clearTimeout(timeout);
         };
-    }, [username, currentUser?.uid]);
+    }, [username]);
 
     const canSubmit = useMemo(() => {
         return !!fullName.trim() && !!gender && !!dob && usernameOk && agreedToTerms && !checkingUsername && !submitting;
     }, [fullName, gender, dob, usernameOk, agreedToTerms, checkingUsername, submitting]);
 
-    const handleDateChange = (_event: any, selectedDate?: Date) => {
-        if (Platform.OS !== 'ios') {
+    const openDatePicker = () => {
+        setDraftDob(dob || new Date(2000, 0, 1));
+        setShowDatePicker(true);
+    };
+
+    const closeDatePicker = () => {
+        setShowDatePicker(false);
+    };
+
+    const confirmDatePicker = () => {
+        setDob(draftDob);
+        closeDatePicker();
+    };
+
+    const handleDateChange = (event: any, selectedDate?: Date) => {
+        if (Platform.OS === 'android') {
             setShowDatePicker(false);
+            if (event.type === 'set' && selectedDate) {
+                setDob(selectedDate);
+            }
+            return;
         }
-        // Only set date when user presses OK, not on cancel/dismiss
-        if (_event.type === 'set' && selectedDate) {
-            setDob(selectedDate);
+
+        if (selectedDate) {
+            setDraftDob(selectedDate);
         }
     };
 
@@ -171,9 +197,8 @@ const CompleteProfileScreen = ({ navigation, route }) => {
             return;
         }
 
-        // Requirement: check age on submit before creating Firebase Auth for new users.
         const age = calculateAge(dob);
-        if (!currentUser && age < 18) {
+        if (age < 18) {
             Alert.alert('Not Eligible', `You are not eligible to use Tripzi because your age is ${age}. You must be at least 18 years old.`);
             await resetToStart();
             return;
@@ -181,24 +206,35 @@ const CompleteProfileScreen = ({ navigation, route }) => {
 
         setSubmitting(true);
         try {
-            let signedInUser = auth().currentUser;
-            if (!signedInUser) {
-                if (!pendingIdToken) {
-                    throw new Error('Missing Google session. Please continue with Google again.');
-                }
-                const credential = auth.GoogleAuthProvider.credential(pendingIdToken);
-                const userCredential = await auth().signInWithCredential(credential);
-                signedInUser = userCredential.user;
+            if (!pendingIdToken) {
+                throw new Error('Missing Google session. Please continue with Google again.');
             }
 
-            const completeOnboarding = functions().httpsCallable('completeOnboarding');
-            await completeOnboarding({
+            const finalizeGoogleOnboarding = functions().httpsCallable('finalizeGoogleOnboarding');
+            const onboardingResult: any = await finalizeGoogleOnboarding({
+                idToken: pendingIdToken,
                 name: fullName.trim(),
                 username: sanitizeUsername(username.trim()),
                 gender,
                 dateOfBirth: dob.toISOString(),
                 bio: bio.trim(),
             });
+
+            const customToken = onboardingResult?.data?.customToken;
+            if (!customToken) {
+                throw new Error('Could not start your Tripzi account session.');
+            }
+
+            const authResult = await auth().signInWithCustomToken(customToken);
+            const signedInUser = authResult.user;
+
+            const permissionStatus = await requestNotificationPermission();
+            await syncNotificationPreference(
+                signedInUser.uid,
+                permissionStatus,
+                permissionStatus === 'granted'
+            );
+            await setBooleanPreference(PREFERENCE_KEYS.notificationPrompted, true);
 
             navigation.reset({ index: 0, routes: [{ name: 'App' }] });
         } catch (error: any) {
@@ -289,7 +325,7 @@ const CompleteProfileScreen = ({ navigation, route }) => {
                     <Text style={[styles.label, { color: colors.textSecondary }]}>Date of Birth *</Text>
                     <TouchableOpacity
                         style={[styles.input, styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
-                        onPress={() => setShowDatePicker(true)}
+                        onPress={openDatePicker}
                     >
                         <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} />
                         <Text style={[styles.dateText, { color: dob ? colors.text : colors.textSecondary }]}>
@@ -297,15 +333,41 @@ const CompleteProfileScreen = ({ navigation, route }) => {
                         </Text>
                     </TouchableOpacity>
 
-                    {showDatePicker && (
+                    {showDatePicker && Platform.OS === 'android' && (
                         <DateTimePicker
                             value={dob || new Date(2000, 0, 1)}
                             mode="date"
-                            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                            display="default"
                             onChange={handleDateChange}
                             maximumDate={new Date()}
                             minimumDate={new Date(1920, 0, 1)}
                         />
+                    )}
+
+                    {showDatePicker && Platform.OS === 'ios' && (
+                        <Modal transparent animationType="fade" visible={showDatePicker} onRequestClose={closeDatePicker}>
+                            <Pressable style={styles.datePickerOverlay} onPress={closeDatePicker}>
+                                <Pressable style={[styles.datePickerCard, { backgroundColor: colors.card }]} onPress={() => { }}>
+                                    <View style={[styles.datePickerHeader, { borderBottomColor: colors.border }]}>
+                                        <TouchableOpacity onPress={closeDatePicker}>
+                                            <Text style={[styles.datePickerAction, { color: colors.textSecondary }]}>Cancel</Text>
+                                        </TouchableOpacity>
+                                        <Text style={[styles.datePickerTitle, { color: colors.text }]}>Select Date of Birth</Text>
+                                        <TouchableOpacity onPress={confirmDatePicker}>
+                                            <Text style={[styles.datePickerAction, { color: colors.primary }]}>Done</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                    <DateTimePicker
+                                        value={draftDob}
+                                        mode="date"
+                                        display="spinner"
+                                        onChange={handleDateChange}
+                                        maximumDate={new Date()}
+                                        minimumDate={new Date(1920, 0, 1)}
+                                    />
+                                </Pressable>
+                            </Pressable>
+                        </Modal>
                     )}
 
                     <Text style={[styles.label, { color: colors.textSecondary }]}>Bio (Optional)</Text>
@@ -443,6 +505,32 @@ const styles = StyleSheet.create({
     },
     dateText: {
         fontSize: FONT_SIZE.md,
+    },
+    datePickerOverlay: {
+        flex: 1,
+        justifyContent: 'flex-end',
+        backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    },
+    datePickerCard: {
+        borderTopLeftRadius: BORDER_RADIUS.xl,
+        borderTopRightRadius: BORDER_RADIUS.xl,
+        paddingBottom: SPACING.xl,
+    },
+    datePickerHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: SPACING.lg,
+        paddingVertical: SPACING.md,
+        borderBottomWidth: 1,
+    },
+    datePickerTitle: {
+        fontSize: FONT_SIZE.md,
+        fontWeight: FONT_WEIGHT.semibold,
+    },
+    datePickerAction: {
+        fontSize: FONT_SIZE.sm,
+        fontWeight: FONT_WEIGHT.semibold,
     },
     submitWrap: {
         marginTop: SPACING.xl,

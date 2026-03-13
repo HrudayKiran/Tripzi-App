@@ -1,11 +1,20 @@
 import * as admin from 'firebase-admin';
 import { db } from './firebase';
+import { deleteR2Prefix } from './r2';
 
 const safeDeleteStoragePrefix = async (bucket: any, prefix: string) => {
     try {
         await bucket.deleteFiles({ prefix });
     } catch (error) {
         console.log(`Storage delete skipped for prefix "${prefix}":`, error);
+    }
+};
+
+const safeDeleteR2Prefix = async (prefix: string) => {
+    try {
+        await deleteR2Prefix(prefix);
+    } catch (error) {
+        console.log(`R2 delete skipped for prefix "${prefix}":`, error);
     }
 };
 
@@ -175,6 +184,9 @@ export const wipeUserData = async (uid: string) => {
         }
 
         // ==================== E. STORAGE PREFIXES ====================
+
+        await safeDeleteR2Prefix(`profiles/${uid}/`);
+        await safeDeleteR2Prefix(`trips/${uid}/`);
 
         await safeDeleteStoragePrefix(bucket, `profiles/${uid}/`);
         await safeDeleteStoragePrefix(bucket, `trips/${uid}/`);

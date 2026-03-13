@@ -18,6 +18,9 @@ export const deleteMyAccount = onCall(async (request) => {
 
     const uid = request.auth.uid;
     const reason = typeof request.data?.reason === 'string' ? request.data.reason.trim() : '';
+    if (!reason) {
+        throw new HttpsError('invalid-argument', 'A deletion reason is required.');
+    }
 
     try {
         console.log(`Requesting account deletion for user: ${uid}`);
@@ -52,9 +55,10 @@ export const deleteMyAccount = onCall(async (request) => {
             name: userData.name || userData.displayName || null,
             username: userData.username || null,
             gender: userData.gender || null,
-            reason: reason || 'No reason provided',
+            reason,
             providers: authProviders,
             originalCreatedAt: userData.createdAt || null,
+            profileSnapshot: userData,
             deletedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 

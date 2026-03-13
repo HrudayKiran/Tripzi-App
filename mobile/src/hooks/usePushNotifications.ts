@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react';
-import { Platform, Alert, Linking } from 'react-native';
+import { Platform, Linking } from 'react-native';
 import fs, { getFirestore, collection, doc, setDoc, serverTimestamp, getDoc } from '@react-native-firebase/firestore';
-import ms, { getMessaging, getToken, onMessage, onNotificationOpenedApp, getInitialNotification, requestPermission, AuthorizationStatus } from '@react-native-firebase/messaging';
+import ms, { getMessaging, getToken, onMessage, onNotificationOpenedApp, getInitialNotification } from '@react-native-firebase/messaging';
 import au, { getAuth, onAuthStateChanged } from '@react-native-firebase/auth';
 import * as RootNavigation from '../navigation/RootNavigation';
+import { getNotificationPermissionStatus } from '../utils/notificationPermissions';
+import { resolveNotificationTarget } from '../utils/notificationNavigation';
 
 interface NotificationData {
   route?: string;
@@ -26,13 +28,13 @@ const usePushNotifications = () => {
 
 
 
-  useEffect(() => {
+    useEffect(() => {
 
     let unsubscribeAuth: (() => void) | null = null;
     let unsubscribeOnNotificationOpened: (() => void) | null = null;
     let unsubscribeOnMessage: (() => void) | null = null;
 
-    const setup = async () => {
+        const setup = async () => {
 
       try {
         const messaging = getMessaging(); // Modular instance
@@ -45,7 +47,7 @@ const usePushNotifications = () => {
           const remoteMessage = await getInitialNotification(messaging);
           if (remoteMessage?.data) {
             setTimeout(() => {
-              handleNotificationNavigation(remoteMessage.data as NotificationData);
+              void handleNotificationNavigation(remoteMessage.data as NotificationData);
             }, 1000);
           }
         };
@@ -54,7 +56,7 @@ const usePushNotifications = () => {
         unsubscribeOnNotificationOpened = onNotificationOpenedApp(messaging,
           (remoteMessage) => {
             if (remoteMessage.data) {
-              handleNotificationNavigation(remoteMessage.data as NotificationData);
+              void handleNotificationNavigation(remoteMessage.data as NotificationData);
             }
           }
         );
@@ -69,7 +71,6 @@ const usePushNotifications = () => {
         // Handle notification when app is in foreground - Just log it now, system handles UI
         unsubscribeOnMessage = onMessage(messaging,
           async (remoteMessage) => {
-
             // System notification will show automatically due to setForegroundNotificationPresentationOptions
           }
         );
@@ -78,7 +79,7 @@ const usePushNotifications = () => {
         const auth = getAuth();
         unsubscribeAuth = onAuthStateChanged(auth, (user) => {
           if (user) {
-            setupMessaging(user);
+            void setupMessaging(user);
             handleInitialNotification();
           }
         });
@@ -89,25 +90,21 @@ const usePushNotifications = () => {
 
     const setupMessaging = async (user: any) => {
       try {
-
         const messaging = getMessaging();
-        const authStatus = await requestPermission(messaging);
+        const permissionStatus = await getNotificationPermissionStatus();
+        const db = getFirestore();
+        const userRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userRef);
+        const userData = userDoc.data() || {};
+        const notificationsEnabled =
+          userData.pushNotificationsEnabled === true &&
+          permissionStatus === 'granted';
 
-
-        const enabled =
-          authStatus === AuthorizationStatus.AUTHORIZED ||
-          authStatus === AuthorizationStatus.PROVISIONAL;
-
-        if (enabled) {
-
-          getAndSaveToken(user);
-          // Token refresh currently requires using instance method in some versions, 
-          // or check documentation. safely sticking to getToken for now.
-          // Note: onTokenRefresh might be deprecated or moved.
-          // For simplicity, we just get the token once per session.
-        } else {
-
+        if (!notificationsEnabled) {
+          return;
         }
+
+        await getAndSaveToken(user);
       } catch (error: any) {
 
       }
@@ -183,7 +180,7 @@ const usePushNotifications = () => {
     };
   }, []);
 
-  const handleNotificationNavigation = (data: NotificationData) => {
+  const handleNotificationNavigation = async (data: NotificationData) => {
 
     const route = data.route;
     if (!route) return;
@@ -197,46 +194,31 @@ const usePushNotifications = () => {
       }
     };
 
-    switch (route) {
-      case 'TripDetails':
-        if (data.tripId) {
-          navigate('TripDetails', { tripId: data.tripId });
-        }
-        break;
-      case 'Chat':
-      case 'Message':
-        if (data.chatId) {
-          navigate('Chat', { chatId: data.chatId }); // Verify if screen name is 'Chat' or 'Message'
-        }
-        break;
-      case 'UserProfile':
-      case 'Profile':
-        if (data.userId) {
-          navigate('UserProfile', { userId: data.userId });
-        } else {
-          navigate('UserProfile', {}); // Go to own profile
-        }
-        break;
-      case 'ExternalLink':
-        if (data.url) {
-          Linking.openURL(data.url).catch(() => { });
-        }
-        break;
-      case 'Home':
-        navigate('Home', {});
-        break;
-      case 'Notifications':
-        navigate('Notifications', {});
-        break;
-      case 'GroupInfo':
-        if (data.chatId) {
-          navigate('GroupInfo', { chatId: data.chatId });
-        }
-        break;
-      default:
+    const target = await resolveNotificationTarget({
+      deepLinkRoute: route,
+      deepLinkParams: {
+        tripId: data.tripId,
+        chatId: data.chatId,
+        userId: data.userId,
+        url: data.url,
+      },
+      entityId: data.tripId || data.chatId || data.userId || null,
+      entityType: data.chatId ? 'chat' : data.tripId ? 'trip' : data.userId ? 'user' : null,
+    });
 
-        break;
+    if (!target) {
+      return;
     }
+
+    if (target.route === 'ExternalLink') {
+      const url = target.params?.url;
+      if (typeof url === 'string' && url.length > 0) {
+        Linking.openURL(url).catch(() => { });
+      }
+      return;
+    }
+
+    navigate(target.route, target.params || {});
   };
 };
 

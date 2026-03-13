@@ -11,14 +11,9 @@ export type NotificationType =
     | 'trip_cancelled'
     | 'trip_join'
     | 'age_verified'
-    | 'kyc_verified'
-    | 'kyc_approved'
-    | 'kyc_rejected'
     | 'rating'
     | 'report_submitted'
     | 'trip_report'
-    | 'like'
-    | 'comment'
     | 'trip_full'
     | 'system'
     | 'action_required';
@@ -30,7 +25,7 @@ export interface AppNotification {
     title: string;
     message: string;
     entityId: string | null;
-    entityType: 'trip' | 'chat' | 'user' | 'kyc' | 'report' | null;
+    entityType: 'trip' | 'chat' | 'user' | 'report' | null;
     actorId: string | null;
     actorName: string | null;
     actorPhotoUrl: string | null;
@@ -69,64 +64,88 @@ export function useNotifications(): UseNotificationsReturn {
 
     useEffect(() => {
         const userId = auth().currentUser?.uid;
-
-
         if (!userId) {
-
             setLoading(false);
             setNotifications([]);
             return;
         }
 
-        setLoading(true);
-        setError(null);
+        let unsubscribe = () => {};
+        let isMounted = true;
 
+        const setup = async () => {
+            setLoading(true);
+            setError(null);
 
-        const unsubscribe = firestore()
-            .collection('notifications')
-            .doc(userId)
-            .collection('items')
-            .orderBy('createdAt', 'desc')
-            .limit(50)
-            .onSnapshot(
-                (snapshot) => {
-                    const notifs = snapshot.docs.map((doc) => {
-                        const data = doc.data();
-                        return {
-                            id: doc.id,
-                            recipientId: userId, // Implied by collection path
-                            type: data.type as NotificationType,
-                            title: data.title,
-                            message: data.body || data.message, // handle both body and message fields
-                            entityId: data.data?.tripId || data.data?.chatId || data.entityId || null,
-                            entityType: data.entityType || null,
-                            actorId: data.senderId || data.actorId || null,
-                            actorName: data.actorName || null,
-                            actorPhotoUrl: data.actorPhotoUrl || null,
-                            deepLinkRoute: data.deepLinkRoute || '',
-                            deepLinkParams: data.deepLinkParams || {},
-                            read: data.read || false,
-                            readAt: data.readAt?.toDate() || null,
-                            createdAt: data.createdAt?.toDate() || new Date(),
-                        } as AppNotification;
-                    });
-                    setNotifications(notifs);
-                    setUnreadCount(notifs.filter(n => !n.read).length);
+            try {
+                const userDoc = await firestore().collection('users').doc(userId).get();
+                const userData = userDoc.data() || {};
+                const notificationsEnabled =
+                    userData.pushNotificationsEnabled !== false &&
+                    userData.notificationPermissionStatus !== 'denied';
+
+                if (!notificationsEnabled) {
+                    if (!isMounted) return;
+                    setNotifications([]);
+                    setUnreadCount(0);
                     setLoading(false);
-                },
-                (err) => {
-                    // Ignore permission errors if user is logged out (likely due to logout action)
-                    if (err.code?.includes('permission-denied') && !auth().currentUser) {
-                        return;
-                    }
-                    
-                    setError(err);
-                    setLoading(false);
+                    return;
                 }
-            );
 
+                unsubscribe = firestore()
+                    .collection('notifications')
+                    .doc(userId)
+                    .collection('items')
+                    .orderBy('createdAt', 'desc')
+                    .limit(50)
+                    .onSnapshot(
+                        (snapshot) => {
+                            const notifs = snapshot.docs.map((doc) => {
+                                const data = doc.data();
+                                return {
+                                    id: doc.id,
+                                    recipientId: userId,
+                                    type: data.type as NotificationType,
+                                    title: data.title,
+                                    message: data.body || data.message,
+                                    entityId: data.data?.tripId || data.data?.chatId || data.entityId || null,
+                                    entityType: data.entityType || null,
+                                    actorId: data.senderId || data.actorId || null,
+                                    actorName: data.actorName || null,
+                                    actorPhotoUrl: data.actorPhotoUrl || null,
+                                    deepLinkRoute: data.deepLinkRoute || '',
+                                    deepLinkParams: data.deepLinkParams || {},
+                                    read: data.read || false,
+                                    readAt: data.readAt?.toDate() || null,
+                                    createdAt: data.createdAt?.toDate() || new Date(),
+                                } as AppNotification;
+                            });
+                            setNotifications(notifs);
+                            setUnreadCount(notifs.filter((notification) => !notification.read).length);
+                            setLoading(false);
+                        },
+                        (err) => {
+                            if (err.code?.includes('permission-denied') && !auth().currentUser) {
+                                return;
+                            }
 
-        return () => unsubscribe();
+                            setError(err);
+                            setLoading(false);
+                        }
+                    );
+            } catch (err) {
+                if (!isMounted) return;
+                setError(err as Error);
+                setLoading(false);
+            }
+        };
+
+        void setup();
+
+        return () => {
+            isMounted = false;
+            unsubscribe();
+        };
     }, [refreshKey]);
 
     const markAsRead = useCallback(async (notificationId: string) => {

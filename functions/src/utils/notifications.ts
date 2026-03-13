@@ -22,9 +22,27 @@ interface PushPayload {
     data?: any;
 }
 
+const canDeliverNotifications = async (userId: string): Promise<boolean> => {
+    const userDoc = await db.collection('users').doc(userId).get();
+    if (!userDoc.exists) return false;
+
+    const userData = userDoc.data() || {};
+    const permissionStatus = userData.notificationPermissionStatus || 'unknown';
+
+    if (permissionStatus === 'denied') {
+        return false;
+    }
+
+    return userData.pushNotificationsEnabled !== false;
+};
+
 export const createNotification = async (payload: NotificationPayload) => {
     try {
         const { recipientId, ...data } = payload;
+
+        if (!(await canDeliverNotifications(recipientId))) {
+            return;
+        }
 
         // Deduplication Logic
         // check if a similar notification exists from the same actor for the same entity
@@ -63,6 +81,10 @@ export const createNotification = async (payload: NotificationPayload) => {
 
 export const sendPushToUser = async (userId: string, payload: PushPayload) => {
     try {
+        if (!(await canDeliverNotifications(userId))) {
+            return;
+        }
+
         console.log(`[Push] Preparing to send push to ${userId}`);
         const tokenDoc = await db.collection('push_tokens').doc(userId).get();
         if (!tokenDoc.exists) {

@@ -29,48 +29,55 @@ const TermsScreen = ({ navigation }) => {
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           <Animatable.View animation="fadeInUp" duration={400}>
             <Text style={[styles.lastUpdated, { color: colors.textSecondary }]}>
-              Last updated: January 2026
+              Last updated: March 2026
             </Text>
 
             <Section title="1. Acceptance of Terms" colors={colors}>
-              By accessing and using Tripzi, you accept and agree to be bound by the terms and
-              provision of this agreement. If you do not agree to these terms, please do not use our service.
+              By using Tripzi, you agree to these Terms. If you do not agree, do not use the app.
             </Section>
 
-            <Section title="2. Use of Service" colors={colors}>
-              Tripzi provides a platform for solo travelers to connect, plan trips, and share experiences.
-              You agree to use the service only for lawful purposes and in accordance with these Terms.
+            <Section title="2. India-Only and 18+" colors={colors}>
+              Tripzi is designed for users in India and is intended only for adults who are at least 18 years old.
+              You must provide accurate profile information, including your age and gender where required for trip participation rules.
             </Section>
 
-            <Section title="3. User Accounts" colors={colors}>
-              You are responsible for maintaining the confidentiality of your account credentials and for
-              all activities that occur under your account. You agree to notify us immediately of any
-              unauthorized use of your account.
+            <Section title="3. Accounts and Google Sign-In" colors={colors}>
+              Tripzi uses Google Sign-In for account access. You are responsible for keeping your Google account secure
+              and for any activity that happens through your Tripzi account.
             </Section>
 
-            <Section title="4. Content Guidelines" colors={colors}>
-              Users must not post content that is illegal, harmful, threatening, abusive, harassing,
-              defamatory, vulgar, obscene, or otherwise objectionable. Tripzi reserves the right to
-              remove any content that violates these guidelines.
+            <Section title="4. Platform Use" colors={colors}>
+              Tripzi lets users create trips, join trips, chat with other travelers, share profile content,
+              upload images, and report abusive or unsafe behavior. You must use the app lawfully and respectfully.
             </Section>
 
-            <Section title="5. Privacy" colors={colors}>
-              Your use of Tripzi is also governed by our Privacy Policy. Please review our Privacy
-              Policy to understand our practices.
+            <Section title="5. Content and Conduct" colors={colors}>
+              You must not post illegal, abusive, misleading, sexual, hateful, violent, fraudulent, or unsafe content.
+              Tripzi may remove content, restrict accounts, cancel trips, or suspend users to protect the community.
             </Section>
 
-            <Section title="6. Limitation of Liability" colors={colors}>
-              Tripzi shall not be liable for any indirect, incidental, special, consequential, or
-              punitive damages resulting from your use of or inability to use the service.
+            <Section title="6. Trip Participation and Safety" colors={colors}>
+              Tripzi is a platform for connecting travelers. Tripzi does not guarantee the conduct, identity, safety,
+              legality, or reliability of any user, trip, destination, or off-platform arrangement. Users remain
+              responsible for their own safety, spending, bookings, transportation, and decisions.
             </Section>
 
-            <Section title="7. Changes to Terms" colors={colors}>
-              We reserve the right to modify these terms at any time. We will notify users of any
-              significant changes via email or through the app.
+            <Section title="7. Notifications, Media, and Features" colors={colors}>
+              Certain Tripzi features depend on optional permissions such as notifications, photos, camera, and location.
+              If you deny a permission, related features may be limited or unavailable.
             </Section>
 
-            <Section title="8. Contact Us" colors={colors}>
-              If you have any questions about these Terms, please contact us at support@tripzi.com
+            <Section title="8. Termination and Deletion" colors={colors}>
+              You can request account deletion from Settings. Tripzi may retain limited records required for security,
+              fraud prevention, abuse handling, legal compliance, and service administration, including deletion reasons.
+            </Section>
+
+            <Section title="9. Changes to Terms" colors={colors}>
+              Tripzi may update these Terms from time to time. Continued use of the app after an update means you accept the revised Terms.
+            </Section>
+
+            <Section title="10. Contact" colors={colors}>
+              Support contact details will be published in the production release and Play Store listing.
             </Section>
 
             <View style={{ height: SPACING.xxxl }} />

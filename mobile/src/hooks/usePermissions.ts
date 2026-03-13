@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Platform, PermissionsAndroid } from 'react-native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
@@ -31,16 +31,6 @@ export function usePermissions(): UsePermissionsReturn {
         camera: false,
         mediaLibrary: false,
     });
-
-    // Request only notifications on mount for a smoother first-launch UX.
-    useEffect(() => {
-        const checkAndRequestNotifications = async () => {
-            await new Promise(resolve => setTimeout(resolve, 1200));
-            await requestNotificationPermission();
-        };
-
-        checkAndRequestNotifications();
-    }, []);
 
     const requestAllPermissions = async () => {
         await requestNotificationPermission();

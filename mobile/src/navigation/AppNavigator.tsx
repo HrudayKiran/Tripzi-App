@@ -11,7 +11,7 @@ import OfflineBanner from '../components/OfflineBanner';
 import auth from '@react-native-firebase/auth';
 
 import usePushNotifications from '../hooks/usePushNotifications';
-import usePermissions from '../hooks/usePermissions';
+import usePresence from '../hooks/usePresence';
 
 import LaunchScreen from '../screens/LaunchScreen';
 import WelcomeScreen from '../screens/WelcomeScreen';
@@ -49,7 +49,7 @@ const AppTabs = () => {
     const { colors } = useTheme();
     const [showCreateModal, setShowCreateModal] = React.useState(false);
     usePushNotifications();
-    usePermissions();
+    usePresence();
 
     const handleCreateTripPress = (navigation: any) => {
         setShowCreateModal(true);
@@ -227,8 +227,9 @@ const AppNavigator = () => {
                         // User has both Auth AND Firestore profile → Go to App
                         setInitialRoute('App');
                     } else {
-                        // User has Auth but NO Firestore profile → Continue onboarding flow
-                        setInitialRoute('CompleteProfile');
+                        // A stale auth session without a profile should return to sign-in.
+                        await auth().signOut();
+                        setInitialRoute('Start');
                     }
                 } catch (error) {
                     // Error checking profile → Sign out and show auth flow

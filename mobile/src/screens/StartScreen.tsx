@@ -81,7 +81,15 @@ const StartScreen = ({ navigation }) => {
         const docExists = typeof userDoc.exists === 'function' ? userDoc.exists() : userDoc.exists;
 
         if (!docExists) {
-          navigation.navigate('CompleteProfile');
+          try {
+            await auth().signOut();
+          } catch (e) { }
+          navigation.navigate('CompleteProfile', {
+            idToken,
+            email: googleEmail,
+            displayName: googleDisplayName,
+            photoURL: googlePhotoURL,
+          });
           return;
         }
 

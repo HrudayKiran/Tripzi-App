@@ -19,7 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, STATUS, NEUTRAL } from '../styles';
 import DefaultAvatar from '../components/DefaultAvatar';
-import { pickAndUploadImage } from '../utils/imageUpload';
+import { deleteProfileImageFromR2, pickAndUploadImage } from '../utils/imageUpload';
 
 const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/;
 const sanitizeUsername = (value: string): string => value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
@@ -39,6 +39,7 @@ const EditProfileScreen = ({ navigation }) => {
     const [username, setUsername] = useState('');
     const [bio, setBio] = useState('');
     const [profileImage, setProfileImage] = useState<string | null>(null);
+    const [profileImageObjectKey, setProfileImageObjectKey] = useState<string | null>(null);
     const [checkingUsername, setCheckingUsername] = useState(false);
     const [usernameError, setUsernameError] = useState('');
     const [usernameOk, setUsernameOk] = useState(false);
@@ -60,6 +61,7 @@ const EditProfileScreen = ({ navigation }) => {
                 setUsername(data.username || '');
                 setBio(data.bio || '');
                 setProfileImage(data.photoURL || currentUser.photoURL || null);
+                setProfileImageObjectKey(data.photoObjectKey || null);
                 setLoading(false);
             }, () => {
                 setLoading(false);
@@ -126,6 +128,7 @@ const EditProfileScreen = ({ navigation }) => {
     const pickProfile = async () => {
         if (!currentUser) return;
         try {
+            const previousObjectKey = profileImageObjectKey || user?.photoObjectKey || null;
             const result = await pickAndUploadImage({
                 folder: 'profiles',
                 userId: currentUser.uid,
@@ -134,8 +137,31 @@ const EditProfileScreen = ({ navigation }) => {
                 allowsEditing: true,
             });
 
-            if (result.success && result.url) {
-                setProfileImage(result.url);
+            if (result.success && result.url && result.objectKey) {
+                try {
+                    await firestore().collection('users').doc(currentUser.uid).set({
+                        photoURL: result.url,
+                        photoObjectKey: result.objectKey,
+                        updatedAt: firestore.FieldValue.serverTimestamp(),
+                    }, { merge: true });
+
+                    try {
+                        await currentUser.updateProfile({
+                            photoURL: result.url,
+                        });
+                    } catch (e) { }
+
+                    if (previousObjectKey && previousObjectKey !== result.objectKey) {
+                        await deleteProfileImageFromR2(previousObjectKey);
+                    }
+
+                    setProfileImage(result.url);
+                    setProfileImageObjectKey(result.objectKey);
+                    setUser((prev: any) => ({ ...prev, photoURL: result.url, photoObjectKey: result.objectKey }));
+                } catch {
+                    await deleteProfileImageFromR2(result.objectKey);
+                    Alert.alert('Error', 'Could not upload profile image.');
+                }
             } else if (result.error && result.error !== 'Selection cancelled') {
                 Alert.alert('Upload Failed', result.error);
             }
@@ -163,6 +189,7 @@ const EditProfileScreen = ({ navigation }) => {
                 username: sanitized,
                 bio: bio.trim(),
                 photoURL: profileImage || null,
+                photoObjectKey: profileImageObjectKey || null,
                 displayName: firestore.FieldValue.delete(),
                 updatedAt: firestore.FieldValue.serverTimestamp(),
             }, { merge: true });

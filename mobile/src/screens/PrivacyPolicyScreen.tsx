@@ -29,55 +29,59 @@ const PrivacyPolicyScreen = ({ navigation }) => {
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           <Animatable.View animation="fadeInUp" duration={400}>
             <Text style={[styles.lastUpdated, { color: colors.textSecondary }]}>
-              Last updated: January 2026
+              Last updated: March 2026
             </Text>
 
             <Section title="1. Information We Collect" colors={colors}>
-              We collect information you provide directly to us, including your name, email address,
-              phone number, profile information, and any other information you choose to provide when
-              using Tripzi.
+              Tripzi may collect your Google account email, profile details you submit during onboarding,
+              trip content, chat content, ratings, reports, bug submissions, device tokens for notifications,
+              and technical diagnostics needed to operate the app.
             </Section>
 
             <Section title="2. How We Use Your Information" colors={colors}>
-              We use the information we collect to provide, maintain, and improve our services, to
-              communicate with you, to monitor and analyze trends and usage, and to personalize your
-              experience on Tripzi.
+              We use your information to create and manage your account, operate trips and group chats,
+              deliver notifications, prevent abuse, improve app performance, investigate reports, and support users.
             </Section>
 
-            <Section title="3. Information Sharing" colors={colors}>
-              We do not share your personal information with third parties except as described in this
-              policy. We may share information with other users as part of the trip planning and
-              social features of the app.
+            <Section title="3. What Other Users Can See" colors={colors}>
+              Other signed-in users may see your public Tripzi profile information, public trip posts,
+              ratings you leave where applicable, and content you share inside chats or group chats.
             </Section>
 
-            <Section title="4. Data Security" colors={colors}>
-              We take reasonable measures to protect your personal information from unauthorized access,
-              use, or disclosure. However, no internet transmission is ever fully secure or error-free.
+            <Section title="4. Permissions and Device Access" colors={colors}>
+              Tripzi asks for permissions only for features that need them, such as notifications,
+              camera, media access, location, and saving media to the device gallery. If you do not grant
+              a permission, the related feature may not work.
             </Section>
 
-            <Section title="5. Your Rights" colors={colors}>
-              You have the right to access, update, or delete your personal information at any time
-              through your account settings. You may also contact us to exercise these rights.
+            <Section title="5. Storage, Analytics, and Vendors" colors={colors}>
+              Tripzi uses Firebase services for authentication, database, messaging, remote config,
+              performance, crash reporting, and related backend operations. Tripzi may also use Cloudflare R2
+              for media storage and other service providers needed to deliver app functionality.
             </Section>
 
-            <Section title="6. Cookies and Tracking" colors={colors}>
-              We use cookies and similar tracking technologies to collect information about your
-              browsing activities and to provide you with a personalized experience.
+            <Section title="6. Security and Retention" colors={colors}>
+              We take reasonable measures to protect user data, but no system is perfectly secure.
+              Tripzi may retain limited records after account deletion for fraud prevention, abuse review,
+              moderation history, legal compliance, and operational security.
             </Section>
 
-            <Section title="7. Children's Privacy" colors={colors}>
-              Tripzi is not intended for use by children under 13 years of age. We do not knowingly
-              collect personal information from children under 13.
+            <Section title="7. Your Choices" colors={colors}>
+              You can update your profile, manage selected settings, control optional permissions,
+              and request account deletion from within the app. If notification permission is denied,
+              Tripzi may disable both push and in-app notifications for your account on that device.
             </Section>
 
-            <Section title="8. Changes to Privacy Policy" colors={colors}>
-              We may update this Privacy Policy from time to time. We will notify you of any changes
-              by posting the new Privacy Policy on this page and updating the "Last updated" date.
+            <Section title="8. Age and Region" colors={colors}>
+              Tripzi is intended for users in India who are at least 18 years old. Users under 18 are not permitted to create or use accounts.
             </Section>
 
-            <Section title="9. Contact Us" colors={colors}>
-              If you have any questions about this Privacy Policy, please contact us at
-              privacy@tripzi.com
+            <Section title="9. Changes to this Policy" colors={colors}>
+              Tripzi may update this Privacy Policy from time to time. The latest version will be available in the app and the production listing.
+            </Section>
+
+            <Section title="10. Contact" colors={colors}>
+              Support contact details will be published in the production release and Play Store listing.
             </Section>
 
             <View style={{ height: SPACING.xxxl }} />

@@ -16,16 +16,19 @@ import {
     Dimensions,
     Linking,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system/legacy';
 
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
 import { useChatMessages, Message, ReplyTo } from '../hooks/useChatMessages';
 import { useChats } from '../hooks/useChats';
 import { getPublicProfilesByIds } from '../utils/publicProfiles';
+import { getBooleanPreference, PREFERENCE_KEYS } from '../utils/preferences';
 import DefaultAvatar from '../components/DefaultAvatar';
 import LocationPickerModal from '../components/LocationPickerModal';
 import LiveLocationMapModal from '../components/LiveLocationMapModal';
@@ -35,12 +38,17 @@ import storage from '@react-native-firebase/storage';
 import { format, isToday, isYesterday, isSameDay, differenceInMinutes, addMinutes } from 'date-fns';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const GOOGLE_MAPS_SEARCH_URL = 'https://www.google.com/maps/search/?api=1&query=';
+
+const formatLocationCoordinates = (latitude: number, longitude: number) =>
+    `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
 
 interface ChatScreenProps {
     navigation: any;
     route: {
         params: {
             chatId: string;
+            collectionName?: 'chats' | 'group_chats';
             otherUserId?: string;
             otherUserName?: string;
             otherUserPhoto?: string;
@@ -51,13 +59,14 @@ interface ChatScreenProps {
 }
 
 const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
-    const { chatId, otherUserId, otherUserName, otherUserPhoto, isGroupChat: isGroupParam } = route.params;
+    const { chatId, collectionName: routeCollectionName, otherUserId, otherUserName, otherUserPhoto, isGroupChat: isGroupParam } = route.params;
     const { colors } = useTheme();
+    const insets = useSafeAreaInsets();
     const { chats } = useChats();
     const currentUser = auth().currentUser;
     const chat = chats.find((c) => c.id === chatId);
     const isGroupChat = isGroupParam || chat?.type === 'group';
-    const chatCollection = isGroupChat ? 'group_chats' : 'chats';
+    const chatCollection = routeCollectionName || chat?.collectionName || (isGroupChat ? 'group_chats' : 'chats');
     const clearedAt = currentUser ? chat?.clearedAt?.[currentUser.uid] : undefined;
 
     const { messages, loading, sendMessage, markAsRead } = useChatMessages(chatId, clearedAt, chatCollection);
@@ -118,6 +127,9 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     const [lastSeenText, setLastSeenText] = useState('');
     // Live profile photo from public_users
     const [livePhoto, setLivePhoto] = useState<string | null>(null);
+    const seededIncomingMediaIds = useRef<Set<string>>(new Set());
+    const skipInitialAutoSave = useRef(true);
+    const galleryPermissionDenied = useRef(false);
 
     const groupMembers = React.useMemo(() => {
         if (chat?.type !== 'group' || !chat.participantDetails) return [];
@@ -205,12 +217,20 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 // Live photo
                 if (data?.photoURL) setLivePhoto(data.photoURL);
                 // Last seen
-                if (data?.lastSeen) {
+                const presence = typeof data?.presence === 'string' ? data.presence : '';
+                const lastSeenValue = data?.lastSeenAt || data?.lastSeen;
+
+                if (presence === 'online') {
+                    setLastSeenText('Online');
+                    return;
+                }
+
+                if (lastSeenValue) {
                     try {
-                        const ts = data.lastSeen.toDate ? data.lastSeen.toDate() : new Date(data.lastSeen);
+                        const ts = lastSeenValue.toDate ? lastSeenValue.toDate() : new Date(lastSeenValue);
                         const diffMs = Date.now() - ts.getTime();
-                        if (diffMs < 2 * 60 * 1000) {
-                            setLastSeenText('Online');
+                        if (diffMs < 60 * 1000) {
+                            setLastSeenText('Last seen just now');
                         } else if (diffMs < 60 * 60 * 1000) {
                             setLastSeenText(`last seen ${Math.floor(diffMs / 60000)} min ago`);
                         } else if (diffMs < 24 * 60 * 60 * 1000) {
@@ -226,23 +246,63 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         return () => unsub();
     }, [otherParticipantUid, chat?.type]);
 
-    // Write lastSeen to own profile so other users can see it
     useEffect(() => {
-        if (!currentUser) return;
-        const updateLastSeen = () => {
-            // Update both users and public_users collections for lastSeen
-            const timestamp = firestore.FieldValue.serverTimestamp();
-            firestore().collection('users').doc(currentUser.uid).update({
-                lastSeen: timestamp,
-            }).catch(() => { });
-            firestore().collection('public_users').doc(currentUser.uid).update({
-                lastSeen: timestamp,
-            }).catch(() => { });
+        if (!messages.length || !currentUser) return;
+
+        const incomingImageIds = messages
+            .filter((message) => message.type === 'image' && !!message.mediaUrl && message.senderId !== currentUser.uid)
+            .map((message) => message.id);
+
+        if (skipInitialAutoSave.current) {
+            incomingImageIds.forEach((id) => seededIncomingMediaIds.current.add(id));
+            skipInitialAutoSave.current = false;
+            return;
+        }
+
+        const newIncomingImages = messages.filter(
+            (message) =>
+                message.type === 'image' &&
+                !!message.mediaUrl &&
+                message.senderId !== currentUser.uid &&
+                !seededIncomingMediaIds.current.has(message.id)
+        );
+
+        if (newIncomingImages.length === 0) {
+            return;
+        }
+
+        const saveIncomingMedia = async () => {
+            const shouldSave = await getBooleanPreference(PREFERENCE_KEYS.saveToGallery, true);
+            if (!shouldSave || galleryPermissionDenied.current) {
+                newIncomingImages.forEach((message) => seededIncomingMediaIds.current.add(message.id));
+                return;
+            }
+
+            let permission = await MediaLibrary.getPermissionsAsync();
+            if (permission.status !== 'granted') {
+                permission = await MediaLibrary.requestPermissionsAsync();
+            }
+
+            if (permission.status !== 'granted') {
+                galleryPermissionDenied.current = true;
+                return;
+            }
+
+            for (const message of newIncomingImages) {
+                try {
+                    const extension = message.mediaUrl?.split('.').pop()?.split('?')[0] || 'jpg';
+                    const localUri = `${FileSystem.cacheDirectory}${message.id}.${extension}`;
+                    await FileSystem.downloadAsync(message.mediaUrl!, localUri);
+                    await MediaLibrary.createAssetAsync(localUri);
+                    seededIncomingMediaIds.current.add(message.id);
+                } catch {
+                    // Keep the message unsaved; the app should continue normally.
+                }
+            }
         };
-        updateLastSeen();
-        const interval = setInterval(updateLastSeen, 60000); // Update every 60s
-        return () => clearInterval(interval);
-    }, [currentUser?.uid]);
+
+        void saveIncomingMedia();
+    }, [messages, currentUser]);
 
     // Typing indicator listener (throttled — only reads typing field)
     useEffect(() => {
@@ -530,6 +590,34 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         }
     };
 
+    const requestForegroundLocationPermission = async () => {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (permission.status !== 'granted') {
+            Alert.alert('Permission needed', 'Please enable location access to use this option.');
+            return false;
+        }
+        return true;
+    };
+
+    const updateLiveShareCoordinates = async (coords: { latitude: number; longitude: number; heading?: number | null }) => {
+        if (!currentUser || !chatId) {
+            return;
+        }
+
+        await firestore()
+            .collection(chatCollection)
+            .doc(chatId)
+            .collection('live_shares')
+            .doc(currentUser.uid)
+            .set({
+                latitude: coords.latitude,
+                longitude: coords.longitude,
+                heading: coords.heading ?? null,
+                timestamp: firestore.FieldValue.serverTimestamp(),
+            }, { merge: true })
+            .catch(() => { });
+    };
+
     // Location sharing
     const sendLocation = async (pickedLocation?: { latitude: number; longitude: number; address?: string }) => {
         setShowAttachmentPicker(false);
@@ -547,9 +635,8 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     address: pickedLocation.address
                 };
             } else {
-                const { status } = await Location.requestForegroundPermissionsAsync();
-                if (status !== 'granted') {
-                    Alert.alert('Permission needed', 'Please enable location access.');
+                const hasLocationPermission = await requestForegroundLocationPermission();
+                if (!hasLocationPermission) {
                     setGettingLocation(false);
                     return;
                 }
@@ -641,43 +728,53 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 {
                     text: 'Start Sharing', onPress: async () => {
                         try {
-                            const { status } = await Location.requestForegroundPermissionsAsync();
-                            if (status !== 'granted') return;
+                            if (!currentUser || !chatId) {
+                                return;
+                            }
+
+                            const hasLocationPermission = await requestForegroundLocationPermission();
+                            if (!hasLocationPermission) {
+                                return;
+                            }
 
                             setIsSharingLive(true);
 
-                            // Create/Update share doc
-                            const userDoc = await firestore().collection('users').doc(currentUser?.uid).get();
+                            const initialLocation = await Location.getCurrentPositionAsync({
+                                accuracy: Location.Accuracy.Balanced,
+                            });
+
+                            const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
                             const userData = userDoc.data();
 
                             await firestore()
                                 .collection(chatCollection)
                                 .doc(chatId)
                                 .collection('live_shares')
-                                .doc(currentUser?.uid)
+                                .doc(currentUser.uid)
                                 .set({
                                     isActive: true,
                                     validUntil: firestore.Timestamp.fromDate(addMinutes(new Date(), durationMinutes)),
                                     timestamp: firestore.FieldValue.serverTimestamp(),
-                                    displayName: userData?.name || userData?.displayName || currentUser?.displayName || 'User',
-                                    photoURL: userData?.photoURL || userData?.image || currentUser?.photoURL || null,
-                                    latitude: 0, // Placeholder
-                                    longitude: 0 // Placeholder
+                                    displayName: userData?.name || userData?.displayName || currentUser.displayName || 'User',
+                                    photoURL: userData?.photoURL || userData?.image || currentUser.photoURL || null,
+                                    latitude: initialLocation.coords.latitude,
+                                    longitude: initialLocation.coords.longitude,
+                                    heading: initialLocation.coords.heading ?? null,
                                 }, { merge: true });
 
-                            // Send system message
                             await firestore()
                                 .collection(chatCollection)
                                 .doc(chatId)
                                 .collection('messages')
                                 .add({
-                                    senderId: currentUser?.uid,
+                                    senderId: currentUser.uid,
                                     senderName: 'System',
                                     type: 'system',
                                     text: `${userData?.name || userData?.displayName || 'User'} started sharing live location.`,
                                     createdAt: firestore.FieldValue.serverTimestamp(),
                                 });
 
+                            await updateLiveShareCoordinates(initialLocation.coords);
                             startLocationWatcher();
 
                         } catch (error) {
@@ -704,26 +801,18 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         if (locationSubscription.current) return;
 
         try {
+            const permission = await Location.getForegroundPermissionsAsync();
+            if (permission.status !== 'granted') {
+                await stopLiveSharing(true);
+                return;
+            }
+
             const sub = await Location.watchPositionAsync({
                 accuracy: Location.Accuracy.Balanced,
                 timeInterval: 10000, // 10 seconds
                 distanceInterval: 20, // 20 meters
             }, async (loc) => {
-                // Update Firestore
-                if (currentUser && chatId) {
-                    await firestore()
-                        .collection(chatCollection)
-                        .doc(chatId)
-                        .collection('live_shares')
-                        .doc(currentUser.uid)
-                        .update({
-                            latitude: loc.coords.latitude,
-                            longitude: loc.coords.longitude,
-                            heading: loc.coords.heading,
-                            timestamp: firestore.FieldValue.serverTimestamp(),
-                        })
-                        .catch((err) => { });
-                }
+                await updateLiveShareCoordinates(loc.coords);
             });
             locationSubscription.current = sub;
         } catch (e) {
@@ -752,13 +841,19 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
 
     // Open location in maps
     const openLocationInMaps = (lat: number, lng: number) => {
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            Alert.alert('Location unavailable', 'This location could not be opened.');
+            return;
+        }
+
+        const fallbackUrl = `${GOOGLE_MAPS_SEARCH_URL}${lat},${lng}`;
         const url = Platform.select({
             ios: `maps:0,0?q=${lat},${lng}`,
             android: `geo:0,0?q=${lat},${lng}`,
-        }) || `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+        }) || fallbackUrl;
 
         Linking.openURL(url).catch(() => {
-            Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`);
+            Linking.openURL(fallbackUrl);
         });
     };
 
@@ -775,7 +870,14 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         if (!selectedMessage) return;
         setReplyingTo({
             messageId: selectedMessage.id,
-            text: selectedMessage.text || selectedMessage.type === 'image' ? '📷 Photo' : selectedMessage.type === 'location' ? '📍 Location' : '🎤 Voice',
+            text: selectedMessage.text
+                || (selectedMessage.type === 'image'
+                    ? '📷 Photo'
+                    : selectedMessage.type === 'location'
+                        ? '📍 Location'
+                        : selectedMessage.type === 'trip_share'
+                            ? '🧳 Trip'
+                            : '🎤 Voice'),
             senderId: selectedMessage.senderId,
         });
         setShowContextMenu(false);
@@ -1052,6 +1154,29 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             );
         }
 
+        const isSystemMessage = item.type === 'system' || item.senderId === 'system';
+
+        if (isSystemMessage) {
+            return (
+                <View>
+                    {showDayHeader && (
+                        <View style={styles.dayHeaderContainer}>
+                            <Text style={[styles.dayHeaderText, { color: colors.textSecondary }]}>
+                                {formatDayHeader(item.createdAt)}
+                            </Text>
+                        </View>
+                    )}
+                    <View style={styles.systemMessageRow}>
+                        <View style={[styles.systemMessageBubble, { backgroundColor: colors.card }]}>
+                            <Text style={[styles.systemMessageText, { color: colors.textSecondary }]}>
+                                {item.text || 'System update'}
+                            </Text>
+                        </View>
+                    </View>
+                </View>
+            );
+        }
+
         return (
             <View>
                 {showDayHeader && (
@@ -1105,7 +1230,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                             {/* Image message */}
                             {item.type === 'image' && item.mediaUrl && (
                                 <TouchableOpacity onPress={() => setViewingImage(item.mediaUrl!)}>
-                                    <Image source={{ uri: item.mediaUrl }} style={styles.messageImage} resizeMode="cover" />
+                                    <Image source={{ uri: item.mediaUrl }} style={styles.messageImage} resizeMode="contain" />
                                 </TouchableOpacity>
                             )}
 
@@ -1127,8 +1252,11 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                                                 {item.location.address}
                                             </Text>
                                         )}
+                                        <Text style={[styles.locationCoordinates, { color: isOwn ? 'rgba(255,255,255,0.72)' : colors.textSecondary }]}>
+                                            {formatLocationCoordinates(item.location.latitude, item.location.longitude)}
+                                        </Text>
                                         <Text style={[styles.locationTap, { color: isOwn ? 'rgba(255,255,255,0.6)' : colors.primary }]}>
-                                            Tap to open in Maps
+                                            Tap to open in Google Maps
                                         </Text>
                                     </View>
                                 </TouchableOpacity>
@@ -1213,7 +1341,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     onPress={() => {
                         const isGroup = chat?.type === 'group' || route.params?.isGroupChat;
                         if (isGroup) {
-                            navigation.navigate('GroupInfo', { chatId });
+                            navigation.navigate('GroupInfo', { chatId, collectionName: chatCollection });
                         } else if (otherParticipantUid) {
                             navigation.navigate('UserProfile', { userId: otherParticipantUid });
                         }
@@ -1232,7 +1360,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                         <Text style={[styles.headerStatus, { color: otherUserTyping ? colors.primary : colors.textSecondary }]} numberOfLines={1}>
                             {otherUserTyping ? 'typing...' : (
                                 (chat?.type === 'group' || route.params?.isGroupChat)
-                                    ? `${chat?.participants?.length || 0} members${chat?.groupDescription ? ' · ' + chat.groupDescription.substring(0, 30) : ''}`
+                                    ? `${chat?.memberCount || chat?.participants?.length || 0} members${chat?.groupDescription ? ' · ' + chat.groupDescription.substring(0, 30) : ''}`
                                     : (lastSeenText || '')
                             )}
                         </Text>
@@ -1242,7 +1370,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 {(chat?.type === 'group' || route.params?.isGroupChat) && (
                     <TouchableOpacity
                         style={styles.infoButton}
-                        onPress={() => navigation.navigate('GroupInfo', { chatId })}
+                        onPress={() => navigation.navigate('GroupInfo', { chatId, collectionName: chatCollection })}
                     >
                         <Ionicons name="information-circle-outline" size={24} color={colors.text} />
                     </TouchableOpacity>
@@ -1335,7 +1463,16 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 )}
 
                 {/* Composer */}
-                <View style={[styles.composer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+                <View
+                    style={[
+                        styles.composer,
+                        {
+                            backgroundColor: colors.card,
+                            borderTopColor: colors.border,
+                            paddingBottom: Math.max(insets.bottom, SPACING.sm),
+                        },
+                    ]}
+                >
                     <TouchableOpacity
                         style={styles.attachButton}
                         onPress={() => setShowAttachmentPicker(true)}
@@ -1530,6 +1667,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 onClose={() => setShowLiveMap(false)}
                 chatId={chatId}
                 currentUser={currentUser}
+                collectionName={chatCollection}
             />
 
             {/* Edit Message Modal */}
@@ -1564,20 +1702,24 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
 
             {/* Image Viewer */}
             <Modal visible={!!viewingImage} transparent animationType="fade">
-                <View style={styles.imageViewerModal}>
+                <Pressable style={styles.imageViewerModal} onPress={() => setViewingImage(null)}>
                     <TouchableOpacity style={styles.imageViewerClose} onPress={() => setViewingImage(null)}>
                         <Ionicons name="close" size={28} color="#fff" />
                     </TouchableOpacity>
                     {viewingImage && <Image source={{ uri: viewingImage }} style={styles.fullImage} resizeMode="contain" />}
-                </View>
+                </Pressable>
             </Modal>
 
             {/* Image Preview Modal (Before Send) */}
             <Modal visible={!!previewImage} transparent animationType="slide">
                 <View style={[styles.imageViewerModal, { backgroundColor: '#000' }]}>
+                    <View style={[styles.previewHeader, { top: insets.top + 12 }]}>
+                        <Text style={styles.previewTitle}>Ready to send</Text>
+                        <Text style={styles.previewSubtitle}>Check the image before sharing it.</Text>
+                    </View>
                     <Image source={{ uri: previewImage || '' }} style={styles.fullImage} resizeMode="contain" />
 
-                    <View style={styles.previewActions}>
+                    <View style={[styles.previewActions, { bottom: Math.max(insets.bottom, 20) + 20 }]}>
                         <TouchableOpacity
                             style={[styles.previewButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
                             onPress={() => setPreviewImage(null)}
@@ -1634,6 +1776,9 @@ const styles = StyleSheet.create({
     dayHeaderText: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.medium, paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.lg },
     messageRow: { flexDirection: 'row', marginBottom: SPACING.xs },
     ownMessageRow: { justifyContent: 'flex-end' },
+    systemMessageRow: { alignItems: 'center', marginBottom: SPACING.sm },
+    systemMessageBubble: { maxWidth: '88%', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.lg },
+    systemMessageText: { fontSize: FONT_SIZE.xs, textAlign: 'center', lineHeight: 18, fontWeight: FONT_WEIGHT.medium },
     messageBubble: { maxWidth: '80%', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.lg },
     ownBubble: { borderBottomRightRadius: 4 },
     otherBubble: { borderBottomLeftRadius: 4 },
@@ -1653,11 +1798,12 @@ const styles = StyleSheet.create({
     deletedMessageContainer: { alignItems: 'center' },
     deletedBubble: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.lg, gap: SPACING.xs },
     deletedText: { fontSize: FONT_SIZE.sm, fontStyle: 'italic' },
-    locationContainer: { flexDirection: 'row', alignItems: 'center', minWidth: 200 },
+    locationContainer: { flexDirection: 'row', alignItems: 'center', minWidth: 220 },
     locationMapPreview: { width: 60, height: 60, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: BORDER_RADIUS.md, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.sm },
     locationInfo: { flex: 1 },
     locationLabel: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold },
     locationAddress: { fontSize: FONT_SIZE.xs, marginTop: 2 },
+    locationCoordinates: { fontSize: FONT_SIZE.xs, marginTop: 4 },
     locationTap: { fontSize: FONT_SIZE.xs, marginTop: 4 },
     voiceContainer: { flexDirection: 'row', alignItems: 'center', minWidth: 180 },
     voicePlayButton: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.sm },
@@ -1708,9 +1854,24 @@ const styles = StyleSheet.create({
     editButtonText: { color: '#fff', fontWeight: FONT_WEIGHT.semibold },
     imageViewerModal: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
     imageViewerClose: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: SPACING.md },
-    fullImage: { width: '100%', height: '80%' },
-
-    previewActions: { position: 'absolute', bottom: 40, flexDirection: 'row', width: '100%', justifyContent: 'space-around', paddingHorizontal: 20 },
+    fullImage: { width: '100%', height: '78%' },
+    previewHeader: {
+        position: 'absolute',
+        left: SPACING.xl,
+        right: SPACING.xl,
+        zIndex: 10,
+    },
+    previewTitle: {
+        color: '#fff',
+        fontSize: FONT_SIZE.lg,
+        fontWeight: FONT_WEIGHT.bold,
+    },
+    previewSubtitle: {
+        color: 'rgba(255,255,255,0.72)',
+        fontSize: FONT_SIZE.sm,
+        marginTop: 4,
+    },
+    previewActions: { position: 'absolute', flexDirection: 'row', width: '100%', justifyContent: 'space-around', paddingHorizontal: 20 },
     previewButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 30, borderRadius: 30 },
     previewButtonText: { color: '#fff', fontSize: 16 },
     // Dropdown menu styles

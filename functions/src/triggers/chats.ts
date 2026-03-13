@@ -82,13 +82,13 @@ const handleNewMessage = async (
             actorId: senderId,
             actorName: senderName,
             deepLinkRoute: "Chat",
-            deepLinkParams: { chatId, isGroupChat: isGroup },
+            deepLinkParams: { chatId, isGroupChat: isGroup, collectionName },
         });
 
         await sendPushToUser(recipientId, {
             title: userTitle,
             body: userBody,
-            data: { route: "Chat", chatId, isGroupChat: String(isGroup) },
+            data: { route: "Chat", chatId, isGroupChat: String(isGroup), collectionName },
         });
     }));
 };

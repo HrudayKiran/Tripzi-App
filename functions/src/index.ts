@@ -8,6 +8,8 @@ export * from './triggers/chats';
 export * from './triggers/auth';
 export * from './callable/account';
 export * from './callable/ai';
+export * from './callable/media';
+export * from './callable/trips';
 export * from './callable/verification';
 export * from './callable/onboarding';
 export * from './callable/groups';

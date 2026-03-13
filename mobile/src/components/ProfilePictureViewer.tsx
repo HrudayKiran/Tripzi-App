@@ -13,7 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
-import { deleteFromStorage } from '../utils/imageUpload';
+import { deleteFromStorage, deleteProfileImageFromR2 } from '../utils/imageUpload';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { SPACING, FONT_SIZE, FONT_WEIGHT } from '../styles';
@@ -23,6 +23,7 @@ const { width, height } = Dimensions.get('window');
 interface ProfilePictureViewerProps {
     visible: boolean;
     imageUrl: string | null;
+    imageObjectKey?: string | null;
     userName?: string;
     isOwnProfile?: boolean;
     onClose: () => void;
@@ -32,6 +33,7 @@ interface ProfilePictureViewerProps {
 const ProfilePictureViewer = ({
     visible,
     imageUrl,
+    imageObjectKey = null,
     userName = 'User',
     isOwnProfile = false,
     onClose,
@@ -60,8 +62,9 @@ const ProfilePictureViewer = ({
 
         setIsDeleting(true);
         try {
-            // 1. Delete from Firebase Storage (if it's a storage URL)
-            if (imageUrl.includes('firebasestorage')) {
+            if (imageObjectKey) {
+                await deleteProfileImageFromR2(imageObjectKey);
+            } else if (imageUrl.includes('firebasestorage')) {
                 try {
                     await deleteFromStorage(imageUrl);
                 } catch (e) {
@@ -74,6 +77,7 @@ const ProfilePictureViewer = ({
             if (userId) {
                 await firestore().collection('users').doc(userId).update({
                     photoURL: null,
+                    photoObjectKey: null,
                 });
 
                 // Keep Firebase Auth profile in sync so no stale fallback avatar remains.

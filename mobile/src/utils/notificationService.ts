@@ -4,14 +4,9 @@
  */
 
 export type NotificationType =
-    | 'follow'
-    | 'like'
-    | 'comment'
     | 'join_trip'
     | 'leave_trip'
     | 'trip_rating'
-    | 'kyc_verified'
-    | 'kyc_rejected'
     | 'chat_message'
     | 'trip_cancelled'
     | 'trip_report'
@@ -58,24 +53,6 @@ export const createNotification = async ({
  * Pre-built notification creators for common events
  */
 export const NotificationService = {
-    // When someone follows you - Handled by Cloud Function 'onUserFollowed'
-    onFollow: async (_followerId: string, _followerName: string, _targetUserId: string) => {
-        // await createNotification({...}); 
-
-    },
-
-    // When someone likes your trip - Handled by Cloud Function 'onLikeCreated'
-    onLike: async (_likerId: string, _likerName: string, _tripId: string, _tripOwnerId: string, _tripTitle: string) => {
-        // await createNotification({...});
-
-    },
-
-    // When someone comments on your trip - Handled by Cloud Function 'onCommentCreated'
-    onComment: async (_commenterId: string, _commenterName: string, _tripId: string, _tripOwnerId: string, _tripTitle: string) => {
-        // await createNotification({...});
-
-    },
-
     // When someone joins your trip - Handled by Cloud Function 'onTripJoined'
     onJoinTrip: async (_joinerId: string, _joinerName: string, _tripId: string, _tripOwnerId: string, _tripTitle: string) => {
         // await createNotification({...});
@@ -98,28 +75,6 @@ export const NotificationService = {
     onTripRating: async (_raterId: string, _raterName: string, _tripId: string, _tripOwnerId: string, _tripTitle: string, _rating: number) => {
         // await createNotification({...});
 
-    },
-
-    // KYC verified - Handled by backend/manual
-    onKycVerified: async (userId: string) => {
-        await createNotification({
-            recipientId: userId,
-            type: 'kyc_verified',
-            title: 'KYC Verified ✅',
-            body: 'Your identity has been verified. You can now create and join trips!',
-            data: {},
-        });
-    },
-
-    // KYC rejected - Handled by backend/manual
-    onKycRejected: async (userId: string, reason: string) => {
-        await createNotification({
-            recipientId: userId,
-            type: 'kyc_rejected',
-            title: 'KYC Rejected ❌',
-            body: `Your KYC was rejected: ${reason}. Please resubmit.`,
-            data: { reason },
-        });
     },
 
     // Trip cancelled - Handled by Cloud Function 'onTripDeleted'
@@ -170,4 +125,3 @@ export const NotificationService = {
 };
 
 export default NotificationService;
-

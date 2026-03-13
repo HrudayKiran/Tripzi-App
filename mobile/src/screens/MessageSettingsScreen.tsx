@@ -12,8 +12,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const SAVE_TO_GALLERY_KEY = '@tripzi_save_to_gallery';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
+import { getBooleanPreference, PREFERENCE_KEYS, setBooleanPreference } from '../utils/preferences';
 
 const MessageSettingsScreen = ({ navigation }) => {
     const { colors } = useTheme();
@@ -21,9 +22,30 @@ const MessageSettingsScreen = ({ navigation }) => {
     // Save to Gallery — enabled by default
     const [saveMedia, setSaveMedia] = useState(true);
 
+    useEffect(() => {
+        const loadPreference = async () => {
+            const enabled = await getBooleanPreference(PREFERENCE_KEYS.saveToGallery, true);
+            setSaveMedia(enabled);
+        };
+
+        void loadPreference();
+    }, []);
+
     const handleToggleSaveMedia = async (value: boolean) => {
         setSaveMedia(value);
-        // Persist setting later if package available
+        await setBooleanPreference(PREFERENCE_KEYS.saveToGallery, value);
+
+        const uid = auth().currentUser?.uid;
+        if (!uid) return;
+
+        try {
+            await firestore().collection('users').doc(uid).set({
+                saveToGallery: value,
+                updatedAt: firestore.FieldValue.serverTimestamp(),
+            }, { merge: true });
+        } catch {
+            // Save-to-gallery sync should not block local preference changes.
+        }
     };
 
     const SettingItem = ({ icon, title, subtitle, value, onValueChange }) => (

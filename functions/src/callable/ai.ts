@@ -134,7 +134,7 @@ GENERAL BEHAVIOR:
 - Give accurate travel info (distances, costs, weather tips)
 - If user asks non-travel questions, politely redirect to trip planning
 - Suggest the best time to visit, local food, safety tips
-- Mention Tripzi features: group chat, expense splitting, KYC verification`;
+- Mention Tripzi features: group chat, expense splitting`;
 
 const toHistoryMessages = (incoming: IncomingMessage[]): ChatCompletionMessage[] => {
   return incoming

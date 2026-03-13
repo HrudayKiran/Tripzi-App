@@ -8,6 +8,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles';
 import { useNotifications, AppNotification, NotificationType } from '../hooks/useNotifications';
 import { useNavigation } from '@react-navigation/native';
+import { navigationRef } from '../navigation/RootNavigation';
+import { resolveNotificationTarget } from '../utils/notificationNavigation';
 
 const { width } = Dimensions.get('window');
 
@@ -20,10 +22,6 @@ type NotificationsModalProps = {
 // Map notification types to icons and colors
 const getNotificationStyle = (type: NotificationType): { icon: string; color: string } => {
     switch (type) {
-        case 'like':
-            return { icon: 'heart', color: '#EC4899' };
-        case 'comment':
-            return { icon: 'chatbubble', color: '#3B82F6' };
         case 'message':
             return { icon: 'mail', color: '#9d74f7' };
         case 'join_trip':
@@ -38,11 +36,6 @@ const getNotificationStyle = (type: NotificationType): { icon: string; color: st
             return { icon: 'create', color: '#3B82F6' };
         case 'trip_cancelled':
             return { icon: 'close-circle', color: '#EF4444' };
-        case 'kyc_approved':
-        case 'kyc_verified':
-            return { icon: 'shield-checkmark', color: '#10B981' };
-        case 'kyc_rejected':
-            return { icon: 'alert-circle', color: '#EF4444' };
         case 'trip_full':
             return { icon: 'people', color: '#9d74f7' };
         case 'report_submitted':
@@ -175,19 +168,33 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
             await markAsRead(notification.id);
         }
 
-        // Navigate to deep link route
-        if (notification.deepLinkRoute) {
+        const fallbackTarget = notification.type === 'age_verified' ? {
+            route: 'EditProfile',
+            params: {},
+        } : null;
+
+        const target = notification.deepLinkRoute
+            ? await resolveNotificationTarget(notification)
+            : fallbackTarget;
+
+        if (target) {
             onClose();
             setTimeout(() => {
-                if (notification.deepLinkRoute === 'ExternalLink') {
-                    const url = notification.deepLinkParams?.url;
-                    if (typeof url === 'string' && url.length > 0) {
+                if (target.route === 'ExternalLink') {
+                    const url = typeof target.params?.['url'] === 'string'
+                        ? target.params['url']
+                        : null;
+                    if (url && url.length > 0) {
                         Linking.openURL(url).catch(() => { });
                     }
                     return;
                 }
 
-                navigation.navigate(notification.deepLinkRoute as never, notification.deepLinkParams as never);
+                if (navigationRef.isReady()) {
+                    navigationRef.navigate(target.route as any, target.params as any);
+                } else {
+                    navigation.navigate(target.route as never, target.params as never);
+                }
             }, 300);
         }
     };

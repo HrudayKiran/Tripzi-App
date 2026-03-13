@@ -314,7 +314,7 @@ const AIChatScreen = ({ navigation, route }: any) => {
                                 ownerPhotoURL: currentUserData.photoURL || currentUser.photoURL || null,
                                 ownerUsername: currentUserData.username || null,
                                 participants: [currentUser.uid],
-                                likes: [],
+
                                 createdAt: firestore.FieldValue.serverTimestamp(),
                                 location: trip.toLocation,
                                 tripType: trip.tripType || 'adventure',
@@ -620,7 +620,7 @@ const AIChatScreen = ({ navigation, route }: any) => {
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 16 : 0}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 12 : 72}
             >
                 {/* Chat List */}
                 <FlatList
@@ -630,9 +630,9 @@ const AIChatScreen = ({ navigation, route }: any) => {
                     keyExtractor={item => item._id.toString()}
                     inverted
                     style={{ flex: 1 }}
-                    contentContainerStyle={styles.listContent}
-                    keyboardShouldPersistTaps="handled"
-                    keyboardDismissMode="none"
+                    contentContainerStyle={[styles.listContent, { paddingBottom: SPACING.sm }]}
+                    keyboardShouldPersistTaps="always"
+                    keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'none'}
                     ListFooterComponent={
                         isTyping ? (
                             <View style={styles.typingContainer}>
@@ -668,7 +668,7 @@ const AIChatScreen = ({ navigation, route }: any) => {
                 </View>
 
                 {/* Input Area */}
-                <View style={[styles.inputContainer, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, SPACING.sm) }]}>
+                <View style={[styles.inputContainer, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom + SPACING.xs, SPACING.md) }]}>
                     <TextInput
                         ref={inputRef}
                         style={[styles.input, { backgroundColor: colors.background, color: colors.text }]}

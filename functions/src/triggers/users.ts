@@ -8,14 +8,19 @@ const buildPublicProfile = (userId: string, afterData: any) => {
   return {
     userId,
     displayName: resolvedName,
+    name: resolvedName,
     username: afterData?.username || null,
     photoURL: afterData?.photoURL || null,
     bio: afterData?.bio || "",
     gender: afterData?.gender || null,
     ageVerified: afterData?.ageVerified === true,
+    avgRating: afterData?.avgRating || 0,
+    totalRatings: afterData?.totalRatings || 0,
     totalRating: afterData?.totalRating || 0,
     ratingCount: afterData?.ratingCount || 0,
-    lastSeen: afterData?.lastSeen || null,
+    lastSeen: afterData?.lastSeen || afterData?.lastSeenAt || null,
+    lastSeenAt: afterData?.lastSeenAt || afterData?.lastSeen || null,
+    presence: afterData?.presence || "offline",
     createdAt: afterData?.createdAt || admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
@@ -59,18 +64,18 @@ export const onUserUpdated = onDocumentWritten(
     if (!wasAgeVerified && isAgeVerified) {
       updates.push(createNotification({
         recipientId: userId,
-        type: "kyc_verified",
+        type: "age_verified",
         title: "Age Verified ✅",
         message: "You are now age verified! You can create and join trips.",
         entityId: userId,
         entityType: "user",
-        deepLinkRoute: "Profile",
+        deepLinkRoute: "EditProfile",
       }));
 
       updates.push(sendPushToUser(userId, {
         title: "Age Verified ✅",
         body: "You are now age verified! You can create and join trips.",
-        data: { route: "Profile" },
+        data: { route: "EditProfile" },
       }));
     }
 

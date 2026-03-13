@@ -10,12 +10,14 @@ import TripCard from '../components/TripCard';
 import useTrips from '../hooks/useTrips';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { searchUsersByPrefix } from '../utils/searchUsers';
+import { applyTripFilters } from '../utils/filterUtils';
+import auth from '@react-native-firebase/auth';
 
 const { width } = Dimensions.get('window');
 
 const SearchScreen = ({ navigation }) => {
     const { colors } = useTheme();
-    const { trips } = useTrips();
+    const { allTrips } = useTrips();
     const [searchQuery, setSearchQuery] = useState('');
     const [filterVisible, setFilterVisible] = useState(false);
     const [filters, setFilters] = useState<FilterOptions | null>(null);
@@ -54,69 +56,29 @@ const SearchScreen = ({ navigation }) => {
         };
     }, [searchQuery]);
 
-    // Filter trips
+    // Filter trips using centralized utility
     const filteredTrips = useMemo(() => {
-        let result = [...trips];
-
-        // Search filter
-        if (searchQuery) {
-            result = result.filter(trip =>
-                trip.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                trip.location?.toLowerCase().includes(searchQuery.toLowerCase())
-            );
-        }
-
-        // Apply additional filters
-        if (filters) {
-            if (filters.destination) {
-                result = result.filter(trip =>
-                    trip.location?.toLowerCase().includes(filters.destination.toLowerCase())
-                );
-            }
-            if (filters.maxCost) {
-                result = result.filter(trip => (trip.cost || 0) <= filters.maxCost);
-            }
-            if (filters.maxTravelers) {
-                result = result.filter(trip => (trip.travelers || 1) <= filters.maxTravelers);
-            }
-            if (filters.minDays && filters.minDays > 1) {
-                result = result.filter(trip => (trip.duration || 1) >= filters.minDays);
-            }
-            if (filters.tripType) {
-                result = result.filter(trip =>
-                    trip.tripTypes?.some(t => t.toLowerCase().includes(filters.tripType.toLowerCase()))
-                );
-            }
-            if (filters.transportMode) {
-                result = result.filter(trip =>
-                    trip.transportModes?.some(t => t.toLowerCase().includes(filters.transportMode.toLowerCase()))
-                );
-            }
-            if (filters.genderPreference && filters.genderPreference !== 'anyone') {
-                result = result.filter(trip =>
-                    trip.genderPreference === filters.genderPreference || trip.genderPreference === 'anyone'
-                );
-            }
-            if (filters.sortBy) {
-                switch (filters.sortBy) {
-                    case 'newest':
-                        result.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
-                        break;
-                    case 'oldest':
-                        result.sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0));
-                        break;
-                    case 'lowestCost':
-                        result.sort((a, b) => (a.cost || 0) - (b.cost || 0));
-                        break;
-                    case 'highestCost':
-                        result.sort((a, b) => (b.cost || 0) - (a.cost || 0));
-                        break;
-                }
-            }
-        }
-
-        return result;
-    }, [trips, searchQuery, filters]);
+        const currentUserUid = auth().currentUser?.uid;
+        return applyTripFilters(allTrips, searchQuery, filters, currentUserUid, false);
+    }, [allTrips, searchQuery, filters]);
+    
+    // Count active filters for badge
+    const activeFilterCount = useMemo(() => {
+        if (!filters) return 0;
+        let count = 0;
+        if (filters.destination) count++;
+        if (filters.startingFrom) count++;
+        if (filters.maxCost !== undefined) count++;
+        if (filters.maxTravelers && filters.maxTravelers < 50) count++;
+        if (filters.tripTypes && filters.tripTypes.length > 0) count++;
+        if (filters.transportModes && filters.transportModes.length > 0) count++;
+        if (filters.genderPreference && filters.genderPreference !== 'anyone') count++;
+        if (filters.accommodationType) count++;
+        if (filters.bookingStatus) count++;
+        if (filters.sortBy && filters.sortBy !== 'newest') count++;
+        if (filters.startDate || filters.endDate) count++;
+        return count;
+    }, [filters]);
 
     const handleApplyFilters = (newFilters: FilterOptions) => {
         setFilters(newFilters);
@@ -155,10 +117,15 @@ const SearchScreen = ({ navigation }) => {
                     )}
                 </View>
                 <TouchableOpacity
-                    style={[styles.filterButton, { backgroundColor: filters ? colors.primary : colors.card }]}
+                    style={[styles.filterButton, { backgroundColor: activeFilterCount > 0 ? colors.primary : colors.card }]}
                     onPress={() => setFilterVisible(true)}
                 >
-                    <Ionicons name="options-outline" size={20} color={filters ? '#fff' : colors.text} />
+                    <Ionicons name="options-outline" size={20} color={activeFilterCount > 0 ? '#fff' : colors.text} />
+                    {activeFilterCount > 0 && (
+                        <View style={[styles.filterBadge, { backgroundColor: '#EF4444' }]}>
+                            <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+                        </View>
+                    )}
                 </TouchableOpacity>
             </View>
 
@@ -258,6 +225,7 @@ const SearchScreen = ({ navigation }) => {
                 visible={filterVisible}
                 onClose={() => setFilterVisible(false)}
                 onApply={handleApplyFilters}
+                currentFilters={filters}
             />
         </SafeAreaView>
     );
@@ -366,6 +334,25 @@ const styles = StyleSheet.create({
     emptyText: {
         fontSize: FONT_SIZE.sm,
         textAlign: 'center',
+    },
+    filterBadge: {
+        position: 'absolute',
+        top: -5,
+        right: -5,
+        minWidth: 18,
+        height: 18,
+        borderRadius: 9,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#EF4444',
+        paddingHorizontal: 4,
+        borderWidth: 1.5,
+        borderColor: '#fff',
+    },
+    filterBadgeText: {
+        color: '#fff',
+        fontSize: 10,
+        fontWeight: 'bold',
     },
 });
 

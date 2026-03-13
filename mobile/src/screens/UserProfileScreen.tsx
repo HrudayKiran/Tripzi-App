@@ -13,13 +13,21 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL 
 import TripCard from '../components/TripCard';
 import ProfilePictureViewer from '../components/ProfilePictureViewer';
 import DefaultAvatar from '../components/DefaultAvatar';
-import { pickAndUploadImage } from '../utils/imageUpload';
-
-import NotificationService from '../utils/notificationService';
+import ActionReasonModal from '../components/ActionReasonModal';
+import { deleteProfileImageFromR2, pickAndUploadImage } from '../utils/imageUpload';
+import { cancelTrip } from '../utils/tripActions';
 
 import ReportTripModal from '../components/ReportTripModal';
 
 const { width, height } = Dimensions.get('window');
+
+const CANCEL_REASONS = [
+    'Host is unavailable',
+    'Safety or logistics issue',
+    'Weather or route issue',
+    'Trip plan changed',
+    'Other',
+];
 
 // Fallback user
 const FALLBACK_USER = {
@@ -56,6 +64,7 @@ const UserProfileScreen = ({ route, navigation }) => {
     const [editTripTitle, setEditTripTitle] = useState('');
     const [editTripLocation, setEditTripLocation] = useState('');
     const [profileImage, setProfileImage] = useState(null);
+    const [profileImageObjectKey, setProfileImageObjectKey] = useState<string | null>(null);
 
     const [hostRating, setHostRating] = useState<{ average: number; count: number } | null>(null);
     const [showFullImage, setShowFullImage] = useState(false);
@@ -64,6 +73,8 @@ const UserProfileScreen = ({ route, navigation }) => {
     // Hoisted Modal State
     const [activeModal, setActiveModal] = useState<'none' | 'report'>('none');
     const [selectedTrip, setSelectedTrip] = useState<any>(null);
+    const [tripCancelTargetId, setTripCancelTargetId] = useState<string | null>(null);
+    const [cancellingTrip, setCancellingTrip] = useState(false);
 
 
 
@@ -185,6 +196,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                 setEditBio(userData.bio || '');
                 setEditUsername(userData.username || '');
                 setProfileImage(userData.photoURL);
+                setProfileImageObjectKey(userData.photoObjectKey || null);
 
                 // Trips are now handled by useEffect subscription
 
@@ -215,16 +227,19 @@ const UserProfileScreen = ({ route, navigation }) => {
                     displayName: currentUser.displayName || 'User',
                     email: currentUser.email,
                     photoURL: currentUser.photoURL || null,
+                    photoObjectKey: null,
                     bio: '',
                     ageVerified: false,
                 });
                 setEditName(currentUser.displayName || '');
                 setProfileImage(currentUser.photoURL);
+                setProfileImageObjectKey(null);
             } else {
                 setUser(FALLBACK_USER);
                 setEditName(FALLBACK_USER.displayName);
                 setEditBio(FALLBACK_USER.bio);
                 setProfileImage(FALLBACK_USER.photoURL);
+                setProfileImageObjectKey(null);
             }
         } catch (error) {
 
@@ -234,13 +249,16 @@ const UserProfileScreen = ({ route, navigation }) => {
                     name: currentUser.displayName || 'User',
                     displayName: currentUser.displayName || 'User',
                     photoURL: currentUser.photoURL,
+                    photoObjectKey: null,
                     bio: '',
                     ageVerified: false,
                 });
                 setEditName(currentUser.displayName || '');
                 setProfileImage(currentUser.photoURL);
+                setProfileImageObjectKey(null);
             } else {
                 setUser(FALLBACK_USER);
+                setProfileImageObjectKey(null);
             }
         } finally {
             setLoading(false);
@@ -255,6 +273,7 @@ const UserProfileScreen = ({ route, navigation }) => {
         }
 
         try {
+            const previousObjectKey = profileImageObjectKey || user?.photoObjectKey || null;
             const result = await pickAndUploadImage({
                 folder: 'profiles',
                 userId: currentUser.uid,
@@ -264,19 +283,35 @@ const UserProfileScreen = ({ route, navigation }) => {
             });
 
 
-            if (result.success && result.url) {
+            if (result.success && result.url && result.objectKey) {
                 // Update local state
                 setProfileImage(result.url);
+                setProfileImageObjectKey(result.objectKey);
 
-                // Update Firestore with the cloud URL
-                await firestore().collection('users').doc(currentUser.uid).update({
-                    photoURL: result.url,
-                });
+                try {
+                    await firestore().collection('users').doc(currentUser.uid).update({
+                        photoURL: result.url,
+                        photoObjectKey: result.objectKey,
+                    });
 
-                // Update user state
-                setUser(prev => ({ ...prev, photoURL: result.url }));
+                    try {
+                        await auth().currentUser?.updateProfile({ photoURL: result.url });
+                    } catch (e) {
 
-                Alert.alert('Success! ✨', 'Your profile photo has been updated.');
+                    }
+
+                    if (previousObjectKey && previousObjectKey !== result.objectKey) {
+                        await deleteProfileImageFromR2(previousObjectKey);
+                    }
+
+                    setUser(prev => ({ ...prev, photoURL: result.url, photoObjectKey: result.objectKey }));
+                    Alert.alert('Success! ✨', 'Your profile photo has been updated.');
+                } catch (updateError) {
+                    await deleteProfileImageFromR2(result.objectKey);
+                    setProfileImage(user?.photoURL || currentUser.photoURL || null);
+                    setProfileImageObjectKey(previousObjectKey);
+                    Alert.alert('Error', 'Failed to save profile image. Please try again.');
+                }
             } else if (result.error && result.error !== 'Selection cancelled') {
                 Alert.alert('Upload Failed', result.error);
             }
@@ -323,6 +358,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                 displayName: firestore.FieldValue.delete(),
                 bio: editBio,
                 photoURL: profileImage,
+                photoObjectKey: profileImageObjectKey || null,
             };
 
             if (editUsername) {
@@ -331,56 +367,18 @@ const UserProfileScreen = ({ route, navigation }) => {
 
             await firestore().collection('users').doc(currentUser.uid).update(updateData);
 
-            setUser(prev => ({ ...prev, name: editName, displayName: editName, bio: editBio, photoURL: profileImage, username: editUsername.toLowerCase() }));
+            setUser(prev => ({ ...prev, name: editName, displayName: editName, bio: editBio, photoURL: profileImage, photoObjectKey: profileImageObjectKey || null, username: editUsername.toLowerCase() }));
             setShowEditModal(false);
             Alert.alert('Success! ✨', 'Profile updated!');
         } catch (error) {
-            setUser(prev => ({ ...prev, name: editName, displayName: editName, bio: editBio, photoURL: profileImage }));
+            setUser(prev => ({ ...prev, name: editName, displayName: editName, bio: editBio, photoURL: profileImage, photoObjectKey: profileImageObjectKey || null }));
             setShowEditModal(false);
             Alert.alert('Saved!', 'Profile updated locally.');
         }
     };
 
     const handleDeleteTrip = (tripId) => {
-        Alert.alert('Cancel Trip', 'Are you sure? All participants will be notified and this trip will be marked as cancelled.', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Confirm', style: 'destructive',
-                onPress: async () => {
-                    try {
-                        // Fetch trip data to get participants
-                        const tripDoc = await firestore().collection('trips').doc(tripId).get();
-                        const tripData = tripDoc.data();
-
-                        if (tripData) {
-                            const participants = tripData.participants || [];
-                            const hostName = currentUser?.displayName || 'The host';
-                            const tripTitle = tripData.title || 'A trip';
-
-                            // Notify all participants (except the owner)
-                            for (const participantId of participants) {
-                                if (participantId !== currentUser?.uid) {
-                                    await NotificationService.onTripCancelled(participantId, tripId, tripTitle, hostName);
-                                }
-                            }
-                        }
-
-                        await firestore().collection('trips').doc(tripId).update({
-                            status: 'cancelled',
-                            isCancelled: true,
-                            cancelledBy: currentUser?.uid || null,
-                            cancelledAt: firestore.FieldValue.serverTimestamp(),
-                            updatedAt: firestore.FieldValue.serverTimestamp(),
-                        });
-                    } catch (e) { }
-                    setTrips(prev => prev.map(t => t.id === tripId ? {
-                        ...t,
-                        status: 'cancelled',
-                        isCancelled: true,
-                    } : t));
-                }
-            }
-        ]);
+        setTripCancelTargetId(tripId);
     };
 
 
@@ -755,12 +753,14 @@ const UserProfileScreen = ({ route, navigation }) => {
             <ProfilePictureViewer
                 visible={showFullImage}
                 imageUrl={profileImage || user?.photoURL}
+                imageObjectKey={profileImageObjectKey || user?.photoObjectKey || null}
                 userName={user?.displayName}
                 isOwnProfile={isOwnProfile}
                 onClose={() => setShowFullImage(false)}
                 onDeleted={() => {
                     setProfileImage(null);
-                    setUser(prev => ({ ...prev, photoURL: null }));
+                    setProfileImageObjectKey(null);
+                    setUser(prev => ({ ...prev, photoURL: null, photoObjectKey: null }));
                 }}
             />
 
@@ -771,6 +771,34 @@ const UserProfileScreen = ({ route, navigation }) => {
                     setSelectedTrip(null);
                 }}
                 trip={selectedTrip}
+            />
+
+            <ActionReasonModal
+                visible={!!tripCancelTargetId}
+                title="Cancel Trip"
+                subtitle="Joined travelers will be notified with your reason and the trip will move to cancelled."
+                actionLabel="Cancel Trip"
+                actionTone="danger"
+                reasons={CANCEL_REASONS}
+                loading={cancellingTrip}
+                onClose={() => setTripCancelTargetId(null)}
+                onSubmit={async (reason) => {
+                    if (!tripCancelTargetId) return;
+                    setCancellingTrip(true);
+                    try {
+                        await cancelTrip(tripCancelTargetId, reason);
+                        setTrips(prev => prev.map(t => t.id === tripCancelTargetId ? {
+                            ...t,
+                            status: 'cancelled',
+                            isCancelled: true,
+                        } : t));
+                        setTripCancelTargetId(null);
+                    } catch (error: any) {
+                        Alert.alert('Error', error?.message || 'Failed to cancel trip.');
+                    } finally {
+                        setCancellingTrip(false);
+                    }
+                }}
             />
 
             {/* Create Selection Modal */}

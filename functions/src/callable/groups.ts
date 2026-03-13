@@ -8,10 +8,15 @@ interface GroupChatData {
   createdBy?: string;
   participants?: string[];
   admins?: string[];
+  memberCount?: number;
 }
 
 const toTrimmedString = (value: unknown): string => {
   return typeof value === "string" ? value.trim() : "";
+};
+
+const isChatCollection = (value: unknown): value is "chats" | "group_chats" => {
+  return value === "chats" || value === "group_chats";
 };
 
 const requireAuthUid = (request: any): string => {
@@ -22,19 +27,27 @@ const requireAuthUid = (request: any): string => {
   return uid;
 };
 
-const getGroupChat = async (chatId: string) => {
-  const chatRef = db.collection("chats").doc(chatId);
-  const chatDoc = await chatRef.get();
-  if (!chatDoc.exists) {
-    throw new HttpsError("not-found", "Group chat not found.");
+const getGroupChat = async (chatId: string, preferredCollection?: "chats" | "group_chats") => {
+  const collections: Array<"chats" | "group_chats"> = preferredCollection
+    ? [preferredCollection, preferredCollection === "chats" ? "group_chats" : "chats"]
+    : ["group_chats", "chats"];
+
+  for (const collectionName of collections) {
+    const chatRef = db.collection(collectionName).doc(chatId);
+    const chatDoc = await chatRef.get();
+    if (!chatDoc.exists) {
+      continue;
+    }
+
+    const chatData = chatDoc.data() as GroupChatData;
+    if (chatData?.type && chatData.type !== "group") {
+      throw new HttpsError("failed-precondition", "Chat is not a group.");
+    }
+
+    return { chatRef, chatData, collectionName };
   }
 
-  const chatData = chatDoc.data() as GroupChatData;
-  if (chatData?.type !== "group") {
-    throw new HttpsError("failed-precondition", "Chat is not a group.");
-  }
-
-  return { chatRef, chatData };
+  throw new HttpsError("not-found", "Group chat not found.");
 };
 
 const isGroupAdmin = (chatData: GroupChatData, uid: string): boolean => {
@@ -99,12 +112,15 @@ export const addGroupMember = onCall(async (request) => {
   const callerUid = requireAuthUid(request);
   const chatId = toTrimmedString(request.data?.chatId);
   const memberId = toTrimmedString(request.data?.memberId);
+  const collectionName = isChatCollection(request.data?.collectionName)
+    ? request.data.collectionName
+    : undefined;
 
   if (!chatId || !memberId) {
     throw new HttpsError("invalid-argument", "chatId and memberId are required.");
   }
 
-  const { chatRef, chatData } = await getGroupChat(chatId);
+  const { chatRef, chatData } = await getGroupChat(chatId, collectionName);
   ensureAdmin(chatData, callerUid);
 
   const participants = Array.isArray(chatData.participants) ? chatData.participants : [];
@@ -125,6 +141,8 @@ export const addGroupMember = onCall(async (request) => {
       role: "member",
     },
     [`unreadCount.${memberId}`]: 0,
+    memberCount: participants.length + 1,
+    hidden: false,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
@@ -137,6 +155,9 @@ export const removeGroupMember = onCall(async (request) => {
   const callerUid = requireAuthUid(request);
   const chatId = toTrimmedString(request.data?.chatId);
   const memberId = toTrimmedString(request.data?.memberId);
+  const collectionName = isChatCollection(request.data?.collectionName)
+    ? request.data.collectionName
+    : undefined;
 
   if (!chatId || !memberId) {
     throw new HttpsError("invalid-argument", "chatId and memberId are required.");
@@ -149,7 +170,7 @@ export const removeGroupMember = onCall(async (request) => {
     );
   }
 
-  const { chatRef, chatData } = await getGroupChat(chatId);
+  const { chatRef, chatData } = await getGroupChat(chatId, collectionName);
   ensureAdmin(chatData, callerUid);
 
   const participants = Array.isArray(chatData.participants) ? chatData.participants : [];
@@ -169,6 +190,7 @@ export const removeGroupMember = onCall(async (request) => {
     [`participantDetails.${memberId}`]: admin.firestore.FieldValue.delete(),
     [`unreadCount.${memberId}`]: admin.firestore.FieldValue.delete(),
     [`clearedAt.${memberId}`]: admin.firestore.FieldValue.delete(),
+    memberCount: Math.max(0, participants.length - 1),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
@@ -181,12 +203,15 @@ export const promoteGroupAdmin = onCall(async (request) => {
   const callerUid = requireAuthUid(request);
   const chatId = toTrimmedString(request.data?.chatId);
   const memberId = toTrimmedString(request.data?.memberId);
+  const collectionName = isChatCollection(request.data?.collectionName)
+    ? request.data.collectionName
+    : undefined;
 
   if (!chatId || !memberId) {
     throw new HttpsError("invalid-argument", "chatId and memberId are required.");
   }
 
-  const { chatRef, chatData } = await getGroupChat(chatId);
+  const { chatRef, chatData } = await getGroupChat(chatId, collectionName);
   ensureCreator(chatData, callerUid);
 
   const participants = Array.isArray(chatData.participants) ? chatData.participants : [];
@@ -214,12 +239,15 @@ export const demoteGroupAdmin = onCall(async (request) => {
   const callerUid = requireAuthUid(request);
   const chatId = toTrimmedString(request.data?.chatId);
   const memberId = toTrimmedString(request.data?.memberId);
+  const collectionName = isChatCollection(request.data?.collectionName)
+    ? request.data.collectionName
+    : undefined;
 
   if (!chatId || !memberId) {
     throw new HttpsError("invalid-argument", "chatId and memberId are required.");
   }
 
-  const { chatRef, chatData } = await getGroupChat(chatId);
+  const { chatRef, chatData } = await getGroupChat(chatId, collectionName);
   ensureCreator(chatData, callerUid);
 
   if (memberId === chatData.createdBy) {
@@ -250,12 +278,15 @@ export const demoteGroupAdmin = onCall(async (request) => {
 export const leaveGroup = onCall(async (request) => {
   const callerUid = requireAuthUid(request);
   const chatId = toTrimmedString(request.data?.chatId);
+  const collectionName = isChatCollection(request.data?.collectionName)
+    ? request.data.collectionName
+    : undefined;
 
   if (!chatId) {
     throw new HttpsError("invalid-argument", "chatId is required.");
   }
 
-  const { chatRef, chatData } = await getGroupChat(chatId);
+  const { chatRef, chatData } = await getGroupChat(chatId, collectionName);
 
   if (chatData.createdBy === callerUid) {
     throw new HttpsError(
@@ -278,6 +309,7 @@ export const leaveGroup = onCall(async (request) => {
     [`participantDetails.${callerUid}`]: admin.firestore.FieldValue.delete(),
     [`unreadCount.${callerUid}`]: admin.firestore.FieldValue.delete(),
     [`clearedAt.${callerUid}`]: admin.firestore.FieldValue.delete(),
+    memberCount: Math.max(0, participants.length - 1),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 

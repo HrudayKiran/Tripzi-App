@@ -10,10 +10,10 @@ import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
 import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
+import { deleteTripImagesFromR2, uploadTripImageToR2 } from '../utils/imageUpload';
 
 const { width } = Dimensions.get('window');
 
@@ -57,6 +57,13 @@ const GENDER_PREFERENCES = [
     { id: 'female', label: 'Female Only', icon: 'female' },
 ];
 
+type TripImageItem = {
+    id: string;
+    uri: string;
+    location: string;
+    objectKey?: string | null;
+};
+
 const EditTripScreen = ({ navigation, route }: any) => {
     const { colors } = useTheme();
     const tripId = route.params?.tripId;
@@ -64,12 +71,18 @@ const EditTripScreen = ({ navigation, route }: any) => {
 
     // Unified Image & Location state with stable IDs
     const [title, setTitle] = useState(initialData?.title || '');
-    const [tripImages, setTripImages] = useState<{ id: string, uri: string, location: string }[]>(
+    const [tripImages, setTripImages] = useState<TripImageItem[]>(
         initialData?.images?.map((uri: string, i: number) => ({
             id: `img-${Date.now()}-${i}`,
             uri,
-            location: initialData?.imageLocations?.[i] || ''
+            location: initialData?.imageLocations?.[i] || '',
+            objectKey: initialData?.imageObjectKeys?.[i] || null,
         })) || []
+    );
+    const [initialImageObjectKeys, setInitialImageObjectKeys] = useState<string[]>(
+        Array.isArray(initialData?.imageObjectKeys) ?
+            initialData.imageObjectKeys.filter((key: unknown): key is string => typeof key === 'string' && key.trim().length > 0) :
+            []
     );
 
     // Location & Dates
@@ -118,8 +131,14 @@ const EditTripScreen = ({ navigation, route }: any) => {
                             setTripImages(imgUris.map((uri: string, i: number) => ({
                                 id: `img-${tripId}-${i}`,
                                 uri,
-                                location: imgLocs[i] || ''
+                                location: imgLocs[i] || '',
+                                objectKey: data.imageObjectKeys?.[i] || null,
                             })));
+                            setInitialImageObjectKeys(
+                                Array.isArray(data.imageObjectKeys) ?
+                                    data.imageObjectKeys.filter((key: unknown): key is string => typeof key === 'string' && key.trim().length > 0) :
+                                    []
+                            );
 
                             setFromLocation(data.fromLocation || '');
                             setToLocation(data.toLocation || data.location || '');
@@ -168,7 +187,8 @@ const EditTripScreen = ({ navigation, route }: any) => {
             const newImage = {
                 id: `img-new-${Date.now()}`,
                 uri: result.assets[0].uri,
-                location: ''
+                location: '',
+                objectKey: null,
             };
             setTripImages(prev => [...prev, newImage].slice(0, 5));
         }
@@ -272,28 +292,34 @@ const EditTripScreen = ({ navigation, route }: any) => {
         if (!currentUser) return;
 
         setIsPosting(true);
+        const newObjectKeys: string[] = [];
 
         try {
-            // Upload new images to Firebase Storage
-            let uploadedImageData: { uri: string, location: string }[] = [];
+            let uploadedImageData: Array<{ uri: string, location: string, objectKey: string | null }> = [];
 
             for (let i = 0; i < tripImages.length; i++) {
                 const img = tripImages[i];
                 const imageUri = img.uri;
 
-                // Check if it's already a remote URL
                 if (imageUri.startsWith('http') || imageUri.startsWith('https')) {
-                    uploadedImageData.push({ uri: imageUri, location: img.location });
+                    uploadedImageData.push({
+                        uri: imageUri,
+                        location: img.location,
+                        objectKey: img.objectKey || null,
+                    });
                     continue;
                 }
 
-                const filename = `trips/${currentUser.uid}/${Date.now()}_${i}.jpg`;
-                const reference = storage().ref(filename);
-
                 try {
-                    await reference.putFile(imageUri, { contentType: 'image/jpeg' });
-                    const downloadUrl = await reference.getDownloadURL();
-                    uploadedImageData.push({ uri: downloadUrl, location: img.location });
+                    const uploadResult = await uploadTripImageToR2(imageUri, currentUser.uid, tripId);
+                    if (uploadResult.success && uploadResult.url && uploadResult.objectKey) {
+                        uploadedImageData.push({
+                            uri: uploadResult.url,
+                            location: img.location,
+                            objectKey: uploadResult.objectKey,
+                        });
+                        newObjectKeys.push(uploadResult.objectKey);
+                    }
                 } catch (uploadError) {
                     console.error('Image upload failed', uploadError);
                 }
@@ -301,16 +327,21 @@ const EditTripScreen = ({ navigation, route }: any) => {
 
             const finalImages = uploadedImageData.map(d => d.uri);
             const finalLocations = uploadedImageData.map(d => d.location);
+            const finalObjectKeys = uploadedImageData.map(d => d.objectKey || null);
 
             if (finalImages.length === 0) {
                 finalImages.push('https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800');
                 finalLocations.push('');
+                finalObjectKeys.push(null);
             }
+
+            const removedObjectKeys = initialImageObjectKeys.filter((key) => !finalObjectKeys.includes(key));
 
             const tripData = {
                 title,
                 images: finalImages,
                 imageLocations: finalLocations,
+                imageObjectKeys: finalObjectKeys,
                 fromLocation,
                 toLocation,
                 location: toLocation,
@@ -337,6 +368,12 @@ const EditTripScreen = ({ navigation, route }: any) => {
             };
 
             await firestore().collection('trips').doc(tripId).update(tripData);
+            if (removedObjectKeys.length > 0) {
+                await deleteTripImagesFromR2(removedObjectKeys, tripId);
+            }
+            setInitialImageObjectKeys(
+                finalObjectKeys.filter((key): key is string => typeof key === 'string' && key.trim().length > 0)
+            );
 
             // Update chat title if exists
             try {
@@ -351,6 +388,9 @@ const EditTripScreen = ({ navigation, route }: any) => {
             Alert.alert('Success! 🎉', 'Your trip has been updated!');
             navigation.goBack();
         } catch (error: any) {
+            if (newObjectKeys.length > 0) {
+                await deleteTripImagesFromR2(newObjectKeys, tripId);
+            }
             setIsPosting(false);
             Alert.alert('Error', `Failed to update trip: ${error?.message || 'Unknown error'}. Please try again.`);
         }

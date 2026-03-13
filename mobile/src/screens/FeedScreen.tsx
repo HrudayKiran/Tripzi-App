@@ -13,8 +13,28 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, NEUTRAL }
 import AppLogo from '../components/AppLogo';
 import ReportTripModal from '../components/ReportTripModal'; // Imported
 import { searchUsersByPrefix } from '../utils/searchUsers';
+import { applyTripFilters } from '../utils/filterUtils';
+import auth from '@react-native-firebase/auth';
 
 const { width, height } = Dimensions.get('window');
+
+const getActiveFilterCount = (filters: FilterOptions | null) => {
+    if (!filters) return 0;
+
+    let count = 0;
+    if (filters.destination) count++;
+    if (filters.startingFrom) count++;
+    if (filters.maxCost !== undefined) count++;
+    if (filters.maxTravelers && filters.maxTravelers < 50) count++;
+    if (filters.tripTypes && filters.tripTypes.length > 0) count++;
+    if (filters.transportModes && filters.transportModes.length > 0) count++;
+    if (filters.genderPreference && filters.genderPreference !== 'anyone') count++;
+    if (filters.accommodationType) count++;
+    if (filters.bookingStatus) count++;
+    if (filters.sortBy && filters.sortBy !== 'newest') count++;
+    if (filters.startDate || filters.endDate) count++;
+    return count;
+};
 
 const FeedScreen = ({ navigation }) => {
     const { trips, loading, refetch } = useTrips();
@@ -113,104 +133,21 @@ const FeedScreen = ({ navigation }) => {
         };
     }, [searchQuery]);
 
+    // Filter trips using centralized utility
     const filteredTrips = useMemo(() => {
-        let result = [...trips];
-
-        // Search filter
-        if (searchQuery) {
-            result = result.filter(trip =>
-                trip.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                trip.location?.toLowerCase().includes(searchQuery.toLowerCase())
-            );
-        }
-
-        // Apply additional filters
-        if (filters) {
-            if (filters.destination) {
-                result = result.filter(trip =>
-                    trip.location?.toLowerCase().includes(filters.destination.toLowerCase()) ||
-                    trip.toLocation?.toLowerCase().includes(filters.destination.toLowerCase())
-                );
-            }
-            if (filters.startingFrom) {
-                result = result.filter(trip =>
-                    trip.fromLocation?.toLowerCase().includes(filters.startingFrom!.toLowerCase())
-                );
-            }
-            if (filters.maxCost) {
-                result = result.filter(trip => (trip.cost || 0) <= filters.maxCost);
-            }
-            if (filters.maxTravelers && filters.maxTravelers < 50) {
-                result = result.filter(trip => (trip.maxTravelers || 1) <= filters.maxTravelers);
-            }
-            if (filters.minDays && filters.minDays > 1) {
-                result = result.filter(trip => (trip.duration || 1) >= filters.minDays);
-            }
-            // Multi-select trip types
-            if (filters.tripTypes && filters.tripTypes.length > 0) {
-                result = result.filter(trip =>
-                    trip.tripTypes?.some((t: string) => filters.tripTypes!.includes(t.toLowerCase())) ||
-                    filters.tripTypes!.includes(trip.tripType?.toLowerCase())
-                );
-            } else if (filters.tripType) {
-                result = result.filter(trip =>
-                    trip.tripTypes?.some((t: string) => t.toLowerCase().includes(filters.tripType!.toLowerCase()))
-                );
-            }
-            // Multi-select transport modes
-            if (filters.transportModes && filters.transportModes.length > 0) {
-                result = result.filter(trip =>
-                    trip.transportModes?.some((t: string) => filters.transportModes!.includes(t.toLowerCase())) ||
-                    filters.transportModes!.includes(trip.transportMode?.toLowerCase())
-                );
-            } else if (filters.transportMode) {
-                result = result.filter(trip =>
-                    trip.transportModes?.some((t: string) => t.toLowerCase().includes(filters.transportMode!.toLowerCase()))
-                );
-            }
-            if (filters.genderPreference && filters.genderPreference !== 'anyone') {
-                result = result.filter(trip =>
-                    trip.genderPreference === filters.genderPreference || trip.genderPreference === 'anyone'
-                );
-            }
-            if (filters.accommodationType) {
-                result = result.filter(trip =>
-                    trip.accommodationType?.toLowerCase() === filters.accommodationType
-                );
-            }
-            if (filters.bookingStatus) {
-                result = result.filter(trip =>
-                    trip.bookingStatus?.toLowerCase() === filters.bookingStatus
-                );
-            }
-            if (filters.sortBy) {
-                switch (filters.sortBy) {
-                    case 'newest':
-                        result.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
-                        break;
-                    case 'oldest':
-                        result.sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0));
-                        break;
-                    case 'lowestCost':
-                        result.sort((a, b) => (a.cost || 0) - (b.cost || 0));
-                        break;
-                    case 'highestCost':
-                        result.sort((a, b) => (b.cost || 0) - (a.cost || 0));
-                        break;
-                }
-            }
-        }
-
-        return result;
+        const currentUserUid = auth().currentUser?.uid;
+        return applyTripFilters(trips, searchQuery, filters, currentUserUid, true);
     }, [trips, searchQuery, filters]);
 
     const handleApplyFilters = (newFilters: FilterOptions) => {
-        setFilters(newFilters);
+        setFilters(getActiveFilterCount(newFilters) > 0 ? newFilters : null);
     };
 
     const clearFilters = () => {
         setFilters(null);
         setSearchQuery('');
+        setSearchedUsers([]);
+        setSearchingUsers(false);
     };
 
     const onRefresh = useCallback(() => {
@@ -219,26 +156,8 @@ const FeedScreen = ({ navigation }) => {
         setTimeout(() => setRefreshing(false), 1500);
     }, [refetch]);
 
-    const hasActiveFilters = filters !== null || searchQuery !== '';
-
-    // Count active filters for badge
-    const activeFilterCount = useMemo(() => {
-        if (!filters) return 0;
-        let count = 0;
-        if (filters.destination) count++;
-        if (filters.startingFrom) count++;
-        if (filters.maxCost !== undefined) count++;
-        if (filters.maxTravelers && filters.maxTravelers < 50) count++;
-        if (filters.tripTypes && filters.tripTypes.length > 0) count++;
-        if (filters.transportModes && filters.transportModes.length > 0) count++;
-        if (filters.genderPreference && filters.genderPreference !== 'anyone') count++;
-        if (filters.accommodationType) count++;
-        if (filters.bookingStatus) count++;
-        if (filters.sortBy && filters.sortBy !== 'newest') count++;
-        if (filters.startDate) count++;
-        if (filters.endDate) count++;
-        return count;
-    }, [filters]);
+    const activeFilterCount = useMemo(() => getActiveFilterCount(filters), [filters]);
+    const hasActiveFilters = activeFilterCount > 0 || searchQuery !== '';
 
     // Sticky header - now rendered outside FlatList
     const renderStickyHeader = () => (
@@ -400,7 +319,15 @@ const FeedScreen = ({ navigation }) => {
                                     </TouchableOpacity>
                                 )}
                             </View>
-                            <TouchableOpacity onPress={() => { setSearchQuery(''); setSearchVisible(false); }} style={styles.cancelButton}>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setSearchQuery('');
+                                    setSearchedUsers([]);
+                                    setSearchingUsers(false);
+                                    setSearchVisible(false);
+                                }}
+                                style={styles.cancelButton}
+                            >
                                 <Text style={[styles.cancelText, { color: colors.primary }]}>Cancel</Text>
                             </TouchableOpacity>
                         </View>

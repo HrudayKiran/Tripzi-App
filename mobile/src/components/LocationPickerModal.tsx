@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator, SafeAreaView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,30 +12,43 @@ interface LocationPickerModalProps {
     onSelectLocation: (location: { latitude: number; longitude: number; address?: string }) => void;
 }
 
-const { width, height } = Dimensions.get('window');
+const DEFAULT_REGION = {
+    latitude: 20.5937,
+    longitude: 78.9629,
+    latitudeDelta: 12,
+    longitudeDelta: 12,
+};
 
 const LocationPickerModal = ({ visible, onClose, onSelectLocation }: LocationPickerModalProps) => {
     const { colors } = useTheme();
-    const [region, setRegion] = useState<any>(null);
+    const [region, setRegion] = useState<any>(DEFAULT_REGION);
     const [selectedLocation, setSelectedLocation] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [address, setAddress] = useState('');
+    const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
 
     useEffect(() => {
         if (visible) {
-            getCurrentLocation();
+            void initializeMap();
         }
     }, [visible]);
 
-    const getCurrentLocation = async () => {
+    const initializeMap = async () => {
         setLoading(true);
+        setAddress('');
+        setLocationPermissionDenied(false);
         try {
             const { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
+                setLocationPermissionDenied(true);
+                setRegion(DEFAULT_REGION);
+                setSelectedLocation(null);
                 return;
             }
 
-            const location = await Location.getCurrentPositionAsync({});
+            const location = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.Balanced,
+            });
             const initialRegion = {
                 latitude: location.coords.latitude,
                 longitude: location.coords.longitude,
@@ -49,7 +62,9 @@ const LocationPickerModal = ({ visible, onClose, onSelectLocation }: LocationPic
             });
             await fetchAddress(location.coords.latitude, location.coords.longitude);
         } catch (error) {
-
+            setRegion(DEFAULT_REGION);
+            setSelectedLocation(null);
+            setAddress('');
         } finally {
             setLoading(false);
         }
@@ -87,30 +102,39 @@ const LocationPickerModal = ({ visible, onClose, onSelectLocation }: LocationPic
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
             <View style={styles.container}>
-                {region ? (
+                {loading ? (
+                    <View style={[styles.map, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#f0f0f0' }]}>
+                        <ActivityIndicator size="large" color={colors.primary} />
+                        <Text style={{ marginTop: 10, color: '#666' }}>Loading Map...</Text>
+                    </View>
+                ) : (
                     <MapView
                         provider={PROVIDER_GOOGLE}
                         style={styles.map}
                         initialRegion={region}
                         onPress={handlePress}
-                        showsUserLocation
-                        showsMyLocationButton
+                        showsUserLocation={!locationPermissionDenied}
+                        showsMyLocationButton={!locationPermissionDenied}
                     >
                         {selectedLocation && (
                             <Marker coordinate={selectedLocation} />
                         )}
                     </MapView>
-                ) : (
-                    <View style={[styles.map, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#f0f0f0' }]}>
-                        <ActivityIndicator size="large" color={colors.primary} />
-                        <Text style={{ marginTop: 10, color: '#666' }}>Loading Map...</Text>
-                    </View>
                 )}
 
                 {/* Header Back Button */}
                 <TouchableOpacity style={styles.backButton} onPress={onClose}>
                     <Ionicons name="arrow-back" size={24} color="#000" />
                 </TouchableOpacity>
+
+                {locationPermissionDenied && (
+                    <View style={[styles.permissionBanner, { backgroundColor: colors.card }]}>
+                        <Ionicons name="information-circle" size={18} color={colors.primary} />
+                        <Text style={[styles.permissionText, { color: colors.text }]}>
+                            Location permission is off. You can still pick a place manually on the map.
+                        </Text>
+                    </View>
+                )}
 
                 {/* Bottom Card */}
                 <View style={[styles.bottomCard, { backgroundColor: colors.card }]}>
@@ -158,6 +182,23 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.2,
         shadowRadius: 4,
+    },
+    permissionBanner: {
+        position: 'absolute',
+        top: 104,
+        left: 20,
+        right: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.sm,
+        paddingHorizontal: SPACING.md,
+        paddingVertical: SPACING.sm,
+        borderRadius: BORDER_RADIUS.lg,
+    },
+    permissionText: {
+        flex: 1,
+        fontSize: FONT_SIZE.sm,
+        lineHeight: 18,
     },
     bottomCard: {
         position: 'absolute',

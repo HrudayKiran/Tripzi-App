@@ -10,6 +10,11 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, ST
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import functions from '@react-native-firebase/functions';
+import {
+    getNotificationPermissionStatus,
+    requestNotificationPermission,
+    syncNotificationPreference,
+} from '../utils/notificationPermissions';
 
 const DELETE_REASONS = [
     'I have privacy concerns',
@@ -27,6 +32,7 @@ const SettingsScreen = ({ navigation }) => {
     const [deleteReason, setDeleteReason] = useState('');
     const [customReason, setCustomReason] = useState('');
     const [deleting, setDeleting] = useState(false);
+    const [notificationPermissionGranted, setNotificationPermissionGranted] = useState(false);
     const currentUser = auth().currentUser;
 
     // Load initial setting
@@ -34,9 +40,12 @@ const SettingsScreen = ({ navigation }) => {
         if (!currentUser) return;
         const loadSettings = async () => {
             try {
+                const permissionStatus = await getNotificationPermissionStatus();
+                setNotificationPermissionGranted(permissionStatus === 'granted');
+
                 const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
                 if (userDoc.exists) {
-                    const isEnabled = userDoc.data()?.pushNotifications !== false;
+                    const isEnabled = userDoc.data()?.pushNotificationsEnabled === true && permissionStatus === 'granted';
                     setPushEnabled(isEnabled);
                 }
             } catch (error) {
@@ -47,21 +56,48 @@ const SettingsScreen = ({ navigation }) => {
     }, [currentUser]);
 
     const handlePushToggle = async (value: boolean) => {
-        setPushEnabled(value);
         if (!currentUser) return;
         try {
-            if (value) {
-                await firestore().collection('users').doc(currentUser.uid).set({
-                    pushNotifications: true
-                }, { merge: true });
-            } else {
-                await firestore().collection('users').doc(currentUser.uid).update({
-                    pushNotifications: false,
-                    pushToken: firestore.FieldValue.delete(),
-                });
+            let permissionStatus = await getNotificationPermissionStatus();
+
+            if (value && permissionStatus !== 'granted') {
+                permissionStatus = await requestNotificationPermission();
+            }
+
+            const enabled = value && permissionStatus === 'granted';
+            setNotificationPermissionGranted(permissionStatus === 'granted');
+            setPushEnabled(enabled);
+
+            await syncNotificationPreference(currentUser.uid, permissionStatus, enabled);
+
+            if (!enabled && permissionStatus !== 'granted') {
+                Alert.alert(
+                    'Notifications Disabled',
+                    'Enable notifications in system settings to receive Tripzi notifications.'
+                );
             }
         } catch (error) {
             // Error updating settings
+        }
+    };
+
+    const handleEnableNotifications = async () => {
+        if (!currentUser) return;
+        try {
+            const permissionStatus = await requestNotificationPermission();
+            const enabled = permissionStatus === 'granted';
+            setNotificationPermissionGranted(enabled);
+            setPushEnabled(enabled);
+            await syncNotificationPreference(currentUser.uid, permissionStatus, enabled);
+
+            if (!enabled) {
+                Alert.alert(
+                    'Notifications Disabled',
+                    'Allow notifications in your device settings to receive Tripzi alerts.'
+                );
+            }
+        } catch (error) {
+            Alert.alert('Error', 'Could not update notification permission right now.');
         }
     };
 
@@ -97,7 +133,7 @@ const SettingsScreen = ({ navigation }) => {
                             // Navigate to auth screen
                             navigation.reset({
                                 index: 0,
-                                routes: [{ name: 'Auth' }],
+                                routes: [{ name: 'Start' }],
                             });
                         } catch (error: any) {
                             Alert.alert("Error", error.message || "Could not delete account. Please try again later.");
@@ -137,7 +173,9 @@ const SettingsScreen = ({ navigation }) => {
                             <View style={styles.settingInfo}>
                                 <Text style={[styles.settingTitle, { color: colors.text }]}>Push Notifications</Text>
                                 <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
-                                    Receive notifications about new trips and messages
+                                    {notificationPermissionGranted
+                                        ? 'Receive notifications about new trips and messages'
+                                        : 'Enable device notification permission to receive Tripzi notifications'}
                                 </Text>
                             </View>
                             <Switch
@@ -145,8 +183,20 @@ const SettingsScreen = ({ navigation }) => {
                                 onValueChange={handlePushToggle}
                                 trackColor={{ false: NEUTRAL.gray200, true: STATUS.success }}
                                 thumbColor={NEUTRAL.white}
+                                disabled={!notificationPermissionGranted}
                             />
                         </View>
+                        {!notificationPermissionGranted && (
+                            <TouchableOpacity
+                                style={[styles.enablePermissionButton, { borderColor: colors.primary }]}
+                                onPress={handleEnableNotifications}
+                                activeOpacity={0.75}
+                            >
+                                <Text style={[styles.enablePermissionText, { color: colors.primary }]}>
+                                    Allow Notifications
+                                </Text>
+                            </TouchableOpacity>
+                        )}
                     </Animatable.View>
 
                     {/* Dark Mode */}
@@ -330,6 +380,18 @@ const styles = StyleSheet.create({
     settingDescription: {
         fontSize: FONT_SIZE.sm,
         lineHeight: 20,
+    },
+    enablePermissionButton: {
+        marginTop: SPACING.sm,
+        marginLeft: 64,
+        borderWidth: 1,
+        borderRadius: BORDER_RADIUS.md,
+        paddingVertical: SPACING.sm,
+        alignItems: 'center',
+    },
+    enablePermissionText: {
+        fontSize: FONT_SIZE.sm,
+        fontWeight: FONT_WEIGHT.semibold,
     },
     // Delete Reason Modal
     modalOverlay: {

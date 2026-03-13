@@ -3,6 +3,7 @@ import { onDocumentUpdated, onDocumentDeleted } from 'firebase-functions/v2/fire
 import { db } from '../utils/firebase';
 import { createNotification, sendPushToUser } from '../utils/notifications';
 import * as admin from 'firebase-admin';
+import { deleteR2Objects, r2AccessKeyId, r2SecretAccessKey } from '../utils/r2';
 
 // ==================== TRIP NOTIFICATIONS ====================
 
@@ -90,9 +91,37 @@ export const onTripJoin = onDocumentUpdated(
                 await chatDoc.ref.update({
                     participants: admin.firestore.FieldValue.arrayUnion(...newJoiners),
                     ...detailsUpdate,
+                    memberCount: afterParticipants.length,
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    lastMessage: {
+                        text: newJoiners.length === 1 
+                            ? `${joinerDetailsMap[newJoiners[0]].displayName} joined the group`
+                            : `${newJoiners.length} new members joined the group`,
+                        senderId: 'system',
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        type: 'system',
+                    }
                 });
-                console.log(`[JoinTrigger] Added joiners to existing chat ${chatId}`);
+
+                // Add system messages to the messages subcollection
+                const batch = db.batch();
+                for (const uid of newJoiners) {
+                    const msgRef = chatDoc.ref.collection('messages').doc();
+                    batch.set(msgRef, {
+                        senderId: 'system',
+                        senderName: 'System',
+                        type: 'system',
+                        text: `${joinerDetailsMap[uid].displayName} joined the group`,
+                        status: 'sent',
+                        readBy: {},
+                        deliveredTo: [],
+                        deletedFor: [],
+                        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    });
+                }
+                await batch.commit();
+
+                console.log(`[JoinTrigger] Added joiners to existing chat ${chatId} and updated lastMessage`);
             } else if (hostId) {
                 // Create new chat with full details
                 isNewChat = true;
@@ -126,10 +155,12 @@ export const onTripJoin = onDocumentUpdated(
                     groupIcon,
                     tripImage: groupIcon,
                     participants: [hostId, ...newJoiners],
+                    memberCount: [hostId, ...newJoiners].length,
                     participantDetails,
                     createdBy: hostId,
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    hidden: false,
                     lastMessage: {
                         text: `Group chat created for "${tripTitle}"`,
                         senderId: 'system',
@@ -156,14 +187,14 @@ export const onTripJoin = onDocumentUpdated(
                     entityId: tripId,
                     entityType: "trip",
                     deepLinkRoute: chatId ? "Chat" : "TripDetails",
-                    deepLinkParams: chatId ? { chatId } : { tripId },
+                    deepLinkParams: chatId ? { chatId, isGroupChat: true, collectionName: "group_chats" } : { tripId },
                 });
 
                 if (chatId) {
                     await sendPushToUser(joinerId, {
                         title: "You're Going! 🎒",
                         body: `You joined "${tripTitle}" and were added to the group chat.`,
-                        data: { route: "Chat", chatId },
+                        data: { route: "Chat", chatId, isGroupChat: "true", collectionName: "group_chats" },
                     });
                 } else {
                     await sendPushToUser(joinerId, {
@@ -185,13 +216,15 @@ export const onTripJoin = onDocumentUpdated(
                         actorId: joinerId,
                         actorName: joinerName,
                         deepLinkRoute: chatId ? "Chat" : "TripDetails",
-                        deepLinkParams: chatId ? { chatId } : { tripId },
+                        deepLinkParams: chatId ? { chatId, isGroupChat: true, collectionName: "group_chats" } : { tripId },
                     });
 
                     await sendPushToUser(hostId, {
                         title: "New Trip Mate! 🎉",
                         body: `${joinerName} joined "${tripTitle}"`,
-                        data: { route: chatId ? "Chat" : "TripDetails", chatId, tripId },
+                        data: chatId
+                            ? { route: "Chat", chatId, isGroupChat: "true", collectionName: "group_chats", tripId }
+                            : { route: "TripDetails", tripId },
                     });
                 }
 
@@ -292,6 +325,7 @@ export const onTripUpdated = onDocumentUpdated(
                             [`participantDetails.${leaverId}`]: admin.firestore.FieldValue.delete(),
                             [`unreadCount.${leaverId}`]: admin.firestore.FieldValue.delete(),
                             [`clearedAt.${leaverId}`]: admin.firestore.FieldValue.delete(),
+                            memberCount: afterParticipants.length,
                             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                         });
 
@@ -402,7 +436,10 @@ export const onTripUpdated = onDocumentUpdated(
  * Includes the delete reason if provided (stored in trip doc before deletion).
  */
 export const onTripDeleted = onDocumentDeleted(
-    { document: "trips/{tripId}" },
+    {
+        document: "trips/{tripId}",
+        secrets: [r2AccessKeyId, r2SecretAccessKey],
+    },
     async (event) => {
         const snapshot = event.data;
         if (!snapshot) return;
@@ -413,6 +450,33 @@ export const onTripDeleted = onDocumentDeleted(
         const participants = tripData.participants || [];
         const deleteReason = tripData.deleteReason || tripData.cancelReason || '';
         const reasonText = deleteReason ? `\nReason: "${deleteReason}"` : '';
+        const imageObjectKeys = Array.isArray(tripData.imageObjectKeys) ?
+            tripData.imageObjectKeys.filter((value: unknown): value is string => typeof value === 'string' && value.trim().length > 0) :
+            [];
+
+        if (imageObjectKeys.length > 0) {
+            try {
+                await deleteR2Objects(imageObjectKeys);
+            } catch (error) {
+                console.error(`[TripDelete] Failed to delete R2 assets for trip ${event.params.tripId}:`, error);
+            }
+        }
+
+        try {
+            const relatedChats = await db.collection('group_chats')
+                .where('tripId', '==', event.params.tripId)
+                .get();
+
+            for (const chatDoc of relatedChats.docs) {
+                const messagesSnapshot = await chatDoc.ref.collection('messages').get();
+                const batch = db.batch();
+                messagesSnapshot.docs.forEach((messageDoc) => batch.delete(messageDoc.ref));
+                batch.delete(chatDoc.ref);
+                await batch.commit();
+            }
+        } catch (error) {
+            console.error(`[TripDelete] Failed to delete group chats for trip ${event.params.tripId}:`, error);
+        }
 
         const recipients = participants.filter((uid: string) => uid !== hostId);
 

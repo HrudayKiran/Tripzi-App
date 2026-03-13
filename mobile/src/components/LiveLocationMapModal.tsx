@@ -12,20 +12,26 @@ interface LiveLocationMapModalProps {
     onClose: () => void;
     chatId: string;
     currentUser: any;
+    collectionName?: 'chats' | 'group_chats';
 }
 
-const { width, height } = Dimensions.get('window');
+const DEFAULT_REGION = {
+    latitude: 20.5937,
+    longitude: 78.9629,
+    latitudeDelta: 10,
+    longitudeDelta: 10,
+};
 
-const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser }: LiveLocationMapModalProps) => {
+const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectionName = 'chats' }: LiveLocationMapModalProps) => {
     const { colors } = useTheme();
     const [users, setUsers] = useState<any[]>([]);
-    const [region, setRegion] = useState<any>(null);
+    const [region, setRegion] = useState<any>(DEFAULT_REGION);
 
     useEffect(() => {
         if (!visible || !chatId) return;
 
         const unsubscribe = firestore()
-            .collection('chats')
+            .collection(collectionName)
             .doc(chatId)
             .collection('live_shares')
             .where('isActive', '==', true)
@@ -34,18 +40,19 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser }: LiveLoc
                 const activeUsers: any[] = [];
 
                 snapshot.forEach(doc => {
-                    activeUsers.push({ id: doc.id, ...doc.data() });
+                    const data = doc.data();
+                    if (typeof data.latitude !== 'number' || typeof data.longitude !== 'number') {
+                        return;
+                    }
+                    if (data.latitude === 0 && data.longitude === 0) {
+                        return;
+                    }
+                    activeUsers.push({ id: doc.id, ...data });
                 });
-
-                // Fetch user details for markers if needed, or rely on stored profile info
-                // For now assuming profile info is stored in live_share doc for performance
-                // If not, we'd need to fetch user profiles. 
-                // Let's assume the sharer stores { displayName, photoURL } in the doc.
 
                 setUsers(activeUsers);
 
-                // Focus map on first user or current user if available
-                if (activeUsers.length > 0 && !region) {
+                if (activeUsers.length > 0) {
                     setRegion({
                         latitude: activeUsers[0].latitude,
                         longitude: activeUsers[0].longitude,
@@ -56,7 +63,7 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser }: LiveLoc
             });
 
         return () => unsubscribe();
-    }, [visible, chatId]);
+    }, [visible, chatId, collectionName]);
 
     const focusOnUser = (user: any) => {
         setRegion({
@@ -73,6 +80,7 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser }: LiveLoc
                 <MapView
                     provider={PROVIDER_GOOGLE}
                     style={styles.map}
+                    initialRegion={DEFAULT_REGION}
                     region={region}
                     onRegionChangeComplete={setRegion}
                     showsUserLocation
@@ -86,10 +94,18 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser }: LiveLoc
                             description={`Updated ${user.timestamp ? formatDistanceToNow(user.timestamp.toDate()) : 'just now'} ago`}
                         >
                             <View style={styles.markerContainer}>
-                                <Image
-                                    source={{ uri: user.photoURL || 'https://via.placeholder.com/40' }}
-                                    style={[styles.markerImage, { borderColor: user.id === currentUser?.uid ? colors.primary : '#fff' }]}
-                                />
+                                {user.photoURL ? (
+                                    <Image
+                                        source={{ uri: user.photoURL }}
+                                        style={[styles.markerImage, { borderColor: user.id === currentUser?.uid ? colors.primary : '#fff' }]}
+                                    />
+                                ) : (
+                                    <View style={[styles.markerFallback, { borderColor: user.id === currentUser?.uid ? colors.primary : '#fff' }]}>
+                                        <Text style={styles.markerFallbackText}>
+                                            {(user.displayName || 'U').charAt(0).toUpperCase()}
+                                        </Text>
+                                    </View>
+                                )}
                                 <View style={styles.markerArrow} />
                             </View>
                         </Marker>
@@ -116,7 +132,15 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser }: LiveLoc
                                 style={styles.userRow}
                                 onPress={() => focusOnUser(user)}
                             >
-                                <Image source={{ uri: user.photoURL }} style={styles.listAvatar} />
+                                {user.photoURL ? (
+                                    <Image source={{ uri: user.photoURL }} style={styles.listAvatar} />
+                                ) : (
+                                    <View style={[styles.listAvatar, styles.listAvatarFallback]}>
+                                        <Text style={styles.markerFallbackText}>
+                                            {(user.displayName || 'U').charAt(0).toUpperCase()}
+                                        </Text>
+                                    </View>
+                                )}
                                 <View style={{ flex: 1 }}>
                                     <Text style={[styles.userName, { color: colors.text }]}>
                                         {user.id === currentUser?.uid ? 'You' : user.displayName}
@@ -177,6 +201,20 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         borderWidth: 2,
     },
+    markerFallback: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        borderWidth: 2,
+        backgroundColor: '#1F2937',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    markerFallbackText: {
+        color: '#fff',
+        fontSize: FONT_SIZE.sm,
+        fontWeight: FONT_WEIGHT.bold,
+    },
     markerArrow: {
         width: 0,
         height: 0,
@@ -216,6 +254,11 @@ const styles = StyleSheet.create({
         borderBottomColor: 'rgba(0,0,0,0.1)',
     },
     listAvatar: { width: 32, height: 32, borderRadius: 16 },
+    listAvatarFallback: {
+        backgroundColor: '#1F2937',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     userName: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold },
     updatedText: { fontSize: 10 },
 });

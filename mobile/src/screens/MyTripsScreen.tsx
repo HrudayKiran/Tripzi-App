@@ -4,6 +4,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import * as Animatable from 'react-native-animatable';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
+import { leaveTrip } from '../utils/tripActions';
 
 import { Ionicons } from '@expo/vector-icons';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, NEUTRAL, TOUCH_TARGET } from '../styles';
@@ -75,13 +76,9 @@ const MyTripsScreen = ({ navigation, route }) => {
         {
           text: 'Leave',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              await firestore().collection('trips').doc(tripId).update({
-                lastLeaveReason: 'User chose to leave',
-                participants: firestore.FieldValue.arrayRemove(currentUser.uid),
-                currentTravelers: firestore.FieldValue.increment(-1),
-              });
+            onPress: async () => {
+                try {
+              await leaveTrip(tripId, 'Plans changed');
               setJoinedTrips(prev => prev.filter(trip => trip.id !== tripId));
             } catch {
               Alert.alert('Error', 'Could not leave trip. Please try again.');

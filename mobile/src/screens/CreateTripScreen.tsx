@@ -10,10 +10,10 @@ import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
 import auth from '@react-native-firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
+import { deleteTripImagesFromR2, uploadTripImageToR2 } from '../utils/imageUpload';
 
 
 const { width } = Dimensions.get('window');
@@ -52,6 +52,13 @@ const BOOKING_STATUS = [
     { id: 'not_needed', label: 'Not Needed' },
 ];
 
+type TripImageItem = {
+    id: string;
+    uri: string;
+    location: string;
+    objectKey?: string | null;
+};
+
 const GENDER_PREFERENCES = [
     { id: 'anyone', label: 'Anyone', icon: 'people' },
     { id: 'male', label: 'Male Only', icon: 'male' },
@@ -68,11 +75,12 @@ const CreateTripScreen = ({ navigation, route }: any) => {
     // Step 1: Basic Info
     const [title, setTitle] = useState(initialData?.title || '');
     // Unified Image & Location state with stable IDs (from EditTripScreen)
-    const [tripImages, setTripImages] = useState<{ id: string, uri: string, location: string }[]>(
+    const [tripImages, setTripImages] = useState<TripImageItem[]>(
         initialData?.images?.map((uri: string, i: number) => ({
             id: `img-${Date.now()}-${i}`,
             uri,
-            location: initialData?.imageLocations?.[i] || ''
+            location: initialData?.imageLocations?.[i] || '',
+            objectKey: initialData?.imageObjectKeys?.[i] || null,
         })) || []
     );
 
@@ -129,7 +137,8 @@ const CreateTripScreen = ({ navigation, route }: any) => {
             const newImage = {
                 id: `img-new-${Date.now()}`,
                 uri: result.assets[0].uri,
-                location: ''
+                location: '',
+                objectKey: null,
             };
             setTripImages(prev => [...prev, newImage].slice(0, 5));
         }
@@ -219,31 +228,37 @@ const CreateTripScreen = ({ navigation, route }: any) => {
         }
 
         setIsPosting(true);
+        const newObjectKeys: string[] = [];
 
         try {
             const currentUserDoc = await firestore().collection('users').doc(currentUser.uid).get();
             const currentUserData = currentUserDoc.data() || {};
 
-            // Upload images to Firebase Storage first
-            let uploadedImageData: { uri: string, location: string }[] = [];
+            let uploadedImageData: Array<{ uri: string, location: string, objectKey: string | null }> = [];
             if (tripImages.length > 0) {
                 for (let i = 0; i < tripImages.length; i++) {
                     const img = tripImages[i];
                     const imageUri = img.uri;
 
-                    // Check if it's already a remote URL (e.g. from AI)
                     if (imageUri.startsWith('http') || imageUri.startsWith('https')) {
-                        uploadedImageData.push({ uri: imageUri, location: img.location });
+                        uploadedImageData.push({
+                            uri: imageUri,
+                            location: img.location,
+                            objectKey: img.objectKey || null,
+                        });
                         continue;
                     }
 
-                    const filename = `trips/${currentUser.uid}/${Date.now()}_${i}.jpg`;
-                    const reference = storage().ref(filename);
-
                     try {
-                        await reference.putFile(imageUri, { contentType: 'image/jpeg' });
-                        const downloadUrl = await reference.getDownloadURL();
-                        uploadedImageData.push({ uri: downloadUrl, location: img.location });
+                        const uploadResult = await uploadTripImageToR2(imageUri, currentUser.uid);
+                        if (uploadResult.success && uploadResult.url && uploadResult.objectKey) {
+                            uploadedImageData.push({
+                                uri: uploadResult.url,
+                                location: img.location,
+                                objectKey: uploadResult.objectKey,
+                            });
+                            newObjectKeys.push(uploadResult.objectKey);
+                        }
                     } catch (uploadError) {
                         console.error('Image upload failed', uploadError);
                     }
@@ -252,10 +267,12 @@ const CreateTripScreen = ({ navigation, route }: any) => {
 
             const finalImages = uploadedImageData.map(d => d.uri);
             const finalLocations = uploadedImageData.map(d => d.location);
+            const finalObjectKeys = uploadedImageData.map(d => d.objectKey || null);
 
             if (finalImages.length === 0) {
                 finalImages.push('https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800');
                 finalLocations.push('');
+                finalObjectKeys.push(null);
             }
 
             const tripData = {
@@ -288,6 +305,8 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                 ownerUsername: currentUserData.username || null,
                 participants: [currentUser.uid],
                 likes: [],
+                imageObjectKeys: finalObjectKeys,
+
                 createdAt: firestore.FieldValue.serverTimestamp(),
                 location: toLocation,
                 tripType: tripTypes[0] || 'Adventure',
@@ -319,6 +338,9 @@ const CreateTripScreen = ({ navigation, route }: any) => {
             Alert.alert('Success! 🎉', 'Your trip has been posted!');
             navigation.navigate('UserProfile', { userId: auth().currentUser?.uid });
         } catch (error: any) {
+            if (newObjectKeys.length > 0) {
+                await deleteTripImagesFromR2(newObjectKeys);
+            }
             setIsPosting(false);
             Alert.alert('Error', `Failed to post trip: ${error?.message || 'Unknown error'}. Please try again.`);
         }

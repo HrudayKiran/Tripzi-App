@@ -22,6 +22,7 @@ export interface LastMessage {
 export interface Chat {
     id: string;
     type: 'direct' | 'group';
+    collectionName: 'chats' | 'group_chats';
     participants: string[];
     participantDetails: { [uid: string]: ChatParticipant };
     groupName?: string;
@@ -30,6 +31,8 @@ export interface Chat {
     tripImage?: string;
     tripId?: string;
     createdBy?: string;
+    memberCount?: number;
+    hidden?: boolean;
     lastMessage?: LastMessage;
     unreadCount: { [uid: string]: number };
     deletedBy: string[];
@@ -50,6 +53,7 @@ interface UseChatsReturn {
 
 export function useChats(): UseChatsReturn {
     const [directChats, setDirectChats] = useState<Chat[]>([]);
+    const [legacyGroupChats, setLegacyGroupChats] = useState<Chat[]>([]);
     const [groupChats, setGroupChats] = useState<Chat[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
@@ -59,10 +63,35 @@ export function useChats(): UseChatsReturn {
 
     const currentUser = auth().currentUser;
 
+    const normalizeChat = useCallback((
+        doc: any,
+        collectionName: 'chats' | 'group_chats'
+    ): Chat => {
+        const data = doc.data() || {};
+        const participants = Array.isArray(data.participants) ? data.participants : [];
+        const type: 'direct' | 'group' = data.type === 'group' ? 'group' : 'direct';
+
+        return {
+            id: doc.id,
+            type,
+            collectionName,
+            ...data,
+            participants,
+            participantDetails: data.participantDetails || {},
+            unreadCount: data.unreadCount || {},
+            deletedBy: Array.isArray(data.deletedBy) ? data.deletedBy : [],
+            groupName: type === 'group' ? (data.groupName || data.tripTitle || 'Group Chat') : data.groupName,
+            groupIcon: type === 'group' ? (data.groupIcon || data.tripImage || null) : data.groupIcon,
+            memberCount: typeof data.memberCount === 'number' ? data.memberCount : participants.length,
+            hidden: data.hidden === true,
+        } as Chat;
+    }, []);
+
     // Listen to direct chats (chats collection)
     useEffect(() => {
         if (!currentUser) {
             setDirectChats([]);
+            setLegacyGroupChats([]);
             setDirectLoaded(true);
             return;
         }
@@ -80,14 +109,11 @@ export function useChats(): UseChatsReturn {
                     }
 
                     const chatsList: Chat[] = snapshot.docs
-                        .map((doc) => ({
-                            id: doc.id,
-                            type: 'direct' as const,
-                            ...doc.data(),
-                        }))
-                        .filter((chat: any) => !chat.deletedBy?.includes(currentUser.uid)) as Chat[];
+                        .map((doc) => normalizeChat(doc, 'chats'))
+                        .filter((chat: any) => !chat.deletedBy?.includes(currentUser.uid) && chat.hidden !== true) as Chat[];
 
-                    setDirectChats(chatsList);
+                    setDirectChats(chatsList.filter((chat) => chat.type === 'direct'));
+                    setLegacyGroupChats(chatsList.filter((chat) => chat.type === 'group'));
                     setDirectLoaded(true);
                     setError(null);
                 },
@@ -121,12 +147,8 @@ export function useChats(): UseChatsReturn {
                     }
 
                     const chatsList: Chat[] = snapshot.docs
-                        .map((doc) => ({
-                            id: doc.id,
-                            type: 'group' as const,
-                            ...doc.data(),
-                        }))
-                        .filter((chat: any) => !chat.deletedBy?.includes(currentUser.uid)) as Chat[];
+                        .map((doc) => normalizeChat(doc, 'group_chats'))
+                        .filter((chat: any) => !chat.deletedBy?.includes(currentUser.uid) && chat.hidden !== true) as Chat[];
 
                     setGroupChats(chatsList);
                     setGroupLoaded(true);
@@ -149,7 +171,7 @@ export function useChats(): UseChatsReturn {
     }, [directLoaded, groupLoaded]);
 
     // Merge and sort by updatedAt
-    const chats = [...directChats, ...groupChats].sort((a, b) => {
+    const chats = [...directChats, ...legacyGroupChats, ...groupChats].sort((a, b) => {
         const aTime = a.updatedAt
             ? (typeof (a.updatedAt as any).toDate === 'function'
                 ? (a.updatedAt as any).toDate().getTime()
@@ -172,6 +194,7 @@ export function useChats(): UseChatsReturn {
 
             const chatData: Omit<Chat, 'id'> = {
                 type: 'direct',
+                collectionName: 'chats',
                 participants: [currentUser.uid, otherUserId],
                 participantDetails: {
                     [currentUser.uid]: {
@@ -245,9 +268,8 @@ export function useChats(): UseChatsReturn {
     const deleteChat = useCallback(async (chatId: string) => {
         if (!currentUser) return;
         try {
-            // Check if it's a group chat
-            const isGroup = groupChats.some((c) => c.id === chatId);
-            const collection = isGroup ? 'group_chats' : 'chats';
+            const targetChat = [...directChats, ...legacyGroupChats, ...groupChats].find((chat) => chat.id === chatId);
+            const collection = targetChat?.collectionName || 'chats';
 
             await firestore()
                 .collection(collection)
@@ -258,7 +280,7 @@ export function useChats(): UseChatsReturn {
         } catch (err) {
             throw err;
         }
-    }, [currentUser, groupChats]);
+    }, [currentUser, directChats, legacyGroupChats, groupChats]);
 
     const refreshChats = useCallback(() => {
         setRefreshKey((prev) => prev + 1);

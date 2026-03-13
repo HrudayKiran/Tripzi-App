@@ -82,6 +82,7 @@ const ChatsListScreen = ({ navigation }) => {
             const otherUser = chat.type === 'direct' ? getOtherParticipant(chat) : null;
             navigation.navigate('Chat', {
                 chatId: chat.id,
+                collectionName: chat.collectionName,
                 otherUserId: otherUser?.uid,
                 otherUserName: chat.type === 'group' ? chat.groupName : otherUser?.displayName,
                 otherUserPhoto: chat.type === 'group' ? chat.groupIcon : otherUser?.photoURL,
@@ -226,6 +227,7 @@ const ChatsListScreen = ({ navigation }) => {
 
             navigation.navigate('Chat', {
                 chatId,
+                collectionName: 'chats',
                 otherUserId: user.id,
                 otherUserName: user.displayName,
                 otherUserPhoto: user.photoURL,
@@ -332,7 +334,6 @@ const ChatsListScreen = ({ navigation }) => {
         </View>
     );
 
-    // Stories header component removed (v1.0.0)
 
     if (loading) {
         return (

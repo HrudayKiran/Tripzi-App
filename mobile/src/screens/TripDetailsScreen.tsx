@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Animated, Dimensions, FlatList, Linking, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, TouchableWithoutFeedback } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
 import auth from '@react-native-firebase/auth';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
@@ -10,11 +9,35 @@ import { useTheme } from '../contexts/ThemeContext';
 
 import DefaultAvatar from '../components/DefaultAvatar';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
-import NotificationService from '../utils/notificationService';
 import ReportTripModal from '../components/ReportTripModal';
-import { pickAndUploadImage } from '../utils/imageUpload';
+import ActionReasonModal from '../components/ActionReasonModal';
+import { cancelTrip, deleteTrip, joinTrip, leaveTrip, rateTrip } from '../utils/tripActions';
 
 const { width } = Dimensions.get('window');
+
+const LEAVE_REASONS = [
+  'Plans changed',
+  'Trip dates no longer work for me',
+  'Budget changed',
+  'I joined by mistake',
+  'Other',
+];
+
+const CANCEL_REASONS = [
+  'Host is unavailable',
+  'Safety or logistics issue',
+  'Weather or route issue',
+  'Trip plan changed',
+  'Other',
+];
+
+const DELETE_REASONS = [
+  'Trip posted by mistake',
+  'Trip plan changed completely',
+  'Need to recreate the trip',
+  'Safety or moderation concern',
+  'Other',
+];
 
 // Unused constants removed
 
@@ -40,6 +63,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
   const [participantsData, setParticipantsData] = useState<any[]>([]);
   const [showMenu, setShowMenu] = useState(false);
   const [mediaAspectRatio, setMediaAspectRatio] = useState(4 / 5);
+  const [pendingAction, setPendingAction] = useState<'leave' | 'cancel' | 'delete' | null>(null);
 
   useEffect(() => {
     const firstMedia = trip?.images?.[0] || trip?.coverImage;
@@ -153,38 +177,12 @@ const TripDetailsScreen = ({ route, navigation }) => {
     try {
       const ratingData = {
         tripId,
-        tripTitle: trip?.title || 'Trip',
-        userId: user.uid,
-        userName: user.displayName || 'User',
-        userPhoto: user.photoURL || '',
-        hostId: trip?.userId,
         rating: userRating,
         feedback: userFeedback.trim(),
-        createdAt: firestore.FieldValue.serverTimestamp(),
       };
 
-      if (hasRated) {
-        // Update existing rating
-        const existingRating = existingRatings.find(r => r.userId === user.uid);
-        if (existingRating) {
-          await firestore().collection('ratings').doc(existingRating.id).update({
-            rating: userRating,
-            feedback: userFeedback.trim(),
-            updatedAt: firestore.FieldValue.serverTimestamp(),
-          });
-        }
-      } else {
-        // Create new rating
-        await firestore().collection('ratings').add(ratingData);
-        setHasRated(true);
-
-        // Send notification to trip owner (only for new ratings, not updates)
-        if (trip?.userId && trip.userId !== user.uid) {
-          const raterName = user.displayName || 'Someone';
-          const tripTitle = trip?.title || 'your trip';
-          await NotificationService.onTripRating(user.uid, raterName, tripId, trip.userId, tripTitle, userRating);
-        }
-      }
+      await rateTrip(ratingData.tripId, ratingData.rating, ratingData.feedback);
+      setHasRated(true);
 
       Alert.alert('Thank You! ⭐', 'Your rating has been submitted.');
     } catch (error) {
@@ -207,87 +205,15 @@ const TripDetailsScreen = ({ route, navigation }) => {
     }
 
     try {
-      const userName = user.displayName || 'A traveler';
-      const tripTitle = trip?.title || 'a trip';
-
       if (isJoined) {
-        // Leave trip - ask for confirmation with reason
-        Alert.alert(
-          'Leave Trip',
-          'Are you sure you want to leave this trip?',
-          [
-            { text: 'Stay', style: 'cancel' },
-            {
-              text: 'Leave',
-              style: 'destructive',
-              onPress: async () => {
-                try {
-                  // Store leave reason + remove from participants in one update
-                  await firestore().collection('trips').doc(tripId).update({
-                    lastLeaveReason: 'User chose to leave',
-                    participants: firestore.FieldValue.arrayRemove(user.uid),
-                    currentTravelers: firestore.FieldValue.increment(-1),
-                  });
-                  setIsJoined(false);
-                } catch (e) {
-                  Alert.alert('Error', 'Could not leave trip. Please try again.');
-                }
-              },
-            },
-          ]
-        );
+        setPendingAction('leave');
         return;
       } else {
-        // Check spots
-        if (spotsLeft <= 0) {
-          Alert.alert('Trip Full', 'Sorry, this trip is already full.');
-          return;
-        }
-
-        // Gender check — read from 'users' where gender is stored
-        const tripGender = (trip?.genderPreference || '').trim().toLowerCase();
-        if (tripGender && tripGender !== 'anyone') {
-          try {
-            const userDoc = await firestore().collection('users').doc(user.uid).get();
-            const userData = userDoc.data();
-            const userGender = (userData?.gender || '').trim().toLowerCase();
-
-            if (!userGender) {
-              Alert.alert(
-                'Gender Not Set',
-                'Your gender is required to join gender-restricted trips. Please update your profile.'
-              );
-              return;
-            }
-
-            if (userGender !== tripGender) {
-              const genderLabel = tripGender === 'male' ? 'Male' : 'Female';
-              Alert.alert(
-                'Gender Restriction',
-                `This trip is for ${genderLabel} travelers only. Try joining other trips that match your gender or are open to Anyone! 🌍`
-              );
-              return;
-            }
-          } catch (e) {
-            Alert.alert('Error', 'Could not verify your gender. Please try again.');
-            return;
-          }
-        }
-
-        // Join trip - instant toggle
-        await firestore().collection('trips').doc(tripId).update({
-          participants: firestore.FieldValue.arrayUnion(user.uid),
-          currentTravelers: firestore.FieldValue.increment(1),
-        });
+        await joinTrip(tripId);
         setIsJoined(true);
-
-        // Send join notification to trip owner
-        if (trip?.userId && trip.userId !== user.uid) {
-          await NotificationService.onJoinTrip(user.uid, userName, tripId, trip.userId, tripTitle);
-        }
       }
-    } catch (error) {
-      // Keep previous state on error
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'Could not update trip participation.');
     }
   };
 
@@ -397,77 +323,12 @@ const TripDetailsScreen = ({ route, navigation }) => {
 
   // Soft Cancel - Marks as cancelled (stores cancelReason for notification)
   const handleCancelTrip = () => {
-    Alert.alert(
-      'Cancel Trip',
-      'Are you sure you want to cancel this trip? Participants will be notified.',
-      [
-        { text: 'No, Keep it', style: 'cancel' },
-        {
-          text: 'Yes, Cancel Trip',
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              // Notify participants
-              const participants = trip?.participants || [];
-              const hostName = user?.displayName || 'The host';
-              const tripTitle = trip?.title || 'A trip';
-
-              for (const participantId of participants) {
-                if (participantId !== user?.uid) {
-                  await NotificationService.onTripCancelled(participantId, tripId, tripTitle, hostName);
-                }
-              }
-
-              // Update status with cancel reason
-              await firestore().collection('trips').doc(tripId).update({
-                status: 'cancelled',
-                isCancelled: true,
-                cancelReason: 'Cancelled by host',
-                cancelledAt: firestore.FieldValue.serverTimestamp(),
-              });
-              Alert.alert('Cancelled', 'Trip has been marked as cancelled.');
-              navigation.goBack();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to cancel trip.');
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ]
-    );
+    setPendingAction('cancel');
   };
 
   // Hard Delete - Stores deleteReason in doc before deletion so onTripDeleted trigger can read it
   const handleDeleteTrip = () => {
-    Alert.alert(
-      'Delete Trip',
-      'Are you sure you want to PERMANENTLY delete this trip? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Permanently',
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              // Store delete reason before deletion so the trigger can read it
-              await firestore().collection('trips').doc(tripId).update({
-                deleteReason: 'Deleted by host',
-              });
-              await firestore().collection('trips').doc(tripId).delete();
-              Alert.alert('Deleted', 'Trip deleted successfully.');
-              navigation.goBack();
-            } catch (error: any) {
-              Alert.alert('Error', 'Failed to delete trip.');
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ]
-    );
+    setPendingAction('delete');
   };
 
   if (loading) return (
@@ -961,6 +822,78 @@ const TripDetailsScreen = ({ route, navigation }) => {
         visible={showReportModal}
         trip={trip}
         onClose={() => setShowReportModal(false)}
+      />
+
+      <ActionReasonModal
+        visible={pendingAction === 'leave'}
+        title="Leave Trip"
+        subtitle="Tell the host why you are leaving this trip. The reason will be shared with them."
+        actionLabel="Leave Trip"
+        actionTone="danger"
+        reasons={LEAVE_REASONS}
+        loading={deleting}
+        onClose={() => setPendingAction(null)}
+        onSubmit={async (reason) => {
+          setDeleting(true);
+          try {
+            await leaveTrip(tripId, reason);
+            setIsJoined(false);
+            setPendingAction(null);
+            Alert.alert('Trip Left', 'You have left this trip.');
+          } catch (error: any) {
+            Alert.alert('Error', error?.message || 'Could not leave trip. Please try again.');
+          } finally {
+            setDeleting(false);
+          }
+        }}
+      />
+
+      <ActionReasonModal
+        visible={pendingAction === 'cancel'}
+        title="Cancel Trip"
+        subtitle="Participants will be notified with your reason and the trip will move to cancelled."
+        actionLabel="Cancel Trip"
+        actionTone="danger"
+        reasons={CANCEL_REASONS}
+        loading={deleting}
+        onClose={() => setPendingAction(null)}
+        onSubmit={async (reason) => {
+          setDeleting(true);
+          try {
+            await cancelTrip(tripId, reason);
+            setPendingAction(null);
+            Alert.alert('Cancelled', 'Trip has been marked as cancelled.');
+            navigation.goBack();
+          } catch (error: any) {
+            Alert.alert('Error', error?.message || 'Failed to cancel trip.');
+          } finally {
+            setDeleting(false);
+          }
+        }}
+      />
+
+      <ActionReasonModal
+        visible={pendingAction === 'delete'}
+        title="Delete Trip"
+        subtitle="This permanently removes the trip. Joined travelers will be notified with your reason."
+        actionLabel="Delete Permanently"
+        actionTone="danger"
+        reasons={DELETE_REASONS}
+        loading={deleting}
+        onClose={() => setPendingAction(null)}
+        onSubmit={async (reason) => {
+          setDeleting(true);
+          try {
+            await deleteTrip(tripId, reason);
+            setPendingAction(null);
+            Alert.alert('Deleted', 'Trip deleted successfully.');
+            navigation.goBack();
+          } catch (error: any) {
+            Alert.alert('Error', error?.message || 'Failed to delete trip.');
+          } finally {
+            setDeleting(false);
+          }
+        }}
       />
 
     </View>

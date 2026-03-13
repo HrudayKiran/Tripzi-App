@@ -39,11 +39,14 @@ interface GroupData {
     groupDescription?: string;
     participants: string[];
     createdBy: string;
+    collectionName?: 'chats' | 'group_chats';
+    memberCount?: number;
     participantDetails?: { [uid: string]: { displayName?: string; photoURL?: string } };
 }
 
 const GroupInfoScreen = ({ navigation, route }) => {
     const { chatId } = route.params;
+    const requestedCollection = route.params?.collectionName as 'chats' | 'group_chats' | undefined;
     const { colors } = useTheme();
     const currentUser = auth().currentUser;
 
@@ -66,14 +69,29 @@ const GroupInfoScreen = ({ navigation, route }) => {
 
     const loadGroup = async () => {
         try {
-            const doc = await firestore().collection('group_chats').doc(chatId).get();
-            if (!doc.exists) {
+            const collections: Array<'group_chats' | 'chats'> = requestedCollection
+                ? [requestedCollection, requestedCollection === 'chats' ? 'group_chats' : 'chats']
+                : ['group_chats', 'chats'];
+
+            let doc = null as any;
+            let collectionName: 'group_chats' | 'chats' | null = null;
+
+            for (const name of collections) {
+                const snapshot = await firestore().collection(name).doc(chatId).get();
+                if (snapshot.exists) {
+                    doc = snapshot;
+                    collectionName = name;
+                    break;
+                }
+            }
+
+            if (!doc || !doc.exists || !collectionName) {
                 Alert.alert('Error', 'Group not found.');
                 navigation.goBack();
                 return;
             }
 
-            const data = { id: doc.id, ...doc.data() } as GroupData;
+            const data = { id: doc.id, collectionName, ...doc.data() } as GroupData;
             setGroup(data);
             setEditName(data.groupName);
 
@@ -108,7 +126,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
     const updateGroupName = async () => {
         if (!editName.trim() || !isAdmin) return;
         try {
-            await firestore().collection('group_chats').doc(chatId).update({
+            await firestore().collection(group?.collectionName || requestedCollection || 'group_chats').doc(chatId).update({
                 groupName: editName.trim(),
             });
             setGroup((prev) => prev ? { ...prev, groupName: editName.trim() } : null);
@@ -140,7 +158,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
                 await storageRef.putFile(result.assets[0].uri);
                 const downloadUrl = await storageRef.getDownloadURL();
 
-                await firestore().collection('group_chats').doc(chatId).update({
+                await firestore().collection(group?.collectionName || requestedCollection || 'group_chats').doc(chatId).update({
                     groupIcon: downloadUrl,
                 });
                 setGroup((prev) => prev ? { ...prev, groupIcon: downloadUrl } : null);
@@ -175,10 +193,11 @@ const GroupInfoScreen = ({ navigation, route }) => {
     const addMember = async (user: any) => {
         if (!isAdmin || !group) return;
         try {
-            await functions().httpsCallable('addGroupMember')({
-                chatId,
-                memberId: user.id,
-            });
+                            await functions().httpsCallable('addGroupMember')({
+                                chatId,
+                                memberId: user.id,
+                                collectionName: group?.collectionName || requestedCollection || 'group_chats',
+                            });
 
             setShowAddMember(false);
             setSearchQuery('');
@@ -205,6 +224,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
                             await functions().httpsCallable('removeGroupMember')({
                                 chatId,
                                 memberId: member.id,
+                                collectionName: group?.collectionName || requestedCollection || 'group_chats',
                             });
 
                             loadGroup();
@@ -236,11 +256,13 @@ const GroupInfoScreen = ({ navigation, route }) => {
                                 await functions().httpsCallable('promoteGroupAdmin')({
                                     chatId,
                                     memberId: member.id,
+                                    collectionName: group?.collectionName || requestedCollection || 'group_chats',
                                 });
                             } else {
                                 await functions().httpsCallable('demoteGroupAdmin')({
                                     chatId,
                                     memberId: member.id,
+                                    collectionName: group?.collectionName || requestedCollection || 'group_chats',
                                 });
                             }
                             loadGroup();
@@ -266,6 +288,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
                         try {
                             await functions().httpsCallable('leaveGroup')({
                                 chatId,
+                                collectionName: group?.collectionName || requestedCollection || 'group_chats',
                             });
 
                             navigation.navigate('ChatsList');
@@ -380,7 +403,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
                     )}
 
                     <Text style={[styles.memberCount, { color: colors.textSecondary }]}>
-                        {members.length} members
+                        {(group?.participants?.length || group?.memberCount || members.length)} members
                     </Text>
                 </View>
 

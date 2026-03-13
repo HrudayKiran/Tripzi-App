@@ -30,7 +30,6 @@ export const ICONS = {
     cameraOutline: 'camera-outline' as const,
     image: 'images-outline' as const,
     flag: 'flag-outline' as const,
-    share: 'share-outline' as const,
     copy: 'copy-outline' as const,
     checkmark: 'checkmark-circle' as const,
 

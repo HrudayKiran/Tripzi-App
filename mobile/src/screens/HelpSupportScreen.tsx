@@ -12,7 +12,7 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, NE
 const TAWKTO_PROPERTY_ID = process.env.EXPO_PUBLIC_TAWKTO_PROPERTY_ID || '';
 const TAWKTO_WIDGET_ID = process.env.EXPO_PUBLIC_TAWKTO_WIDGET_ID || '';
 
-const SUPPORT_EMAIL = 'tickets@tripzi.p.tawk.email';
+const SUPPORT_EMAIL = 'support@tripzi.app';
 
 const HelpSupportScreen = ({ navigation }) => {
   const { colors } = useTheme();
@@ -24,13 +24,13 @@ const HelpSupportScreen = ({ navigation }) => {
   const currentUser = auth().currentUser;
 
   const faqs = [
-    { id: 1, question: 'How do I create a trip?', answer: 'Go to My Trips and tap the + icon at the top right corner. Fill in the trip details and tap Post Trip.' },
-    { id: 2, question: "How do I join someone else's trip?", answer: 'Browse trips on the Home page, open a trip you like, and tap the "Join Trip" button.' },
-    { id: 3, question: 'What is KYC verification?', answer: 'KYC (Know Your Customer) verification helps us ensure the safety of our community. Go to Profile > KYC Status to complete your verification.' },
-    { id: 4, question: 'How do I message other travelers?', answer: 'Tap on the Messages icon in the bottom navigation bar to see your conversations.' },
-    { id: 5, question: 'Can I edit or delete my trip?', answer: 'Yes! Go to My Trips, tap on your trip, and you can edit or delete it from the trip details page.' },
-    { id: 6, question: 'How do I delete my account?', answer: 'Go to Settings > scroll to the bottom > tap "Delete Account". All your data will be permanently removed.' },
-    { id: 7, question: 'Is my data safe?', answer: 'Yes! We use Firebase security, encrypted connections, and follow strict privacy guidelines. See our Privacy Policy for details.' },
+    { id: 1, question: 'How do I create a trip?', answer: 'Tap the + button from the main tabs, then create a trip manually or with Tripzi AI.' },
+    { id: 2, question: "Why can't I join some trips?", answer: 'Trips may be full, already started, cancelled, or restricted by host gender preference. Your profile must also be complete.' },
+    { id: 3, question: 'When do group chats appear?', answer: 'A trip group chat is created automatically when the first traveler joins a trip. Later joined users are added to the same group.' },
+    { id: 4, question: 'Why are notifications not working?', answer: 'Tripzi needs device notification permission. If permission is denied, Tripzi may disable both push and in-app notifications until you enable it again.' },
+    { id: 5, question: 'Can I rate a trip anytime?', answer: 'No. Ratings are available only after the trip end date and only for travelers who joined that trip.' },
+    { id: 6, question: 'How do I delete my account?', answer: 'Open Settings, choose Delete Account, select a reason, and confirm. Tripzi will delete your account and connected data, while keeping limited safety records if required.' },
+    { id: 7, question: 'Is Tripzi available outside India?', answer: 'No. Tripzi is currently designed only for users in India and for adults aged 18 or above.' },
   ];
 
   const toggleFAQ = (id) => {
