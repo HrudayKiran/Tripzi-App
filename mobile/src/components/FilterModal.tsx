@@ -108,12 +108,28 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
     const [showEndPicker, setShowEndPicker] = useState(false);
     const slideAnim = useRef(new Animated.Value(width)).current;
 
+    const clearLocalState = () => {
+        setSortBy('newest');
+        setDestination('');
+        setStartingFrom('');
+        setMaxCost(undefined);
+        setCustomBudget('');
+        setGroupSize('');
+        setTripTypes([]);
+        setTransportModes([]);
+        setGenderPreference(undefined);
+        setAccommodationType(undefined);
+        setBookingStatus(undefined);
+        setStartDateObj(null);
+        setEndDateObj(null);
+    };
+
     // Reset internal state when modal opens or when currentFilters changes to null (clear)
     useEffect(() => {
         if (visible) {
             if (!currentFilters) {
-                // All filters cleared externally — reset everything
-                handleReset();
+                // All filters cleared externally — reset everything without closing
+                clearLocalState();
             } else {
                 // Restore from current filters
                 setSortBy(currentFilters.sortBy || 'newest');
@@ -151,19 +167,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
     };
 
     const handleReset = () => {
-        setSortBy('newest');
-        setDestination('');
-        setStartingFrom('');
-        setMaxCost(undefined);
-        setCustomBudget('');
-        setGroupSize('');
-        setTripTypes([]);
-        setTransportModes([]);
-        setGenderPreference(undefined);
-        setAccommodationType(undefined);
-        setBookingStatus(undefined);
-        setStartDateObj(null);
-        setEndDateObj(null);
+        clearLocalState();
 
         onApply({
             sortBy: 'newest',

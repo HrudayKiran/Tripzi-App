@@ -8,7 +8,6 @@ import perf from '@react-native-firebase/perf';
 import AppNavigator from './src/navigation/AppNavigator';
 import { initializeAppCheck } from './src/hooks/useAppCheck';
 import { compareVersions } from './src/utils/version';
-import { requestNotificationPermission } from './src/utils/notificationPermissions';
 
 
 
@@ -31,7 +30,6 @@ export default function App() {
 
     initFirebase();
     initializeAppCheck().catch(() => { });
-    requestNotificationPermission().catch(() => { });
 
     const checkAppVersion = async () => {
       try {

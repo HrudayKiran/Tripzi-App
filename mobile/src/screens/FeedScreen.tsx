@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import TripCard from '../components/TripCard';
 import DefaultAvatar from '../components/DefaultAvatar';
 import useTrips from '../hooks/useTrips';
+import usePermissions from '../hooks/usePermissions';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
@@ -38,8 +39,13 @@ const getActiveFilterCount = (filters: FilterOptions | null) => {
 
 const FeedScreen = ({ navigation }) => {
     const { trips, loading, refetch } = useTrips();
+    const { requestNotificationPermission } = usePermissions();
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
+
+    useEffect(() => {
+        requestNotificationPermission().catch(() => {});
+    }, []);
     const [searchQuery, setSearchQuery] = useState('');
     const [refreshing, setRefreshing] = useState(false);
     const [notificationsVisible, setNotificationsVisible] = useState(false);
