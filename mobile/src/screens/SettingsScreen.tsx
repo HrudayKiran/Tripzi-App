@@ -262,7 +262,7 @@ const SettingsScreen = ({ navigation }) => {
                                     style={[
                                         styles.reasonOption,
                                         { borderColor: colors.border, backgroundColor: colors.inputBackground },
-                                        deleteReason === reason && styles.reasonSelected,
+                                        deleteReason === reason && [styles.reasonSelected, { backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2' }],
                                     ]}
                                     onPress={() => setDeleteReason(reason)}
                                     activeOpacity={0.7}
@@ -303,9 +303,9 @@ const SettingsScreen = ({ navigation }) => {
                                 <Text style={[styles.modalBtnText, { color: colors.text }]}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.modalBtn, styles.modalDeleteBtn]}
+                                style={[styles.modalBtn, styles.modalDeleteBtn, (deleting || !deleteReason || (deleteReason === 'Other' && !customReason.trim())) ? { opacity: 0.5 } : null]}
                                 onPress={confirmDelete}
-                                disabled={deleting || !deleteReason}
+                                disabled={deleting || !deleteReason || (deleteReason === 'Other' && !customReason.trim())}
                             >
                                 {deleting ? (
                                     <ActivityIndicator color={NEUTRAL.white} size="small" />

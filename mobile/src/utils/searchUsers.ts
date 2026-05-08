@@ -31,30 +31,43 @@ export const searchUsersByPrefix = async (
     const trimmed = query.trim();
     if (trimmed.length < 2) return [];
 
-    const end = `${trimmed}\uf8ff`;
+    const queryLower = trimmed.toLowerCase();
+    const endLower = `${queryLower}\uf8ff`;
 
-    const [nameSnap, usernameSnap] = await Promise.all([
+    const queryTitleCase = queryLower.charAt(0).toUpperCase() + queryLower.slice(1);
+    const endTitleCase = `${queryTitleCase}\uf8ff`;
+
+    const [nameSnap, usernameSnap, rawNameSnap] = await Promise.all([
         firestore()
             .collection('public_users')
             .orderBy('displayName')
-            .startAt(trimmed)
-            .endAt(end)
+            .startAt(queryTitleCase)
+            .endAt(endTitleCase)
             .limit(limit)
             .get()
             .catch(() => ({ docs: [] } as any)),
         firestore()
             .collection('public_users')
             .orderBy('username')
-            .startAt(trimmed)
-            .endAt(end)
+            .startAt(queryLower)
+            .endAt(endLower)
             .limit(limit)
             .get()
             .catch(() => ({ docs: [] } as any)),
+        trimmed !== queryTitleCase && trimmed !== queryLower ? firestore()
+            .collection('public_users')
+            .orderBy('displayName')
+            .startAt(trimmed)
+            .endAt(`${trimmed}\uf8ff`)
+            .limit(limit)
+            .get()
+            .catch(() => ({ docs: [] } as any)) : { docs: [] } as any
     ]);
 
     const users = [
         ...nameSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })),
         ...usernameSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })),
+        ...rawNameSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })),
     ];
 
     return dedupeById(users).slice(0, limit);

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Modal, Dimensions, Animated, NativeSyntheticEvent, NativeScrollEvent, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Modal, Dimensions, Animated, NativeSyntheticEvent, NativeScrollEvent, Platform, ScrollView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import TripCard from '../components/TripCard';
 import DefaultAvatar from '../components/DefaultAvatar';
@@ -15,6 +15,8 @@ import AppLogo from '../components/AppLogo';
 import ReportTripModal from '../components/ReportTripModal'; // Imported
 import { searchUsersByPrefix } from '../utils/searchUsers';
 import { applyTripFilters } from '../utils/filterUtils';
+import { PREFERENCE_KEYS, getBooleanPreference, setBooleanPreference } from '../utils/preferences';
+import { syncNotificationPreference } from '../utils/notificationPermissions';
 import auth from '@react-native-firebase/auth';
 
 const { width, height } = Dimensions.get('window');
@@ -44,7 +46,29 @@ const FeedScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
 
     useEffect(() => {
-        requestNotificationPermission().catch(() => {});
+        const checkAndRequestPermission = async () => {
+            try {
+                const hasPrompted = await getBooleanPreference(PREFERENCE_KEYS.notificationPrompted, false);
+                if (!hasPrompted) {
+                    const granted = await requestNotificationPermission();
+                    
+                    const currentUser = auth().currentUser;
+                    if (currentUser) {
+                        await syncNotificationPreference(
+                            currentUser.uid,
+                            granted ? 'granted' : 'denied',
+                            granted
+                        );
+                    }
+                    
+                    await setBooleanPreference(PREFERENCE_KEYS.notificationPrompted, true);
+                }
+            } catch (error) {
+                // Ignore errors
+            }
+        };
+
+        checkAndRequestPermission();
     }, []);
     const [searchQuery, setSearchQuery] = useState('');
     const [refreshing, setRefreshing] = useState(false);
@@ -338,7 +362,26 @@ const FeedScreen = ({ navigation }) => {
                             </TouchableOpacity>
                         </View>
 
-                        {/* User Search Results */}
+                        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                            {/* Loading State */}
+                            {searchingUsers && searchQuery.length >= 2 && (
+                                <View style={{ padding: 40, alignItems: 'center' }}>
+                                    <ActivityIndicator size="large" color={colors.primary} />
+                                    <Text style={{ marginTop: 16, color: colors.textSecondary, fontSize: 16 }}>Searching...</Text>
+                                </View>
+                            )}
+
+                            {/* Empty State */}
+                            {!searchingUsers && searchQuery.length >= 2 && searchedUsers.length === 0 && filteredTrips.length === 0 && (
+                                <View style={{ padding: 40, alignItems: 'center', marginTop: 20 }}>
+                                    <Ionicons name="search-outline" size={64} color={colors.border} />
+                                    <Text style={{ marginTop: 16, fontSize: 16, color: colors.textSecondary, textAlign: 'center' }}>
+                                        No results found for "{searchQuery}"
+                                    </Text>
+                                </View>
+                            )}
+
+                            {/* User Search Results */}
                         {searchQuery.length >= 2 && searchedUsers.length > 0 && (
                             <Animatable.View animation="fadeIn" style={[styles.userResultsContainer, { backgroundColor: colors.card }]}>
                                 <Text style={[styles.userResultsTitle, { color: colors.textSecondary }]}>PEOPLE</Text>
@@ -407,6 +450,7 @@ const FeedScreen = ({ navigation }) => {
                                 ))}
                             </Animatable.View>
                         )}
+                        </ScrollView>
                     </SafeAreaView>
                 </View>
             </Modal>

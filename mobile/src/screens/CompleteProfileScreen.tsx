@@ -228,14 +228,6 @@ const CompleteProfileScreen = ({ navigation, route }) => {
             const authResult = await auth().signInWithCustomToken(customToken);
             const signedInUser = authResult.user;
 
-            const permissionStatus = await requestNotificationPermission();
-            await syncNotificationPreference(
-                signedInUser.uid,
-                permissionStatus,
-                permissionStatus === 'granted'
-            );
-            await setBooleanPreference(PREFERENCE_KEYS.notificationPrompted, true);
-
             navigation.reset({ index: 0, routes: [{ name: 'App' }] });
         } catch (error: any) {
             const code = error?.code || '';
