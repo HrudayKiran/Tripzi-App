@@ -7,9 +7,8 @@ import { useTheme } from '../contexts/ThemeContext';
 
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, STATUS, NEUTRAL, CATEGORY, ICONS } from '../styles';
 
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
-import functions from '@react-native-firebase/functions';
+import { supabase } from '../lib/supabase';
+import { workersApi } from '../lib/workersApi';
 import {
     getNotificationPermissionStatus,
     requestNotificationPermission,
@@ -33,7 +32,11 @@ const SettingsScreen = ({ navigation }) => {
     const [customReason, setCustomReason] = useState('');
     const [deleting, setDeleting] = useState(false);
     const [notificationPermissionGranted, setNotificationPermissionGranted] = useState(false);
-    const currentUser = auth().currentUser;
+    const [currentUser, setCurrentUser] = React.useState<any>(null);
+
+    React.useEffect(() => {
+        supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+    }, []);
 
     // Load initial setting
     React.useEffect(() => {
@@ -43,9 +46,13 @@ const SettingsScreen = ({ navigation }) => {
                 const permissionStatus = await getNotificationPermissionStatus();
                 setNotificationPermissionGranted(permissionStatus === 'granted');
 
-                const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
-                if (userDoc.exists) {
-                    const isEnabled = userDoc.data()?.pushNotificationsEnabled === true && permissionStatus === 'granted';
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('push_notifications_enabled')
+                    .eq('id', currentUser.id)
+                    .maybeSingle();
+                if (profile) {
+                    const isEnabled = profile.push_notifications_enabled === true && permissionStatus === 'granted';
                     setPushEnabled(isEnabled);
                 }
             } catch (error) {
@@ -68,7 +75,7 @@ const SettingsScreen = ({ navigation }) => {
             setNotificationPermissionGranted(permissionStatus === 'granted');
             setPushEnabled(enabled);
 
-            await syncNotificationPreference(currentUser.uid, permissionStatus, enabled);
+            await syncNotificationPreference(currentUser.id, permissionStatus, enabled);
 
             if (!enabled && permissionStatus !== 'granted') {
                 Alert.alert(
@@ -125,10 +132,9 @@ const SettingsScreen = ({ navigation }) => {
                     onPress: async () => {
                         setDeleting(true);
                         try {
-                            const deleteMyAccount = functions().httpsCallable('deleteMyAccount');
-                            await deleteMyAccount({ reason });
+                            await workersApi('/account/delete', { body: { reason } });
                             // Sign out locally
-                            try { await auth().signOut(); } catch (e) { }
+                            try { await supabase.auth.signOut(); } catch (e) { }
                             setShowDeleteModal(false);
                             // Navigate to auth screen
                             navigation.reset({

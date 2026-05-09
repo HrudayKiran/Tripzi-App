@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, KeyboardAvoidingView, Platform, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { supabase } from '../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import * as ImagePicker from 'expo-image-picker';
@@ -79,15 +78,14 @@ const SuggestFeatureScreen = ({ navigation }) => {
       return;
     }
     try {
-      const currentUser = auth().currentUser;
-      await firestore().collection('suggestions').add({
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      await supabase.from('suggestions').insert({
         title: featureTitle,
         description: featureDescription,
         category: featureCategory,
-        imageUris: featureImages,
-        imageUri: featureImages[0] || null,
-        userId: currentUser?.uid,
-        createdAt: firestore.FieldValue.serverTimestamp(),
+        image_uris: featureImages,
+        image_uri: featureImages[0] || null,
+        user_id: currentUser?.id,
       });
 
       Alert.alert('Ticket Received ✅', 'Thank you! Your feature suggestion has been received. Our team will review it shortly. A confirmation has been sent to your email.');
@@ -104,16 +102,15 @@ const SuggestFeatureScreen = ({ navigation }) => {
       return;
     }
     try {
-      const currentUser = auth().currentUser;
-      await firestore().collection('bugs').add({
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      await supabase.from('bugs').insert({
         title: bugTitle,
         description: bugDescription,
         category: bugCategory,
         severity: bugSeverity,
-        imageUris: bugImages,
-        imageUri: bugImages[0] || null,
-        userId: currentUser?.uid,
-        createdAt: firestore.FieldValue.serverTimestamp(),
+        image_uris: bugImages,
+        image_uri: bugImages[0] || null,
+        user_id: currentUser?.id,
       });
 
       Alert.alert('Ticket Received ✅', 'Thank you! Your bug report has been received. Our team will investigate it shortly. A confirmation has been sent to your email.');

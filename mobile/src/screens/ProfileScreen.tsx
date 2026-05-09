@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
@@ -20,50 +19,76 @@ const ProfileScreen = ({ navigation }) => {
   const [switchingAccount, setSwitchingAccount] = useState(false);
 
   useEffect(() => {
-    const currentUser = auth().currentUser;
-    if (!currentUser) return;
+    let isMounted = true;
 
-    // Configure Google Signin
-    const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-    if (!webClientId) {
-      return;
-    }
+    const loadProfile = async () => {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser || !isMounted) return;
 
-    GoogleSignin.configure({
-      webClientId,
-      offlineAccess: true,
-      scopes: ['profile', 'email'],
-    });
-
-    const unsubscribe = firestore()
-
-      .collection('users')
-      .doc(currentUser.uid)
-      .onSnapshot((doc) => {
-        if (doc.exists) {
-          const data = doc.data() || {};
-          setUser({
-            id: doc.id,
-            ...data,
-            displayName: data.name || data.displayName || currentUser.displayName || 'User',
-          });
-        } else {
-          setUser({
-            displayName: currentUser.displayName,
-            email: currentUser.email,
-            photoURL: currentUser.photoURL,
-          });
-        }
-      }, (error) => {
-        // Error handled silently
-        setUser({
-          displayName: auth().currentUser?.displayName,
-          email: auth().currentUser?.email,
-          photoURL: auth().currentUser?.photoURL,
+      // Configure Google Signin
+      const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+      if (webClientId) {
+        GoogleSignin.configure({
+          webClientId,
+          offlineAccess: true,
+          scopes: ['profile', 'email'],
         });
-      });
+      }
 
-    return () => unsubscribe();
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .maybeSingle();
+
+      if (isMounted && profile) {
+        setUser({
+          id: profile.id,
+          ...profile,
+          displayName: profile.name || 'User',
+          photoURL: profile.photo_url,
+          email: profile.email,
+          username: profile.username,
+        });
+      } else if (isMounted) {
+        setUser({
+          displayName: authUser.user_metadata?.full_name || 'User',
+          email: authUser.email,
+          photoURL: authUser.user_metadata?.avatar_url,
+        });
+      }
+    };
+
+    loadProfile();
+
+    // Subscribe to profile changes via Supabase Realtime
+    const channel = supabase
+      .channel('profile-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+        },
+        (payload) => {
+          if (payload.new && isMounted) {
+            const p = payload.new as any;
+            setUser({
+              id: p.id,
+              ...p,
+              displayName: p.name || 'User',
+              photoURL: p.photo_url,
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -77,14 +102,6 @@ const ProfileScreen = ({ navigation }) => {
           style: 'destructive',
           onPress: async () => {
             try {
-              if (auth().currentUser) {
-                firestore().collection('users').doc(auth().currentUser.uid).update({
-                  lastLogoutAt: firestore.FieldValue.serverTimestamp(),
-                }).catch(() => { });
-              }
-            } catch (e) { }
-
-            try {
               await GoogleSignin.revokeAccess();
             } catch (error: any) {
               // Ignore if already revoked
@@ -97,7 +114,7 @@ const ProfileScreen = ({ navigation }) => {
             }
 
             try {
-              await auth().signOut();
+              await supabase.auth.signOut();
             } catch (e: any) {
               // Ignore sign out errors
             }
@@ -163,17 +180,20 @@ const ProfileScreen = ({ navigation }) => {
 
         {/* User Profile Card - Tappable to view full profile */}
         <TouchableOpacity
-          onPress={() => navigation.navigate('UserProfile', { userId: auth().currentUser?.uid })}
+          onPress={async () => {
+            const { data: { user: authUser } } = await supabase.auth.getUser();
+            if (authUser) navigation.navigate('UserProfile', { userId: authUser.id });
+          }}
           activeOpacity={0.8}
         >
           <Animatable.View animation="fadeInUp" duration={400} style={[styles.profileCard, { backgroundColor: colors.card }, { flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }]}>
             <View style={[styles.avatarContainer, { marginRight: 0 }]}>
               <View style={[styles.avatarBorder, { backgroundColor: colors.background }]}>
                 <DefaultAvatar
-                  uri={user && 'photoURL' in user ? user.photoURL : auth().currentUser?.photoURL}
-                  name={user?.displayName || auth().currentUser?.displayName}
+                  uri={user && 'photoURL' in user ? user.photoURL : null}
+                  name={user?.displayName}
                   size={80}
-                  style={styles.avatar} // Ensure styles.avatar doesn't conflict, mainly size
+                  style={styles.avatar}
                 />
               </View>
             </View>

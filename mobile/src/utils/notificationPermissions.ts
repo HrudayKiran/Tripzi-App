@@ -1,5 +1,5 @@
 import { PermissionsAndroid, Platform } from 'react-native';
-import firestore from '@react-native-firebase/firestore';
+import { supabase } from '../lib/supabase';
 
 export type NotificationPermissionStatus = 'granted' | 'denied' | 'not_determined';
 
@@ -47,11 +47,13 @@ export const syncNotificationPreference = async (
     enabled: boolean
 ): Promise<void> => {
     try {
-        await firestore().collection('users').doc(uid).set({
-            notificationPermissionStatus: permissionStatus,
-            pushNotificationsEnabled: enabled && permissionStatus === 'granted',
-            updatedAt: firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
+        await supabase
+            .from('profiles')
+            .update({
+                notification_permission_status: permissionStatus,
+                push_notifications_enabled: enabled && permissionStatus === 'granted',
+            })
+            .eq('id', uid);
     } catch {
         // Sync failures should not block user flow.
     }

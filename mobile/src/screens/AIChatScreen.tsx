@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, KeyboardAvoidingView, FlatList, TextInput, Image, ActivityIndicator, Alert, Animated, Keyboard, Modal } from 'react-native';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -258,7 +257,7 @@ const AIChatScreen = ({ navigation, route }: any) => {
     };
 
     const handleAutoPostTrip = async (trip: any) => {
-        const currentUser = auth().currentUser;
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
         if (!currentUser) {
             Alert.alert('Error', 'Please login to post a trip.');
             return;
@@ -282,56 +281,58 @@ const AIChatScreen = ({ navigation, route }: any) => {
                                 ? finalImages
                                 : [`https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800`];
 
-                            const currentUserDoc = await firestore().collection('users').doc(currentUser.uid).get();
-                            const currentUserData = currentUserDoc.data() || {};
+                            const { data: profile } = await supabase
+                                .from('profiles')
+                                .select('name, display_name, photo_url, username')
+                                .eq('id', currentUser.id)
+                                .maybeSingle();
+                            const userData: any = profile || {};
 
                             const tripData = {
                                 title: trip.title,
                                 images,
-                                imageLocations: (trip.placesToVisit || []).slice(0, images.length),
-                                fromLocation: trip.fromLocation || 'Unknown',
-                                toLocation: trip.toLocation,
-                                mapsLink: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trip.toLocation)}`,
-                                fromDate: firestore.Timestamp.now(),
-                                toDate: firestore.Timestamp.fromMillis(Date.now() + (trip.durationDays || 3) * 24 * 60 * 60 * 1000),
+                                image_locations: (trip.placesToVisit || []).slice(0, images.length),
+                                from_location: trip.fromLocation || 'Unknown',
+                                to_location: trip.toLocation,
+                                maps_link: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trip.toLocation)}`,
+                                from_date: new Date().toISOString(),
+                                to_date: new Date(Date.now() + (trip.durationDays || 3) * 24 * 60 * 60 * 1000).toISOString(),
                                 duration: `${trip.durationDays || 3} days`,
-                                tripTypes: [trip.tripType || 'adventure'],
-                                transportModes: [trip.transportMode || 'mixed'],
-                                costPerPerson: trip.cost || 0,
-                                totalCost: trip.cost || 0,
+                                trip_types: [trip.tripType || 'adventure'],
+                                transport_modes: [trip.transportMode || 'mixed'],
+                                cost_per_person: trip.cost || 0,
+                                total_cost: trip.cost || 0,
                                 cost: trip.cost || 0,
-                                accommodationType: trip.accommodationType || 'hotel',
-                                bookingStatus: trip.bookingStatus || 'to_book',
-                                accommodationDays: trip.durationDays || 3,
-                                maxTravelers: trip.maxTravelers || 5,
-                                currentTravelers: 1,
-                                genderPreference: trip.genderPreference || 'anyone',
+                                accommodation_type: trip.accommodationType || 'hotel',
+                                booking_status: trip.bookingStatus || 'to_book',
+                                accommodation_days: trip.durationDays || 3,
+                                max_travelers: trip.maxTravelers || 5,
+                                current_travelers: 1,
+                                gender_preference: trip.genderPreference || 'anyone',
                                 description: trip.description,
-                                mandatoryItems: trip.mandatoryItems || [],
-                                placesToVisit: trip.placesToVisit || [],
-                                userId: currentUser.uid,
-                                ownerDisplayName: currentUserData.name || currentUserData.displayName || currentUser.displayName || 'Traveler',
-                                ownerPhotoURL: currentUserData.photoURL || currentUser.photoURL || null,
-                                ownerUsername: currentUserData.username || null,
-                                participants: [currentUser.uid],
-
-                                createdAt: firestore.FieldValue.serverTimestamp(),
+                                mandatory_items: trip.mandatoryItems || [],
+                                places_to_visit: trip.placesToVisit || [],
+                                user_id: currentUser.id,
+                                owner_display_name: userData.name || userData.display_name || currentUser.user_metadata?.full_name || 'Traveler',
+                                owner_photo_url: userData.photo_url || currentUser.user_metadata?.avatar_url || null,
+                                owner_username: userData.username || null,
+                                participants: [currentUser.id],
                                 location: trip.toLocation,
-                                tripType: trip.tripType || 'adventure',
-                                coverImage: images[0],
+                                trip_type: trip.tripType || 'adventure',
+                                cover_image: images[0],
                             };
 
-                            const tripRef = await firestore().collection('trips').add(tripData);
+                            const { data: tripRow, error: tripErr } = await supabase.from('trips').insert(tripData).select('id').single();
+                            if (tripErr || !tripRow) throw tripErr || new Error('Failed');
 
-                            await firestore().collection('chats').doc(`trip_${tripRef.id}`).set({
+                            await supabase.from('chats').insert({
+                                id: `trip_${tripRow.id}`,
                                 type: 'group',
-                                tripId: tripRef.id,
-                                tripTitle: trip.title,
-                                participants: [currentUser.uid],
-                                createdBy: currentUser.uid,
-                                createdAt: firestore.FieldValue.serverTimestamp(),
-                                lastMessage: 'Trip created by Tripzi AI!',
-                                lastMessageTime: firestore.FieldValue.serverTimestamp(),
+                                trip_id: tripRow.id,
+                                trip_title: trip.title,
+                                participants: [currentUser.id],
+                                created_by: currentUser.id,
+                                last_message: 'Trip created by Tripzi AI!',
                             });
 
                             const successMsg: AIMessage = {

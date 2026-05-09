@@ -75,7 +75,7 @@ module.exports = {
     },
     plugins: [
       '@react-native-firebase/app',
-      '@react-native-firebase/auth',
+
       '@react-native-firebase/messaging',
       '@react-native-firebase/app-check',
       '@react-native-firebase/crashlytics',
@@ -114,6 +114,8 @@ module.exports = {
           isAccessMediaLocationEnabled: true,
         },
       ],
+      '@morrowdigital/watermelondb-expo-plugin',
+      'expo-sqlite',
       '@react-native-community/datetimepicker',
       'expo-font',
     ],

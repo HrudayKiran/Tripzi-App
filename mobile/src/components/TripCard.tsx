@@ -3,8 +3,7 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, Alert, Lin
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+import { supabase } from '../lib/supabase';
 import DefaultAvatar from './DefaultAvatar';
 import ActionReasonModal from './ActionReasonModal';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, STATUS, NEUTRAL } from '../styles';
@@ -55,7 +54,10 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
     const moreButtonRef = useRef<View>(null);
     const [mediaAspectRatio, setMediaAspectRatio] = useState(4 / 5);
     const [showLeaveReasonModal, setShowLeaveReasonModal] = useState(false);
-    const currentUser = auth().currentUser;
+    const [currentUser, setCurrentUser] = useState<any>(null);
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+    }, []);
 
     // Detect aspect ratio of first media item
     useEffect(() => {
@@ -76,32 +78,32 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
     // Initialize join state from props
     useEffect(() => {
         if (currentUser && trip.participants) {
-            setHasJoined(trip.participants.includes(currentUser.uid));
+            setHasJoined(trip.participants.includes(currentUser.id));
         } else {
             setHasJoined(false);
         }
-    }, [trip.id, trip.participants, currentUser?.uid]);
+    }, [trip.id, trip.participants, currentUser?.id]);
 
     // Load user rating
     useEffect(() => {
         if (!trip.userId) return;
 
-        firestore()
-            .collection('public_users')
-            .doc(trip.userId)
-            .get()
-            .then(doc => {
-                if (doc.exists) {
-                    const data = doc.data();
-                    if ((data?.avgRating || data?.totalRatings) || (data?.totalRating && data?.ratingCount)) {
+        supabase
+            .from('public_users')
+            .select('avg_rating, total_ratings, total_rating, rating_count')
+            .eq('id', trip.userId)
+            .maybeSingle()
+            .then(({ data }) => {
+                if (data) {
+                    if ((data.avg_rating || data.total_ratings) || (data.total_rating && data.rating_count)) {
                         setUserRating({
-                            avg: data?.avgRating || parseFloat((data.totalRating / data.ratingCount).toFixed(1)),
-                            count: data?.totalRatings || data?.ratingCount || 0,
+                            avg: data.avg_rating || parseFloat((data.total_rating / data.rating_count).toFixed(1)),
+                            count: data.total_ratings || data.rating_count || 0,
                         });
                     }
                 }
             })
-            .catch(() => { });
+            .then(undefined, () => { });
     }, [trip.userId]);
 
     const formatCost = (cost) => {
@@ -181,46 +183,40 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
             return;
         }
         try {
-            const chatQuery = await firestore()
-                .collection('chats')
-                .where('type', '==', 'direct')
-                .where('participants', 'array-contains', currentUser.uid)
-                .get();
+            const { data: existingChats } = await supabase
+                .from('chats')
+                .select('*')
+                .eq('type', 'direct')
+                .contains('participants', [currentUser.id]);
 
             let chatId = null;
-            for (const doc of chatQuery.docs) {
-                const data = doc.data();
-                if (data.participants && data.participants.includes(trip.userId)) {
-                    chatId = doc.id;
+            for (const chat of (existingChats || [])) {
+                if (chat.participants && chat.participants.includes(trip.userId)) {
+                    chatId = chat.id;
                     break;
                 }
             }
 
             if (!chatId) {
-                const newChatRef = await firestore().collection('chats').add({
+                const { data: newChat } = await supabase.from('chats').insert({
                     type: 'direct',
-                    createdBy: currentUser.uid,
-                    participants: [currentUser.uid, trip.userId],
-                    participantDetails: {
-                        [currentUser.uid]: {
-                            displayName: currentUser.displayName || 'User',
-                            photoURL: currentUser.photoURL || '',
+                    created_by: currentUser.id,
+                    participants: [currentUser.id, trip.userId],
+                    participant_details: {
+                        [currentUser.id]: {
+                            displayName: currentUser.user_metadata?.full_name || 'User',
+                            photoURL: currentUser.user_metadata?.avatar_url || '',
                         },
                         [trip.userId]: {
                             displayName: trip.user?.displayName || trip.user?.name || 'User',
                             photoURL: trip.user?.photoURL || '',
                         },
                     },
-                    unreadCount: {
-                        [currentUser.uid]: 0,
-                        [trip.userId]: 0,
-                    },
-                    mutedBy: [],
-                    pinnedBy: [],
-                    createdAt: firestore.FieldValue.serverTimestamp(),
-                    updatedAt: firestore.FieldValue.serverTimestamp(),
-                });
-                chatId = newChatRef.id;
+                    unread_count: { [currentUser.id]: 0, [trip.userId]: 0 },
+                    muted_by: [],
+                    pinned_by: [],
+                }).select('id').single();
+                chatId = newChat?.id;
             }
 
             navigation.navigate('Chat' as never, {
@@ -237,7 +233,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
 
     // Check if trip is completed (marked by owner)
     const isCompleted = trip.isCompleted === true;
-    const isOwnTrip = trip.userId === currentUser?.uid || trip.user?.uid === currentUser?.uid;
+    const isOwnTrip = trip.userId === currentUser?.id || trip.user?.uid === currentUser?.id;
 
     const transport = TRANSPORT_ICONS[trip.transportMode?.toLowerCase()] || TRANSPORT_ICONS.mixed;
     const spotsLeft = Math.max(0, (trip.maxTravelers || 8) - (trip.participants?.length || trip.currentTravelers || 1));

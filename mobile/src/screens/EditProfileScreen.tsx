@@ -13,8 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, STATUS, NEUTRAL } from '../styles';
@@ -31,7 +30,7 @@ const formatGender = (gender?: string | null) => {
 
 const EditProfileScreen = ({ navigation }) => {
     const { colors } = useTheme();
-    const currentUser = auth().currentUser;
+    const [currentUser, setCurrentUser] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [user, setUser] = useState<any>(null);
@@ -45,30 +44,33 @@ const EditProfileScreen = ({ navigation }) => {
     const [usernameOk, setUsernameOk] = useState(false);
 
     useEffect(() => {
-        if (!currentUser) {
-            navigation.goBack();
-            return;
-        }
+        const loadUser = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                navigation.goBack();
+                return;
+            }
+            setCurrentUser(user);
 
-        const unsubscribe = firestore()
-            .collection('users')
-            .doc(currentUser.uid)
-            .onSnapshot((doc) => {
-                const data = doc.data() || {};
-                const displayName = data.name || data.displayName || currentUser.displayName || '';
-                setUser({ id: doc.id, ...data, displayName });
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .maybeSingle();
+
+            if (profile) {
+                const displayName = profile.name || profile.display_name || user.user_metadata?.full_name || '';
+                setUser({ id: user.id, ...profile, displayName, email: user.email });
                 setName(displayName);
-                setUsername(data.username || '');
-                setBio(data.bio || '');
-                setProfileImage(data.photoURL || currentUser.photoURL || null);
-                setProfileImageObjectKey(data.photoObjectKey || null);
-                setLoading(false);
-            }, () => {
-                setLoading(false);
-            });
-
-        return () => unsubscribe();
-    }, [currentUser, navigation]);
+                setUsername(profile.username || '');
+                setBio(profile.bio || '');
+                setProfileImage(profile.photo_url || user.user_metadata?.avatar_url || null);
+                setProfileImageObjectKey(profile.photo_object_key || null);
+            }
+            setLoading(false);
+        };
+        loadUser();
+    }, [navigation]);
 
     useEffect(() => {
         let active = true;
@@ -91,14 +93,14 @@ const EditProfileScreen = ({ navigation }) => {
             setUsernameError('');
             setUsernameOk(false);
             try {
-                const snapshot = await firestore()
-                    .collection('public_users')
-                    .where('username', '==', value)
-                    .get();
+            const snapshot = await supabase
+                .from('public_profiles')
+                .select('id')
+                .eq('username', value);
 
-                if (!active) return;
+            if (!active) return;
 
-                const isTaken = snapshot.docs.some(doc => doc.id !== currentUser?.uid);
+            const isTaken = (snapshot.data || []).some(row => row.id !== currentUser?.id);
                 if (isTaken) {
                     setUsernameError('Username is already taken');
                     setUsernameOk(false);
@@ -139,15 +141,14 @@ const EditProfileScreen = ({ navigation }) => {
 
             if (result.success && result.url && result.objectKey) {
                 try {
-                    await firestore().collection('users').doc(currentUser.uid).set({
-                        photoURL: result.url,
-                        photoObjectKey: result.objectKey,
-                        updatedAt: firestore.FieldValue.serverTimestamp(),
-                    }, { merge: true });
+                    await supabase.from('profiles').update({
+                        photo_url: result.url,
+                        photo_object_key: result.objectKey,
+                    }).eq('id', currentUser.id);
 
                     try {
-                        await currentUser.updateProfile({
-                            photoURL: result.url,
+                        await supabase.auth.updateUser({
+                            data: { avatar_url: result.url },
                         });
                     } catch (e) { }
 
@@ -184,20 +185,17 @@ const EditProfileScreen = ({ navigation }) => {
         setSaving(true);
         try {
             const sanitized = sanitizeUsername(username.trim());
-            await firestore().collection('users').doc(currentUser.uid).set({
+            await supabase.from('profiles').update({
                 name: name.trim(),
                 username: sanitized,
                 bio: bio.trim(),
-                photoURL: profileImage || null,
-                photoObjectKey: profileImageObjectKey || null,
-                displayName: firestore.FieldValue.delete(),
-                updatedAt: firestore.FieldValue.serverTimestamp(),
-            }, { merge: true });
+                photo_url: profileImage || null,
+                photo_object_key: profileImageObjectKey || null,
+            }).eq('id', currentUser.id);
 
             try {
-                await currentUser.updateProfile({
-                    displayName: name.trim(),
-                    photoURL: profileImage || undefined,
+                await supabase.auth.updateUser({
+                    data: { full_name: name.trim(), avatar_url: profileImage || undefined },
                 });
             } catch (e) { }
 

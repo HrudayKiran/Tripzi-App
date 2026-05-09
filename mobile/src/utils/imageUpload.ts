@@ -1,7 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
-import storage from '@react-native-firebase/storage';
-import functions from '@react-native-firebase/functions';
 import { Alert, Linking, Platform } from 'react-native';
+import { workersApi } from '../lib/workersApi';
 
 export type ImageFolder = 'profiles' | 'trips' | 'chats';
 
@@ -13,6 +12,8 @@ export interface UploadOptions {
     quality?: number;
     allowsEditing?: boolean;
     tripId?: string;
+    chatId?: string;
+    existingUri?: string;
 }
 
 export interface UploadResult {
@@ -75,19 +76,16 @@ const putBlobToSignedUrl = async (
 
 const uploadImageToR2 = async (
     uri: string,
-    callableName: 'startProfileImageUpload' | 'startTripImageUpload',
+    endpoint: '/media/profile-upload' | '/media/trip-upload' | '/media/chat-upload',
     payload: Record<string, unknown>
 ): Promise<UploadResult> => {
     try {
         const contentType = inferContentType(uri);
         const fileName = inferFileName(uri);
-        const callable = functions().httpsCallable(callableName);
-        const ticketResponse = await callable({
-            ...payload,
-            contentType,
-            fileName,
+
+        const ticket = await workersApi<UploadTicket>(endpoint, {
+            body: { ...payload, contentType, fileName },
         });
-        const ticket = ticketResponse?.data as UploadTicket | undefined;
 
         if (!ticket?.uploadUrl || !ticket?.publicUrl || !ticket?.objectKey) {
             throw new Error('Upload ticket was incomplete.');
@@ -112,7 +110,6 @@ const uploadImageToR2 = async (
 
 /**
  * Request permission to access media library.
- * Shows alert with "Open Settings" option if denied.
  */
 export async function requestMediaPermission(): Promise<boolean> {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -142,7 +139,6 @@ export async function requestMediaPermission(): Promise<boolean> {
 
 /**
  * Request camera permission.
- * Shows alert with "Open Settings" option if denied.
  */
 export async function requestCameraPermission(): Promise<boolean> {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -174,39 +170,47 @@ export async function requestCameraPermission(): Promise<boolean> {
  * Pick an image from the device library and upload it.
  */
 export async function pickAndUploadImage(options: UploadOptions): Promise<UploadResult> {
-    const { folder, userId, subfolder, aspect = [1, 1], quality = 0.8, allowsEditing = true, tripId } = options;
+    const { folder, userId, aspect = [1, 1], quality = 0.8, allowsEditing = true, tripId, chatId, existingUri } = options;
 
-    const hasPermission = await requestMediaPermission();
-    if (!hasPermission) {
-        return { success: false, error: 'Permission denied' };
-    }
+    let uri = existingUri;
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing,
-        aspect,
-        quality,
-    });
+    if (!uri) {
+        const hasPermission = await requestMediaPermission();
+        if (!hasPermission) {
+            return { success: false, error: 'Permission denied' };
+        }
 
-    if (result.canceled || !result.assets[0]) {
-        return { success: false, error: 'Selection cancelled' };
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing,
+            aspect,
+            quality,
+        });
+
+        if (result.canceled || !result.assets[0]) {
+            return { success: false, error: 'Selection cancelled' };
+        }
+        uri = result.assets[0].uri;
     }
 
     if (folder === 'profiles') {
-        return uploadProfileImageToR2(result.assets[0].uri, userId);
+        return uploadProfileImageToR2(uri, userId);
     }
     if (folder === 'trips') {
-        return uploadTripImageToR2(result.assets[0].uri, userId, tripId);
+        return uploadTripImageToR2(uri, userId, tripId);
+    }
+    if (folder === 'chats') {
+        return uploadChatImageToR2(uri, userId, chatId || 'general');
     }
 
-    return uploadToStorage(result.assets[0].uri, folder, userId, subfolder);
+    return uploadTripImageToR2(uri, userId);
 }
 
 /**
  * Take a photo with camera and upload it.
  */
 export async function captureAndUploadImage(options: UploadOptions): Promise<UploadResult> {
-    const { folder, userId, subfolder, aspect = [1, 1], quality = 0.8, allowsEditing = true, tripId } = options;
+    const { folder, userId, aspect = [1, 1], quality = 0.8, allowsEditing = true, tripId } = options;
 
     const hasPermission = await requestCameraPermission();
     if (!hasPermission) {
@@ -231,14 +235,14 @@ export async function captureAndUploadImage(options: UploadOptions): Promise<Upl
         return uploadTripImageToR2(result.assets[0].uri, userId, tripId);
     }
 
-    return uploadToStorage(result.assets[0].uri, folder, userId, subfolder);
+    return uploadTripImageToR2(result.assets[0].uri, userId);
 }
 
 export async function uploadProfileImageToR2(
     uri: string,
     userId: string
 ): Promise<UploadResult> {
-    return uploadImageToR2(uri, 'startProfileImageUpload', { userId });
+    return uploadImageToR2(uri, '/media/profile-upload', { userId });
 }
 
 export async function uploadTripImageToR2(
@@ -246,15 +250,25 @@ export async function uploadTripImageToR2(
     userId: string,
     tripId?: string
 ): Promise<UploadResult> {
-    return uploadImageToR2(uri, 'startTripImageUpload', { userId, tripId: tripId || null });
+    return uploadImageToR2(uri, '/media/trip-upload', { userId, tripId: tripId || null });
+}
+
+export async function uploadChatImageToR2(
+    uri: string,
+    userId: string,
+    chatId: string
+): Promise<UploadResult> {
+    return uploadImageToR2(uri, '/media/chat-upload', { userId, chatId });
 }
 
 export async function deleteProfileImageFromR2(objectKey: string): Promise<boolean> {
     if (!objectKey) return false;
 
     try {
-        const callable = functions().httpsCallable('deleteProfileImage');
-        await callable({ objectKey });
+        await workersApi('/media/profile-image', {
+            method: 'DELETE',
+            body: { objectKey },
+        });
         return true;
     } catch {
         return false;
@@ -269,10 +283,9 @@ export async function deleteTripImagesFromR2(
     if (filteredKeys.length === 0) return true;
 
     try {
-        const callable = functions().httpsCallable('deleteTripImages');
-        await callable({
-            objectKeys: filteredKeys,
-            tripId: tripId || null,
+        await workersApi('/media/trip-images', {
+            method: 'DELETE',
+            body: { objectKeys: filteredKeys, tripId: tripId || null },
         });
         return true;
     } catch {
@@ -280,82 +293,14 @@ export async function deleteTripImagesFromR2(
     }
 }
 
-/**
- * Upload a local file to Firebase Storage.
- * Retained for non-migrated media only.
- */
-export async function uploadToStorage(
-    uri: string,
-    folder: ImageFolder,
-    userId: string,
-    subfolder?: string
-): Promise<UploadResult> {
-    try {
-        const timestamp = Date.now();
-        const filename = `${timestamp}.jpg`;
-        const path = subfolder
-            ? `${folder}/${userId}/${subfolder}/${filename}`
-            : `${folder}/${userId}/${filename}`;
-
-        const reference = storage().ref(path);
-        await reference.putFile(uri);
-        const downloadUrl = await reference.getDownloadURL();
-
-        return { success: true, url: downloadUrl, path };
-    } catch (error) {
-
-        return { success: false, error: 'Upload failed. Please try again.' };
-    }
-}
-
-/**
- * Delete a file from Firebase Storage by URL.
- * Retained for legacy/non-migrated media.
- */
-export async function deleteFromStorage(url: string): Promise<boolean> {
-    if (!url || !url.startsWith('https://')) {
-        return false;
-    }
-
-    try {
-        const reference = storage().refFromURL(url);
-        await reference.delete();
-        return true;
-    } catch (error) {
-
-        return false;
-    }
-}
-
-/**
- * Delete a file from Firebase Storage by path.
- * Retained for legacy/non-migrated media.
- */
-export async function deleteFromStorageByPath(path: string): Promise<boolean> {
-    if (!path) {
-        return false;
-    }
-
-    try {
-        const reference = storage().ref(path);
-        await reference.delete();
-        return true;
-    } catch (error) {
-
-        return false;
-    }
-}
-
 export default {
     pickAndUploadImage,
     captureAndUploadImage,
-    uploadToStorage,
     uploadProfileImageToR2,
     uploadTripImageToR2,
+    uploadChatImageToR2,
     deleteProfileImageFromR2,
     deleteTripImagesFromR2,
-    deleteFromStorage,
-    deleteFromStorageByPath,
     requestMediaPermission,
     requestCameraPermission,
 };

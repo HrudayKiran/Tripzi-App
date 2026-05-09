@@ -9,8 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
 import { deleteTripImagesFromR2, uploadTripImageToR2 } from '../utils/imageUpload';
@@ -119,9 +118,9 @@ const EditTripScreen = ({ navigation, route }: any) => {
             const fetchTrip = async () => {
                 setFetching(true);
                 try {
-                    const doc = await firestore().collection('trips').doc(tripId).get();
-                    if (doc.exists) {
-                        const data = doc.data();
+                    const { data: doc } = await supabase.from('trips').select('*').eq('id', tripId).maybeSingle();
+                    if (doc) {
+                        const data = doc;
                         if (data) {
                             setTitle(data.title || '');
 
@@ -143,19 +142,19 @@ const EditTripScreen = ({ navigation, route }: any) => {
                             setFromLocation(data.fromLocation || '');
                             setToLocation(data.toLocation || data.location || '');
                             setMapsLink(data.mapsLink || '');
-                            setFromDate(data.fromDate?.toDate ? data.fromDate.toDate() : new Date());
-                            setToDate(data.toDate?.toDate ? data.toDate.toDate() : new Date());
-                            setTripTypes(data.tripTypes || (data.tripType ? [data.tripType] : []));
-                            setTransportModes(data.transportModes || (data.transportMode ? [data.transportMode] : []));
-                            setCostPerPerson(data.costPerPerson ? String(data.costPerPerson) : (data.cost ? String(data.cost) : ''));
-                            setAccommodationType(data.accommodationType || '');
-                            setBookingStatus(data.bookingStatus || '');
-                            setAccommodationDays(data.accommodationDays ? String(data.accommodationDays) : (data.durationDays ? String(data.durationDays) : ''));
-                            setMaxTravelers(data.maxTravelers ? String(data.maxTravelers) : '');
-                            setGenderPreference(data.genderPreference || 'anyone');
+                            setFromDate(data.from_date ? new Date(data.from_date) : new Date());
+                            setToDate(data.to_date ? new Date(data.to_date) : new Date());
+                            setTripTypes(data.trip_types || (data.trip_type ? [data.trip_type] : []));
+                            setTransportModes(data.transport_modes || (data.transport_mode ? [data.transport_mode] : []));
+                            setCostPerPerson(data.cost_per_person ? String(data.cost_per_person) : (data.cost ? String(data.cost) : ''));
+                            setAccommodationType(data.accommodation_type || '');
+                            setBookingStatus(data.booking_status || '');
+                            setAccommodationDays(data.accommodation_days ? String(data.accommodation_days) : '');
+                            setMaxTravelers(data.max_travelers ? String(data.max_travelers) : '');
+                            setGenderPreference(data.gender_preference || 'anyone');
                             setDescription(data.description || '');
-                            setMandatoryItems(Array.isArray(data.mandatoryItems) ? data.mandatoryItems.join(', ') : (data.mandatoryItems || ''));
-                            setPlacesToVisit(Array.isArray(data.placesToVisit) ? data.placesToVisit.join(', ') : (data.placesToVisit || ''));
+                            setMandatoryItems(Array.isArray(data.mandatory_items) ? data.mandatory_items.join(', ') : (data.mandatory_items || ''));
+                            setPlacesToVisit(Array.isArray(data.places_to_visit) ? data.places_to_visit.join(', ') : (data.places_to_visit || ''));
                         }
                     }
                 } catch (error) {
@@ -288,7 +287,7 @@ const EditTripScreen = ({ navigation, route }: any) => {
             return;
         }
 
-        const currentUser = auth().currentUser;
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
         if (!currentUser) return;
 
         setIsPosting(true);
@@ -311,7 +310,7 @@ const EditTripScreen = ({ navigation, route }: any) => {
                 }
 
                 try {
-                    const uploadResult = await uploadTripImageToR2(imageUri, currentUser.uid, tripId);
+                    const uploadResult = await uploadTripImageToR2(imageUri, currentUser.id, tripId);
                     if (uploadResult.success && uploadResult.url && uploadResult.objectKey) {
                         uploadedImageData.push({
                             uri: uploadResult.url,
@@ -340,34 +339,33 @@ const EditTripScreen = ({ navigation, route }: any) => {
             const tripData = {
                 title,
                 images: finalImages,
-                imageLocations: finalLocations,
-                imageObjectKeys: finalObjectKeys,
-                fromLocation,
-                toLocation,
+                image_locations: finalLocations,
+                image_object_keys: finalObjectKeys,
+                from_location: fromLocation,
+                to_location: toLocation,
                 location: toLocation,
-                mapsLink: mapsLink || generateMapsLink(toLocation),
-                fromDate: firestore.Timestamp.fromDate(fromDate),
-                toDate: firestore.Timestamp.fromDate(toDate),
+                maps_link: mapsLink || generateMapsLink(toLocation),
+                from_date: fromDate.toISOString(),
+                to_date: toDate.toISOString(),
                 duration: getDuration(),
-                tripTypes,
-                tripType: tripTypes[0] || 'Adventure',
-                transportModes,
-                costPerPerson: parseFloat(costPerPerson) || 0,
-                totalCost: parseFloat(costPerPerson) || 0,
+                trip_types: tripTypes,
+                trip_type: tripTypes[0] || 'Adventure',
+                transport_modes: transportModes,
+                cost_per_person: parseFloat(costPerPerson) || 0,
+                total_cost: parseFloat(costPerPerson) || 0,
                 cost: parseFloat(costPerPerson) || 0,
-                accommodationType,
-                bookingStatus,
-                accommodationDays: accommodationDays ? parseInt(accommodationDays) : null,
-                maxTravelers: parseInt(maxTravelers) || 5,
-                genderPreference,
+                accommodation_type: accommodationType,
+                booking_status: bookingStatus,
+                accommodation_days: accommodationDays ? parseInt(accommodationDays) : null,
+                max_travelers: parseInt(maxTravelers) || 5,
+                gender_preference: genderPreference,
                 description,
-                mandatoryItems: mandatoryItems.split(',').map(item => item.trim()).filter(Boolean),
-                placesToVisit: placesToVisit.split(',').map(place => place.trim()).filter(Boolean),
-                coverImage: finalImages[0],
-                updatedAt: firestore.FieldValue.serverTimestamp(),
+                mandatory_items: mandatoryItems.split(',').map(item => item.trim()).filter(Boolean),
+                places_to_visit: placesToVisit.split(',').map(place => place.trim()).filter(Boolean),
+                cover_image: finalImages[0],
             };
 
-            await firestore().collection('trips').doc(tripId).update(tripData);
+            await supabase.from('trips').update(tripData).eq('id', tripId);
             if (removedObjectKeys.length > 0) {
                 await deleteTripImagesFromR2(removedObjectKeys, tripId);
             }
@@ -377,9 +375,9 @@ const EditTripScreen = ({ navigation, route }: any) => {
 
             // Update chat title if exists
             try {
-                await firestore().collection('chats').doc(`trip_${tripId}`).update({
-                    tripTitle: title
-                });
+                await supabase.from('chats').update({
+                    trip_title: title
+                }).eq('id', `trip_${tripId}`);
             } catch (e) {
                 // Ignore if chat doesn't exist
             }

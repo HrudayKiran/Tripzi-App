@@ -1,4 +1,4 @@
-import functions from '@react-native-firebase/functions';
+import { workersApi } from '../lib/workersApi';
 
 export interface AIMessage {
     _id: string | number;
@@ -38,9 +38,10 @@ class AIService {
         model: AIModel = 'llama-3.3-70b-versatile'
     ): Promise<AIMessage[]> {
         try {
-            const callable = functions().httpsCallable('planTripWithAI');
-            const result = await callable({ text, previousMessages, model });
-            const aiText = result?.data?.text;
+            const result = await workersApi<{ text: string; model: string }>('/ai/plan', {
+                body: { text, previousMessages, model },
+            });
+            const aiText = result?.text;
 
             if (typeof aiText === 'string' && aiText.trim().length > 0) {
                 return [{
@@ -58,7 +59,7 @@ class AIService {
                 user: AI_USER,
             }];
         } catch (error: any) {
-            const errorMsg = error?.message?.includes('UNAUTHENTICATED')
+            const errorMsg = error?.message?.includes('Not authenticated')
                 ? 'Please log in to use Tripzi AI.'
                 : 'Sorry, I couldn\'t connect to the AI. Please check your internet and try again.';
 
@@ -73,9 +74,10 @@ class AIService {
 
     async fetchPlaceImages(places: string[]): Promise<PlaceImage[]> {
         try {
-            const callable = functions().httpsCallable('getPlaceImages');
-            const result = await callable({ places });
-            return result?.data?.images || [];
+            const result = await workersApi<{ images: PlaceImage[] }>('/ai/images', {
+                body: { places },
+            });
+            return result?.images || [];
         } catch {
             return [];
         }

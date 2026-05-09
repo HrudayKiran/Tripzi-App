@@ -6,8 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
 import TripCard from '../components/TripCard';
@@ -40,9 +39,16 @@ const FALLBACK_USER = {
 };
 
 const UserProfileScreen = ({ route, navigation }) => {
-    const currentUser = auth().currentUser;
-    // Default to current user if no param passed (e.g. from Tab bar)
-    const userId = route.params?.userId || currentUser?.uid;
+    const [currentUser, setCurrentUser] = useState<any>(null);
+    const userId = route.params?.userId || currentUser?.id;
+
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setCurrentUser(session?.user || null);
+        });
+        return () => subscription.unsubscribe();
+    }, []);
 
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
@@ -84,7 +90,7 @@ const UserProfileScreen = ({ route, navigation }) => {
     const headerTranslateY = useRef(new Animated.Value(0)).current;
     const HEADER_HEIGHT = 60 + insets.top;
 
-    const isOwnProfile = userId === currentUser?.uid;
+    const isOwnProfile = userId === currentUser?.id;
     const formatGender = (gender?: string | null) => {
         if (!gender) return 'Not set';
         return `${gender.charAt(0).toUpperCase()}${gender.slice(1).toLowerCase()}`;
@@ -154,28 +160,17 @@ const UserProfileScreen = ({ route, navigation }) => {
     useEffect(() => {
         if (!userId) return;
 
-        const unsubscribe = firestore()
-            .collection('trips')
-            .where('userId', '==', userId)
-            .onSnapshot((snapshot) => {
-                if (snapshot) {
-                    const tripsData = snapshot.docs.map(doc => ({ // Sort manually if needed, or rely on query order
-                        id: doc.id,
-                        ...doc.data()
-                    }));
-                    // Client-side sort by createdAt desc
-                    tripsData.sort((a, b) => {
-                        const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-                        const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-                        return bTime - aTime;
-                    });
-                    setTrips(tripsData);
-                }
-            }, (error) => {
+        const loadTrips = async () => {
+            const { data } = await supabase.from('trips').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+            if (data) setTrips(data);
+        };
+        loadTrips();
 
-            });
+        const channel = supabase.channel(`trips-${userId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'trips', filter: `user_id=eq.${userId}` }, () => { loadTrips(); })
+            .subscribe();
 
-        return () => unsubscribe();
+        return () => { supabase.removeChannel(channel); };
     }, [userId]);
 
     const loadUserData = async () => {
@@ -185,54 +180,42 @@ const UserProfileScreen = ({ route, navigation }) => {
         }
 
         try {
-            const profileCollection = isOwnProfile ? 'users' : 'public_users';
-            const userDoc = await firestore().collection(profileCollection).doc(userId).get();
+            const table = isOwnProfile ? 'profiles' : 'public_users';
+            const { data: userData, error: profileErr } = await supabase.from(table).select('*').eq('id', userId).maybeSingle();
 
-            if (userDoc.exists) {
-                const userData = { id: userDoc.id, ...userDoc.data() };
-                const normalizedDisplayName = userData.name || userData.displayName || currentUser?.displayName || 'User';
-                setUser({ ...userData, displayName: normalizedDisplayName, name: userData.name || normalizedDisplayName });
+            if (!profileErr && userData) {
+                const normalizedDisplayName = userData.name || userData.display_name || currentUser?.user_metadata?.full_name || 'User';
+                setUser({ ...userData, displayName: normalizedDisplayName, name: userData.name || normalizedDisplayName, photoURL: userData.photo_url, photoObjectKey: userData.photo_object_key });
                 setEditName(normalizedDisplayName);
                 setEditBio(userData.bio || '');
                 setEditUsername(userData.username || '');
-                setProfileImage(userData.photoURL);
-                setProfileImageObjectKey(userData.photoObjectKey || null);
+                setProfileImage(userData.photo_url);
+                setProfileImageObjectKey(userData.photo_object_key || null);
 
-                // Trips are now handled by useEffect subscription
-
-                // Fetch host ratings for this user
+                // Fetch host ratings
                 if (userId) {
                     try {
-                        const ratingsSnapshot = await firestore()
-                            .collection('ratings')
-                            .where('hostId', '==', userId)
-                            .get();
-
-                        if (ratingsSnapshot.docs.length > 0) {
-                            const totalRating = ratingsSnapshot.docs.reduce((sum, doc) => sum + (doc.data().rating || 0), 0);
-                            const avgRating = totalRating / ratingsSnapshot.docs.length;
-                            setHostRating({
-                                average: Math.round(avgRating * 10) / 10,
-                                count: ratingsSnapshot.docs.length,
-                            });
+                        const { data: ratings } = await supabase.from('ratings').select('rating').eq('host_id', userId);
+                        if (ratings && ratings.length > 0) {
+                            const totalRating = ratings.reduce((sum, r) => sum + (r.rating || 0), 0);
+                            setHostRating({ average: Math.round((totalRating / ratings.length) * 10) / 10, count: ratings.length });
                         }
-                    } catch (e) {
-
-                    }
+                    } catch (e) { }
                 }
             } else if (isOwnProfile && currentUser) {
+                const meta = currentUser.user_metadata || {};
                 setUser({
-                    id: currentUser.uid,
-                    name: currentUser.displayName || 'User',
-                    displayName: currentUser.displayName || 'User',
+                    id: currentUser.id,
+                    name: meta.full_name || 'User',
+                    displayName: meta.full_name || 'User',
                     email: currentUser.email,
-                    photoURL: currentUser.photoURL || null,
+                    photoURL: meta.avatar_url || null,
                     photoObjectKey: null,
                     bio: '',
                     ageVerified: false,
                 });
-                setEditName(currentUser.displayName || '');
-                setProfileImage(currentUser.photoURL);
+                setEditName(meta.full_name || '');
+                setProfileImage(meta.avatar_url);
                 setProfileImageObjectKey(null);
             } else {
                 setUser(FALLBACK_USER);
@@ -242,19 +225,19 @@ const UserProfileScreen = ({ route, navigation }) => {
                 setProfileImageObjectKey(null);
             }
         } catch (error) {
-
             if (isOwnProfile && currentUser) {
+                const meta = currentUser.user_metadata || {};
                 setUser({
-                    id: currentUser.uid,
-                    name: currentUser.displayName || 'User',
-                    displayName: currentUser.displayName || 'User',
-                    photoURL: currentUser.photoURL,
+                    id: currentUser.id,
+                    name: meta.full_name || 'User',
+                    displayName: meta.full_name || 'User',
+                    photoURL: meta.avatar_url,
                     photoObjectKey: null,
                     bio: '',
                     ageVerified: false,
                 });
-                setEditName(currentUser.displayName || '');
-                setProfileImage(currentUser.photoURL);
+                setEditName(meta.full_name || '');
+                setProfileImage(meta.avatar_url);
                 setProfileImageObjectKey(null);
             } else {
                 setUser(FALLBACK_USER);
@@ -276,29 +259,21 @@ const UserProfileScreen = ({ route, navigation }) => {
             const previousObjectKey = profileImageObjectKey || user?.photoObjectKey || null;
             const result = await pickAndUploadImage({
                 folder: 'profiles',
-                userId: currentUser.uid,
+                userId: currentUser.id,
                 aspect: [1, 1],
                 quality: 0.7,
                 allowsEditing: true,
             });
 
-
             if (result.success && result.url && result.objectKey) {
-                // Update local state
                 setProfileImage(result.url);
                 setProfileImageObjectKey(result.objectKey);
 
                 try {
-                    await firestore().collection('users').doc(currentUser.uid).update({
-                        photoURL: result.url,
-                        photoObjectKey: result.objectKey,
-                    });
-
-                    try {
-                        await auth().currentUser?.updateProfile({ photoURL: result.url });
-                    } catch (e) {
-
-                    }
+                    await supabase.from('profiles').update({
+                        photo_url: result.url,
+                        photo_object_key: result.objectKey,
+                    }).eq('id', currentUser.id);
 
                     if (previousObjectKey && previousObjectKey !== result.objectKey) {
                         await deleteProfileImageFromR2(previousObjectKey);
@@ -308,7 +283,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                     Alert.alert('Success! ✨', 'Your profile photo has been updated.');
                 } catch (updateError) {
                     await deleteProfileImageFromR2(result.objectKey);
-                    setProfileImage(user?.photoURL || currentUser.photoURL || null);
+                    setProfileImage(user?.photoURL || currentUser.user_metadata?.avatar_url || null);
                     setProfileImageObjectKey(previousObjectKey);
                     Alert.alert('Error', 'Failed to save profile image. Please try again.');
                 }
@@ -333,39 +308,30 @@ const UserProfileScreen = ({ route, navigation }) => {
             setUsernameError('');
 
             try {
-                // Check if username is already taken
-                const usernameQuery = await firestore()
-                    .collection('public_users')
-                    .where('username', '==', editUsername.toLowerCase())
-                    .get();
+                const { data: existing } = await supabase.from('public_users').select('id').eq('username', editUsername.toLowerCase()).neq('id', currentUser.id);
 
-                const isTaken = usernameQuery.docs.some(doc => doc.id !== currentUser.uid);
-
-                if (isTaken) {
+                if (existing && existing.length > 0) {
                     setUsernameError('Username already taken. Try a different one.');
                     setCheckingUsername(false);
                     return;
                 }
-            } catch (error) {
-
-            }
+            } catch (error) { }
             setCheckingUsername(false);
         }
 
         try {
             const updateData: any = {
                 name: editName,
-                displayName: firestore.FieldValue.delete(),
                 bio: editBio,
-                photoURL: profileImage,
-                photoObjectKey: profileImageObjectKey || null,
+                photo_url: profileImage,
+                photo_object_key: profileImageObjectKey || null,
             };
 
             if (editUsername) {
                 updateData.username = editUsername.toLowerCase();
             }
 
-            await firestore().collection('users').doc(currentUser.uid).update(updateData);
+            await supabase.from('profiles').update(updateData).eq('id', currentUser.id);
 
             setUser(prev => ({ ...prev, name: editName, displayName: editName, bio: editBio, photoURL: profileImage, photoObjectKey: profileImageObjectKey || null, username: editUsername.toLowerCase() }));
             setShowEditModal(false);
@@ -392,68 +358,43 @@ const UserProfileScreen = ({ route, navigation }) => {
             Alert.alert('Error', 'User profile not loaded. Please try again.');
             return;
         }
-        if (userId === currentUser.uid) {
+        if (userId === currentUser.id) {
             return; // Can't message yourself
         }
 
         try {
-            // Create or get existing chat using Firestore directly
-            const chatQuery = await firestore()
-                .collection('chats')
-                .where('type', '==', 'direct')
-                .where('participants', 'array-contains', currentUser.uid)
-                .get();
+            const { data: existingChats } = await supabase
+                .from('chats')
+                .select('*')
+                .eq('type', 'direct')
+                .contains('participants', [currentUser.id]);
 
             let chatId = null;
-            for (const doc of chatQuery.docs) {
-                const data = doc.data();
-                if (data.participants && data.participants.includes(userId)) {
-                    chatId = doc.id;
+            for (const chat of (existingChats || [])) {
+                if (chat.participants && chat.participants.includes(userId)) {
+                    chatId = chat.id;
                     break;
                 }
             }
 
             if (!chatId) {
-                // Get current user data with fallback
-                let currentUserName = currentUser.displayName || 'User';
-                let currentUserPhoto = currentUser.photoURL || '';
+                const { data: profile } = await supabase.from('profiles').select('name, display_name, photo_url').eq('id', currentUser.id).maybeSingle();
+                const myName = profile?.name || profile?.display_name || currentUser.user_metadata?.full_name || 'User';
+                const myPhoto = profile?.photo_url || currentUser.user_metadata?.avatar_url || '';
 
-                try {
-                    const currentUserDoc = await firestore().collection('users').doc(currentUser.uid).get();
-                    if (currentUserDoc.exists) {
-                        const currentUserData = currentUserDoc.data();
-                        currentUserName = currentUserData?.name || currentUserData?.displayName || currentUser.displayName || 'User';
-                        currentUserPhoto = currentUserData?.photoURL || currentUser.photoURL || '';
-                    }
-                } catch {
-                    // Use auth profile data as fallback
-                }
-
-                // Create new chat
-                const newChatRef = await firestore().collection('chats').add({
+                const { data: newChat } = await supabase.from('chats').insert({
                     type: 'direct',
-                    createdBy: currentUser.uid,
-                    participants: [currentUser.uid, userId],
-                    participantDetails: {
-                        [currentUser.uid]: {
-                            displayName: currentUserName,
-                            photoURL: currentUserPhoto,
-                        },
-                        [userId]: {
-                            displayName: user.displayName || user.name || 'User',
-                            photoURL: user.photoURL || '',
-                        },
+                    created_by: currentUser.id,
+                    participants: [currentUser.id, userId],
+                    participant_details: {
+                        [currentUser.id]: { displayName: myName, photoURL: myPhoto },
+                        [userId]: { displayName: user.displayName || user.name || 'User', photoURL: user.photoURL || '' },
                     },
-                    unreadCount: {
-                        [currentUser.uid]: 0,
-                        [userId]: 0,
-                    },
-                    mutedBy: [],
-                    pinnedBy: [],
-                    createdAt: firestore.FieldValue.serverTimestamp(),
-                    updatedAt: firestore.FieldValue.serverTimestamp(),
-                });
-                chatId = newChatRef.id;
+                    unread_count: { [currentUser.id]: 0, [userId]: 0 },
+                    muted_by: [],
+                    pinned_by: [],
+                }).select('id').single();
+                chatId = newChat?.id;
             }
 
             navigation.navigate('Chat', {

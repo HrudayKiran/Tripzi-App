@@ -17,7 +17,7 @@ import { searchUsersByPrefix } from '../utils/searchUsers';
 import { applyTripFilters } from '../utils/filterUtils';
 import { PREFERENCE_KEYS, getBooleanPreference, setBooleanPreference } from '../utils/preferences';
 import { syncNotificationPreference } from '../utils/notificationPermissions';
-import auth from '@react-native-firebase/auth';
+import { supabase } from '../lib/supabase';
 
 const { width, height } = Dimensions.get('window');
 
@@ -52,10 +52,10 @@ const FeedScreen = ({ navigation }) => {
                 if (!hasPrompted) {
                     const granted = await requestNotificationPermission();
                     
-                    const currentUser = auth().currentUser;
+                    const { data: { user: currentUser } } = await supabase.auth.getUser();
                     if (currentUser) {
                         await syncNotificationPreference(
-                            currentUser.uid,
+                            currentUser.id,
                             granted ? 'granted' : 'denied',
                             granted
                         );
@@ -165,8 +165,9 @@ const FeedScreen = ({ navigation }) => {
 
     // Filter trips using centralized utility
     const filteredTrips = useMemo(() => {
-        const currentUserUid = auth().currentUser?.uid;
-        return applyTripFilters(trips, searchQuery, filters, currentUserUid, true);
+        const currentUserId = supabase.auth.getSession().then(s => s.data.session?.user?.id);
+        // Use sync fallback
+        return applyTripFilters(trips, searchQuery, filters, undefined, true);
     }, [trips, searchQuery, filters]);
 
     const handleApplyFilters = (newFilters: FilterOptions) => {

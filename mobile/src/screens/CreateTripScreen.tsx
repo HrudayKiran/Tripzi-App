@@ -9,8 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
 import { deleteTripImagesFromR2, uploadTripImageToR2 } from '../utils/imageUpload';
@@ -220,7 +219,7 @@ const CreateTripScreen = ({ navigation, route }: any) => {
     const handlePostTrip = async () => {
         if (!validateForm()) return;
 
-        const currentUser = auth().currentUser;
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
         if (!currentUser) {
             Alert.alert('Error', 'You need to be logged in to create a trip.');
             navigation.navigate('Start');
@@ -231,8 +230,12 @@ const CreateTripScreen = ({ navigation, route }: any) => {
         const newObjectKeys: string[] = [];
 
         try {
-            const currentUserDoc = await firestore().collection('users').doc(currentUser.uid).get();
-            const currentUserData = currentUserDoc.data() || {};
+            const { data: currentUserData } = await supabase
+                .from('profiles')
+                .select('name, display_name, photo_url, username')
+                .eq('id', currentUser.id)
+                .maybeSingle();
+            const userData: { name?: string; display_name?: string; photo_url?: string; username?: string } = currentUserData || {};
 
             let uploadedImageData: Array<{ uri: string, location: string, objectKey: string | null }> = [];
             if (tripImages.length > 0) {
@@ -250,7 +253,7 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                     }
 
                     try {
-                        const uploadResult = await uploadTripImageToR2(imageUri, currentUser.uid);
+                        const uploadResult = await uploadTripImageToR2(imageUri, currentUser.id);
                         if (uploadResult.success && uploadResult.url && uploadResult.objectKey) {
                             uploadedImageData.push({
                                 uri: uploadResult.url,
@@ -278,57 +281,54 @@ const CreateTripScreen = ({ navigation, route }: any) => {
             const tripData = {
                 title,
                 images: finalImages,
-                imageLocations: finalLocations, // Save specific place names
-                fromLocation,
-                toLocation,
-                mapsLink: generateMapsLink(toLocation),
-                fromDate: firestore.Timestamp.fromDate(fromDate),
-                toDate: firestore.Timestamp.fromDate(toDate),
+                image_locations: finalLocations,
+                from_location: fromLocation,
+                to_location: toLocation,
+                maps_link: generateMapsLink(toLocation),
+                from_date: fromDate.toISOString(),
+                to_date: toDate.toISOString(),
                 duration: getDuration(),
-                tripTypes,
-                transportModes,
-                costPerPerson: parseFloat(costPerPerson) || 0,
-                totalCost: parseFloat(costPerPerson) || 0,
+                trip_types: tripTypes,
+                transport_modes: transportModes,
+                cost_per_person: parseFloat(costPerPerson) || 0,
+                total_cost: parseFloat(costPerPerson) || 0,
                 cost: parseFloat(costPerPerson) || 0,
-                accommodationType,
-                bookingStatus,
-                accommodationDays: accommodationDays ? parseInt(accommodationDays) : null,
-                maxTravelers: parseInt(maxTravelers) || 5,
-                currentTravelers: 1,
-                genderPreference,
+                accommodation_type: accommodationType,
+                booking_status: bookingStatus,
+                accommodation_days: accommodationDays ? parseInt(accommodationDays) : null,
+                max_travelers: parseInt(maxTravelers) || 5,
+                current_travelers: 1,
+                gender_preference: genderPreference,
                 description,
-                mandatoryItems: mandatoryItems.split(',').map(item => item.trim()).filter(Boolean),
-                placesToVisit: placesToVisit.split(',').map(place => place.trim()).filter(Boolean),
-                userId: currentUser.uid,
-                ownerDisplayName: currentUserData.name || currentUserData.displayName || currentUser.displayName || 'Traveler',
-                ownerPhotoURL: currentUserData.photoURL || currentUser.photoURL || null,
-                ownerUsername: currentUserData.username || null,
-                participants: [currentUser.uid],
+                mandatory_items: mandatoryItems.split(',').map(item => item.trim()).filter(Boolean),
+                places_to_visit: placesToVisit.split(',').map(place => place.trim()).filter(Boolean),
+                user_id: currentUser.id,
+                owner_display_name: userData.name || userData.display_name || currentUser.user_metadata?.full_name || 'Traveler',
+                owner_photo_url: userData.photo_url || currentUser.user_metadata?.avatar_url || null,
+                owner_username: userData.username || null,
+                participants: [currentUser.id],
                 likes: [],
-                imageObjectKeys: finalObjectKeys,
-
-                createdAt: firestore.FieldValue.serverTimestamp(),
+                image_object_keys: finalObjectKeys,
                 location: toLocation,
-                tripType: tripTypes[0] || 'Adventure',
-                coverImage: finalImages[0],
-                // video removed
+                trip_type: tripTypes[0] || 'Adventure',
+                cover_image: finalImages[0],
             };
 
             // Create trip
-            const tripRef = await firestore().collection('trips').add(tripData);
+            const { data: tripRow, error: tripErr } = await supabase.from('trips').insert(tripData).select('id').single();
+            if (tripErr || !tripRow) throw tripErr || new Error('Failed to create trip');
 
 
             // Create group chat for the trip
             try {
-                await firestore().collection('chats').doc(`trip_${tripRef.id}`).set({
+                await supabase.from('chats').insert({
+                    id: `trip_${tripRow.id}`,
                     type: 'group',
-                    tripId: tripRef.id,
-                    tripTitle: title,
-                    participants: [currentUser.uid],
-                    createdBy: currentUser.uid,
-                    createdAt: firestore.FieldValue.serverTimestamp(),
-                    lastMessage: 'Trip group created!',
-                    lastMessageTime: firestore.FieldValue.serverTimestamp(),
+                    trip_id: tripRow.id,
+                    trip_title: title,
+                    participants: [currentUser.id],
+                    created_by: currentUser.id,
+                    last_message: 'Trip group created!',
                 });
             } catch {
                 // Group chat creation failed (non-critical)
@@ -336,7 +336,7 @@ const CreateTripScreen = ({ navigation, route }: any) => {
 
             setIsPosting(false);
             Alert.alert('Success! 🎉', 'Your trip has been posted!');
-            navigation.navigate('UserProfile', { userId: auth().currentUser?.uid });
+            navigation.navigate('UserProfile', { userId: currentUser.id });
         } catch (error: any) {
             if (newObjectKeys.length > 0) {
                 await deleteTripImagesFromR2(newObjectKeys);

@@ -13,9 +13,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
-import { deleteFromStorage, deleteProfileImageFromR2 } from '../utils/imageUpload';
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { deleteProfileImageFromR2 } from '../utils/imageUpload';
+import { supabase } from '../lib/supabase';
 import { SPACING, FONT_SIZE, FONT_WEIGHT } from '../styles';
 
 const { width, height } = Dimensions.get('window');
@@ -64,37 +63,23 @@ const ProfilePictureViewer = ({
         try {
             if (imageObjectKey) {
                 await deleteProfileImageFromR2(imageObjectKey);
-            } else if (imageUrl.includes('firebasestorage')) {
-                try {
-                    await deleteFromStorage(imageUrl);
-                } catch (e) {
-
-                }
             }
 
-            // 2. Always update Firestore to remove URL
-            const userId = auth().currentUser?.uid;
-            if (userId) {
-                await firestore().collection('users').doc(userId).update({
-                    photoURL: null,
-                    photoObjectKey: null,
-                });
-
-                // Keep Firebase Auth profile in sync so no stale fallback avatar remains.
-                try {
-                    await auth().currentUser?.updateProfile({ photoURL: null });
-                } catch (e) {
-
-                }
+            // Update Supabase profile to remove URL
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user?.id) {
+                await supabase.from('profiles').update({
+                    photo_url: null,
+                    photo_object_key: null,
+                }).eq('id', user.id);
             }
 
             onDeleted?.();
             onClose();
             Alert.alert('Success', 'Profile picture removed.');
-            return; // Exit early as we manually handled success
+            return;
 
         } catch (error) {
-
             Alert.alert('Error', 'Failed to delete image. Please try again.');
         } finally {
             setIsDeleting(false);

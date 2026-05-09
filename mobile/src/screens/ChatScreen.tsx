@@ -25,16 +25,15 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
-import { useChatMessages, Message, ReplyTo } from '../hooks/useChatMessages';
+import { useChatMessages, ChatMessage, ReplyTo } from '../hooks/useChatMessages';
 import { useChats } from '../hooks/useChats';
 import { getPublicProfilesByIds } from '../utils/publicProfiles';
 import { getBooleanPreference, PREFERENCE_KEYS } from '../utils/preferences';
 import DefaultAvatar from '../components/DefaultAvatar';
 import LocationPickerModal from '../components/LocationPickerModal';
 import LiveLocationMapModal from '../components/LiveLocationMapModal';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
+import { supabase } from '../lib/supabase';
+import { pickAndUploadImage, uploadChatImageToR2 } from '../utils/imageUpload';
 import { format, isToday, isYesterday, isSameDay, differenceInMinutes, addMinutes } from 'date-fns';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -63,29 +62,32 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const { chats } = useChats();
-    const currentUser = auth().currentUser;
+    const [currentUser, setCurrentUser] = useState<any>(null);
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+    }, []);
     const chat = chats.find((c) => c.id === chatId);
     const isGroupChat = isGroupParam || chat?.type === 'group';
     const chatCollection = routeCollectionName || chat?.collectionName || (isGroupChat ? 'group_chats' : 'chats');
-    const clearedAt = currentUser ? chat?.clearedAt?.[currentUser.uid] : undefined;
+    const clearedAt = currentUser ? chat?.clearedAt?.[currentUser.id] : undefined;
 
-    const { messages, loading, sendMessage, markAsRead } = useChatMessages(chatId, clearedAt, chatCollection);
+
+    const { messages, loading, sendMessage, markAsRead } = useChatMessages(chatId, clearedAt);
     const [inputText, setInputText] = useState('');
     const [sending, setSending] = useState(false);
     const [uploading, setUploading] = useState(false);
     const flatListRef = useRef<FlatList>(null);
     const sendingRef = useRef(false); // Ref-based lock to prevent double-send
-    // Ref-based lock to prevent double-send
 
     // Context menu state
-    const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+    const [selectedMessage, setSelectedMessage] = useState<ChatMessage | null>(null);
     const [showContextMenu, setShowContextMenu] = useState(false);
 
     // Reply state
     const [replyingTo, setReplyingTo] = useState<ReplyTo | null>(null);
 
     // Edit state
-    const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+    const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
     const [editText, setEditText] = useState('');
 
     // Attachment picker state
@@ -94,7 +96,6 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     // Image viewer state
     const [viewingImage, setViewingImage] = useState<string | null>(null);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
-
 
     // Location state
     const [gettingLocation, setGettingLocation] = useState(false);
@@ -111,6 +112,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     const [isTyping, setIsTyping] = useState(false);
     const [otherUserTyping, setOtherUserTyping] = useState(false);
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const lastTypingUpdate = useRef<number>(0);
 
     // Chat menu state (three-dots)
     const [showChatMenu, setShowChatMenu] = useState(false);
@@ -140,7 +142,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     }, [chat]);
 
     // Get chat details
-    const otherParticipantUid = chat?.participants.find((uid) => uid !== currentUser?.uid) || otherUserId;
+    const otherParticipantUid = chat?.participants.find((uid) => uid !== currentUser?.id) || otherUserId;
     const otherParticipant = chat?.participantDetails?.[otherParticipantUid || ''];
 
     const displayName = chat?.type === 'group'
@@ -208,49 +210,46 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     // Fetch last seen + live profile photo for direct chats
     useEffect(() => {
         if (!otherParticipantUid || chat?.type === 'group') return;
-        const unsub = firestore()
-            .collection('public_users')
-            .doc(otherParticipantUid)
-            .onSnapshot((doc) => {
-                if (!doc.exists) return;
-                const data = doc.data();
-                // Live photo
-                if (data?.photoURL) setLivePhoto(data.photoURL);
-                // Last seen
-                const presence = typeof data?.presence === 'string' ? data.presence : '';
-                const lastSeenValue = data?.lastSeenAt || data?.lastSeen;
-
-                if (presence === 'online') {
-                    setLastSeenText('Online');
-                    return;
-                }
-
-                if (lastSeenValue) {
-                    try {
-                        const ts = lastSeenValue.toDate ? lastSeenValue.toDate() : new Date(lastSeenValue);
-                        const diffMs = Date.now() - ts.getTime();
-                        if (diffMs < 60 * 1000) {
-                            setLastSeenText('Last seen just now');
-                        } else if (diffMs < 60 * 60 * 1000) {
-                            setLastSeenText(`last seen ${Math.floor(diffMs / 60000)} min ago`);
-                        } else if (diffMs < 24 * 60 * 60 * 1000) {
-                            setLastSeenText(`last seen ${Math.floor(diffMs / 3600000)}h ago`);
-                        } else {
-                            setLastSeenText(`last seen ${format(ts, 'MMM d, h:mm a')}`);
-                        }
-                    } catch { setLastSeenText(''); }
-                } else {
-                    setLastSeenText('');
-                }
-            }, () => { });
-        return () => unsub();
+        const loadPresence = async () => {
+            const { data } = await supabase.from('public_users').select('photo_url, presence, last_seen_at, last_seen').eq('id', otherParticipantUid).maybeSingle();
+            if (!data) return;
+            if (data.photo_url) setLivePhoto(data.photo_url);
+            const presence = typeof data.presence === 'string' ? data.presence : '';
+            const lastSeenValue = data.last_seen_at || data.last_seen;
+            if (presence === 'online') { setLastSeenText('Online'); return; }
+            if (lastSeenValue) {
+                try {
+                    const ts = new Date(lastSeenValue);
+                    const diffMs = Date.now() - ts.getTime();
+                    if (diffMs < 60 * 1000) setLastSeenText('Last seen just now');
+                    else if (diffMs < 60 * 60 * 1000) setLastSeenText(`last seen ${Math.floor(diffMs / 60000)} min ago`);
+                    else if (diffMs < 24 * 60 * 60 * 1000) setLastSeenText(`last seen ${Math.floor(diffMs / 3600000)}h ago`);
+                    else setLastSeenText(`last seen ${format(ts, 'MMM d, h:mm a')}`);
+                } catch { setLastSeenText(''); }
+            } else { setLastSeenText(''); }
+        };
+        loadPresence();
+        const channel = supabase.channel(`presence-${otherParticipantUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'public_users', filter: `id=eq.${otherParticipantUid}` }, () => { loadPresence(); })
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
     }, [otherParticipantUid, chat?.type]);
 
+
+
+
+
+
+
+
+
+
+    // Auto-save incoming media to gallery if preference enabled
     useEffect(() => {
         if (!messages.length || !currentUser) return;
 
         const incomingImageIds = messages
-            .filter((message) => message.type === 'image' && !!message.mediaUrl && message.senderId !== currentUser.uid)
+            .filter((message) => message.type === 'image' && !!message.mediaUrl && message.senderId !== currentUser.id)
             .map((message) => message.id);
 
         if (skipInitialAutoSave.current) {
@@ -263,7 +262,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             (message) =>
                 message.type === 'image' &&
                 !!message.mediaUrl &&
-                message.senderId !== currentUser.uid &&
+                message.senderId !== currentUser.id &&
                 !seededIncomingMediaIds.current.has(message.id)
         );
 
@@ -308,65 +307,87 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     useEffect(() => {
         if (!chatId || !currentUser) return;
 
-        const unsubscribe = firestore()
-            .collection(chatCollection)
-            .doc(chatId)
-            .onSnapshot((doc) => {
-                if (!doc || !doc.exists) {
-                    setOtherUserTyping(false);
-                    return;
-                }
-                const data = doc.data();
+        const table = chatCollection === 'group_chats' ? 'group_chats' : 'chats';
+        const channel = supabase
+            .channel(`typing-${chatId}`)
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: table,
+                filter: `id=eq.${chatId}`,
+            }, (payload) => {
+                const data = payload.new as any;
                 if (data?.typing) {
                     const typingUsers = Object.entries(data.typing)
                         .filter(([uid, timestamp]: [string, any]) => {
-                            if (uid === currentUser.uid) return false;
-                            const ts = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
-                            return Date.now() - ts.getTime() < 5000;
+                            if (uid === currentUser.id) return false;
+                            const ts = new Date(timestamp);
+                            return Date.now() - ts.getTime() < 10000;
                         });
                     setOtherUserTyping(typingUsers.length > 0);
                 } else {
                     setOtherUserTyping(false);
                 }
-            }, () => { });
+            })
+            .subscribe();
 
-        return () => unsubscribe();
+        supabase.from(table).select('typing').eq('id', chatId).maybeSingle().then(({ data }) => {
+            if (data?.typing) {
+                const typingUsers = Object.entries(data.typing)
+                    .filter(([uid, timestamp]: [string, any]) => {
+                        if (uid === currentUser.id) return false;
+                        const ts = new Date(timestamp as string);
+                        return Date.now() - ts.getTime() < 10000;
+                    });
+                setOtherUserTyping(typingUsers.length > 0);
+            }
+        });
+
+        return () => { supabase.removeChannel(channel); };
     }, [chatId, currentUser]);
 
     // Check for active live sharers
     useEffect(() => {
         if (!chatId) return;
-        const unsubscribe = firestore()
-            .collection(chatCollection)
-            .doc(chatId)
-            .collection('live_shares')
-            .where('isActive', '==', true)
-            .where('validUntil', '>', firestore.Timestamp.now())
-            .onSnapshot(snapshot => {
-                // Guard against null snapshot
-                if (!snapshot) {
-                    setActiveSharersCount(0);
-                    return;
-                }
+        const channel = supabase
+            .channel(`live-shares-${chatId}`)
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'live_shares',
+                filter: `chat_id=eq.${chatId}`,
+            }, () => {
+                fetchActiveSharers();
+            })
+            .subscribe();
 
-                setActiveSharersCount(snapshot.size);
+        const fetchActiveSharers = async () => {
+            const { data, error } = await supabase
+                .from('live_shares')
+                .select('*')
+                .eq('chat_id', chatId)
+                .eq('is_active', true)
+                .gt('updated_at', new Date(Date.now() - 3600000).toISOString());
 
-                // Check if I am sharing
-                if (currentUser) {
-                    const myShare = snapshot.docs.find(doc => doc.id === currentUser.uid);
-                    if (myShare && !isSharingLive) {
-                        // Resume sharing if app restarted but share is valid
-                        // For simplicity, we just set UI state to true, 
-                        // re-enabling the watcher requires user action or more complex background restoration
-                        setIsSharingLive(true);
-                        startLiveLocationHeaderResume();
-                    } else if (!myShare && isSharingLive) {
-                        setIsSharingLive(false);
-                        stopLiveSharing(false); // Stop watcher if remote says invalid
-                    }
+            if (error) return;
+
+            setActiveSharersCount(data?.length || 0);
+
+            if (currentUser) {
+                const myShare = data?.find(s => s.user_id === currentUser.id);
+                if (myShare && !isSharingLive) {
+                    setIsSharingLive(true);
+                    startLiveLocationHeaderResume();
+                } else if (!myShare && isSharingLive) {
+                    setIsSharingLive(false);
+                    stopLiveSharing(false);
                 }
-            });
-        return () => unsubscribe();
+            }
+        };
+
+        fetchActiveSharers();
+
+        return () => { supabase.removeChannel(channel); };
     }, [chatId, currentUser]);
 
     const startLiveLocationHeaderResume = async () => {
@@ -380,36 +401,43 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     };
 
     // Update typing status
-    const updateTypingStatus = useCallback((isTyping: boolean) => {
+    const updateTypingStatus = useCallback((isTypingParam: boolean) => {
         if (!chatId || !currentUser) return;
 
         if (typingTimeoutRef.current) {
             clearTimeout(typingTimeoutRef.current);
         }
 
-        if (isTyping) {
-            firestore()
-                .collection(chatCollection)
-                .doc(chatId)
-                .update({
-                    [`typing.${currentUser.uid}`]: firestore.FieldValue.serverTimestamp(),
-                })
-                .catch(() => { });
+        const table = chatCollection === 'group_chats' ? 'group_chats' : 'chats';
 
-            // Clear typing after 3 seconds
+        if (isTypingParam) {
+            const now = Date.now();
+            // Throttle DB updates to once every 2 seconds
+            if (!isTyping || (now - lastTypingUpdate.current > 2000)) {
+                setIsTyping(true);
+                lastTypingUpdate.current = now;
+                supabase.from(table).select('typing').eq('id', chatId).maybeSingle().then(({ data }) => {
+                    const typing = data?.typing || {};
+                    typing[currentUser.id] = new Date().toISOString();
+                    supabase.from(table).update({ typing }).eq('id', chatId);
+                });
+            }
+
             typingTimeoutRef.current = setTimeout(() => {
                 updateTypingStatus(false);
             }, 3000);
         } else {
-            firestore()
-                .collection(chatCollection)
-                .doc(chatId)
-                .update({
-                    [`typing.${currentUser.uid}`]: firestore.FieldValue.delete(),
-                })
-                .catch(() => { });
+            setIsTyping(false);
+            lastTypingUpdate.current = 0;
+            supabase.from(table).select('typing').eq('id', chatId).maybeSingle().then(({ data }) => {
+                const typing = data?.typing || {};
+                if (typing[currentUser.id]) {
+                    delete typing[currentUser.id];
+                    supabase.from(table).update({ typing }).eq('id', chatId);
+                }
+            });
         }
-    }, [chatId, currentUser]);
+    }, [chatId, currentUser, isTyping, chatCollection]);
 
     // Handle text input
     const handleTextChange = (text: string) => {
@@ -436,11 +464,9 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             }
         }
 
-        if (text.length > 0 && !isTyping) {
-            setIsTyping(true);
+        if (text.length > 0) {
             updateTypingStatus(true);
-        } else if (text.length === 0 && isTyping) {
-            setIsTyping(false);
+        } else {
             updateTypingStatus(false);
         }
     };
@@ -544,44 +570,42 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         setUploading(true);
 
         try {
-            const filename = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
-            const storageRef = storage().ref(`chats/${chatId}/images/${filename}`);
-            await storageRef.putFile(imageUri);
-            const downloadUrl = await storageRef.getDownloadURL();
 
-            const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
-            const userData = userDoc.data();
 
-            await firestore()
-                .collection(chatCollection)
-                .doc(chatId)
-                .collection('messages')
-                .add({
-                    senderId: currentUser.uid,
-                    senderName: userData?.name || userData?.displayName || currentUser.displayName || 'User',
-                    type: 'image',
-                    mediaUrl: downloadUrl,
-                    status: 'sent',
-                    readBy: {},
-                    deliveredTo: [],
-                    deletedFor: [],
-                    createdAt: firestore.FieldValue.serverTimestamp(),
-                });
 
-            await firestore()
-                .collection(chatCollection)
-                .doc(chatId)
+            const { success, url, error: uploadError } = await uploadChatImageToR2(imageUri, currentUser.id, chatId);
+            if (!success || !url) throw new Error(uploadError || 'Upload failed');
+            const downloadUrl = url;
+
+            const { data: userData } = await supabase.from('profiles').select('name').eq('id', currentUser.id).maybeSingle();
+            const uData: any = userData || {};
+
+            const isGroup = chat?.type === 'group';
+            await supabase.from('messages').insert({
+                sender_id: currentUser.id,
+                sender_name: uData.name || currentUser.user_metadata?.full_name || 'User',
+                type: 'image',
+                media_url: downloadUrl,
+                status: 'sent',
+                chat_id: isGroup ? null : chatId,
+                group_chat_id: isGroup ? chatId : null,
+                read_by: {},
+                delivered_to: [],
+            });
+            const table = isGroup ? 'group_chats' : 'chats';
+            await supabase
+                .from(table)
                 .update({
-                    lastMessage: {
+                    last_message: {
                         text: '📷 Photo',
-                        senderId: currentUser.uid,
-                        senderName: userData?.name || userData?.displayName || currentUser.displayName || 'User',
-                        timestamp: firestore.FieldValue.serverTimestamp(),
+                        sender_id: currentUser.id,
+                        sender_name: uData.name || currentUser.user_metadata?.full_name || 'User',
+                        created_at: new Date().toISOString(),
                         type: 'image',
                     },
-                    updatedAt: firestore.FieldValue.serverTimestamp(),
-                    [`unreadCount.${currentUser.uid}`]: 0,
-                });
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', chatId);
         } catch (error) {
 
             Alert.alert('Error', 'Failed to send image.');
@@ -604,18 +628,23 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             return;
         }
 
-        await firestore()
-            .collection(chatCollection)
-            .doc(chatId)
-            .collection('live_shares')
-            .doc(currentUser.uid)
-            .set({
-                latitude: coords.latitude,
-                longitude: coords.longitude,
-                heading: coords.heading ?? null,
-                timestamp: firestore.FieldValue.serverTimestamp(),
-            }, { merge: true })
-            .catch(() => { });
+        try {
+            const isGroup = chat?.type === 'group';
+            await supabase
+                .from('live_shares')
+                .upsert({
+                    chat_id: chatId,
+                    chat_type: isGroup ? 'group' : 'direct',
+                    user_id: currentUser.id,
+                    latitude: coords.latitude,
+                    longitude: coords.longitude,
+                    heading: coords.heading ?? null,
+                    is_active: true,
+                    updated_at: new Date().toISOString(),
+                }, { onConflict: 'chat_id,user_id' });
+        } catch (error) {
+            console.error('Error updating live location:', error);
+        }
     };
 
     // Location sharing
@@ -671,45 +700,42 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
 
             if (!currentUser || !chatId) return;
 
-            const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
-            const userData = userDoc.data();
+            const userDoc = await supabase.from('profiles').select('name').eq('id', currentUser.id).maybeSingle();
+            const userData: any = userDoc.data || {};
 
-            await firestore()
-                .collection(chatCollection)
-                .doc(chatId)
-                .collection('messages')
-                .add({
-                    senderId: currentUser.uid,
-                    senderName: userData?.name || userData?.displayName || currentUser.displayName || 'User',
-                    type: 'location',
-                    location: {
-                        latitude: locationData.coords.latitude,
-                        longitude: locationData.coords.longitude,
-                        address: address,
-                    },
-                    status: 'sent',
-                    readBy: {},
-                    deliveredTo: [],
-                    deletedFor: [],
-                    createdAt: firestore.FieldValue.serverTimestamp(),
-                });
+            const isGroup = chat?.type === 'group';
+            const senderName = userData?.name || currentUser.user_metadata?.full_name || 'User';
 
-            await firestore()
-                .collection(chatCollection)
-                .doc(chatId)
+            await supabase.from('messages').insert({
+                sender_id: currentUser.id,
+                sender_name: senderName,
+                type: 'location',
+                location: {
+                    latitude: locationData.coords.latitude,
+                    longitude: locationData.coords.longitude,
+                    address: address,
+                },
+                status: 'sent',
+                chat_id: isGroup ? null : chatId,
+                group_chat_id: isGroup ? chatId : null,
+                read_by: {},
+                delivered_to: [],
+                deleted_for: [],
+            });
+            const table = isGroup ? 'group_chats' : 'chats';
+            await supabase
+                .from(table)
                 .update({
-                    lastMessage: {
+                    last_message: {
                         text: '📍 Location',
-                        senderId: currentUser.uid,
-                        senderName: userData?.name || userData?.displayName || currentUser.displayName || 'User',
-                        timestamp: firestore.FieldValue.serverTimestamp(),
+                        sender_id: currentUser.id,
+                        sender_name: senderName,
+                        created_at: new Date().toISOString(),
                         type: 'location',
                     },
-                    updatedAt: firestore.FieldValue.serverTimestamp(),
-                    [`unreadCount.${currentUser.uid}`]: 0,
-                });
-
-
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', chatId);
         } catch (error) {
 
             Alert.alert('Error', 'Failed to get location.');
@@ -742,37 +768,6 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                             const initialLocation = await Location.getCurrentPositionAsync({
                                 accuracy: Location.Accuracy.Balanced,
                             });
-
-                            const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
-                            const userData = userDoc.data();
-
-                            await firestore()
-                                .collection(chatCollection)
-                                .doc(chatId)
-                                .collection('live_shares')
-                                .doc(currentUser.uid)
-                                .set({
-                                    isActive: true,
-                                    validUntil: firestore.Timestamp.fromDate(addMinutes(new Date(), durationMinutes)),
-                                    timestamp: firestore.FieldValue.serverTimestamp(),
-                                    displayName: userData?.name || userData?.displayName || currentUser.displayName || 'User',
-                                    photoURL: userData?.photoURL || userData?.image || currentUser.photoURL || null,
-                                    latitude: initialLocation.coords.latitude,
-                                    longitude: initialLocation.coords.longitude,
-                                    heading: initialLocation.coords.heading ?? null,
-                                }, { merge: true });
-
-                            await firestore()
-                                .collection(chatCollection)
-                                .doc(chatId)
-                                .collection('messages')
-                                .add({
-                                    senderId: currentUser.uid,
-                                    senderName: 'System',
-                                    type: 'system',
-                                    text: `${userData?.name || userData?.displayName || 'User'} started sharing live location.`,
-                                    createdAt: firestore.FieldValue.serverTimestamp(),
-                                });
 
                             await updateLiveShareCoordinates(initialLocation.coords);
                             startLocationWatcher();
@@ -828,14 +823,15 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         setIsSharingLive(false);
 
         if (updateDoc && currentUser && chatId) {
-            await firestore()
-                .collection(chatCollection)
-                .doc(chatId)
-                .collection('live_shares')
-                .doc(currentUser.uid)
-                .update({
-                    isActive: false
-                }).catch(() => { });
+            try {
+                await supabase
+                    .from('live_shares')
+                    .update({ is_active: false })
+                    .eq('chat_id', chatId)
+                    .eq('user_id', currentUser.id);
+            } catch (error) {
+                console.error('Error stopping live sharing:', error);
+            }
         }
     };
 
@@ -860,7 +856,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
 
 
     // Long press handler
-    const handleLongPress = (message: Message) => {
+    const handleLongPress = (message: ChatMessage) => {
         setSelectedMessage(message);
         setShowContextMenu(true);
     };
@@ -885,7 +881,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     };
 
     const handleEdit = () => {
-        if (!selectedMessage || selectedMessage.senderId !== currentUser?.uid) return;
+        if (!selectedMessage || selectedMessage.senderId !== currentUser?.id) return;
         setEditingMessage(selectedMessage);
         setEditText(selectedMessage.text || '');
         setShowContextMenu(false);
@@ -895,7 +891,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     const handleDelete = (forEveryone: boolean = false) => {
         if (!selectedMessage || !currentUser) return;
 
-        const canDeleteForEveryone = selectedMessage.senderId === currentUser.uid &&
+        const canDeleteForEveryone = selectedMessage.senderId === currentUser.id &&
             selectedMessage.createdAt &&
             differenceInMinutes(new Date(), (selectedMessage.createdAt as any).toDate ? (selectedMessage.createdAt as any).toDate() : new Date(selectedMessage.createdAt as any)) < 60;
 
@@ -911,25 +907,33 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            const msgRef = firestore()
-                                .collection(chatCollection)
-                                .doc(chatId)
-                                .collection('messages')
-                                .doc(selectedMessage.id);
-
                             if (forEveryone && canDeleteForEveryone) {
-                                await msgRef.update({
-                                    deletedForEveryoneAt: firestore.FieldValue.serverTimestamp(),
-                                    text: '',
-                                    mediaUrl: null,
-                                });
+                                await supabase
+                                    .from('messages')
+                                    .update({
+                                        deleted_for_everyone_at: new Date().toISOString(),
+                                        text: '',
+                                        media_url: null,
+                                    })
+                                    .eq('id', selectedMessage.id);
                             } else {
-                                await msgRef.update({
-                                    deletedFor: firestore.FieldValue.arrayUnion(currentUser.uid),
-                                });
+                                const { data: msg } = await supabase
+                                    .from('messages')
+                                    .select('deleted_for')
+                                    .eq('id', selectedMessage.id)
+                                    .single();
+
+                                const deletedFor = msg?.deleted_for || [];
+                                if (!deletedFor.includes(currentUser.id)) {
+                                    deletedFor.push(currentUser.id);
+                                    await supabase
+                                        .from('messages')
+                                        .update({ deleted_for: deletedFor })
+                                        .eq('id', selectedMessage.id);
+                                }
                             }
                         } catch (error) {
-
+                            // Error handling
                         }
                     },
                 },
@@ -944,21 +948,28 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         if (!editingMessage || !editText.trim()) return;
 
         try {
-            await firestore()
-                .collection(chatCollection)
-                .doc(chatId)
-                .collection('messages')
-                .doc(editingMessage.id)
+            await supabase
+                .from('messages')
                 .update({
                     text: editText.trim(),
-                    editedAt: firestore.FieldValue.serverTimestamp(),
-                });
+                    edited_at: new Date().toISOString(),
+                })
+                .eq('id', editingMessage.id);
             setEditingMessage(null);
             setEditText('');
         } catch (error) {
-
             Alert.alert('Error', 'Failed to edit message.');
         }
+    };
+
+    const getMessageStatus = (message: ChatMessage) => {
+        if (message.senderId !== currentUser?.id) return null;
+
+        const readByOthers = Object.keys(message.readBy || {}).filter(uid => uid !== currentUser?.id);
+        if (readByOthers.length > 0) return 'read';
+        if (message.deliveredTo?.length > 0) return 'delivered';
+        if (message.status === 'sent') return 'sent';
+        return 'pending';
     };
 
     // Clear all messages in chat
@@ -973,24 +984,16 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            const messagesRef = firestore()
-                                .collection(chatCollection)
-                                .doc(chatId)
-                                .collection('messages');
+                            if (!currentUser || !chatId) return;
+                            const table = chatCollection === 'group_chats' ? 'group_chats' : 'chats';
 
-                            const snapshot = await messagesRef.get();
-                            const batch = firestore().batch();
+                            const { data } = await supabase.from(table).select('cleared_at').eq('id', chatId).maybeSingle();
+                            const clearedAt = data?.cleared_at || {};
+                            clearedAt[currentUser.id] = new Date().toISOString();
 
-                            snapshot.docs.forEach((doc) => {
-                                batch.update(doc.ref, {
-                                    deletedFor: firestore.FieldValue.arrayUnion(currentUser?.uid),
-                                });
-                            });
-
-                            await batch.commit();
+                            await supabase.from(table).update({ cleared_at: clearedAt }).eq('id', chatId);
                             setShowChatMenu(false);
                         } catch (error) {
-
                             Alert.alert('Error', 'Failed to clear chat.');
                         }
                     },
@@ -1028,33 +1031,30 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            const batch = firestore().batch();
-
-                            selectedMessages.forEach((msgId) => {
-                                const msgRef = firestore()
-                                    .collection(chatCollection)
-                                    .doc(chatId)
-                                    .collection('messages')
-                                    .doc(msgId);
-
-                                if (forEveryone) {
-                                    batch.update(msgRef, {
-                                        deletedForEveryoneAt: firestore.FieldValue.serverTimestamp(),
+                            if (!currentUser) return;
+                            const ids = Array.from(selectedMessages);
+                            if (forEveryone) {
+                                await supabase
+                                    .from('messages')
+                                    .update({
+                                        deleted_for_everyone_at: new Date().toISOString(),
                                         text: '',
-                                        mediaUrl: null,
-                                    });
-                                } else {
-                                    batch.update(msgRef, {
-                                        deletedFor: firestore.FieldValue.arrayUnion(currentUser?.uid),
-                                    });
+                                        media_url: null,
+                                    })
+                                    .in('id', ids);
+                            } else {
+                                for (const id of ids) {
+                                    const { data: msg } = await supabase.from('messages').select('deleted_for').eq('id', id).single();
+                                    const deletedFor = msg?.deleted_for || [];
+                                    if (!deletedFor.includes(currentUser.id)) {
+                                        deletedFor.push(currentUser.id);
+                                        await supabase.from('messages').update({ deleted_for: deletedFor }).eq('id', id);
+                                    }
                                 }
-                            });
-
-                            await batch.commit();
+                            }
                             setSelectedMessages(new Set());
                             setIsSelectionMode(false);
                         } catch (error) {
-
                             Alert.alert('Error', 'Failed to delete messages.');
                         }
                     },
@@ -1091,7 +1091,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         }
     };
 
-    const shouldShowDayHeader = (message: Message, index: number) => {
+    const shouldShowDayHeader = (message: ChatMessage, index: number) => {
         if (index === 0) return true;
         const prevMessage = messages[index - 1];
         if (!message.createdAt || !prevMessage?.createdAt) return false;
@@ -1100,16 +1100,6 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         const prevDate = (prevMessage.createdAt as any).toDate ? (prevMessage.createdAt as any).toDate() : new Date(prevMessage.createdAt as any);
 
         return !isSameDay(msgDate, prevDate);
-    };
-
-    const getMessageStatus = (message: Message) => {
-        if (message.senderId !== currentUser?.uid) return null;
-
-        const readByOthers = Object.keys(message.readBy || {}).filter(uid => uid !== currentUser?.uid);
-        if (readByOthers.length > 0) return 'read';
-        if (message.deliveredTo?.length > 0) return 'delivered';
-        if (message.status === 'sent') return 'sent';
-        return 'pending';
     };
 
     const renderStatusIcon = (status: string | null) => {
@@ -1129,8 +1119,8 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         }
     };
 
-    const renderMessage = ({ item, index }: { item: Message; index: number }) => {
-        const isOwn = item.senderId === currentUser?.uid;
+    const renderMessage = ({ item, index }: { item: ChatMessage; index: number }) => {
+        const isOwn = item.senderId === currentUser?.id;
         const showDayHeader = shouldShowDayHeader(item, index);
         const status = getMessageStatus(item);
 
@@ -1520,7 +1510,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                             <Text style={[styles.contextMenuText, { color: colors.text }]}>Reply</Text>
                         </TouchableOpacity>
 
-                        {selectedMessage?.senderId === currentUser?.uid && selectedMessage?.type === 'text' && (
+                        {selectedMessage?.senderId === currentUser?.id && selectedMessage?.type === 'text' && (
                             <TouchableOpacity style={styles.contextMenuItem} onPress={handleEdit}>
                                 <Ionicons name="create-outline" size={20} color={colors.text} />
                                 <Text style={[styles.contextMenuText, { color: colors.text }]}>Edit</Text>
@@ -1532,7 +1522,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                             <Text style={[styles.contextMenuText, { color: '#EF4444' }]}>Delete for Me</Text>
                         </TouchableOpacity>
 
-                        {selectedMessage?.senderId === currentUser?.uid && (
+                        {selectedMessage?.senderId === currentUser?.id && (
                             <TouchableOpacity style={styles.contextMenuItem} onPress={() => handleDelete(true)}>
                                 <Ionicons name="trash-outline" size={20} color="#EF4444" />
                                 <Text style={[styles.contextMenuText, { color: '#EF4444' }]}>Delete for Everyone</Text>

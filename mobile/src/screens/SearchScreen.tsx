@@ -11,7 +11,7 @@ import useTrips from '../hooks/useTrips';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { searchUsersByPrefix } from '../utils/searchUsers';
 import { applyTripFilters } from '../utils/filterUtils';
-import auth from '@react-native-firebase/auth';
+import { supabase } from '../lib/supabase';
 
 const { width } = Dimensions.get('window');
 
@@ -58,8 +58,7 @@ const SearchScreen = ({ navigation }) => {
 
     // Filter trips using centralized utility
     const filteredTrips = useMemo(() => {
-        const currentUserUid = auth().currentUser?.uid;
-        return applyTripFilters(allTrips, searchQuery, filters, currentUserUid, false);
+        return applyTripFilters(allTrips, searchQuery, filters, undefined, false);
     }, [allTrips, searchQuery, filters]);
     
     // Count active filters for badge

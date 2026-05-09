@@ -17,10 +17,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, STATUS, NEUTRAL } from '../styles';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
-import functions from '@react-native-firebase/functions';
+import { supabase } from '../lib/supabase';
+import { workersApi } from '../lib/workersApi';
+import { uploadTripImageToR2 } from '../utils/imageUpload';
 import { searchUsersByPrefix } from '../utils/searchUsers';
 import { getPublicProfilesByIds } from '../utils/publicProfiles';
 import DefaultAvatar from '../components/DefaultAvatar';
@@ -48,7 +47,11 @@ const GroupInfoScreen = ({ navigation, route }) => {
     const { chatId } = route.params;
     const requestedCollection = route.params?.collectionName as 'chats' | 'group_chats' | undefined;
     const { colors } = useTheme();
-    const currentUser = auth().currentUser;
+    const [currentUser, setCurrentUser] = useState<any>(null);
+
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+    }, []);
 
     const [group, setGroup] = useState<GroupData | null>(null);
     const [members, setMembers] = useState<Member[]>([]);
@@ -60,8 +63,8 @@ const GroupInfoScreen = ({ navigation, route }) => {
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [searching, setSearching] = useState(false);
 
-    const isAdmin = group?.createdBy === currentUser?.uid;
-    const isCreator = group?.createdBy === currentUser?.uid;
+    const isAdmin = group?.createdBy === currentUser?.id;
+    const isCreator = group?.createdBy === currentUser?.id;
 
     useEffect(() => {
         loadGroup();
@@ -77,21 +80,21 @@ const GroupInfoScreen = ({ navigation, route }) => {
             let collectionName: 'group_chats' | 'chats' | null = null;
 
             for (const name of collections) {
-                const snapshot = await firestore().collection(name).doc(chatId).get();
-                if (snapshot.exists) {
-                    doc = snapshot;
+                const { data: row } = await supabase.from(name).select('*').eq('id', chatId).maybeSingle();
+                if (row) {
+                    doc = row;
                     collectionName = name;
                     break;
                 }
             }
 
-            if (!doc || !doc.exists || !collectionName) {
+            if (!doc || !collectionName) {
                 Alert.alert('Error', 'Group not found.');
                 navigation.goBack();
                 return;
             }
 
-            const data = { id: doc.id, collectionName, ...doc.data() } as GroupData;
+            const data = { id: doc.id, collectionName, groupName: doc.group_name || doc.trip_title || 'Group', groupIcon: doc.group_icon || doc.trip_image, groupDescription: doc.group_description, participants: doc.participants || [], createdBy: doc.created_by, participantDetails: doc.participant_details } as GroupData;
             setGroup(data);
             setEditName(data.groupName);
 
@@ -126,9 +129,8 @@ const GroupInfoScreen = ({ navigation, route }) => {
     const updateGroupName = async () => {
         if (!editName.trim() || !isAdmin) return;
         try {
-            await firestore().collection(group?.collectionName || requestedCollection || 'group_chats').doc(chatId).update({
-                groupName: editName.trim(),
-            });
+            const table = group?.collectionName || requestedCollection || 'group_chats';
+            await supabase.from(table).update({ group_name: editName.trim() }).eq('id', chatId);
             setGroup((prev) => prev ? { ...prev, groupName: editName.trim() } : null);
             setEditing(false);
         } catch (error) {
@@ -153,15 +155,12 @@ const GroupInfoScreen = ({ navigation, route }) => {
             });
 
             if (!result.canceled && result.assets[0]) {
-                const filename = `${Date.now()}_group.jpg`;
-                const storageRef = storage().ref(`groups/${currentUser.uid}/${filename}`);
-                await storageRef.putFile(result.assets[0].uri);
-                const downloadUrl = await storageRef.getDownloadURL();
-
-                await firestore().collection(group?.collectionName || requestedCollection || 'group_chats').doc(chatId).update({
-                    groupIcon: downloadUrl,
-                });
-                setGroup((prev) => prev ? { ...prev, groupIcon: downloadUrl } : null);
+                const uploadResult = await uploadTripImageToR2(result.assets[0].uri, currentUser.id);
+                if (uploadResult.success && uploadResult.url) {
+                    const table = group?.collectionName || requestedCollection || 'group_chats';
+                    await supabase.from(table).update({ group_icon: uploadResult.url }).eq('id', chatId);
+                    setGroup((prev) => prev ? { ...prev, groupIcon: uploadResult.url } : null);
+                }
             }
         } catch (error) {
             Alert.alert('Error', 'Failed to update group icon.');
@@ -179,7 +178,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
         try {
             const users = await searchUsersByPrefix(query, 10);
             const results = users.filter((user) =>
-                !group?.participants.includes(user.id) && user.id !== currentUser?.uid
+                !group?.participants.includes(user.id) && user.id !== currentUser?.id
             );
 
             setSearchResults(results);
@@ -193,11 +192,11 @@ const GroupInfoScreen = ({ navigation, route }) => {
     const addMember = async (user: any) => {
         if (!isAdmin || !group) return;
         try {
-                            await functions().httpsCallable('addGroupMember')({
-                                chatId,
-                                memberId: user.id,
-                                collectionName: group?.collectionName || requestedCollection || 'group_chats',
-                            });
+            await workersApi('/groups/add-member', { body: {
+                chatId,
+                memberId: user.id,
+                collectionName: group?.collectionName || requestedCollection || 'group_chats',
+            } });
 
             setShowAddMember(false);
             setSearchQuery('');
@@ -209,7 +208,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
     };
 
     const removeMember = (member: Member) => {
-        if (!isAdmin || member.id === currentUser?.uid) return;
+        if (!isAdmin || member.id === currentUser?.id) return;
 
         Alert.alert(
             'Remove Member',
@@ -221,11 +220,11 @@ const GroupInfoScreen = ({ navigation, route }) => {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await functions().httpsCallable('removeGroupMember')({
+                            await workersApi('/groups/remove-member', { body: {
                                 chatId,
                                 memberId: member.id,
                                 collectionName: group?.collectionName || requestedCollection || 'group_chats',
-                            });
+                            } });
 
                             loadGroup();
                         } catch (error) {
@@ -238,7 +237,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
     };
 
     const toggleAdmin = (member: Member) => {
-        if (!isCreator || member.id === currentUser?.uid) return;
+        if (!isCreator || member.id === currentUser?.id) return;
 
         const action = member.role === 'admin' ? 'remove as admin' : 'make admin';
         const newRole = member.role === 'admin' ? 'member' : 'admin';
@@ -252,19 +251,12 @@ const GroupInfoScreen = ({ navigation, route }) => {
                     text: 'Confirm',
                     onPress: async () => {
                         try {
-                            if (newRole === 'admin') {
-                                await functions().httpsCallable('promoteGroupAdmin')({
-                                    chatId,
-                                    memberId: member.id,
-                                    collectionName: group?.collectionName || requestedCollection || 'group_chats',
-                                });
-                            } else {
-                                await functions().httpsCallable('demoteGroupAdmin')({
-                                    chatId,
-                                    memberId: member.id,
-                                    collectionName: group?.collectionName || requestedCollection || 'group_chats',
-                                });
-                            }
+                            const endpoint = newRole === 'admin' ? '/groups/promote-admin' : '/groups/demote-admin';
+                            await workersApi(endpoint, { body: {
+                                chatId,
+                                memberId: member.id,
+                                collectionName: group?.collectionName || requestedCollection || 'group_chats',
+                            } });
                             loadGroup();
                         } catch (error) {
                             Alert.alert('Error', 'Failed to update admin status.');
@@ -286,10 +278,10 @@ const GroupInfoScreen = ({ navigation, route }) => {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await functions().httpsCallable('leaveGroup')({
+                            await workersApi('/groups/leave', { body: {
                                 chatId,
                                 collectionName: group?.collectionName || requestedCollection || 'group_chats',
-                            });
+                            } });
 
                             navigation.navigate('ChatsList');
                         } catch (error) {
@@ -302,7 +294,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
     };
 
     const renderMember = ({ item }: { item: Member }) => {
-        const isMe = item.id === currentUser?.uid;
+        const isMe = item.id === currentUser?.id;
 
         return (
             <TouchableOpacity

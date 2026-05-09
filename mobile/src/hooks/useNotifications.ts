@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { supabase } from '../lib/supabase';
 
 export type NotificationType =
     | 'message'
@@ -47,10 +46,6 @@ interface UseNotificationsReturn {
     refresh: () => void;
 }
 
-/**
- * Hook for real-time notifications from Firestore.
- * Provides notifications list, unread count, and actions to mark as read/delete.
- */
 export function useNotifications(): UseNotificationsReturn {
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
@@ -63,152 +58,100 @@ export function useNotifications(): UseNotificationsReturn {
     }, []);
 
     useEffect(() => {
-        const userId = auth().currentUser?.uid;
-        if (!userId) {
-            setLoading(false);
-            setNotifications([]);
-            return;
-        }
-
-        let unsubscribe = () => {};
         let isMounted = true;
 
         const setup = async () => {
             setLoading(true);
             setError(null);
 
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                if (isMounted) { setLoading(false); setNotifications([]); }
+                return;
+            }
+
             try {
-                const userDoc = await firestore().collection('users').doc(userId).get();
-                const userData = userDoc.data() || {};
-                const notificationsEnabled =
-                    userData.pushNotificationsEnabled !== false &&
-                    userData.notificationPermissionStatus !== 'denied';
+                const { data, error: fetchError } = await supabase
+                    .from('notifications')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .order('created_at', { ascending: false })
+                    .limit(50);
 
-                if (!notificationsEnabled) {
-                    if (!isMounted) return;
-                    setNotifications([]);
-                    setUnreadCount(0);
+                if (fetchError) throw fetchError;
+
+                if (isMounted) {
+                    const notifs = (data || []).map((row: any) => ({
+                        id: row.id,
+                        recipientId: user.id,
+                        type: row.type as NotificationType,
+                        title: row.title,
+                        message: row.body || row.message || '',
+                        entityId: row.entity_id || null,
+                        entityType: row.entity_type || null,
+                        actorId: row.actor_id || null,
+                        actorName: row.actor_name || null,
+                        actorPhotoUrl: row.actor_photo_url || null,
+                        deepLinkRoute: row.deep_link_route || '',
+                        deepLinkParams: row.deep_link_params || {},
+                        read: row.read || false,
+                        readAt: row.read_at ? new Date(row.read_at) : null,
+                        createdAt: row.created_at ? new Date(row.created_at) : new Date(),
+                    }));
+
+                    setNotifications(notifs);
+                    setUnreadCount(notifs.filter((n) => !n.read).length);
                     setLoading(false);
-                    return;
                 }
-
-                unsubscribe = firestore()
-                    .collection('notifications')
-                    .doc(userId)
-                    .collection('items')
-                    .orderBy('createdAt', 'desc')
-                    .limit(50)
-                    .onSnapshot(
-                        (snapshot) => {
-                            const notifs = snapshot.docs.map((doc) => {
-                                const data = doc.data();
-                                return {
-                                    id: doc.id,
-                                    recipientId: userId,
-                                    type: data.type as NotificationType,
-                                    title: data.title,
-                                    message: data.body || data.message,
-                                    entityId: data.data?.tripId || data.data?.chatId || data.entityId || null,
-                                    entityType: data.entityType || null,
-                                    actorId: data.senderId || data.actorId || null,
-                                    actorName: data.actorName || null,
-                                    actorPhotoUrl: data.actorPhotoUrl || null,
-                                    deepLinkRoute: data.deepLinkRoute || '',
-                                    deepLinkParams: data.deepLinkParams || {},
-                                    read: data.read || false,
-                                    readAt: data.readAt?.toDate() || null,
-                                    createdAt: data.createdAt?.toDate() || new Date(),
-                                } as AppNotification;
-                            });
-                            setNotifications(notifs);
-                            setUnreadCount(notifs.filter((notification) => !notification.read).length);
-                            setLoading(false);
-                        },
-                        (err) => {
-                            if (err.code?.includes('permission-denied') && !auth().currentUser) {
-                                return;
-                            }
-
-                            setError(err);
-                            setLoading(false);
-                        }
-                    );
             } catch (err) {
-                if (!isMounted) return;
-                setError(err as Error);
-                setLoading(false);
+                if (isMounted) { setError(err as Error); setLoading(false); }
             }
         };
 
-        void setup();
+        setup();
+
+        // Realtime subscription for new notifications
+        const channel = supabase
+            .channel('notifications-feed')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => {
+                setup();
+            })
+            .subscribe();
 
         return () => {
             isMounted = false;
-            unsubscribe();
+            supabase.removeChannel(channel);
         };
     }, [refreshKey]);
 
     const markAsRead = useCallback(async (notificationId: string) => {
-        const userId = auth().currentUser?.uid;
-        if (!userId) return;
-        try {
-            await firestore()
-                .collection('notifications')
-                .doc(userId)
-                .collection('items')
-                .doc(notificationId)
-                .update({
-                    read: true,
-                    readAt: firestore.FieldValue.serverTimestamp(),
-                });
-        } catch (err) {
-            
-            throw err;
-        }
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        await supabase
+            .from('notifications')
+            .update({ read: true, read_at: new Date().toISOString() })
+            .eq('id', notificationId)
+            .eq('user_id', user.id);
     }, []);
 
     const markAllAsRead = useCallback(async () => {
-        const userId = auth().currentUser?.uid;
-        if (!userId) return;
-        try {
-            const batch = firestore().batch();
-            const unreadDocs = await firestore()
-                .collection('notifications')
-                .doc(userId)
-                .collection('items')
-                .where('read', '==', false)
-                .get();
-
-            if (unreadDocs.empty) return;
-
-            unreadDocs.docs.forEach((doc) => {
-                batch.update(doc.ref, {
-                    read: true,
-                    readAt: firestore.FieldValue.serverTimestamp(),
-                });
-            });
-
-            await batch.commit();
-        } catch (err) {
-            
-            throw err;
-        }
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        await supabase
+            .from('notifications')
+            .update({ read: true, read_at: new Date().toISOString() })
+            .eq('user_id', user.id)
+            .eq('read', false);
     }, []);
 
     const deleteNotification = useCallback(async (notificationId: string) => {
-        const userId = auth().currentUser?.uid;
-        if (!userId) return;
-        try {
-            await firestore()
-                .collection('notifications')
-                .doc(userId)
-                .collection('items')
-                .doc(notificationId)
-                .delete();
-        } catch (err) {
-            
-            throw err;
-        }
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        await supabase
+            .from('notifications')
+            .delete()
+            .eq('id', notificationId)
+            .eq('user_id', user.id);
     }, []);
 
     return {

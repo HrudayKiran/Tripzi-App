@@ -1,24 +1,19 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+import { supabase } from '../lib/supabase';
 
 const writePresence = async (presence: 'online' | 'background' | 'offline') => {
-    const uid = auth().currentUser?.uid;
-    if (!uid) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
     try {
-        const payload = {
-            presence,
-            lastSeenAt: firestore.FieldValue.serverTimestamp(),
-            lastSeen: firestore.FieldValue.serverTimestamp(),
-            updatedAt: firestore.FieldValue.serverTimestamp(),
-        };
-
-        await Promise.all([
-            firestore().collection('users').doc(uid).set(payload, { merge: true }),
-            firestore().collection('public_users').doc(uid).set(payload, { merge: true }),
-        ]);
+        await supabase
+            .from('profiles')
+            .update({
+                presence,
+                last_seen_at: new Date().toISOString(),
+            })
+            .eq('id', user.id);
     } catch {
         // Presence writes should not interrupt app usage.
     }

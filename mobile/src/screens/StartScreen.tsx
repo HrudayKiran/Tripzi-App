@@ -2,15 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ToastAndroid, Platform, Dimensions, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
-import functions from '@react-native-firebase/functions';
 import * as Animatable from 'react-native-animatable';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BRAND, NEUTRAL } from '../styles';
-import AppLogo from '../components/AppLogo';
 import TripziAnimatedLogo from '../components/TripziAnimatedLogo';
+import { supabase } from '../lib/supabase';
 
 const { width } = Dimensions.get('window');
 
@@ -46,7 +43,6 @@ const StartScreen = ({ navigation }) => {
     setLoading(true);
 
     try {
-
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
       // Force account picker by ensuring previous session is cleared
@@ -66,61 +62,46 @@ const StartScreen = ({ navigation }) => {
       // If no idToken or email, user likely cancelled — just return silently
       if (!idToken || !googleEmail) return;
 
-      // Check whether this Google account is already an existing Tripzi user.
-      const checkGoogleUserStatus = functions().httpsCallable('checkGoogleUserStatus');
-      const statusResult = await checkGoogleUserStatus({ email: googleEmail });
-      const isExistingUser = !!statusResult?.data?.existing;
+      // Sign in to Supabase with the Google ID token
+      const { data: authData, error: authError } = await supabase.auth.signInWithIdToken({
+        provider: 'google',
+        token: idToken,
+      });
 
-      if (isExistingUser) {
-        // Existing users: sign in to Firebase Auth and proceed directly.
-        const googleCredential = auth.GoogleAuthProvider.credential(idToken);
-        const userCredential = await auth().signInWithCredential(googleCredential);
-        const user = userCredential.user;
-        const userDocRef = firestore().collection('users').doc(user.uid);
-        const userDoc = await userDocRef.get();
-        const docExists = typeof userDoc.exists === 'function' ? userDoc.exists() : userDoc.exists;
+      if (authError) {
+        throw new Error(authError.message);
+      }
 
-        if (!docExists) {
-          try {
-            await auth().signOut();
-          } catch (e) { }
-          navigation.navigate('CompleteProfile', {
-            idToken,
-            email: googleEmail,
-            displayName: googleDisplayName,
-            photoURL: googlePhotoURL,
-          });
-          return;
-        }
+      const user = authData?.user;
+      if (!user) {
+        throw new Error('Authentication failed. Please try again.');
+      }
 
-        // Navigate immediately — don't block on non-critical Firestore updates
+      // Check if user has a profile in Supabase
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, name, username')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (profile && profile.name && profile.username) {
+        // Existing user with complete profile → Go to App
+        // Fire-and-forget: update last login
+        supabase
+          .from('profiles')
+          .update({ last_login_at: new Date().toISOString() })
+          .eq('id', user.id)
+          .then(() => {});
+
         showToast('Welcome back! 🎉');
         navigation.reset({ index: 0, routes: [{ name: 'App' }] });
-
-        // Fire-and-forget: update last login and consolidate name in background
-        const userData = userDoc.data ? userDoc.data() : {};
-        const resolvedName = userData?.name || userData?.displayName || user.displayName || 'User';
-
-        userDocRef.set({
-          name: resolvedName,
-          displayName: firestore.FieldValue.delete(),
-          lastLoginAt: firestore.FieldValue.serverTimestamp(),
-        }, { merge: true }).catch(() => { });
-
-        try {
-          if (auth().currentUser) {
-            auth().currentUser?.updateProfile({ displayName: resolvedName }).catch(() => { });
-          }
-        } catch (e) { }
       } else {
-        // New users: DO NOT create Firebase Auth yet. Go to profile completion first.
+        // New user or incomplete profile → Go to profile completion
         navigation.navigate('CompleteProfile', {
-          idToken,
           email: googleEmail,
           displayName: googleDisplayName,
           photoURL: googlePhotoURL,
         });
-        return;
       }
 
     } catch (error: any) {
@@ -298,4 +279,3 @@ const styles = StyleSheet.create({
 });
 
 export default StartScreen;
-

@@ -17,10 +17,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
+import { supabase } from '../lib/supabase';
 import { searchUsersByPrefix } from '../utils/searchUsers';
+import { pickAndUploadImage } from '../utils/imageUpload';
 
 interface User {
     id: string;
@@ -34,15 +33,14 @@ const CreateGroupScreen = ({ navigation }) => {
     const { colors } = useTheme();
 
     // Use state for currentUser to properly handle auth state
-    const [currentUser, setCurrentUser] = useState(auth().currentUser);
+    const [currentUser, setCurrentUser] = useState<any>(null);
 
-    // Listen for auth state changes
     useEffect(() => {
-        const unsubscribe = auth().onAuthStateChanged((user) => {
-
-            setCurrentUser(user);
+        supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setCurrentUser(session?.user || null);
         });
-        return () => unsubscribe();
+        return () => subscription.unsubscribe();
     }, []);
 
     const [step, setStep] = useState<'select' | 'details'>('select');
@@ -68,7 +66,7 @@ const CreateGroupScreen = ({ navigation }) => {
         try {
             const users = await searchUsersByPrefix(query, 10);
             const results: User[] = users
-                .filter((u) => u.id !== currentUser?.uid)
+                .filter((u) => u.id !== currentUser?.id)
                 .map((u) => ({
                     id: u.id,
                     displayName: u.displayName || 'User',
@@ -131,22 +129,24 @@ const CreateGroupScreen = ({ navigation }) => {
             // Upload group icon if selected
             let groupIconUrl = '';
             if (groupIcon) {
-                const filename = `${Date.now()}_group.jpg`;
-                const storageRef = storage().ref(`groups/${currentUser.uid}/${filename}`);
-                await storageRef.putFile(groupIcon);
-                groupIconUrl = await storageRef.getDownloadURL();
+                const result = await pickAndUploadImage({
+                    folder: 'chats',
+                    userId: currentUser.id,
+                    existingUri: groupIcon,
+                });
+                if (result.success && result.url) groupIconUrl = result.url;
             }
 
-            // Get current user data
-            const currentUserDoc = await firestore().collection('users').doc(currentUser.uid).get();
-            const currentUserData = currentUserDoc.data();
+            // Get current user profile
+            const { data: profile } = await supabase.from('profiles').select('name, display_name, photo_url').eq('id', currentUser.id).maybeSingle();
+            const userData: any = profile || {};
 
             // Prepare participants
-            const participants = [currentUser.uid, ...selectedUsers.map((u) => u.id)];
+            const participants = [currentUser.id, ...selectedUsers.map((u) => u.id)];
             const participantDetails: { [key: string]: any } = {
-                [currentUser.uid]: {
-                    displayName: currentUserData?.name || currentUserData?.displayName || currentUser.displayName || 'User',
-                    photoURL: currentUserData?.photoURL || currentUser.photoURL || '',
+                [currentUser.id]: {
+                    displayName: userData.name || userData.display_name || currentUser.user_metadata?.full_name || 'User',
+                    photoURL: userData.photo_url || currentUser.user_metadata?.avatar_url || '',
                     role: 'admin',
                 },
             };
@@ -160,56 +160,36 @@ const CreateGroupScreen = ({ navigation }) => {
             });
 
             // Create group chat
-            const chatRef = await firestore().collection('chats').add({
+            const { data: chatRow, error: chatErr } = await supabase.from('chats').insert({
                 type: 'group',
-                groupName: groupName.trim(),
-                groupIcon: groupIconUrl,
+                group_name: groupName.trim(),
+                group_icon: groupIconUrl,
                 participants,
-                participantDetails,
-                createdBy: currentUser.uid,
-                admins: [currentUser.uid],
-                unreadCount: participants.reduce((acc, uid) => {
-                    acc[uid] = 0;
-                    return acc;
-                }, {} as { [key: string]: number }),
-                mutedBy: [],
-                pinnedBy: [],
-                createdAt: firestore.FieldValue.serverTimestamp(),
-                updatedAt: firestore.FieldValue.serverTimestamp(),
-            });
+                participant_details: participantDetails,
+                created_by: currentUser.id,
+                admins: [currentUser.id],
+                unread_count: participants.reduce((acc, uid) => { acc[uid] = 0; return acc; }, {} as { [key: string]: number }),
+                muted_by: [],
+                pinned_by: [],
+                last_message: `${userData.name || userData.display_name || 'Someone'} created the group "${groupName.trim()}"`,
+            }).select('id').single();
+            if (chatErr || !chatRow) throw chatErr || new Error('Failed');
 
             // Add system message
-            await firestore()
-                .collection('chats')
-                .doc(chatRef.id)
-                .collection('messages')
-                .add({
-                    senderId: 'system',
-                    senderName: 'System',
-                    type: 'system',
-                    text: `${currentUserData?.name || currentUserData?.displayName || 'Someone'} created the group "${groupName.trim()}"`,
-                    status: 'sent',
-                    readBy: {},
-                    deliveredTo: [],
-                    deletedFor: [],
-                    createdAt: firestore.FieldValue.serverTimestamp(),
-                });
-
-            // Update parent chat with lastMessage
-            await firestore().collection('chats').doc(chatRef.id).update({
-                lastMessage: {
-                    text: `${currentUserData?.name || currentUserData?.displayName || 'Someone'} created the group "${groupName.trim()}"`,
-                    senderId: 'system',
-                    senderName: 'System',
-                    timestamp: firestore.FieldValue.serverTimestamp(),
-                    type: 'system',
-                },
-                updatedAt: firestore.FieldValue.serverTimestamp(),
+            await supabase.from('messages').insert({
+                chat_id: chatRow.id,
+                sender_id: 'system',
+                sender_name: 'System',
+                type: 'system',
+                text: `${userData.name || userData.display_name || 'Someone'} created the group "${groupName.trim()}"`,
+                status: 'sent',
+                read_by: {},
+                delivered_to: [],
+                deleted_for: [],
             });
 
-            navigation.replace('Chat', { chatId: chatRef.id });
+            navigation.replace('Chat', { chatId: chatRow.id });
         } catch (error) {
-
             Alert.alert('Error', 'Failed to create group. Please try again.');
         } finally {
             setCreating(false);

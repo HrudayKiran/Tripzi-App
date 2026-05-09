@@ -8,7 +8,7 @@ import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { NetworkProvider } from '../contexts/NetworkContext';
 import { navigationRef } from './RootNavigation';
 import OfflineBanner from '../components/OfflineBanner';
-import auth from '@react-native-firebase/auth';
+import { supabase } from '../lib/supabase';
 
 import usePushNotifications from '../hooks/usePushNotifications';
 import usePresence from '../hooks/usePresence';
@@ -206,34 +206,36 @@ const AppTabs = () => {
 
 const AppNavigator = () => {
     const [initialRoute, setInitialRoute] = React.useState<string | null>(null);
-    const userRef = React.useRef(auth().currentUser);
-    const wasLoggedInRef = React.useRef<boolean>(!!auth().currentUser);
+    const userRef = React.useRef<any>(null);
+    const wasLoggedInRef = React.useRef<boolean>(false);
 
     React.useEffect(() => {
-        // Check auth state AND Firestore profile on mount
+        // Check auth state AND Supabase profile on mount
         const checkAuthAndProfile = async () => {
-            const currentUser = auth().currentUser;
+            const { data: { session } } = await supabase.auth.getSession();
 
-            if (currentUser) {
-                // User is authenticated - but do they have a Firestore profile?
+            if (session?.user) {
+                // User is authenticated - but do they have a Supabase profile?
                 try {
-                    const firestore = require('@react-native-firebase/firestore').default;
-                    const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
+                    const { data: profile } = await supabase
+                        .from('profiles')
+                        .select('id, name, username')
+                        .eq('id', session.user.id)
+                        .maybeSingle();
 
-                    // Handle both Firebase API versions (exists as property or function)
-                    const docExists = typeof userDoc.exists === 'function' ? userDoc.exists() : userDoc.exists;
-
-                    if (docExists) {
-                        // User has both Auth AND Firestore profile → Go to App
+                    if (profile && profile.name && profile.username) {
+                        // User has both Auth AND profile → Go to App
+                        userRef.current = session.user;
+                        wasLoggedInRef.current = true;
                         setInitialRoute('App');
                     } else {
                         // A stale auth session without a profile should return to sign-in.
-                        await auth().signOut();
+                        await supabase.auth.signOut();
                         setInitialRoute('Start');
                     }
                 } catch (error) {
                     // Error checking profile → Sign out and show auth flow
-                    await auth().signOut();
+                    await supabase.auth.signOut();
                     setInitialRoute('Launch');
                 }
             } else {
@@ -248,12 +250,12 @@ const AppNavigator = () => {
         // Navigation is handled explicitly by StartScreen (login) and ProfileScreen (logout).
         // This listener only tracks auth state via ref — NO setState to avoid
         // re-rendering AppNavigator which would remount NavigationContainer.
-        const unsubscribe = auth().onAuthStateChanged((userState) => {
-            userRef.current = userState;
-            wasLoggedInRef.current = !!userState;
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            userRef.current = session?.user || null;
+            wasLoggedInRef.current = !!session?.user;
         });
 
-        return unsubscribe;
+        return () => subscription.unsubscribe();
     }, []);
 
     // Show nothing (or a minimal splash) until we determine the initial route

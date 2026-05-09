@@ -1,4 +1,6 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createMMKV } from 'react-native-mmkv';
+
+const storage = createMMKV();
 
 export const PREFERENCE_KEYS = {
     theme: '@tripzi_theme',
@@ -11,9 +13,8 @@ export const getBooleanPreference = async (
     defaultValue: boolean
 ): Promise<boolean> => {
     try {
-        const value = await AsyncStorage.getItem(key);
-        if (value === null) return defaultValue;
-        return value === 'true';
+        const value = storage.getBoolean(key);
+        return value !== undefined ? value : defaultValue;
     } catch {
         return defaultValue;
     }
@@ -24,7 +25,7 @@ export const setBooleanPreference = async (
     value: boolean
 ): Promise<void> => {
     try {
-        await AsyncStorage.setItem(key, value ? 'true' : 'false');
+        storage.set(key, value);
     } catch {
         // Preference writes are non-blocking UX enhancements.
     }
@@ -35,8 +36,8 @@ export const getStringPreference = async (
     defaultValue: string | null = null
 ): Promise<string | null> => {
     try {
-        const value = await AsyncStorage.getItem(key);
-        return value === null ? defaultValue : value;
+        const value = storage.getString(key);
+        return value !== undefined ? value : defaultValue;
     } catch {
         return defaultValue;
     }
@@ -47,7 +48,7 @@ export const setStringPreference = async (
     value: string
 ): Promise<void> => {
     try {
-        await AsyncStorage.setItem(key, value);
+        storage.set(key, value);
     } catch {
         // Preference writes are non-blocking UX enhancements.
     }

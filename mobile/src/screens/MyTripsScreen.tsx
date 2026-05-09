@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, ActivityIndicator, Image, RefreshControl, Alert } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import * as Animatable from 'react-native-animatable';
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { supabase } from '../lib/supabase';
 import { leaveTrip } from '../utils/tripActions';
 
 import { Ionicons } from '@expo/vector-icons';
@@ -30,42 +29,32 @@ const MyTripsScreen = ({ navigation, route }) => {
 
   useFocusEffect(
     React.useCallback(() => {
-      const currentUser = auth().currentUser;
-
-      if (!currentUser?.uid) {
-        setJoinedTrips([]);
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-
-      // Real-time listener for joined trips
-      const unsubscribe = firestore()
-        .collection('trips')
-        .where('participants', 'array-contains', currentUser.uid)
-        .onSnapshot(
-          snapshot => {
-            const trips = snapshot.docs.map(doc => ({
-              id: doc.id,
-              ...doc.data(),
-            }));
-            setJoinedTrips(trips);
-            setLoading(false);
-            setRefreshing(false);
-          },
-          () => {
-            setLoading(false);
-            setRefreshing(false);
-          }
-        );
-
-      return () => unsubscribe();
+      let cancelled = false;
+      const loadTrips = async () => {
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (!currentUser?.id) {
+          setJoinedTrips([]);
+          setLoading(false);
+          return;
+        }
+        setLoading(true);
+        const { data, error } = await supabase
+          .from('trips')
+          .select('*')
+          .contains('participants', [currentUser.id]);
+        if (!cancelled) {
+          setJoinedTrips(data || []);
+          setLoading(false);
+          setRefreshing(false);
+        }
+      };
+      loadTrips();
+      return () => { cancelled = true; };
     }, [])
   );
 
   const handleLeaveTrip = async (tripId: string) => {
-    const currentUser = auth().currentUser;
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (!currentUser) return;
 
     Alert.alert(
@@ -97,10 +86,8 @@ const MyTripsScreen = ({ navigation, route }) => {
 
     return joinedTrips.filter(trip => {
       // Parse dates - handle Firestore Timestamps
-      const fromDate = trip.fromDate?.toDate ? trip.fromDate.toDate() :
-        trip.fromDate ? new Date(trip.fromDate) : null;
-      const toDate = trip.toDate?.toDate ? trip.toDate.toDate() :
-        trip.toDate ? new Date(trip.toDate) : null;
+      const fromDate = trip.from_date ? new Date(trip.from_date) : (trip.fromDate ? new Date(trip.fromDate) : null);
+      const toDate = trip.to_date ? new Date(trip.to_date) : (trip.toDate ? new Date(trip.toDate) : null);
 
       // Normalize parsed dates to start of day
       const fromDay = fromDate ? new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate()) : null;
@@ -154,9 +141,7 @@ const MyTripsScreen = ({ navigation, route }) => {
             📍 {item.toLocation || item.location || 'Location TBD'}
           </Text>
           <Text style={[styles.tripDate, { color: colors.textSecondary }]}>
-            📅 {item.fromDate ? (
-              item.fromDate.toDate ? item.fromDate.toDate().toLocaleDateString() : new Date(item.fromDate).toLocaleDateString()
-            ) : 'Date TBD'}
+            📅 {item.from_date ? new Date(item.from_date).toLocaleDateString() : (item.fromDate ? new Date(item.fromDate).toLocaleDateString() : 'Date TBD')}
           </Text>
         </View>
       </TouchableOpacity>

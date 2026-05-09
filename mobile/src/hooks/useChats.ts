@@ -1,9 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
-
-// Firestore Timestamp type
-type FirestoreTimestamp = { toDate: () => Date } | Date | null;
+import { supabase } from '../lib/supabase';
 
 export interface ChatParticipant {
     displayName: string;
@@ -15,7 +11,7 @@ export interface LastMessage {
     text: string;
     senderId: string;
     senderName: string;
-    timestamp: FirestoreTimestamp;
+    timestamp: Date | null;
     type: 'text' | 'image' | 'location' | 'voice' | 'system';
 }
 
@@ -36,9 +32,9 @@ export interface Chat {
     lastMessage?: LastMessage;
     unreadCount: { [uid: string]: number };
     deletedBy: string[];
-    clearedAt?: { [uid: string]: FirestoreTimestamp };
-    createdAt: FirestoreTimestamp;
-    updatedAt: FirestoreTimestamp;
+    clearedAt?: { [uid: string]: Date | null };
+    createdAt: Date | null;
+    updatedAt: Date | null;
 }
 
 interface UseChatsReturn {
@@ -51,236 +47,210 @@ interface UseChatsReturn {
     refreshChats: () => void;
 }
 
+const normalizeRow = (row: any, collectionName: 'chats' | 'group_chats'): Chat => {
+    const participants = Array.isArray(row.participants) ? row.participants : [];
+    const type: 'direct' | 'group' = row.type === 'group' ? 'group' : 'direct';
+
+    return {
+        id: row.id,
+        type,
+        collectionName,
+        participants,
+        participantDetails: row.participant_details || {},
+        groupName: type === 'group' ? (row.group_name || row.trip_title || 'Group Chat') : row.group_name,
+        groupDescription: row.group_description,
+        groupIcon: type === 'group' ? (row.group_icon || row.trip_image || null) : row.group_icon,
+        tripImage: row.trip_image,
+        tripId: row.trip_id,
+        createdBy: row.created_by,
+        memberCount: typeof row.member_count === 'number' ? row.member_count : participants.length,
+        hidden: row.hidden === true,
+        lastMessage: row.last_message ? {
+            text: row.last_message.text || '',
+            senderId: row.last_message.sender_id || '',
+            senderName: row.last_message.sender_name || '',
+            timestamp: row.last_message.created_at ? new Date(row.last_message.created_at) : null,
+            type: row.last_message.type || 'text',
+        } : undefined,
+        unreadCount: row.unread_count || {},
+        deletedBy: Array.isArray(row.deleted_by) ? row.deleted_by : [],
+        clearedAt: row.cleared_at || {},
+        createdAt: row.created_at ? new Date(row.created_at) : null,
+        updatedAt: row.updated_at ? new Date(row.updated_at) : null,
+    };
+};
+
 export function useChats(): UseChatsReturn {
     const [directChats, setDirectChats] = useState<Chat[]>([]);
-    const [legacyGroupChats, setLegacyGroupChats] = useState<Chat[]>([]);
     const [groupChats, setGroupChats] = useState<Chat[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
     const [refreshKey, setRefreshKey] = useState(0);
-    const [directLoaded, setDirectLoaded] = useState(false);
-    const [groupLoaded, setGroupLoaded] = useState(false);
+    const [userId, setUserId] = useState<string | null>(null);
 
-    const currentUser = auth().currentUser;
-
-    const normalizeChat = useCallback((
-        doc: any,
-        collectionName: 'chats' | 'group_chats'
-    ): Chat => {
-        const data = doc.data() || {};
-        const participants = Array.isArray(data.participants) ? data.participants : [];
-        const type: 'direct' | 'group' = data.type === 'group' ? 'group' : 'direct';
-
-        return {
-            id: doc.id,
-            type,
-            collectionName,
-            ...data,
-            participants,
-            participantDetails: data.participantDetails || {},
-            unreadCount: data.unreadCount || {},
-            deletedBy: Array.isArray(data.deletedBy) ? data.deletedBy : [],
-            groupName: type === 'group' ? (data.groupName || data.tripTitle || 'Group Chat') : data.groupName,
-            groupIcon: type === 'group' ? (data.groupIcon || data.tripImage || null) : data.groupIcon,
-            memberCount: typeof data.memberCount === 'number' ? data.memberCount : participants.length,
-            hidden: data.hidden === true,
-        } as Chat;
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data: { user } }) => {
+            setUserId(user?.id || null);
+        });
     }, []);
 
-    // Listen to direct chats (chats collection)
+    // Fetch direct chats
     useEffect(() => {
-        if (!currentUser) {
-            setDirectChats([]);
-            setLegacyGroupChats([]);
-            setDirectLoaded(true);
-            return;
-        }
+        if (!userId) { setDirectChats([]); return; }
 
-        const unsubscribe = firestore()
-            .collection('chats')
-            .where('participants', 'array-contains', currentUser.uid)
-            .orderBy('updatedAt', 'desc')
-            .onSnapshot(
-                (snapshot) => {
-                    if (!snapshot) {
-                        setDirectChats([]);
-                        setDirectLoaded(true);
-                        return;
-                    }
+        const fetchDirect = async () => {
+            const { data, error: err } = await supabase
+                .from('chats')
+                .select('*')
+                .contains('participants', [userId])
+                .order('updated_at', { ascending: false });
 
-                    const chatsList: Chat[] = snapshot.docs
-                        .map((doc) => normalizeChat(doc, 'chats'))
-                        .filter((chat: any) => !chat.deletedBy?.includes(currentUser.uid) && chat.hidden !== true) as Chat[];
+            if (err) { setError(err as any); return; }
 
-                    setDirectChats(chatsList.filter((chat) => chat.type === 'direct'));
-                    setLegacyGroupChats(chatsList.filter((chat) => chat.type === 'group'));
-                    setDirectLoaded(true);
-                    setError(null);
-                },
-                (err) => {
-                    setError(err as Error);
-                    setDirectLoaded(true);
-                }
-            );
+            const chats = (data || [])
+                .map((row: any) => normalizeRow(row, 'chats'))
+                .filter((c) => !c.deletedBy?.includes(userId) && c.hidden !== true);
 
-        return () => unsubscribe();
-    }, [currentUser?.uid, refreshKey]);
+            setDirectChats(chats);
+        };
 
-    // Listen to group chats (group_chats collection)
+        fetchDirect();
+
+        const channel = supabase
+            .channel('chats-direct')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'chats' }, () => fetchDirect())
+            .subscribe();
+
+        return () => { supabase.removeChannel(channel); };
+    }, [userId, refreshKey]);
+
+    // Fetch group chats
     useEffect(() => {
-        if (!currentUser) {
-            setGroupChats([]);
-            setGroupLoaded(true);
-            return;
-        }
+        if (!userId) { setGroupChats([]); setLoading(false); return; }
 
-        const unsubscribe = firestore()
-            .collection('group_chats')
-            .where('participants', 'array-contains', currentUser.uid)
-            .orderBy('updatedAt', 'desc')
-            .onSnapshot(
-                (snapshot) => {
-                    if (!snapshot) {
-                        setGroupChats([]);
-                        setGroupLoaded(true);
-                        return;
-                    }
+        const fetchGroups = async () => {
+            const { data, error: err } = await supabase
+                .from('group_chats')
+                .select('*')
+                .contains('participants', [userId])
+                .order('updated_at', { ascending: false });
 
-                    const chatsList: Chat[] = snapshot.docs
-                        .map((doc) => normalizeChat(doc, 'group_chats'))
-                        .filter((chat: any) => !chat.deletedBy?.includes(currentUser.uid) && chat.hidden !== true) as Chat[];
+            if (err) { setError(err as any); return; }
 
-                    setGroupChats(chatsList);
-                    setGroupLoaded(true);
-                    setError(null);
-                },
-                (err) => {
-                    setError(err as Error);
-                    setGroupLoaded(true);
-                }
-            );
+            const chats = (data || [])
+                .map((row: any) => normalizeRow(row, 'group_chats'))
+                .filter((c) => !c.deletedBy?.includes(userId) && c.hidden !== true);
 
-        return () => unsubscribe();
-    }, [currentUser?.uid, refreshKey]);
-
-    // Track overall loading state
-    useEffect(() => {
-        if (directLoaded && groupLoaded) {
+            setGroupChats(chats);
             setLoading(false);
-        }
-    }, [directLoaded, groupLoaded]);
+        };
 
-    // Merge and sort by updatedAt
-    const chats = [...directChats, ...legacyGroupChats, ...groupChats].sort((a, b) => {
-        const aTime = a.updatedAt
-            ? (typeof (a.updatedAt as any).toDate === 'function'
-                ? (a.updatedAt as any).toDate().getTime()
-                : new Date(a.updatedAt as any).getTime())
-            : 0;
-        const bTime = b.updatedAt
-            ? (typeof (b.updatedAt as any).toDate === 'function'
-                ? (b.updatedAt as any).toDate().getTime()
-                : new Date(b.updatedAt as any).getTime())
-            : 0;
+        fetchGroups();
+
+        const channel = supabase
+            .channel('chats-group')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'group_chats' }, () => fetchGroups())
+            .subscribe();
+
+        return () => { supabase.removeChannel(channel); };
+    }, [userId, refreshKey]);
+
+    const chats = [...directChats, ...groupChats].sort((a, b) => {
+        const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+        const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
         return bTime - aTime;
     });
 
     const createDirectChat = useCallback(
         async (otherUserId: string, otherUserDetails: ChatParticipant): Promise<string> => {
-            if (!currentUser) throw new Error('Not authenticated');
+            if (!userId) throw new Error('Not authenticated');
 
-            const currentUserDoc = await firestore().collection('users').doc(currentUser.uid).get();
-            const currentUserData = currentUserDoc.data();
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('name, photo_url')
+                .eq('id', userId)
+                .maybeSingle();
 
-            const chatData: Omit<Chat, 'id'> = {
+            const chatData = {
                 type: 'direct',
-                collectionName: 'chats',
-                participants: [currentUser.uid, otherUserId],
-                participantDetails: {
-                    [currentUser.uid]: {
-                        displayName: currentUserData?.name || currentUserData?.displayName || currentUser.displayName || 'User',
-                        photoURL: currentUserData?.photoURL || currentUser.photoURL || '',
+                participants: [userId, otherUserId],
+                participant_details: {
+                    [userId]: {
+                        displayName: profile?.name || 'User',
+                        photoURL: profile?.photo_url || '',
                     },
                     [otherUserId]: otherUserDetails,
                 },
-                unreadCount: {
-                    [currentUser.uid]: 0,
-                    [otherUserId]: 0,
-                },
-                deletedBy: [],
-                clearedAt: {},
-                createdAt: firestore.FieldValue.serverTimestamp() as any,
-                updatedAt: firestore.FieldValue.serverTimestamp() as any,
+                unread_count: { [userId]: 0, [otherUserId]: 0 },
+                deleted_by: [],
             };
 
-            const chatRef = await firestore().collection('chats').add(chatData);
-            return chatRef.id;
+            const { data, error: insertError } = await supabase
+                .from('chats')
+                .insert(chatData)
+                .select('id')
+                .single();
+
+            if (insertError || !data) throw new Error(insertError?.message || 'Failed to create chat');
+            return data.id;
         },
-        [currentUser]
+        [userId]
     );
 
     const getOrCreateDirectChat = useCallback(
         async (otherUserId: string, otherUserDetails: ChatParticipant): Promise<string> => {
-            if (!currentUser) throw new Error('Not authenticated');
+            if (!userId) throw new Error('Not authenticated');
 
-            // Check in memory first (direct chats only)
-            const existingChat = directChats.find(
-                (chat) =>
-                    chat.participants.includes(currentUser.uid) &&
-                    chat.participants.includes(otherUserId)
+            // Check in memory
+            const existing = directChats.find(
+                (chat) => chat.participants.includes(userId) && chat.participants.includes(otherUserId)
             );
 
-            if (existingChat) {
-                if (existingChat.deletedBy?.includes(currentUser.uid)) {
-                    await firestore().collection('chats').doc(existingChat.id).update({
-                        deletedBy: firestore.FieldValue.arrayRemove(currentUser.uid)
-                    });
+            if (existing) {
+                if (existing.deletedBy?.includes(userId)) {
+                    const newDeletedBy = existing.deletedBy.filter((id) => id !== userId);
+                    await supabase.from('chats').update({ deleted_by: newDeletedBy }).eq('id', existing.id);
                 }
-                return existingChat.id;
+                return existing.id;
             }
 
-            // Query Firestore for existing direct chat
-            const querySnapshot = await firestore()
-                .collection('chats')
-                .where('participants', 'array-contains', currentUser.uid)
-                .get();
+            // Query DB
+            const { data: found } = await supabase
+                .from('chats')
+                .select('id, participants, deleted_by')
+                .contains('participants', [userId]);
 
-            const foundChat = querySnapshot.docs.find((doc) => {
-                const data = doc.data();
-                return data.participants.includes(otherUserId);
-            });
+            const match = (found || []).find((c: any) =>
+                Array.isArray(c.participants) && c.participants.includes(otherUserId)
+            );
 
-            if (foundChat) {
-                const data = foundChat.data();
-                if (data.deletedBy?.includes(currentUser.uid)) {
-                    await foundChat.ref.update({
-                        deletedBy: firestore.FieldValue.arrayRemove(currentUser.uid)
-                    });
+            if (match) {
+                if (Array.isArray(match.deleted_by) && match.deleted_by.includes(userId)) {
+                    const newDeletedBy = match.deleted_by.filter((id: string) => id !== userId);
+                    await supabase.from('chats').update({ deleted_by: newDeletedBy }).eq('id', match.id);
                 }
-                return foundChat.id;
+                return match.id;
             }
 
             return createDirectChat(otherUserId, otherUserDetails);
         },
-        [currentUser, directChats, createDirectChat]
+        [userId, directChats, createDirectChat]
     );
 
     const deleteChat = useCallback(async (chatId: string) => {
-        if (!currentUser) return;
-        try {
-            const targetChat = [...directChats, ...legacyGroupChats, ...groupChats].find((chat) => chat.id === chatId);
-            const collection = targetChat?.collectionName || 'chats';
+        if (!userId) return;
+        const targetChat = [...directChats, ...groupChats].find((c) => c.id === chatId);
+        const table = targetChat?.collectionName || 'chats';
 
-            await firestore()
-                .collection(collection)
-                .doc(chatId)
-                .update({
-                    deletedBy: firestore.FieldValue.arrayUnion(currentUser.uid),
-                });
-        } catch (err) {
-            throw err;
-        }
-    }, [currentUser, directChats, legacyGroupChats, groupChats]);
+        const { data: current } = await supabase
+            .from(table)
+            .select('deleted_by')
+            .eq('id', chatId)
+            .maybeSingle();
+
+        const deletedBy = Array.isArray(current?.deleted_by) ? [...current.deleted_by, userId] : [userId];
+        await supabase.from(table).update({ deleted_by: deletedBy }).eq('id', chatId);
+    }, [userId, directChats, groupChats]);
 
     const refreshChats = useCallback(() => {
         setRefreshKey((prev) => prev + 1);

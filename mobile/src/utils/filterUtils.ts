@@ -150,10 +150,18 @@ export const applyTripFilters = (
         if (filters.sortBy) {
             switch (filters.sortBy) {
                 case 'newest':
-                    result.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+                    result.sort((a, b) => {
+                        const timeA = a.createdAt?.getTime?.() || new Date(a.createdAt).getTime() || 0;
+                        const timeB = b.createdAt?.getTime?.() || new Date(b.createdAt).getTime() || 0;
+                        return timeB - timeA;
+                    });
                     break;
                 case 'oldest':
-                    result.sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0));
+                    result.sort((a, b) => {
+                        const timeA = a.createdAt?.getTime?.() || new Date(a.createdAt).getTime() || 0;
+                        const timeB = b.createdAt?.getTime?.() || new Date(b.createdAt).getTime() || 0;
+                        return timeA - timeB;
+                    });
                     break;
                 case 'lowestCost':
                     result.sort((a, b) => (a.cost || 0) - (b.cost || 0));

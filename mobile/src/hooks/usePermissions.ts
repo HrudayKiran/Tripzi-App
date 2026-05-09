@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Platform, PermissionsAndroid } from 'react-native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import { getMessaging, requestPermission, AuthorizationStatus } from '@react-native-firebase/messaging';
+import * as Notifications from 'expo-notifications';
 
 interface PermissionStatus {
     notifications: boolean;
@@ -50,23 +50,13 @@ export function usePermissions(): UsePermissionsReturn {
                     return false;
                 }
             } else {
-                // For Firebase Cloud Messaging (Android < 13 or iOS)
-                const messaging = getMessaging();
-                const authStatus = await requestPermission(messaging);
-                const enabled =
-                    authStatus === AuthorizationStatus.AUTHORIZED ||
-                    authStatus === AuthorizationStatus.PROVISIONAL;
-
-                if (enabled) {
-                    setPermissions(prev => ({ ...prev, notifications: true }));
-                    return true;
-                } else {
-                    setPermissions(prev => ({ ...prev, notifications: false }));
-                    return false;
-                }
+                // Use expo-notifications for permission
+                const { status } = await Notifications.requestPermissionsAsync();
+                const enabled = status === 'granted';
+                setPermissions(prev => ({ ...prev, notifications: enabled }));
+                return enabled;
             }
         } catch (error) {
-            
             return false;
         }
     };
@@ -78,7 +68,6 @@ export function usePermissions(): UsePermissionsReturn {
             setPermissions(prev => ({ ...prev, location: granted }));
             return granted;
         } catch (error) {
-            
             return false;
         }
     };
@@ -90,7 +79,6 @@ export function usePermissions(): UsePermissionsReturn {
             setPermissions(prev => ({ ...prev, camera: granted }));
             return granted;
         } catch (error) {
-            
             return false;
         }
     };
@@ -102,7 +90,6 @@ export function usePermissions(): UsePermissionsReturn {
             setPermissions(prev => ({ ...prev, mediaLibrary: granted }));
             return granted;
         } catch (error) {
-            
             return false;
         }
     };

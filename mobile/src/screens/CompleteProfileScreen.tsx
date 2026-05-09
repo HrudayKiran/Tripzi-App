@@ -16,8 +16,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import auth from '@react-native-firebase/auth';
-import functions from '@react-native-firebase/functions';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
@@ -27,6 +25,7 @@ import {
     syncNotificationPreference,
 } from '../utils/notificationPermissions';
 import { PREFERENCE_KEYS, setBooleanPreference } from '../utils/preferences';
+import { supabase } from '../lib/supabase';
 
 const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/;
 
@@ -44,7 +43,6 @@ const calculateAge = (dob: Date): number => {
 
 const CompleteProfileScreen = ({ navigation, route }) => {
     const { colors } = useTheme();
-    const currentUser = auth().currentUser;
     const [fullName, setFullName] = useState('');
     const [username, setUsername] = useState('');
     const [bio, setBio] = useState('');
@@ -58,22 +56,16 @@ const CompleteProfileScreen = ({ navigation, route }) => {
     const [agreedToTerms, setAgreedToTerms] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
-    const pendingIdToken = route?.params?.idToken || null;
-    const pendingEmail = route?.params?.email || currentUser?.email || '';
-    const pendingDisplayName = route?.params?.displayName || currentUser?.displayName || '';
+    const pendingEmail = route?.params?.email || '';
+    const pendingDisplayName = route?.params?.displayName || '';
 
     useEffect(() => {
-        if (!pendingIdToken) {
-            navigation.reset({ index: 0, routes: [{ name: 'Start' }] });
-            return;
-        }
-
         const defaultName = pendingDisplayName || '';
         const defaultUsername = sanitizeUsername(pendingEmail?.split('@')[0] || 'traveler');
 
         setFullName(defaultName);
         setUsername(defaultUsername);
-    }, [navigation, pendingDisplayName, pendingEmail, pendingIdToken]);
+    }, [navigation, pendingDisplayName, pendingEmail]);
 
     useEffect(() => {
         let active = true;
@@ -97,20 +89,23 @@ const CompleteProfileScreen = ({ navigation, route }) => {
             setUsernameError('');
             setUsernameOk(false);
             try {
-                const checkUsernameAvailability = functions().httpsCallable('checkUsernameAvailability');
-                const result = await checkUsernameAvailability({
-                    username: value,
-                    excludeUid: '',
-                });
-                const available = !!result?.data?.available;
+                // Check username availability via Supabase
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .eq('username', value)
+                    .maybeSingle();
 
                 if (!active) return;
 
-                if (available) {
-                    setUsernameOk(true);
-                } else {
+                if (error) {
+                    setUsernameError('Could not validate username. Try again.');
+                    setUsernameOk(false);
+                } else if (data) {
                     setUsernameError('Username is already taken');
                     setUsernameOk(false);
+                } else {
+                    setUsernameOk(true);
                 }
             } catch (error) {
                 if (!active) return;
@@ -170,7 +165,7 @@ const CompleteProfileScreen = ({ navigation, route }) => {
             await GoogleSignin.signOut();
         } catch (e) { }
         try {
-            await auth().signOut();
+            await supabase.auth.signOut();
         } catch (e) { }
         navigation.reset({ index: 0, routes: [{ name: 'Start' }] });
     };
@@ -206,42 +201,41 @@ const CompleteProfileScreen = ({ navigation, route }) => {
 
         setSubmitting(true);
         try {
-            if (!pendingIdToken) {
-                throw new Error('Missing Google session. Please continue with Google again.');
+            // Get current Supabase session
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                throw new Error('Session expired. Please sign in again.');
             }
 
-            const finalizeGoogleOnboarding = functions().httpsCallable('finalizeGoogleOnboarding');
-            const onboardingResult: any = await finalizeGoogleOnboarding({
-                idToken: pendingIdToken,
-                name: fullName.trim(),
-                username: sanitizeUsername(username.trim()),
-                gender,
-                dateOfBirth: dob.toISOString(),
-                bio: bio.trim(),
-            });
+            // Create profile in Supabase
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .upsert({
+                    id: user.id,
+                    email: user.email || pendingEmail,
+                    name: fullName.trim(),
+                    username: sanitizeUsername(username.trim()),
+                    gender,
+                    date_of_birth: dob.toISOString().split('T')[0],
+                    bio: bio.trim(),
+                    photo_url: user.user_metadata?.avatar_url || null,
+                    age_verified: true,
+                    age_verified_at: new Date().toISOString(),
+                    last_login_at: new Date().toISOString(),
+                });
 
-            const customToken = onboardingResult?.data?.customToken;
-            if (!customToken) {
-                throw new Error('Could not start your Tripzi account session.');
+            if (profileError) {
+                if (profileError.message?.includes('profiles_username_key')) {
+                    setUsernameError('Username is already taken');
+                    setUsernameOk(false);
+                    return;
+                }
+                throw new Error(profileError.message || 'Failed to create profile.');
             }
-
-            const authResult = await auth().signInWithCustomToken(customToken);
-            const signedInUser = authResult.user;
 
             navigation.reset({ index: 0, routes: [{ name: 'App' }] });
         } catch (error: any) {
-            const code = error?.code || '';
-            if (code.includes('failed-precondition')) {
-                Alert.alert('Not Eligible', 'You are not eligible to use Tripzi because your age is under 18.');
-                await resetToStart();
-                return;
-            }
-            if (code.includes('already-exists')) {
-                setUsernameError('Username is already taken');
-                setUsernameOk(false);
-            } else {
-                Alert.alert('Error', error?.message || 'Failed to complete profile setup.');
-            }
+            Alert.alert('Error', error?.message || 'Failed to complete profile setup.');
         } finally {
             setSubmitting(false);
         }

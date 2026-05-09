@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, Dimensions } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
-import firestore from '@react-native-firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
@@ -30,39 +30,24 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectio
     useEffect(() => {
         if (!visible || !chatId) return;
 
-        const unsubscribe = firestore()
-            .collection(collectionName)
-            .doc(chatId)
-            .collection('live_shares')
-            .where('isActive', '==', true)
-            .where('validUntil', '>', firestore.Timestamp.now())
-            .onSnapshot(async (snapshot) => {
-                const activeUsers: any[] = [];
-
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    if (typeof data.latitude !== 'number' || typeof data.longitude !== 'number') {
-                        return;
-                    }
-                    if (data.latitude === 0 && data.longitude === 0) {
-                        return;
-                    }
-                    activeUsers.push({ id: doc.id, ...data });
-                });
-
-                setUsers(activeUsers);
-
-                if (activeUsers.length > 0) {
-                    setRegion({
-                        latitude: activeUsers[0].latitude,
-                        longitude: activeUsers[0].longitude,
-                        latitudeDelta: 0.01,
-                        longitudeDelta: 0.01,
-                    });
-                }
-            });
-
-        return () => unsubscribe();
+        const loadShares = async () => {
+            const { data } = await supabase
+                .from('live_shares')
+                .select('*')
+                .eq('chat_id', chatId)
+                .eq('is_active', true)
+                .gt('valid_until', new Date().toISOString());
+            const activeUsers = (data || []).filter(d => typeof d.latitude === 'number' && typeof d.longitude === 'number' && !(d.latitude === 0 && d.longitude === 0));
+            setUsers(activeUsers);
+            if (activeUsers.length > 0) {
+                setRegion({ latitude: activeUsers[0].latitude, longitude: activeUsers[0].longitude, latitudeDelta: 0.01, longitudeDelta: 0.01 });
+            }
+        };
+        loadShares();
+        const channel = supabase.channel(`live-loc-${chatId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'live_shares', filter: `chat_id=eq.${chatId}` }, () => { loadShares(); })
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
     }, [visible, chatId, collectionName]);
 
     const focusOnUser = (user: any) => {
@@ -91,16 +76,16 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectio
                             key={user.id}
                             coordinate={{ latitude: user.latitude, longitude: user.longitude }}
                             title={user.displayName}
-                            description={`Updated ${user.timestamp ? formatDistanceToNow(user.timestamp.toDate()) : 'just now'} ago`}
+                            description={`Updated ${user.updated_at ? formatDistanceToNow(new Date(user.updated_at)) : 'just now'} ago`}
                         >
                             <View style={styles.markerContainer}>
                                 {user.photoURL ? (
                                     <Image
                                         source={{ uri: user.photoURL }}
-                                        style={[styles.markerImage, { borderColor: user.id === currentUser?.uid ? colors.primary : '#fff' }]}
+                                        style={[styles.markerImage, { borderColor: user.id === currentUser?.id ? colors.primary : '#fff' }]}
                                     />
                                 ) : (
-                                    <View style={[styles.markerFallback, { borderColor: user.id === currentUser?.uid ? colors.primary : '#fff' }]}>
+                                    <View style={[styles.markerFallback, { borderColor: user.id === currentUser?.id ? colors.primary : '#fff' }]}>
                                         <Text style={styles.markerFallbackText}>
                                             {(user.displayName || 'U').charAt(0).toUpperCase()}
                                         </Text>
@@ -143,10 +128,10 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectio
                                 )}
                                 <View style={{ flex: 1 }}>
                                     <Text style={[styles.userName, { color: colors.text }]}>
-                                        {user.id === currentUser?.uid ? 'You' : user.displayName}
+                                        {user.id === currentUser?.id ? 'You' : user.displayName}
                                     </Text>
                                     <Text style={[styles.updatedText, { color: colors.textSecondary }]}>
-                                        Last active: {user.timestamp ? formatDistanceToNow(user.timestamp.toDate()) : 'now'} ago
+                                        Last active: {user.updated_at ? formatDistanceToNow(new Date(user.updated_at)) : 'now'} ago
                                     </Text>
                                 </View>
                                 <Ionicons name="navigate-circle-outline" size={24} color={colors.primary} />

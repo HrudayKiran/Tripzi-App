@@ -14,8 +14,7 @@ import {
     ScrollView,
     Image,
 } from 'react-native';
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
@@ -76,27 +75,26 @@ const ReportTripModal: React.FC<ReportTripModalProps> = ({ visible, trip, onClos
 
         setSubmitting(true);
         try {
-            const currentUser = auth().currentUser;
+            const { data: { user: currentUser } } = await supabase.auth.getUser();
             const selectedReason = REPORT_TYPES.find(t => t.id === reportType)?.label || reportType;
 
-            await firestore().collection('reports').add({
-                tripId: trip?.id,
-                tripTitle: trip?.title || 'Untitled Trip',
-                targetId: trip?.id,
-                targetType: 'trip',
+            await supabase.from('reports').insert({
+                trip_id: trip?.id,
+                trip_title: trip?.title || 'Untitled Trip',
+                target_id: trip?.id,
+                target_type: 'trip',
                 reason: selectedReason,
-                reporterId: currentUser?.uid,
-                reporterEmail: currentUser?.email || '',
-                reporterName: currentUser?.displayName || '',
-                reportedUserId: trip?.userId,
+                reporter_id: currentUser?.id,
+                reporter_email: currentUser?.email || '',
+                reporter_name: currentUser?.user_metadata?.full_name || '',
+                reported_user_id: trip?.userId,
                 type: reportType,
                 description: description.trim(),
-                screenshotUris: screenshots,
+                screenshot_uris: screenshots,
                 evidence: screenshots,
                 status: 'pending',
-                assignedAdmin: null,
-                createdAt: firestore.FieldValue.serverTimestamp(),
-                resolvedAt: null,
+                assigned_admin: null,
+                resolved_at: null,
                 resolution: null
             });
 

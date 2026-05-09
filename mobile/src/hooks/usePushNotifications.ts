@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Platform, Linking } from 'react-native';
-import fs, { getFirestore, collection, doc, setDoc, serverTimestamp, getDoc } from '@react-native-firebase/firestore';
-import ms, { getMessaging, getToken, onMessage, onNotificationOpenedApp, getInitialNotification } from '@react-native-firebase/messaging';
-import au, { getAuth, onAuthStateChanged } from '@react-native-firebase/auth';
+import * as Notifications from 'expo-notifications';
+import { supabase } from '../lib/supabase';
 import * as RootNavigation from '../navigation/RootNavigation';
 import { getNotificationPermissionStatus } from '../utils/notificationPermissions';
 import { resolveNotificationTarget } from '../utils/notificationNavigation';
@@ -16,182 +15,128 @@ interface NotificationData {
   [key: string]: string | undefined;
 }
 
-/**
- * Generate a simple device identifier for token storage
- */
-const getDeviceId = (): string => {
-  return `${Platform.OS}_${Date.now()}`;
-};
-
 const usePushNotifications = () => {
   const hasHandledInitialNotification = useRef(false);
 
+  useEffect(() => {
+    let notificationResponseSubscription: any = null;
+    let notificationSubscription: any = null;
 
-
-    useEffect(() => {
-
-    let unsubscribeAuth: (() => void) | null = null;
-    let unsubscribeOnNotificationOpened: (() => void) | null = null;
-    let unsubscribeOnMessage: (() => void) | null = null;
-
-        const setup = async () => {
-
+    const setup = async () => {
       try {
-        const messaging = getMessaging(); // Modular instance
-
         // Handle notification that opened the app from quit state
         const handleInitialNotification = async () => {
           if (hasHandledInitialNotification.current) return;
           hasHandledInitialNotification.current = true;
 
-          const remoteMessage = await getInitialNotification(messaging);
-          if (remoteMessage?.data) {
+          const response = await Notifications.getLastNotificationResponseAsync();
+          if (response?.notification?.request?.content?.data) {
             setTimeout(() => {
-              void handleNotificationNavigation(remoteMessage.data as NotificationData);
+              void handleNotificationNavigation(response.notification.request.content.data as NotificationData);
             }, 1000);
           }
         };
 
-        // Handle notification when app is in background and user taps on notification
-        unsubscribeOnNotificationOpened = onNotificationOpenedApp(messaging,
-          (remoteMessage) => {
-            if (remoteMessage.data) {
-              void handleNotificationNavigation(remoteMessage.data as NotificationData);
+        // Handle notification when app is in background and user taps
+        notificationResponseSubscription = Notifications.addNotificationResponseReceivedListener(
+          (response) => {
+            const data = response.notification.request.content.data;
+            if (data) {
+              void handleNotificationNavigation(data as NotificationData);
             }
           }
         );
 
-        // Enable foreground notification presentation options
-        await messaging.setForegroundNotificationPresentationOptions({
-          alert: true,
-          badge: true,
-          sound: true,
+        // Foreground notification
+        notificationSubscription = Notifications.addNotificationReceivedListener(() => {
+          // System notification shows automatically
         });
 
-        // Handle notification when app is in foreground - Just log it now, system handles UI
-        unsubscribeOnMessage = onMessage(messaging,
-          async (remoteMessage) => {
-            // System notification will show automatically due to setForegroundNotificationPresentationOptions
+        // Listen for auth state changes via Supabase
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+          async (event, session) => {
+            if (session?.user) {
+              await setupMessaging(session.user);
+              handleInitialNotification();
+            }
           }
         );
 
-        // Auth state listener
-        const auth = getAuth();
-        unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-          if (user) {
-            void setupMessaging(user);
-            handleInitialNotification();
-          }
-        });
+        // Check current session
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await setupMessaging(user);
+          handleInitialNotification();
+        }
       } catch (error) {
-
+        // Push setup should not crash the app
       }
     };
 
     const setupMessaging = async (user: any) => {
       try {
-        const messaging = getMessaging();
         const permissionStatus = await getNotificationPermissionStatus();
-        const db = getFirestore();
-        const userRef = doc(db, 'users', user.uid);
-        const userDoc = await getDoc(userRef);
-        const userData = userDoc.data() || {};
-        const notificationsEnabled =
-          userData.pushNotificationsEnabled === true &&
-          permissionStatus === 'granted';
+        if (permissionStatus !== 'granted') return;
 
-        if (!notificationsEnabled) {
-          return;
-        }
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('push_notifications_enabled')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (profile?.push_notifications_enabled !== true) return;
 
         await getAndSaveToken(user);
-      } catch (error: any) {
-
+      } catch {
+        // Non-critical
       }
     };
 
-    const getAndSaveToken = async (user: any, freshToken?: string) => {
+    const getAndSaveToken = async (user: any) => {
       try {
-
-        const messaging = getMessaging();
-        const token = freshToken || await getToken(messaging);
-
-        if (!token) {
-
-          return;
-        }
-
-
-
-        await saveTokenToFirestore(user, token);
-
-      } catch (error: any) {
-
+        const token = (await Notifications.getExpoPushTokenAsync()).data;
+        if (!token) return;
+        await saveTokenToSupabase(user, token);
+      } catch {
+        // Non-critical
       }
     };
 
-    const saveTokenToFirestore = async (user: any, token: string) => {
+    const saveTokenToSupabase = async (user: any, token: string) => {
       try {
-        const db = getFirestore();
-        const tokenRef = doc(db, 'push_tokens', user.uid);
-        const tokenDoc = await getDoc(tokenRef);
-
-        let deviceId = getDeviceId(); // Default new ID
-        let tokensMap: any = {};
-
-        if (tokenDoc.exists()) {
-          const data = tokenDoc.data();
-          tokensMap = data?.tokens || {};
-
-          // Check if this token already exists
-          const existingDeviceId = Object.keys(tokensMap).find(
-            key => tokensMap[key]?.token === token
-          );
-
-          if (existingDeviceId) {
-
-            deviceId = existingDeviceId; // Reuse the existing key
-          }
-        }
-
-        // Update or Set the token entry
-        await setDoc(tokenRef, {
-          tokens: {
-            [deviceId]: {
+        // Upsert token — use user_id + token as unique constraint
+        await supabase
+          .from('push_tokens')
+          .upsert(
+            {
+              user_id: user.id,
               token,
               platform: Platform.OS,
-              updatedAt: serverTimestamp(),
-            }
-          }
-        }, { merge: true });
-
-
-      } catch (error: any) {
-
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'user_id,token' }
+          );
+      } catch {
+        // Token save failure is non-critical
       }
     };
 
     setup();
 
     return () => {
-      if (unsubscribeAuth) unsubscribeAuth();
-      if (unsubscribeOnNotificationOpened) unsubscribeOnNotificationOpened();
-      if (unsubscribeOnMessage) unsubscribeOnMessage();
+      if (notificationResponseSubscription) notificationResponseSubscription.remove();
+      if (notificationSubscription) notificationSubscription.remove();
     };
   }, []);
 
   const handleNotificationNavigation = async (data: NotificationData) => {
-
     const route = data.route;
     if (!route) return;
 
-    // Helper to navigate safely
     const navigate = (name: string, params?: any) => {
       try {
         RootNavigation.navigate(name, params);
-      } catch (e) {
-
-      }
+      } catch { /* silent */ }
     };
 
     const target = await resolveNotificationTarget({
@@ -206,9 +151,7 @@ const usePushNotifications = () => {
       entityType: data.chatId ? 'chat' : data.tripId ? 'trip' : data.userId ? 'user' : null,
     });
 
-    if (!target) {
-      return;
-    }
+    if (!target) return;
 
     if (target.route === 'ExternalLink') {
       const url = target.params?.url;

@@ -4,8 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, NEUTRAL } from '../styles';
-import storage from '@react-native-firebase/storage';
-import firestore from '@react-native-firebase/firestore';
+import { supabase } from '../lib/supabase';
 import AppLogo from '../components/AppLogo';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -27,43 +26,23 @@ const WelcomeScreen = ({ navigation }) => {
     const [isLoading, setIsLoading] = useState(true);
     const flatListRef = useRef<FlatList>(null);
 
-    // Load carousel images from Firebase Storage on mount
+    // Load carousel images from Supabase on mount
     useEffect(() => {
-        loadCarouselFromFirebase();
+        loadCarousel();
     }, []);
 
-    const loadCarouselFromFirebase = async () => {
+    const loadCarousel = async () => {
         try {
-            const carouselDoc = await firestore().collection('app_config').doc('splash_carousel').get();
+            const { data, error } = await supabase.from('app_config').select('value').eq('key', 'splash_carousel').maybeSingle();
 
-            if (carouselDoc.exists) {
-                const data = carouselDoc.data();
-                if (data?.images && data.images.length > 0) {
-                    setCarouselImages(data.images);
-                    setIsLoading(false);
-                    return;
-                }
+            if (!error && data?.value?.images?.length > 0) {
+                setCarouselImages(data.value.images);
+                setIsLoading(false);
+                return;
             }
 
-            const storageRef = storage().ref('carousel');
-            const result = await storageRef.listAll();
-
-            if (result.items.length > 0) {
-                const imagePromises = result.items.slice(0, 5).map(async (item, index) => {
-                    const url = await item.getDownloadURL();
-                    return {
-                        id: String(index + 1),
-                        image: url,
-                        title: DEFAULT_CAROUSEL[index]?.title || `Destination ${index + 1}`,
-                        subtitle: DEFAULT_CAROUSEL[index]?.subtitle || 'Explore with Tripzi',
-                        location: DEFAULT_CAROUSEL[index]?.location || 'India',
-                    };
-                });
-                const images = await Promise.all(imagePromises);
-                setCarouselImages(images);
-            } else {
-                setCarouselImages(DEFAULT_CAROUSEL.map(item => ({ ...item, image: null })));
-            }
+            // Fallback to defaults
+            setCarouselImages(DEFAULT_CAROUSEL.map(item => ({ ...item, image: null })));
         } catch (error) {
             setCarouselImages(DEFAULT_CAROUSEL.map(item => ({ ...item, image: null })));
         } finally {

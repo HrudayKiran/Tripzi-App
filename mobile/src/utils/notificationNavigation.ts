@@ -1,22 +1,24 @@
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+import { supabase } from '../lib/supabase';
 import type { AppNotification } from '../hooks/useNotifications';
 
 type ValidTarget =
     | { route: string; params?: Record<string, unknown> }
     | null;
 
-const getChatSnapshotIfAccessible = async (
-    collection: 'chats' | 'group_chats',
+const getChatIfAccessible = async (
+    table: 'chats' | 'group_chats',
     chatId: string,
     uid: string
 ) => {
-    const snapshot = await firestore().collection(collection).doc(chatId).get();
-    if (!snapshot.exists) return null;
+    const { data } = await supabase
+        .from(table)
+        .select('id, participants, hidden')
+        .eq('id', chatId)
+        .maybeSingle();
 
-    const data = snapshot.data() || {};
+    if (!data) return null;
     const participants = Array.isArray(data.participants) ? data.participants : [];
-    return participants.includes(uid) && data.hidden !== true ? snapshot : null;
+    return participants.includes(uid) && data.hidden !== true ? data : null;
 };
 
 export const resolveNotificationTarget = async (
@@ -24,7 +26,9 @@ export const resolveNotificationTarget = async (
 ): Promise<ValidTarget> => {
     const route = notification.deepLinkRoute;
     const params = notification.deepLinkParams || {};
-    const uid = auth().currentUser?.uid;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    const uid = user?.id;
 
     if (!route) return null;
 
@@ -35,14 +39,13 @@ export const resolveNotificationTarget = async (
     if (route === 'TripDetails') {
         const tripId = String(params.tripId || notification.entityId || '');
         if (!tripId) return null;
-        const snapshot = await firestore().collection('trips').doc(tripId).get();
-        if (!snapshot.exists) return null;
+        const { data: trip } = await supabase
+            .from('trips')
+            .select('id, status')
+            .eq('id', tripId)
+            .maybeSingle();
 
-        const trip = snapshot.data() || {};
-        if (trip.deletedAt || trip.status === 'deleted') {
-            return null;
-        }
-
+        if (!trip || trip.status === 'deleted') return null;
         return { route: 'TripDetails', params: { tripId } };
     }
 
@@ -51,8 +54,8 @@ export const resolveNotificationTarget = async (
         const chatId = String(params.chatId || notification.entityId || '');
         if (!chatId) return null;
 
-        const directChat = await getChatSnapshotIfAccessible('chats', chatId, uid);
-        const groupChat = directChat ? null : await getChatSnapshotIfAccessible('group_chats', chatId, uid);
+        const directChat = await getChatIfAccessible('chats', chatId, uid);
+        const groupChat = directChat ? null : await getChatIfAccessible('group_chats', chatId, uid);
         const collectionName = directChat ? 'chats' : groupChat ? 'group_chats' : null;
         if (!collectionName) return null;
 
@@ -69,10 +72,13 @@ export const resolveNotificationTarget = async (
     if (route === 'Profile') {
         const requestedUserId = String(params.userId || notification.entityId || uid || '');
         if (requestedUserId && uid && requestedUserId !== uid) {
-            const snapshot = await firestore().collection('public_users').doc(requestedUserId).get();
-            return snapshot.exists ? { route: 'UserProfile', params: { userId: requestedUserId } } : null;
+            const { data } = await supabase
+                .from('public_profiles')
+                .select('id')
+                .eq('id', requestedUserId)
+                .maybeSingle();
+            return data ? { route: 'UserProfile', params: { userId: requestedUserId } } : null;
         }
-
         return uid ? { route: 'Profile', params: {} } : null;
     }
 
@@ -82,8 +88,12 @@ export const resolveNotificationTarget = async (
         if (uid && userId === uid) {
             return { route: 'Profile', params: {} };
         }
-        const snapshot = await firestore().collection('public_users').doc(userId).get();
-        return snapshot.exists ? { route: 'UserProfile', params: { userId } } : null;
+        const { data } = await supabase
+            .from('public_profiles')
+            .select('id')
+            .eq('id', userId)
+            .maybeSingle();
+        return data ? { route: 'UserProfile', params: { userId } } : null;
     }
 
     if (route === 'ExternalLink') {

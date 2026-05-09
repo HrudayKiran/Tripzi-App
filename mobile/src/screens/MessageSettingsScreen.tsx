@@ -12,8 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { getBooleanPreference, PREFERENCE_KEYS, setBooleanPreference } from '../utils/preferences';
 
 const MessageSettingsScreen = ({ navigation }) => {
@@ -35,14 +34,13 @@ const MessageSettingsScreen = ({ navigation }) => {
         setSaveMedia(value);
         await setBooleanPreference(PREFERENCE_KEYS.saveToGallery, value);
 
-        const uid = auth().currentUser?.uid;
-        if (!uid) return;
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user?.id) return;
 
         try {
-            await firestore().collection('users').doc(uid).set({
-                saveToGallery: value,
-                updatedAt: firestore.FieldValue.serverTimestamp(),
-            }, { merge: true });
+            await supabase.from('profiles').update({
+                save_to_gallery: value,
+            }).eq('id', user.id);
         } catch {
             // Save-to-gallery sync should not block local preference changes.
         }

@@ -1,75 +1,31 @@
 import { useEffect, useState } from 'react';
-import appCheck from '@react-native-firebase/app-check';
 
-const ENABLE_IN_DEV = process.env.EXPO_PUBLIC_ENABLE_APPCHECK === 'true';
-const SHOULD_ENABLE = !__DEV__ || ENABLE_IN_DEV;
-const DEBUG_TOKEN = process.env.EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN?.trim() || undefined;
-const WEB_SITE_KEY = process.env.EXPO_PUBLIC_APPCHECK_WEB_SITE_KEY?.trim() || undefined;
+/**
+ * App Check is a Firebase-specific feature.
+ * Since we migrated to Supabase, this hook is now a no-op stub
+ * that maintains the same interface so nothing breaks.
+ */
 
 export const initializeAppCheck = async () => {
-    if (!SHOULD_ENABLE) {
-        return;
-    }
-
-    const provider = appCheck().newReactNativeFirebaseAppCheckProvider();
-    provider.configure({
-        android: {
-            provider: __DEV__ ? 'debug' : 'playIntegrity',
-            debugToken: DEBUG_TOKEN,
-        },
-        apple: {
-            provider: __DEV__ ? 'debug' : 'appAttestWithDeviceCheckFallback',
-            debugToken: DEBUG_TOKEN,
-        },
-        web: {
-            provider: __DEV__ ? 'debug' : 'reCaptchaV3',
-            debugToken: DEBUG_TOKEN,
-            siteKey: WEB_SITE_KEY,
-        },
-    });
-
-    await appCheck().initializeAppCheck({
-        provider,
-        isTokenAutoRefreshEnabled: true,
-    });
-
-    // Warm up one token so App Check metrics start appearing quickly.
-    await appCheck().getToken(false);
+    // No-op: App Check is Firebase-specific and no longer needed.
 };
 
 export const useAppCheck = () => {
     const [isInitialized, setIsInitialized] = useState(false);
-    const [error, setError] = useState<Error | null>(null);
 
     useEffect(() => {
-        const init = async () => {
-            try {
-                await initializeAppCheck();
-            } catch (err) {
-                setError(err as Error);
-            } finally {
-                setIsInitialized(true);
-            }
-        };
-
-        init();
+        setIsInitialized(true);
     }, []);
 
     return {
         isInitialized,
-        error,
-        isEnabled: SHOULD_ENABLE,
+        error: null,
+        isEnabled: false,
     };
 };
 
 export const getAppCheckToken = async (): Promise<string | null> => {
-    if (!SHOULD_ENABLE) return null;
-    try {
-        const { token } = await appCheck().getToken(true);
-        return token;
-    } catch (_) {
-        return null;
-    }
+    return null;
 };
 
 export default useAppCheck;

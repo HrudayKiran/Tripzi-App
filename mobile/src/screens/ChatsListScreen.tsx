@@ -18,8 +18,7 @@ import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, NEUTRAL } from '../styles';
 import { useChats, Chat } from '../hooks/useChats';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { formatDistanceToNow } from 'date-fns';
 import { LinearGradient } from 'expo-linear-gradient';
 import { searchUsersByPrefix } from '../utils/searchUsers';
@@ -38,15 +37,14 @@ const ChatsListScreen = ({ navigation }) => {
     const { chats, loading, refreshChats, deleteChat } = useChats();
 
     // Use state for currentUser to properly handle auth state
-    const [currentUser, setCurrentUser] = useState(auth().currentUser);
+    const [currentUser, setCurrentUser] = useState<any>(null);
 
-    // Listen for auth state changes
     React.useEffect(() => {
-        const unsubscribe = auth().onAuthStateChanged((user) => {
-
-            setCurrentUser(user);
+        supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setCurrentUser(session?.user || null);
         });
-        return () => unsubscribe();
+        return () => subscription.unsubscribe();
     }, []);
 
     // Search state
@@ -122,7 +120,7 @@ const ChatsListScreen = ({ navigation }) => {
     const getOtherParticipant = useCallback(
         (chat: Chat) => {
             if (!currentUser) return null;
-            const otherUid = chat.participants.find((uid) => uid !== currentUser.uid);
+            const otherUid = chat.participants.find((uid) => uid !== currentUser.id);
             if (!otherUid) return null;
             return {
                 uid: otherUid,
@@ -154,7 +152,7 @@ const ChatsListScreen = ({ navigation }) => {
         try {
             const results = await searchUsersByPrefix(query, 10);
             setSearchResults(
-                results.filter((u) => u.id !== currentUser?.uid).map((u) => ({
+                results.filter((u) => u.id !== currentUser?.id).map((u) => ({
                     id: u.id,
                     displayName: u.displayName || 'User',
                     username: u.username,
@@ -176,49 +174,43 @@ const ChatsListScreen = ({ navigation }) => {
 
         try {
             // Check if chat already exists
-            const chatQuery = await firestore()
-                .collection('chats')
-                .where('type', '==', 'direct')
-                .where('participants', 'array-contains', currentUser.uid)
-                .get();
+            const { data: existingChats } = await supabase
+                .from('chats')
+                .select('*')
+                .eq('type', 'direct')
+                .contains('participants', [currentUser.id]);
 
             let chatId = null;
-            for (const doc of chatQuery.docs) {
-                const data = doc.data();
-                if (data.participants.includes(user.id)) {
-                    chatId = doc.id;
+            for (const chat of (existingChats || [])) {
+                if (chat.participants.includes(user.id)) {
+                    chatId = chat.id;
                     break;
                 }
             }
 
             if (!chatId) {
-                // Create new chat
-                const currentUserDoc = await firestore().collection('users').doc(currentUser.uid).get();
-                const currentUserData = currentUserDoc.data();
+                // Get current user profile
+                const { data: profile } = await supabase.from('profiles').select('name, display_name, photo_url').eq('id', currentUser.id).maybeSingle();
+                const userData: any = profile || {};
 
-                const newChatRef = await firestore().collection('chats').add({
+                const { data: newChat } = await supabase.from('chats').insert({
                     type: 'direct',
-                    participants: [currentUser.uid, user.id],
-                    participantDetails: {
-                        [currentUser.uid]: {
-                            displayName: currentUserData?.name || currentUserData?.displayName || currentUser.displayName || 'User',
-                            photoURL: currentUserData?.photoURL || currentUser.photoURL || '',
+                    participants: [currentUser.id, user.id],
+                    participant_details: {
+                        [currentUser.id]: {
+                            displayName: userData.name || userData.display_name || currentUser.user_metadata?.full_name || 'User',
+                            photoURL: userData.photo_url || currentUser.user_metadata?.avatar_url || '',
                         },
                         [user.id]: {
                             displayName: user.displayName || 'User',
                             photoURL: user.photoURL || '',
                         },
                     },
-                    unreadCount: {
-                        [currentUser.uid]: 0,
-                        [user.id]: 0,
-                    },
-                    mutedBy: [],
-                    pinnedBy: [],
-                    createdAt: firestore.FieldValue.serverTimestamp(),
-                    updatedAt: firestore.FieldValue.serverTimestamp(),
-                });
-                chatId = newChatRef.id;
+                    unread_count: { [currentUser.id]: 0, [user.id]: 0 },
+                    muted_by: [],
+                    pinned_by: [],
+                }).select('id').single();
+                chatId = newChat?.id;
             }
 
             setShowSearch(false);
@@ -233,7 +225,6 @@ const ChatsListScreen = ({ navigation }) => {
                 otherUserPhoto: user.photoURL,
             });
         } catch (error) {
-
             Alert.alert('Error', 'Could not start chat. Please try again.');
         } finally {
             setStartingChat(false);
@@ -244,7 +235,7 @@ const ChatsListScreen = ({ navigation }) => {
         const otherUser = item.type === 'direct' ? getOtherParticipant(item) : null;
         const displayName = item.type === 'group' ? item.groupName : otherUser?.displayName || 'User';
         const displayPhoto = item.type === 'group' ? item.groupIcon : otherUser?.photoURL;
-        const unreadCount = currentUser ? item.unreadCount?.[currentUser.uid] || 0 : 0;
+        const unreadCount = currentUser ? item.unreadCount?.[currentUser.id] || (item as any).unread_count?.[currentUser.id] || 0 : 0;
 
         return (
             <Animatable.View animation="fadeInUp" delay={index * 50} duration={300}>

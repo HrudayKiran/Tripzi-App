@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { WebView } from 'react-native-webview';
 import { useTheme } from '../contexts/ThemeContext';
-import auth from '@react-native-firebase/auth';
+import { supabase } from '../lib/supabase';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, NEUTRAL } from '../styles';
 
 // ─── Tawk.to Configuration ─────────────────────────────────────────
@@ -21,7 +21,10 @@ const HelpSupportScreen = ({ navigation }) => {
   const [chatLoading, setChatLoading] = useState(true);
   const webViewRef = useRef<WebView>(null);
 
-  const currentUser = auth().currentUser;
+  const [currentUser, setCurrentUser] = React.useState<any>(null);
+  React.useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+  }, []);
 
   const faqs = [
     { id: 1, question: 'How do I create a trip?', answer: 'Tap the + button from the main tabs, then create a trip manually or with Tripzi AI.' },
@@ -46,7 +49,7 @@ const HelpSupportScreen = ({ navigation }) => {
   // Open email client with pre-filled user info
   const openEmail = () => {
     const subject = encodeURIComponent('Tripzi App Support');
-    const body = encodeURIComponent(`\n\n---\nUser: ${currentUser?.displayName || 'N/A'}\nEmail: ${currentUser?.email || 'N/A'}\nUID: ${currentUser?.uid || 'N/A'}`);
+    const body = encodeURIComponent(`\n\n---\nUser: ${currentUser?.user_metadata?.full_name || 'N/A'}\nEmail: ${currentUser?.email || 'N/A'}\nUID: ${currentUser?.id || 'N/A'}`);
     Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`);
   };
 

@@ -1,4 +1,4 @@
-import firestore from '@react-native-firebase/firestore';
+import { supabase } from '../lib/supabase';
 
 export interface PublicProfile {
     id: string;
@@ -11,13 +11,27 @@ export interface PublicProfile {
     [key: string]: any;
 }
 
+const mapRow = (row: any): PublicProfile => ({
+    id: row.id,
+    userId: row.id,
+    displayName: row.display_name,
+    username: row.username,
+    photoURL: row.photo_url,
+    bio: row.bio,
+    ageVerified: row.age_verified,
+});
+
 export const getPublicProfile = async (uid: string): Promise<PublicProfile | null> => {
     if (!uid) return null;
 
-    const doc = await firestore().collection('public_users').doc(uid).get();
-    if (!doc.exists) return null;
+    const { data, error } = await supabase
+        .from('public_profiles')
+        .select('*')
+        .eq('id', uid)
+        .maybeSingle();
 
-    return { id: doc.id, ...doc.data() } as PublicProfile;
+    if (error || !data) return null;
+    return mapRow(data);
 };
 
 export const getPublicProfilesByIds = async (
@@ -27,7 +41,8 @@ export const getPublicProfilesByIds = async (
     const result = new Map<string, PublicProfile>();
     if (uniqueIds.length === 0) return result;
 
-    const chunkSize = 10;
+    // Supabase .in() supports up to ~300 values, chunk for safety
+    const chunkSize = 50;
     const chunks = Array.from(
         { length: Math.ceil(uniqueIds.length / chunkSize) },
         (_, i) => uniqueIds.slice(i * chunkSize, i * chunkSize + chunkSize)
@@ -35,14 +50,13 @@ export const getPublicProfilesByIds = async (
 
     await Promise.all(
         chunks.map(async (chunk) => {
-            if (chunk.length === 0) return;
-            const snapshot = await firestore()
-                .collection('public_users')
-                .where(firestore.FieldPath.documentId(), 'in', chunk)
-                .get();
+            const { data } = await supabase
+                .from('public_profiles')
+                .select('*')
+                .in('id', chunk);
 
-            snapshot.docs.forEach((doc) => {
-                result.set(doc.id, { id: doc.id, ...doc.data() } as PublicProfile);
+            (data || []).forEach((row) => {
+                result.set(row.id, mapRow(row));
             });
         })
     );

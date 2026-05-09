@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Animated, Dimensions, FlatList, Linking, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, TouchableWithoutFeedback } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { supabase } from '../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
@@ -48,7 +47,11 @@ const TripDetailsScreen = ({ route, navigation }) => {
   const [isJoined, setIsJoined] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const { tripId } = route.params;
-  const user = auth().currentUser;
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user: u } }) => setUser(u));
+  }, []);
 
   // Rating states
   const [userRating, setUserRating] = useState(0);
@@ -80,26 +83,78 @@ const TripDetailsScreen = ({ route, navigation }) => {
   }, [trip?.images, trip?.coverImage]);
 
   const scrollY = useRef(new Animated.Value(0)).current;
-  const isOwner = trip?.userId === user?.uid;
+  const isOwner = trip?.userId === user?.id || trip?.user_id === user?.id;
 
   useEffect(() => {
-    const unsubscribe = firestore().collection('trips').doc(tripId).onSnapshot(async (doc) => {
-      if (doc.exists) {
-        const tripData = { id: doc.id, ...doc.data() };
+    // Subscribe to trip changes via Supabase realtime
+    const channel = supabase
+      .channel(`trip_${tripId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trips', filter: `id=eq.${tripId}` }, async (payload) => {
+        if (payload.new) {
+          const tripData: any = { id: (payload.new as any).id, ...payload.new };
+          // Normalize snake_case to camelCase for UI compatibility
+          tripData.userId = tripData.user_id || tripData.userId;
+          tripData.coverImage = tripData.cover_image || tripData.coverImage;
+          tripData.toLocation = tripData.to_location || tripData.toLocation;
+          tripData.fromLocation = tripData.from_location || tripData.fromLocation;
+          tripData.maxTravelers = tripData.max_travelers || tripData.maxTravelers;
+          tripData.costPerPerson = tripData.cost_per_person || tripData.costPerPerson;
+          tripData.tripTypes = tripData.trip_types || tripData.tripTypes;
+          tripData.transportModes = tripData.transport_modes || tripData.transportModes;
+          tripData.fromDate = tripData.from_date || tripData.fromDate;
+          tripData.toDate = tripData.to_date || tripData.toDate;
+          tripData.accommodationType = tripData.accommodation_type || tripData.accommodationType;
+          tripData.accommodationDays = tripData.accommodation_days || tripData.accommodationDays;
+          tripData.bookingStatus = tripData.booking_status || tripData.bookingStatus;
+          tripData.genderPreference = tripData.gender_preference || tripData.genderPreference;
+          tripData.mandatoryItems = tripData.mandatory_items || tripData.mandatoryItems;
+          tripData.placesToVisit = tripData.places_to_visit || tripData.placesToVisit;
+          tripData.imageLocations = tripData.image_locations || tripData.imageLocations;
+          if (tripData.userId) {
+            const { data: profile } = await supabase.from('public_profiles').select('*').eq('id', tripData.userId).maybeSingle();
+            if (profile) tripData.user = profile;
+          }
+          setTrip(tripData);
+          setIsJoined(user ? (tripData.participants || []).includes(user.id) : false);
+        }
+      })
+      .subscribe();
+
+    // Initial fetch
+    const fetchTrip = async () => {
+      const { data: doc } = await supabase.from('trips').select('*').eq('id', tripId).maybeSingle();
+      if (doc) {
+        const tripData: any = { id: doc.id, ...doc };
+        tripData.userId = tripData.user_id || tripData.userId;
+        tripData.coverImage = tripData.cover_image || tripData.coverImage;
+        tripData.toLocation = tripData.to_location || tripData.toLocation;
+        tripData.fromLocation = tripData.from_location || tripData.fromLocation;
+        tripData.maxTravelers = tripData.max_travelers || tripData.maxTravelers;
+        tripData.costPerPerson = tripData.cost_per_person || tripData.costPerPerson;
+        tripData.tripTypes = tripData.trip_types || tripData.tripTypes;
+        tripData.transportModes = tripData.transport_modes || tripData.transportModes;
+        tripData.fromDate = tripData.from_date || tripData.fromDate;
+        tripData.toDate = tripData.to_date || tripData.toDate;
+        tripData.accommodationType = tripData.accommodation_type || tripData.accommodationType;
+        tripData.accommodationDays = tripData.accommodation_days || tripData.accommodationDays;
+        tripData.bookingStatus = tripData.booking_status || tripData.bookingStatus;
+        tripData.genderPreference = tripData.gender_preference || tripData.genderPreference;
+        tripData.mandatoryItems = tripData.mandatory_items || tripData.mandatoryItems;
+        tripData.placesToVisit = tripData.places_to_visit || tripData.placesToVisit;
+        tripData.imageLocations = tripData.image_locations || tripData.imageLocations;
         if (tripData.userId) {
-          try {
-            const userDoc = await firestore().collection('public_users').doc(tripData.userId).get();
-            if (userDoc.exists) tripData.user = userDoc.data();
-          } catch (e) { }
+          const { data: profile } = await supabase.from('public_profiles').select('*').eq('id', tripData.userId).maybeSingle();
+          if (profile) tripData.user = profile;
         }
         setTrip(tripData);
-        // Sync isJoined state with participants array
-        setIsJoined(user ? tripData.participants?.includes(user.uid) : false);
+        setIsJoined(user ? (tripData.participants || []).includes(user.id) : false);
       }
       setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [tripId, user?.uid]);
+    };
+    fetchTrip();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [tripId, user?.id]);
 
   // Fetch participant data when trip.participants changes
   useEffect(() => {
@@ -109,18 +164,14 @@ const TripDetailsScreen = ({ route, navigation }) => {
         return;
       }
       try {
-        const participantPromises = trip.participants.slice(0, 8).map(async (uid: string) => {
-          const userDoc = await firestore().collection('public_users').doc(uid).get();
-          if (userDoc.exists) {
-            return { id: uid, ...userDoc.data() };
-          }
-          return { id: uid, displayName: 'Traveler', photoURL: null };
+        const ids = trip.participants.slice(0, 8);
+        const { data: profiles } = await supabase.from('public_profiles').select('*').in('id', ids);
+        const participants = ids.map(uid => {
+          const p = (profiles || []).find(pr => pr.id === uid);
+          return p ? { id: uid, displayName: p.display_name || p.name, photoURL: p.photo_url, ...p } : { id: uid, displayName: 'Traveler', photoURL: null };
         });
-        const participants = await Promise.all(participantPromises);
         setParticipantsData(participants);
       } catch (error) {
-        // Error fetching participants
-
       }
     };
     fetchParticipants();
@@ -130,21 +181,16 @@ const TripDetailsScreen = ({ route, navigation }) => {
   useEffect(() => {
     const fetchRatings = async () => {
       try {
-        const ratingsSnapshot = await firestore()
-          .collection('ratings')
-          .where('tripId', '==', tripId)
-          .orderBy('createdAt', 'desc')
-          .get();
+        const { data: ratings } = await supabase
+          .from('ratings')
+          .select('*')
+          .eq('trip_id', tripId)
+          .order('created_at', { ascending: false });
 
-        const ratings = ratingsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setExistingRatings(ratings);
+        setExistingRatings(ratings || []);
 
-        // Check if current user has already rated
         if (user) {
-          const userRatingDoc = ratings.find(r => r.userId === user.uid);
+          const userRatingDoc = (ratings || []).find(r => r.user_id === user.id);
           if (userRatingDoc) {
             setHasRated(true);
             setUserRating(userRatingDoc.rating);
@@ -152,7 +198,6 @@ const TripDetailsScreen = ({ route, navigation }) => {
           }
         }
       } catch (error) {
-        // Error handled silently
       }
     };
 
@@ -223,49 +268,43 @@ const TripDetailsScreen = ({ route, navigation }) => {
       Alert.alert('Sign In Required', 'Please sign in to chat.');
       return;
     }
-    if (!trip?.userId || trip.userId === user.uid) return;
+    if (!trip?.userId || trip.userId === user.id) return;
 
     try {
-      const chatQuery = await firestore()
-        .collection('chats')
-        .where('type', '==', 'direct')
-        .where('participants', 'array-contains', user.uid)
-        .get();
+      const { data: existingChats } = await supabase
+        .from('chats')
+        .select('*')
+        .eq('type', 'direct')
+        .contains('participants', [user.id]);
 
       let chatId = null;
-      for (const doc of chatQuery.docs) {
-        const data = doc.data();
-        if (data.participants && data.participants.includes(trip.userId)) {
-          chatId = doc.id;
+      for (const chat of (existingChats || [])) {
+        if (chat.participants && chat.participants.includes(trip.userId)) {
+          chatId = chat.id;
           break;
         }
       }
 
       if (!chatId) {
-        const newChatRef = await firestore().collection('chats').add({
+        const { data: newChat, error } = await supabase.from('chats').insert({
           type: 'direct',
-          createdBy: user.uid,
-          participants: [user.uid, trip.userId],
-          participantDetails: {
-            [user.uid]: {
-              displayName: user.displayName || 'User',
-              photoURL: user.photoURL || '',
+          created_by: user.id,
+          participants: [user.id, trip.userId],
+          participant_details: {
+            [user.id]: {
+              displayName: user.user_metadata?.full_name || 'User',
+              photoURL: user.user_metadata?.avatar_url || '',
             },
             [trip.userId]: {
-              displayName: trip.user?.displayName || 'User',
-              photoURL: trip.user?.photoURL || '',
+              displayName: trip.user?.displayName || trip.user?.display_name || 'User',
+              photoURL: trip.user?.photoURL || trip.user?.photo_url || '',
             },
           },
-          unreadCount: {
-            [user.uid]: 0,
-            [trip.userId]: 0,
-          },
-          mutedBy: [],
-          pinnedBy: [],
-          createdAt: firestore.FieldValue.serverTimestamp(),
-          updatedAt: firestore.FieldValue.serverTimestamp(),
-        });
-        chatId = newChatRef.id;
+          unread_count: { [user.id]: 0, [trip.userId]: 0 },
+          muted_by: [],
+          pinned_by: [],
+        }).select('id').single();
+        chatId = newChat?.id;
       }
 
       navigation.navigate('Chat', {
