@@ -6,7 +6,6 @@ import {
     TouchableOpacity,
     TextInput,
     FlatList,
-    Image,
     KeyboardAvoidingView,
     Platform,
     ActivityIndicator,
@@ -16,6 +15,7 @@ import {
     Dimensions,
     Linking,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -33,7 +33,7 @@ import DefaultAvatar from '../components/DefaultAvatar';
 import LocationPickerModal from '../components/LocationPickerModal';
 import LiveLocationMapModal from '../components/LiveLocationMapModal';
 import { supabase } from '../lib/supabase';
-import { pickAndUploadImage, uploadChatImageToR2 } from '../utils/imageUpload';
+import { uploadChatImageToR2 } from '../utils/imageUpload';
 import { format, isToday, isYesterday, isSameDay, differenceInMinutes, addMinutes } from 'date-fns';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -127,7 +127,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
 
     // Last seen / online status
     const [lastSeenText, setLastSeenText] = useState('');
-    // Live profile photo from public_users
+    // Live profile photo from public_profiles
     const [livePhoto, setLivePhoto] = useState<string | null>(null);
     const seededIncomingMediaIds = useRef<Set<string>>(new Set());
     const skipInitialAutoSave = useRef(true);
@@ -177,7 +177,12 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     renderItem={({ item }) => (
                         <TouchableOpacity style={[styles.mentionItem, { borderBottomColor: colors.border }]} onPress={() => handleSelectMention(item)}>
                             {item.photoURL ? (
-                                <Image source={{ uri: item.photoURL }} style={styles.mentionAvatar} />
+                                <Image
+                                    source={{ uri: item.photoURL }}
+                                    style={styles.mentionAvatar}
+                                    contentFit="cover"
+                                    transition={200}
+                                />
                             ) : (
                                 <View style={[styles.mentionAvatarPlaceholder, { backgroundColor: colors.primary }]}>
                                     <Text style={{ color: '#fff', fontSize: 12 }}>{item.displayName?.charAt(0)}</Text>
@@ -211,7 +216,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     useEffect(() => {
         if (!otherParticipantUid || chat?.type === 'group') return;
         const loadPresence = async () => {
-            const { data } = await supabase.from('public_users').select('photo_url, presence, last_seen_at, last_seen').eq('id', otherParticipantUid).maybeSingle();
+            const { data } = await supabase.from('public_profiles').select('photo_url, presence, last_seen_at, last_seen').eq('id', otherParticipantUid).maybeSingle();
             if (!data) return;
             if (data.photo_url) setLivePhoto(data.photo_url);
             const presence = typeof data.presence === 'string' ? data.presence : '';
@@ -230,7 +235,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         };
         loadPresence();
         const channel = supabase.channel(`presence-${otherParticipantUid}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'public_users', filter: `id=eq.${otherParticipantUid}` }, () => { loadPresence(); })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'public_profiles', filter: `id=eq.${otherParticipantUid}` }, () => { loadPresence(); })
             .subscribe();
         return () => { supabase.removeChannel(channel); };
     }, [otherParticipantUid, chat?.type]);
@@ -643,7 +648,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     updated_at: new Date().toISOString(),
                 }, { onConflict: 'chat_id,user_id' });
         } catch (error) {
-            console.error('Error updating live location:', error);
+            // Error updating live location
         }
     };
 
@@ -830,7 +835,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     .eq('chat_id', chatId)
                     .eq('user_id', currentUser.id);
             } catch (error) {
-                console.error('Error stopping live sharing:', error);
+                // Error stopping live sharing
             }
         }
     };
@@ -1220,7 +1225,12 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                             {/* Image message */}
                             {item.type === 'image' && item.mediaUrl && (
                                 <TouchableOpacity onPress={() => setViewingImage(item.mediaUrl!)}>
-                                    <Image source={{ uri: item.mediaUrl }} style={styles.messageImage} resizeMode="contain" />
+                                    <Image
+                                        source={{ uri: item.mediaUrl }}
+                                        style={styles.messageImage}
+                                        contentFit="cover"
+                                        transition={200}
+                                    />
                                 </TouchableOpacity>
                             )}
 
@@ -1268,7 +1278,8 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                                         <Image
                                             source={{ uri: (item as any).tripImage }}
                                             style={styles.tripShareImage}
-                                            resizeMode="cover"
+                                            contentFit="cover"
+                                            transition={200}
                                         />
                                     )}
                                     <View style={styles.tripShareInfo}>
@@ -1696,7 +1707,14 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     <TouchableOpacity style={styles.imageViewerClose} onPress={() => setViewingImage(null)}>
                         <Ionicons name="close" size={28} color="#fff" />
                     </TouchableOpacity>
-                    {viewingImage && <Image source={{ uri: viewingImage }} style={styles.fullImage} resizeMode="contain" />}
+                    {viewingImage && (
+                        <Image
+                            source={{ uri: viewingImage }}
+                            style={styles.fullImage}
+                            contentFit="contain"
+                            transition={200}
+                        />
+                    )}
                 </Pressable>
             </Modal>
 
@@ -1707,7 +1725,12 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                         <Text style={styles.previewTitle}>Ready to send</Text>
                         <Text style={styles.previewSubtitle}>Check the image before sharing it.</Text>
                     </View>
-                    <Image source={{ uri: previewImage || '' }} style={styles.fullImage} resizeMode="contain" />
+                    <Image
+                        source={{ uri: previewImage || '' }}
+                        style={styles.fullImage}
+                        contentFit="contain"
+                        transition={200}
+                    />
 
                     <View style={[styles.previewActions, { bottom: Math.max(insets.bottom, 20) + 20 }]}>
                         <TouchableOpacity

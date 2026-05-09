@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, Animated, Easing, Image, StatusBar as RNStatusBar } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Animated, Easing, StatusBar as RNStatusBar } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useNavigation } from '@react-navigation/native';

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, ActivityIndicator, Image, RefreshControl, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, ActivityIndicator, RefreshControl, Alert } from 'react-native';
+import { Image } from 'expo-image';
 import { useTheme } from '../contexts/ThemeContext';
 import * as Animatable from 'react-native-animatable';
 import { supabase } from '../lib/supabase';
@@ -130,6 +131,8 @@ const MyTripsScreen = ({ navigation, route }) => {
         style={styles.cardContent}
       >
         <Image
+          contentFit="cover"
+          transition={200}
           source={{ uri: item.coverImage || 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800' }}
           style={styles.tripImage}
         />

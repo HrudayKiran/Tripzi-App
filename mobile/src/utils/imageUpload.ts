@@ -1,4 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { Alert, Linking, Platform } from 'react-native';
 import { workersApi } from '../lib/workersApi';
 
@@ -91,8 +92,32 @@ const uploadImageToR2 = async (
             throw new Error('Upload ticket was incomplete.');
         }
 
-        const blob = await readLocalFileAsBlob(uri);
-        await putBlobToSignedUrl(ticket.uploadUrl, blob, contentType);
+        // Determine optimization settings based on endpoint
+        let resizeWidth = 1080;
+        let compressQuality = 0.7;
+
+        if (endpoint === '/media/profile-upload') {
+            resizeWidth = 400;
+            compressQuality = 0.6;
+        } else if (endpoint === '/media/chat-upload') {
+            resizeWidth = 800;
+            compressQuality = 0.6;
+        }
+
+        // Optimize image before upload
+        const manipResult = await ImageManipulator.manipulateAsync(
+            uri,
+            [{ resize: { width: resizeWidth } }],
+            { 
+                compress: compressQuality, 
+                format: ImageManipulator.SaveFormat.JPEG 
+            }
+        );
+
+        const optimizedContentType = 'image/jpeg';
+
+        const blob = await readLocalFileAsBlob(manipResult.uri);
+        await putBlobToSignedUrl(ticket.uploadUrl, blob, optimizedContentType);
 
         return {
             success: true,

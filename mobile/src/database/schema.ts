@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-  version: 2,
+  version: 3,
   tables: [
     tableSchema({
       name: 'profiles',
@@ -42,6 +42,14 @@ export default appSchema({
         { name: 'owner_photo_url', type: 'string', isOptional: true },
         { name: 'owner_username', type: 'string', isOptional: true },
         { name: 'cost', type: 'number', isOptional: true },
+        { name: 'total_cost', type: 'number', isOptional: true },
+        { name: 'cost_per_person', type: 'number', isOptional: true },
+        { name: 'accommodation_days', type: 'number', isOptional: true },
+        { name: 'maps_link', type: 'string', isOptional: true },
+        { name: 'duration', type: 'string', isOptional: true },
+        { name: 'trip_types', type: 'string', isOptional: true }, // JSON string
+        { name: 'transport_modes', type: 'string', isOptional: true }, // JSON string
+        { name: 'image_locations', type: 'string', isOptional: true }, // JSON string
         { name: 'cover_image', type: 'string', isOptional: true },
         { name: 'images', type: 'string', isOptional: true }, // JSON string
         { name: 'participants', type: 'string', isOptional: true }, // JSON string

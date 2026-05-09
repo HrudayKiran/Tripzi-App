@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Animated, Dimensions, FlatList, Linking, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated, Dimensions, FlatList, Linking, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Image as RNImage } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -71,7 +72,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
   useEffect(() => {
     const firstMedia = trip?.images?.[0] || trip?.coverImage;
     if (firstMedia && typeof firstMedia === 'string' && firstMedia.startsWith('http')) {
-      Image.getSize(firstMedia, (width, height) => {
+      RNImage.getSize(firstMedia, (width, height) => {
         if (width && height) {
           const ratio = width / height;
           setMediaAspectRatio(Math.min(Math.max(ratio, 0.8), 1.91));
@@ -526,7 +527,8 @@ const TripDetailsScreen = ({ route, navigation }) => {
                     key={`img_${index}`}
                     source={{ uri: item }}
                     style={[styles.tripImage, { aspectRatio: mediaAspectRatio }]}
-                    resizeMode="contain"
+                    contentFit="contain"
+                    transition={200}
                   />
                   {(imageLocations[index] || trip?.toLocation || trip?.location) ? (
                     <View style={styles.imageOverlay}>

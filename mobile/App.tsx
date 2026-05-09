@@ -16,7 +16,7 @@ export default function App() {
 
   // Initial Sync
   React.useEffect(() => {
-    syncDatabase().catch(err => console.error('Initial sync failed:', err));
+    syncDatabase().catch(() => { });
   }, []);
 
   // Check for App Updates
@@ -28,7 +28,7 @@ export default function App() {
         trace.stop();
         crashlytics().log('App started');
       } catch (e) {
-        console.error('Firebase services init error:', e);
+        // Firebase services init error
       }
     };
 
@@ -79,7 +79,7 @@ export default function App() {
           );
         }
       } catch (e) {
-        console.error('Error checking app version:', e);
+        // Error checking app version
       }
     };
 

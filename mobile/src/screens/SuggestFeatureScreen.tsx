@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, KeyboardAvoidingView, Platform, Linking } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingView, Platform, Linking } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -236,7 +237,12 @@ const SuggestFeatureScreen = ({ navigation }) => {
                   <View style={styles.previewGrid}>
                     {featureImages.map((uri, index) => (
                       <View key={`${uri}-${index}`} style={styles.previewItem}>
-                        <Image source={{ uri }} style={styles.uploadedImage} />
+                        <Image
+                          source={{ uri }}
+                          style={styles.uploadedImage}
+                          contentFit="cover"
+                          transition={200}
+                        />
                         <TouchableOpacity
                           style={styles.removeImageBtn}
                           onPress={() => removeImage(index, setFeatureImages)}
@@ -340,7 +346,12 @@ const SuggestFeatureScreen = ({ navigation }) => {
                   <View style={styles.previewGrid}>
                     {bugImages.map((uri, index) => (
                       <View key={`${uri}-${index}`} style={styles.previewItem}>
-                        <Image source={{ uri }} style={styles.uploadedImage} />
+                        <Image
+                          source={{ uri }}
+                          style={styles.uploadedImage}
+                          contentFit="cover"
+                          transition={200}
+                        />
                         <TouchableOpacity
                           style={styles.removeImageBtn}
                           onPress={() => removeImage(index, setBugImages)}

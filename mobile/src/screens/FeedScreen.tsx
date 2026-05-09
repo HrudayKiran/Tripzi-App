@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Modal, Dimensions, Animated, NativeSyntheticEvent, NativeScrollEvent, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ActivityIndicator, RefreshControl, Modal, Dimensions, Animated, NativeSyntheticEvent, NativeScrollEvent, Platform, ScrollView } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import TripCard from '../components/TripCard';
 import DefaultAvatar from '../components/DefaultAvatar';
@@ -40,12 +41,14 @@ const getActiveFilterCount = (filters: FilterOptions | null) => {
 };
 
 const FeedScreen = ({ navigation }) => {
-    const { trips, loading, refetch } = useTrips();
+    const { trips, loading, refetch, currentUserId } = useTrips();
     const { requestNotificationPermission } = usePermissions();
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
 
     useEffect(() => {
+        if (loading) return; // Wait until feed is completely loaded
+
         const checkAndRequestPermission = async () => {
             try {
                 const hasPrompted = await getBooleanPreference(PREFERENCE_KEYS.notificationPrompted, false);
@@ -69,7 +72,7 @@ const FeedScreen = ({ navigation }) => {
         };
 
         checkAndRequestPermission();
-    }, []);
+    }, [loading]);
     const [searchQuery, setSearchQuery] = useState('');
     const [refreshing, setRefreshing] = useState(false);
     const [notificationsVisible, setNotificationsVisible] = useState(false);
@@ -165,10 +168,8 @@ const FeedScreen = ({ navigation }) => {
 
     // Filter trips using centralized utility
     const filteredTrips = useMemo(() => {
-        const currentUserId = supabase.auth.getSession().then(s => s.data.session?.user?.id);
-        // Use sync fallback
-        return applyTripFilters(trips, searchQuery, filters, undefined, true);
-    }, [trips, searchQuery, filters]);
+        return applyTripFilters(trips, searchQuery, filters, currentUserId || undefined, true);
+    }, [trips, searchQuery, filters, currentUserId]);
 
     const handleApplyFilters = (newFilters: FilterOptions) => {
         setFilters(getActiveFilterCount(newFilters) > 0 ? newFilters : null);
@@ -438,6 +439,8 @@ const FeedScreen = ({ navigation }) => {
                                         <Image
                                             source={{ uri: trip.coverImage || trip.images?.[0] }}
                                             style={styles.tripResultImage}
+                                            contentFit="cover"
+                                            transition={200}
                                         />
                                         <View style={styles.userResultInfo}>
                                             <Text style={[styles.userResultName, { color: colors.text }]} numberOfLines={1}>

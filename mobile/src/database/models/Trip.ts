@@ -30,6 +30,14 @@ export default class Trip extends Model {
   @field('owner_photo_url') ownerPhotoUrl?: string;
   @field('owner_username') ownerUsername?: string;
   @field('cost') cost?: number;
+  @field('total_cost') totalCost?: number;
+  @field('cost_per_person') costPerPerson?: number;
+  @field('accommodation_days') accommodationDays?: number;
+  @field('maps_link') mapsLink?: string;
+  @field('duration') duration?: string;
+  @field('trip_types') tripTypesRaw?: string; // JSON string
+  @field('transport_modes') transportModesRaw?: string; // JSON string
+  @field('image_locations') imageLocationsRaw?: string; // JSON string
   @field('cover_image') coverImage?: string;
   @field('images') imagesRaw?: string; // JSON string
   @field('participants') participantsRaw?: string; // JSON string
@@ -56,6 +64,30 @@ export default class Trip extends Model {
   get images(): string[] {
     try {
       return this.imagesRaw ? JSON.parse(this.imagesRaw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  get tripTypes(): string[] {
+    try {
+      return this.tripTypesRaw ? JSON.parse(this.tripTypesRaw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  get transportModes(): string[] {
+    try {
+      return this.transportModesRaw ? JSON.parse(this.transportModesRaw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  get imageLocations(): string[] {
+    try {
+      return this.imageLocationsRaw ? JSON.parse(this.imageLocationsRaw) : [];
     } catch {
       return [];
     }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions } from 'react-native';
+import { Image } from 'expo-image';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { supabase } from '../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -83,6 +84,7 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectio
                                     <Image
                                         source={{ uri: user.photoURL }}
                                         style={[styles.markerImage, { borderColor: user.id === currentUser?.id ? colors.primary : '#fff' }]}
+                                        contentFit="cover"
                                     />
                                 ) : (
                                     <View style={[styles.markerFallback, { borderColor: user.id === currentUser?.id ? colors.primary : '#fff' }]}>
@@ -118,7 +120,11 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectio
                                 onPress={() => focusOnUser(user)}
                             >
                                 {user.photoURL ? (
-                                    <Image source={{ uri: user.photoURL }} style={styles.listAvatar} />
+                                    <Image
+                                        source={{ uri: user.photoURL }}
+                                        style={styles.listAvatar}
+                                        contentFit="cover"
+                                    />
                                 ) : (
                                     <View style={[styles.listAvatar, styles.listAvatarFallback]}>
                                         <Text style={styles.markerFallbackText}>

@@ -1,41 +1,29 @@
-import { PermissionsAndroid, Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { supabase } from '../lib/supabase';
 
 export type NotificationPermissionStatus = 'granted' | 'denied' | 'not_determined';
 
 export const getNotificationPermissionStatus = async (): Promise<NotificationPermissionStatus> => {
-    if (Platform.OS !== 'android') {
-        return 'granted';
-    }
-
-    if (Platform.Version < 33) {
-        return 'granted';
-    }
-
     try {
-        const granted = await PermissionsAndroid.check(
-            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-        );
-        return granted ? 'granted' : 'denied';
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status === 'undetermined') return 'not_determined';
+        return status;
     } catch {
         return 'denied';
     }
 };
 
 export const requestNotificationPermission = async (): Promise<NotificationPermissionStatus> => {
-    if (Platform.OS !== 'android') {
-        return 'granted';
-    }
-
-    if (Platform.Version < 33) {
-        return 'granted';
-    }
-
     try {
-        const result = await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-        );
-        return result === PermissionsAndroid.RESULTS.GRANTED ? 'granted' : 'denied';
+        const { status } = await Notifications.requestPermissionsAsync({
+            ios: {
+                allowAlert: true,
+                allowBadge: true,
+                allowSound: true,
+            },
+        });
+        if (status === 'undetermined') return 'not_determined';
+        return status;
     } catch {
         return 'denied';
     }

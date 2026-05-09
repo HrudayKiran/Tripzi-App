@@ -5,13 +5,15 @@ import {
     StyleSheet,
     Modal,
     TouchableOpacity,
-    Image,
+
     Dimensions,
     ActivityIndicator,
     Alert,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { deleteProfileImageFromR2 } from '../utils/imageUpload';
 import { supabase } from '../lib/supabase';
@@ -127,15 +129,19 @@ const ProfilePictureViewer = ({
                         <Image
                             source={{ uri: imageUrl }}
                             style={styles.fullImage}
-                            resizeMode="contain"
+                            contentFit="contain"
+                            transition={200}
                         />
                     ) : (
-                        <View style={[styles.placeholder, { backgroundColor: colors.primaryLight }]}>
-                            <Ionicons name="person" size={120} color={colors.primary} />
+                        <LinearGradient
+                            colors={['#9d74f7', '#EC4899', '#F59E0B']}
+                            style={styles.placeholder}
+                        >
+
                             <Text style={[styles.noImageText, { color: colors.textSecondary }]}>
                                 No profile picture
                             </Text>
-                        </View>
+                        </LinearGradient>
                     )}
                 </View>
             </View>

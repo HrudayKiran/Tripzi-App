@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Image, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, FlatList, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
@@ -78,7 +79,12 @@ const WelcomeScreen = ({ navigation }) => {
     const renderItem = ({ item }) => (
         <View style={styles.slide}>
             {item.image ? (
-                <Image source={{ uri: item.image }} style={styles.slideImage} resizeMode="cover" />
+                <Image
+                    source={{ uri: item.image }}
+                    style={styles.slideImage}
+                    contentFit="cover"
+                    transition={200}
+                />
             ) : (
                 <View style={[styles.slideImage, { backgroundColor: colors.primary }]}>
                     <LinearGradient colors={[...BRAND.gradient]} style={{ flex: 1 }} />

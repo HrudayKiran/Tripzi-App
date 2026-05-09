@@ -1,5 +1,6 @@
 import React, { memo, useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, Alert, Linking, ScrollView, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert, Linking, ScrollView, Modal, Image as RNImage } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
@@ -65,7 +66,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
         if (!firstMedia) return;
 
         if (isValidImageUrl(firstMedia)) {
-            Image.getSize(firstMedia, (w, h) => {
+            RNImage.getSize(firstMedia, (w, h) => {
                 if (w && h) {
                     setMediaAspectRatio(w / h);
                 }
@@ -89,7 +90,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
         if (!trip.userId) return;
 
         supabase
-            .from('public_users')
+            .from('public_profiles')
             .select('avg_rating, total_ratings, total_rating, rating_count')
             .eq('id', trip.userId)
             .maybeSingle()
@@ -155,7 +156,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                 setHasJoined(true);
             }
         } catch (error: any) {
-            console.warn('Join trip error:', error?.message || error);
+            // Join trip error
             const message = String(error?.message || '').toLowerCase();
             if (message.includes('male travelers only') || message.includes('female travelers only')) {
                 Alert.alert('Gender Restriction', error.message);
@@ -226,7 +227,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                 otherUserPhoto: trip.user?.photoURL || '',
             } as never);
         } catch (error: any) {
-            console.warn('TripCard chat error:', error?.message || error);
+            // TripCard chat error
             Alert.alert('Error', 'Could not start chat. Please try again.');
         }
     };
@@ -348,7 +349,8 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                                                     key={`img_${index}`}
                                                     style={[styles.tripImage, { aspectRatio: mediaAspectRatio }]}
                                                     source={{ uri: item }}
-                                                    resizeMode="contain"
+                                                    contentFit="contain"
+                                                    transition={200}
                                                 />
                                                 {(trip.imageLocations?.[index] || trip?.toLocation || trip?.location) ? (
                                                     <View style={styles.imageOverlay}>

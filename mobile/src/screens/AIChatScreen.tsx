@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, KeyboardAvoidingView, FlatList, TextInput, Image, ActivityIndicator, Alert, Animated, Keyboard, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, KeyboardAvoidingView, FlatList, TextInput, ActivityIndicator, Alert, Animated, Keyboard, Modal } from 'react-native';
+import { Image } from 'expo-image';
 import { supabase } from '../lib/supabase';
+import { showUploadNotification, completeUploadNotification, failUploadNotification } from '../utils/notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -272,6 +274,7 @@ const AIChatScreen = ({ navigation, route }: any) => {
                     text: "Post It!",
                     onPress: async () => {
                         try {
+                            await showUploadNotification(0.2, 'Auto-posting trip...');
                             const unsplashImages: PlaceImage[] = trip._unsplashImages || [];
                             const finalImages = unsplashImages
                                 .filter(img => img.imageUrl)
@@ -326,7 +329,6 @@ const AIChatScreen = ({ navigation, route }: any) => {
                             if (tripErr || !tripRow) throw tripErr || new Error('Failed');
 
                             await supabase.from('chats').insert({
-                                id: `trip_${tripRow.id}`,
                                 type: 'group',
                                 trip_id: tripRow.id,
                                 trip_title: trip.title,
@@ -341,8 +343,10 @@ const AIChatScreen = ({ navigation, route }: any) => {
                                 createdAt: new Date(),
                                 user: { _id: 'tripzi-ai', name: 'Tripzi AI' },
                             };
+                            await completeUploadNotification('Trip Posted! 🎉', `"${trip.title}" has been posted.`);
                             setMessages(prev => [successMsg, ...prev]);
                         } catch {
+                            await failUploadNotification('Auto-post failed');
                             Alert.alert("Error", "Failed to post trip. Try 'Edit & Post' instead.");
                         }
                     }
@@ -386,7 +390,7 @@ const AIChatScreen = ({ navigation, route }: any) => {
                         <Image
                             source={{ uri: coverUrl }}
                             style={{ width: '100%', height: '100%' }}
-                            resizeMode="cover"
+                            contentFit="cover"
                         />
                         <LinearGradient
                             colors={['transparent', 'rgba(0,0,0,0.8)']}
@@ -449,7 +453,12 @@ const AIChatScreen = ({ navigation, route }: any) => {
                                 {unsplashImages.slice(0, 5).map((img, idx) => (
                                     <View key={idx} style={styles.placeImageWrap}>
                                         {img.imageUrl ? (
-                                            <Image source={{ uri: img.imageUrl }} style={styles.placeImage} />
+                                            <Image
+                                                source={{ uri: img.imageUrl }}
+                                                style={styles.placeImage}
+                                                contentFit="cover"
+                                                transition={200}
+                                            />
                                         ) : (
                                             <View style={[styles.placeImage, { backgroundColor: colors.border, justifyContent: 'center', alignItems: 'center' }]}>
                                                 <Ionicons name="image-outline" size={16} color={colors.textSecondary} />
@@ -506,7 +515,11 @@ const AIChatScreen = ({ navigation, route }: any) => {
             >
                 {!isUser && (
                     <View style={styles.avatarContainer}>
-                        <Image source={require('../../assets/Tripzi AI.png')} style={styles.avatarImage} />
+                        <Image
+                            source={require('../../assets/Tripzi AI.png')}
+                            style={styles.avatarImage}
+                            contentFit="cover"
+                        />
                     </View>
                 )}
                 <View style={{ maxWidth: '100%' }}>
@@ -542,7 +555,11 @@ const AIChatScreen = ({ navigation, route }: any) => {
                             <Ionicons name="chevron-back" size={26} color={colors.text} />
                         </TouchableOpacity>
                         <View style={styles.headerAvatarContainer}>
-                            <Image source={require('../../assets/Tripzi AI.png')} style={styles.headerAvatarImage} />
+                            <Image
+                                source={require('../../assets/Tripzi AI.png')}
+                                style={styles.headerAvatarImage}
+                                contentFit="cover"
+                            />
                         </View>
                         <View>
                             <Text style={[styles.headerTitle, { color: colors.text }]}>Tripzi AI</Text>
@@ -638,7 +655,11 @@ const AIChatScreen = ({ navigation, route }: any) => {
                         isTyping ? (
                             <View style={styles.typingContainer}>
                                 <View style={styles.avatarContainer}>
-                                    <Image source={require('../../assets/Tripzi AI.png')} style={styles.avatarImage} />
+                                    <Image
+                                        source={require('../../assets/Tripzi AI.png')}
+                                        style={styles.avatarImage}
+                                        contentFit="cover"
+                                    />
                                 </View>
                                 <View style={[styles.bubble, styles.aiBubble, { backgroundColor: colors.card }]}>
                                     <TypingDots color={colors.primary} />

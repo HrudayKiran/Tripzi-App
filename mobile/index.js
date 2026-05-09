@@ -9,10 +9,10 @@ import App from './App';
 try {
     const messaging = getMessaging();
     messaging.setBackgroundMessageHandler(async remoteMessage => {
-        
+
     });
 } catch (e) {
-    
+
 }
 
 registerRootComponent(App);

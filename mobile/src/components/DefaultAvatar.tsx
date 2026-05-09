@@ -1,9 +1,6 @@
-import React from 'react';
-import { View, Text, Image, StyleSheet, ViewStyle, ImageStyle } from 'react-native';
+import { View, StyleSheet, ViewStyle, ImageStyle } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useTheme } from '../contexts/ThemeContext';
-import { FONT_WEIGHT } from '../styles';
 
 interface DefaultAvatarProps {
     uri?: string | null;
@@ -13,59 +10,39 @@ interface DefaultAvatarProps {
     isGroup?: boolean;
 }
 
-/**
- * A smart avatar component that shows the user's photo or a gradient with initials.
- */
-const DefaultAvatar: React.FC<DefaultAvatarProps> = ({ uri, name = 'User', size = 40, style, isGroup }) => {
-    const { colors } = useTheme();
-
-    const isValidUrl = uri && (uri.startsWith('https://') || uri.startsWith('http://') || uri.startsWith('file://'));
-
-    if (isValidUrl) {
-        return (
-            <Image
-                source={{ uri: uri! }}
-                style={[{ width: size, height: size, borderRadius: size / 2 }, style as ImageStyle]}
-            />
-        );
-    }
-
-    // Fallback: Gradient with Initials
-    const initial = (name || 'U').charAt(0).toUpperCase();
-    const fontSize = size * 0.4;
+const DefaultAvatar: React.FC<DefaultAvatarProps> = ({ uri, size = 40, style, isGroup = false }) => {
+    const isValidUrl = uri && (typeof uri === 'string') && (uri.startsWith('https://') || uri.startsWith('http://') || uri.startsWith('file://'));
 
     return (
-        <LinearGradient
-            colors={['#9d74f7', '#EC4899', '#F59E0B']}
-            style={[
-                styles.gradient,
-                {
-                    width: size,
-                    height: size,
-                    borderRadius: size / 2,
-                },
-                style
-            ]}
-        >
-            {isGroup ? (
-                <Ionicons name="people" size={size * 0.5} color="#fff" />
+        <View style={[
+            {
+                width: size,
+                height: size,
+                borderRadius: size / 2,
+                overflow: 'hidden',
+                backgroundColor: '#f3f4f6', // Neutral light background for fallback
+                justifyContent: 'center',
+                alignItems: 'center'
+            },
+            style as ViewStyle
+        ]}>
+            {!isValidUrl ? (
+                <Ionicons
+                    name={isGroup ? "people" : "person"}
+                    size={size * 0.6}
+                    color="#9ca3af"
+                />
             ) : (
-                <Text style={[styles.text, { fontSize }]}>{initial}</Text>
+                <Image
+                    source={{ uri: uri! }}
+                    style={StyleSheet.absoluteFill}
+                    contentFit="cover"
+                    transition={200}
+                />
             )}
-        </LinearGradient>
+        </View>
     );
 };
-
-const styles = StyleSheet.create({
-    gradient: {
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    text: {
-        color: '#fff',
-        fontWeight: FONT_WEIGHT.bold,
-    }
-});
 
 export default DefaultAvatar;
 

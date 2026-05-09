@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ToastAndroid, Platform, Dimensions, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ToastAndroid, Platform, Dimensions, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import * as Animatable from 'react-native-animatable';
@@ -162,12 +163,13 @@ const StartScreen = ({ navigation }) => {
                 <ActivityIndicator color={NEUTRAL.dark} />
               ) : (
                 <>
-                  <View style={styles.iconContainer}>
-                    <Image
-                      source={{ uri: 'https://www.google.com/images/branding/googleg/1x/googleg_standard_color_128dp.png' }}
-                      style={styles.googleLogo}
-                    />
-                  </View>
+                    <View style={styles.iconContainer}>
+                      <Image
+                        source={{ uri: 'https://www.google.com/images/branding/googleg/1x/googleg_standard_color_128dp.png' }}
+                        style={styles.googleLogo}
+                        contentFit="contain"
+                      />
+                    </View>
                   <Text style={styles.googleButtonText}>Continue with Google</Text>
                 </>
               )}

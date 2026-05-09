@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Dimensions, Image, Platform, ActivityIndicator, KeyboardAvoidingView, Vibration, LayoutAnimation } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Dimensions, Platform, ActivityIndicator, KeyboardAvoidingView, Vibration, LayoutAnimation } from 'react-native';
+import { Image } from 'expo-image';
 import { GestureHandlerRootView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
 import { ScaleDecorator, NestableScrollContainer, NestableDraggableFlatList } from 'react-native-draggable-flatlist';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -320,7 +321,7 @@ const EditTripScreen = ({ navigation, route }: any) => {
                         newObjectKeys.push(uploadResult.objectKey);
                     }
                 } catch (uploadError) {
-                    console.error('Image upload failed', uploadError);
+                    // Image upload failed
                 }
             }
 
@@ -482,7 +483,12 @@ const EditTripScreen = ({ navigation, route }: any) => {
                                             ]}
                                         >
                                             <View style={[styles.reorderImageVertical, { overflow: 'hidden' }]}>
-                                                <Image source={{ uri: item.uri }} style={styles.tripImage} />
+                                                <Image
+                                                    source={{ uri: item.uri }}
+                                                    style={styles.tripImage}
+                                                    contentFit="cover"
+                                                    transition={200}
+                                                />
                                             </View>
 
                                             <View style={styles.verticalReorderControls}>

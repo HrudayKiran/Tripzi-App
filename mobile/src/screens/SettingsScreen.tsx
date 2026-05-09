@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Switch, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, STATUS, NEUTRAL, CATEGORY, ICONS } from '../styles';
 
@@ -26,7 +27,8 @@ const DELETE_REASONS = [
 
 const SettingsScreen = ({ navigation }) => {
     const { colors, isDarkMode, toggleTheme } = useTheme();
-    const [pushEnabled, setPushEnabled] = useState(true);
+    const [pushEnabled, setPushEnabled] = useState(false);
+    const [loadingSettings, setLoadingSettings] = useState(true);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleteReason, setDeleteReason] = useState('');
     const [customReason, setCustomReason] = useState('');
@@ -38,29 +40,41 @@ const SettingsScreen = ({ navigation }) => {
         supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
     }, []);
 
-    // Load initial setting
-    React.useEffect(() => {
+    const loadSettings = useCallback(async () => {
         if (!currentUser) return;
-        const loadSettings = async () => {
-            try {
-                const permissionStatus = await getNotificationPermissionStatus();
-                setNotificationPermissionGranted(permissionStatus === 'granted');
+        
+        setLoadingSettings(true);
+        try {
+            const permissionStatus = await getNotificationPermissionStatus();
+            const isGranted = permissionStatus === 'granted';
+            setNotificationPermissionGranted(isGranted);
 
-                const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('push_notifications_enabled')
-                    .eq('id', currentUser.id)
-                    .maybeSingle();
-                if (profile) {
-                    const isEnabled = profile.push_notifications_enabled === true && permissionStatus === 'granted';
-                    setPushEnabled(isEnabled);
-                }
-            } catch (error) {
-                // Silently fail
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('push_notifications_enabled')
+                .eq('id', currentUser.id)
+                .maybeSingle();
+            
+            if (profile) {
+                // Only enable if BOTH profile says true AND OS permission is granted
+                const isEnabled = profile.push_notifications_enabled === true && isGranted;
+                setPushEnabled(isEnabled);
+            } else {
+                setPushEnabled(false);
             }
-        };
-        loadSettings();
+        } catch (error) {
+            setPushEnabled(false);
+        } finally {
+            setLoadingSettings(false);
+        }
     }, [currentUser]);
+
+    // Refresh settings when screen comes into focus (captures OS-level permission changes)
+    useFocusEffect(
+        useCallback(() => {
+            loadSettings();
+        }, [loadSettings])
+    );
 
     const handlePushToggle = async (value: boolean) => {
         if (!currentUser) return;
@@ -77,10 +91,11 @@ const SettingsScreen = ({ navigation }) => {
 
             await syncNotificationPreference(currentUser.id, permissionStatus, enabled);
 
-            if (!enabled && permissionStatus !== 'granted') {
+            if (value && permissionStatus !== 'granted') {
+                setPushEnabled(false);
                 Alert.alert(
-                    'Notifications Disabled',
-                    'Enable notifications in system settings to receive Tripzi notifications.'
+                    'Permission Required',
+                    'Please enable notifications in your phone settings to use this feature.'
                 );
             }
         } catch (error) {
@@ -88,25 +103,7 @@ const SettingsScreen = ({ navigation }) => {
         }
     };
 
-    const handleEnableNotifications = async () => {
-        if (!currentUser) return;
-        try {
-            const permissionStatus = await requestNotificationPermission();
-            const enabled = permissionStatus === 'granted';
-            setNotificationPermissionGranted(enabled);
-            setPushEnabled(enabled);
-            await syncNotificationPreference(currentUser.uid, permissionStatus, enabled);
 
-            if (!enabled) {
-                Alert.alert(
-                    'Notifications Disabled',
-                    'Allow notifications in your device settings to receive Tripzi alerts.'
-                );
-            }
-        } catch (error) {
-            Alert.alert('Error', 'Could not update notification permission right now.');
-        }
-    };
 
     const handleDeleteAccount = () => {
         setDeleteReason('');
@@ -179,30 +176,20 @@ const SettingsScreen = ({ navigation }) => {
                             <View style={styles.settingInfo}>
                                 <Text style={[styles.settingTitle, { color: colors.text }]}>Push Notifications</Text>
                                 <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
-                                    {notificationPermissionGranted
-                                        ? 'Receive notifications about new trips and messages'
-                                        : 'Enable device notification permission to receive Tripzi notifications'}
+                                    Receive notifications about new trips and messages
                                 </Text>
                             </View>
-                            <Switch
-                                value={pushEnabled}
-                                onValueChange={handlePushToggle}
-                                trackColor={{ false: NEUTRAL.gray200, true: STATUS.success }}
-                                thumbColor={NEUTRAL.white}
-                                disabled={!notificationPermissionGranted}
-                            />
+                            {loadingSettings ? (
+                                <ActivityIndicator size="small" color={BRAND.primary} />
+                            ) : (
+                                <Switch
+                                    value={pushEnabled}
+                                    onValueChange={handlePushToggle}
+                                    trackColor={{ false: NEUTRAL.gray200, true: STATUS.success }}
+                                    thumbColor={NEUTRAL.white}
+                                />
+                            )}
                         </View>
-                        {!notificationPermissionGranted && (
-                            <TouchableOpacity
-                                style={[styles.enablePermissionButton, { borderColor: colors.primary }]}
-                                onPress={handleEnableNotifications}
-                                activeOpacity={0.75}
-                            >
-                                <Text style={[styles.enablePermissionText, { color: colors.primary }]}>
-                                    Allow Notifications
-                                </Text>
-                            </TouchableOpacity>
-                        )}
                     </Animatable.View>
 
                     {/* Dark Mode */}

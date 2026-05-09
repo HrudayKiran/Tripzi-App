@@ -121,7 +121,7 @@ export function useChatMessages(
         });
 
         // Trigger sync in background
-        require('../database/sync').syncDatabase().catch(console.error);
+        require('../database/sync').syncDatabase().catch(() => { });
     }, [chatId, userId]);
 
     const markAsRead = useCallback(async () => {

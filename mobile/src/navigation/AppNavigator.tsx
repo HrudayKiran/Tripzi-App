@@ -2,7 +2,8 @@ import React from 'react';
 import { NavigationContainer, DefaultTheme as NavigationDefaultTheme, DarkTheme as NavigationDarkTheme } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Modal, Text, Image } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Modal, Text } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { NetworkProvider } from '../contexts/NetworkContext';
@@ -105,7 +106,11 @@ const AppTabs = () => {
                         tabBarLabel: 'AI Planner',
                         tabBarIcon: ({ color, size }) => (
                             <View style={styles.aiTabIconWrap}>
-                                <Image source={require('../../assets/Tripzi AI.png')} style={styles.aiTabIcon} />
+                                <Image
+                                    source={require('../../assets/Tripzi AI.png')}
+                                    style={styles.aiTabIcon}
+                                    contentFit="cover"
+                                />
                             </View>
                         ),
                     }}
@@ -187,7 +192,11 @@ const AppTabs = () => {
                         >
                             <View style={[styles.createOptionIcon, { backgroundColor: '#EDE9FE' }]}>
                                 <View style={styles.tripziAiIconWrap}>
-                                    <Image source={require('../../assets/Tripzi AI.png')} style={styles.tripziAiIcon} />
+                                    <Image
+                                        source={require('../../assets/Tripzi AI.png')}
+                                        style={styles.tripziAiIcon}
+                                        contentFit="cover"
+                                    />
                                 </View>
                             </View>
                             <View style={styles.createOptionText}>

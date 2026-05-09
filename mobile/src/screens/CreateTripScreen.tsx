@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Image, Platform, Modal, ActivityIndicator, KeyboardAvoidingView, Vibration } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Platform, Modal, ActivityIndicator, KeyboardAvoidingView, Vibration } from 'react-native';
+import { Image } from 'expo-image';
 import { GestureHandlerRootView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
 import { ScaleDecorator, NestableScrollContainer, NestableDraggableFlatList } from 'react-native-draggable-flatlist';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,6 +14,7 @@ import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
 import { deleteTripImagesFromR2, uploadTripImageToR2 } from '../utils/imageUpload';
+import { showUploadNotification, completeUploadNotification, failUploadNotification } from '../utils/notifications';
 
 
 const { width } = Dimensions.get('window');
@@ -227,6 +229,7 @@ const CreateTripScreen = ({ navigation, route }: any) => {
         }
 
         setIsPosting(true);
+        await showUploadNotification(0, 'Preparing trip post...');
         const newObjectKeys: string[] = [];
 
         try {
@@ -253,6 +256,8 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                     }
 
                     try {
+                        const progress = (i / tripImages.length) * 0.7;
+                        await showUploadNotification(progress, `Uploading image ${i + 1}/${tripImages.length}...`);
                         const uploadResult = await uploadTripImageToR2(imageUri, currentUser.id);
                         if (uploadResult.success && uploadResult.url && uploadResult.objectKey) {
                             uploadedImageData.push({
@@ -263,7 +268,7 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                             newObjectKeys.push(uploadResult.objectKey);
                         }
                     } catch (uploadError) {
-                        console.error('Image upload failed', uploadError);
+                        // Image upload failed
                     }
                 }
             }
@@ -307,7 +312,6 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                 owner_photo_url: userData.photo_url || currentUser.user_metadata?.avatar_url || null,
                 owner_username: userData.username || null,
                 participants: [currentUser.id],
-                likes: [],
                 image_object_keys: finalObjectKeys,
                 location: toLocation,
                 trip_type: tripTypes[0] || 'Adventure',
@@ -318,11 +322,12 @@ const CreateTripScreen = ({ navigation, route }: any) => {
             const { data: tripRow, error: tripErr } = await supabase.from('trips').insert(tripData).select('id').single();
             if (tripErr || !tripRow) throw tripErr || new Error('Failed to create trip');
 
+            await showUploadNotification(0.8, 'Creating trip group...');
+
 
             // Create group chat for the trip
             try {
                 await supabase.from('chats').insert({
-                    id: `trip_${tripRow.id}`,
                     type: 'group',
                     trip_id: tripRow.id,
                     trip_title: title,
@@ -335,13 +340,14 @@ const CreateTripScreen = ({ navigation, route }: any) => {
             }
 
             setIsPosting(false);
-            Alert.alert('Success! 🎉', 'Your trip has been posted!');
+            await completeUploadNotification('Trip Posted! 🎉', 'Your trip has been posted successfully.');
             navigation.navigate('UserProfile', { userId: currentUser.id });
         } catch (error: any) {
             if (newObjectKeys.length > 0) {
                 await deleteTripImagesFromR2(newObjectKeys);
             }
             setIsPosting(false);
+            await failUploadNotification(error?.message || 'Failed to post trip');
             Alert.alert('Error', `Failed to post trip: ${error?.message || 'Unknown error'}. Please try again.`);
         }
     };
@@ -428,7 +434,12 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                                             ]}
                                         >
                                             <View style={[styles.reorderImageVertical, { overflow: 'hidden' }]}>
-                                                <Image source={{ uri: item.uri }} style={styles.tripImage} />
+                                                <Image
+                                                    source={{ uri: item.uri }}
+                                                    style={styles.tripImage}
+                                                    contentFit="cover"
+                                                    transition={200}
+                                                />
                                             </View>
 
                                             <View style={styles.verticalReorderControls}>

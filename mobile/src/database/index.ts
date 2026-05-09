@@ -14,8 +14,7 @@ const adapter = new SQLiteAdapter({
   // (Recommended) If you want to use the high-performance JSI adapter on Android
   jsi: true,
   onSetUpError: error => {
-    // Database failed to load -- perform the default error handling or alerting.
-    console.error('WatermelonDB setup error:', error);
+    // Database failed to load
   }
 });
 

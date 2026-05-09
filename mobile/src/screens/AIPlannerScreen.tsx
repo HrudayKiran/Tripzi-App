@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Dimensions, ScrollView, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView, FlatList } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -75,7 +76,12 @@ const AIPlannerScreen = ({ navigation }: any) => {
                                 onPress={() => openChat(`Plan a trip to ${item.name}`)}
                                 style={{ width }}
                             >
-                                <Image source={{ uri: item.image }} style={styles.heroImage} />
+                                <Image
+                                    source={{ uri: item.image }}
+                                    style={styles.heroImage}
+                                    contentFit="cover"
+                                    transition={200}
+                                />
                                 <LinearGradient
                                     colors={['transparent', 'rgba(0,0,0,0.7)']}
                                     style={StyleSheet.absoluteFill}
@@ -83,7 +89,11 @@ const AIPlannerScreen = ({ navigation }: any) => {
                                 <View style={[styles.heroOverlay, { paddingTop: insets.top + SPACING.lg }]}>
                                     <View style={styles.heroHeader}>
                                         <View style={styles.heroAvatarWrap}>
-                                            <Image source={require('../../assets/Tripzi AI.png')} style={styles.heroAvatar} />
+                                            <Image
+                                                source={require('../../assets/Tripzi AI.png')}
+                                                style={styles.heroAvatar}
+                                                contentFit="cover"
+                                            />
                                         </View>
                                         <View>
                                             <Text style={styles.heroLabel}>Tripzi AI</Text>
@@ -145,7 +155,11 @@ const AIPlannerScreen = ({ navigation }: any) => {
                             style={styles.ctaButton}
                         >
                             <View style={styles.ctaIconWrap}>
-                                <Image source={require('../../assets/Tripzi AI.png')} style={styles.ctaIcon} />
+                                <Image
+                                    source={require('../../assets/Tripzi AI.png')}
+                                    style={styles.ctaIcon}
+                                    contentFit="cover"
+                                />
                             </View>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.ctaTitle}>Plan & Create Trip Cards</Text>
@@ -167,7 +181,12 @@ const AIPlannerScreen = ({ navigation }: any) => {
                                 activeOpacity={0.8}
                                 onPress={() => openChat(`Plan a trip to ${dest.name}`)}
                             >
-                                <Image source={{ uri: dest.image }} style={styles.destImage} />
+                                <Image
+                                    source={{ uri: dest.image }}
+                                    style={styles.destImage}
+                                    contentFit="cover"
+                                    transition={200}
+                                />
                                 <LinearGradient
                                     colors={['transparent', 'rgba(0,0,0,0.7)']}
                                     style={[StyleSheet.absoluteFill, { borderRadius: BORDER_RADIUS.md }]}
