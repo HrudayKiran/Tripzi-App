@@ -22,7 +22,6 @@ import CompleteProfileScreen from '../screens/CompleteProfileScreen';
 import FeedScreen from '../screens/FeedScreen';
 import MyTripsScreen from '../screens/MyTripsScreen';
 import AIPlannerScreen from '../screens/AIPlannerScreen';
-import AIChatScreen from '../screens/AIChatScreen';
 
 import ChatsListScreen from '../screens/ChatsListScreen';
 import ChatScreen from '../screens/ChatScreen';
@@ -355,7 +354,6 @@ const AppNavigator = () => {
                     <Stack.Screen name="MyTrips" component={MyTripsScreen} />
                     <Stack.Screen name="CreateTrip" component={CreateTripScreen} />
                     <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
-                    <Stack.Screen name="AIChat" component={AIChatScreen} />
 
                     <Stack.Screen name="Chat" component={ChatScreen} />
                     <Stack.Screen name="Map" component={MapScreen} />

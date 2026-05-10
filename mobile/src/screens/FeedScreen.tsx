@@ -54,7 +54,7 @@ const FeedScreen = ({ navigation }) => {
                 const hasPrompted = await getBooleanPreference(PREFERENCE_KEYS.notificationPrompted, false);
                 if (!hasPrompted) {
                     const granted = await requestNotificationPermission();
-                    
+
                     const { data: { user: currentUser } } = await supabase.auth.getUser();
                     if (currentUser) {
                         await syncNotificationPreference(
@@ -63,7 +63,7 @@ const FeedScreen = ({ navigation }) => {
                             granted
                         );
                     }
-                    
+
                     await setBooleanPreference(PREFERENCE_KEYS.notificationPrompted, true);
                 }
             } catch (error) {
@@ -384,76 +384,76 @@ const FeedScreen = ({ navigation }) => {
                             )}
 
                             {/* User Search Results */}
-                        {searchQuery.length >= 2 && searchedUsers.length > 0 && (
-                            <Animatable.View animation="fadeIn" style={[styles.userResultsContainer, { backgroundColor: colors.card }]}>
-                                <Text style={[styles.userResultsTitle, { color: colors.textSecondary }]}>PEOPLE</Text>
-                                {searchedUsers.map((user) => (
-                                    <TouchableOpacity
-                                        key={user.id}
-                                        style={styles.userResultItem}
-                                        onPress={() => {
-                                            setSearchQuery('');
-                                            setSearchedUsers([]);
-                                            setSearchVisible(false);
-                                            navigation.navigate('UserProfile', { userId: user.id });
-                                        }}
-                                    >
-                                        <DefaultAvatar
-                                            uri={user.photoURL}
-                                            name={user.displayName || user.name || 'User'}
-                                            size={40}
-                                            style={styles.userResultAvatar}
-                                        />
-                                        <View style={styles.userResultInfo}>
-                                            <Text style={[styles.userResultName, { color: colors.text }]}>
-                                                {user.displayName || 'User'}
-                                            </Text>
-                                            {user.username && (
-                                                <Text style={[styles.userResultUsername, { color: colors.primary }]}>
-                                                    @{user.username}
+                            {searchQuery.length >= 2 && searchedUsers.length > 0 && (
+                                <Animatable.View animation="fadeIn" style={[styles.userResultsContainer, { backgroundColor: colors.card }]}>
+                                    <Text style={[styles.userResultsTitle, { color: colors.textSecondary }]}>PEOPLE</Text>
+                                    {searchedUsers.map((user) => (
+                                        <TouchableOpacity
+                                            key={user.id}
+                                            style={styles.userResultItem}
+                                            onPress={() => {
+                                                setSearchQuery('');
+                                                setSearchedUsers([]);
+                                                setSearchVisible(false);
+                                                navigation.navigate('UserProfile', { userId: user.id });
+                                            }}
+                                        >
+                                            <DefaultAvatar
+                                                uri={user.photoURL}
+                                                name={user.displayName || user.name || 'User'}
+                                                size={40}
+                                                style={styles.userResultAvatar}
+                                            />
+                                            <View style={styles.userResultInfo}>
+                                                <Text style={[styles.userResultName, { color: colors.text }]}>
+                                                    {user.displayName || 'User'}
                                                 </Text>
+                                                {user.username && (
+                                                    <Text style={[styles.userResultUsername, { color: colors.primary }]}>
+                                                        @{user.username}
+                                                    </Text>
+                                                )}
+                                            </View>
+                                            {user.ageVerified === true && (
+                                                <Ionicons name="shield-checkmark" size={16} color="#10B981" />
                                             )}
-                                        </View>
-                                        {user.ageVerified === true && (
-                                            <Ionicons name="shield-checkmark" size={16} color="#10B981" />
-                                        )}
-                                    </TouchableOpacity>
-                                ))}
-                            </Animatable.View>
-                        )}
+                                        </TouchableOpacity>
+                                    ))}
+                                </Animatable.View>
+                            )}
 
-                        {/* Trip Search Results */}
-                        {searchQuery.length >= 2 && filteredTrips.length > 0 && (
-                            <Animatable.View animation="fadeIn" style={[styles.userResultsContainer, { backgroundColor: colors.card }]}>
-                                <Text style={[styles.userResultsTitle, { color: colors.textSecondary }]}>TRIPS</Text>
-                                {filteredTrips.slice(0, 5).map((trip) => (
-                                    <TouchableOpacity
-                                        key={trip.id}
-                                        style={styles.userResultItem}
-                                        onPress={() => {
-                                            setSearchQuery('');
-                                            setSearchVisible(false);
-                                            navigation.navigate('TripDetails', { tripId: trip.id });
-                                        }}
-                                    >
-                                        <Image
-                                            source={{ uri: trip.coverImage || trip.images?.[0] }}
-                                            style={styles.tripResultImage}
-                                            contentFit="cover"
-                                            transition={200}
-                                        />
-                                        <View style={styles.userResultInfo}>
-                                            <Text style={[styles.userResultName, { color: colors.text }]} numberOfLines={1}>
-                                                {trip.title}
-                                            </Text>
-                                            <Text style={[styles.userResultUsername, { color: colors.textSecondary }]}>
-                                                📍 {trip.location}
-                                            </Text>
-                                        </View>
-                                    </TouchableOpacity>
-                                ))}
-                            </Animatable.View>
-                        )}
+                            {/* Trip Search Results */}
+                            {searchQuery.length >= 2 && filteredTrips.length > 0 && (
+                                <Animatable.View animation="fadeIn" style={[styles.userResultsContainer, { backgroundColor: colors.card }]}>
+                                    <Text style={[styles.userResultsTitle, { color: colors.textSecondary }]}>TRIPS</Text>
+                                    {filteredTrips.slice(0, 5).map((trip) => (
+                                        <TouchableOpacity
+                                            key={trip.id}
+                                            style={styles.userResultItem}
+                                            onPress={() => {
+                                                setSearchQuery('');
+                                                setSearchVisible(false);
+                                                navigation.navigate('TripDetails', { tripId: trip.id });
+                                            }}
+                                        >
+                                            <Image
+                                                source={{ uri: trip.coverImage || trip.images?.[0] }}
+                                                style={styles.tripResultImage}
+                                                contentFit="cover"
+                                                transition={200}
+                                            />
+                                            <View style={styles.userResultInfo}>
+                                                <Text style={[styles.userResultName, { color: colors.text }]} numberOfLines={1}>
+                                                    {trip.title}
+                                                </Text>
+                                                <Text style={[styles.userResultUsername, { color: colors.textSecondary }]}>
+                                                    📍 {trip.location}
+                                                </Text>
+                                            </View>
+                                        </TouchableOpacity>
+                                    ))}
+                                </Animatable.View>
+                            )}
                         </ScrollView>
                     </SafeAreaView>
                 </View>

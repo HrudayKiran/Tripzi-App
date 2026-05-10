@@ -4,8 +4,19 @@ compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
 # Cron Triggers — daily trip lifecycle at 8:00 AM IST (2:30 AM UTC)
+# + daily cleanup of expired AI chats (30-day retention)
 [triggers]
 crons = ["30 2 * * *"]
+
+# Workers AI binding (free tier: 10K neurons/day)
+[ai]
+binding = "AI"
+
+# D1 database binding — chat history storage
+[[d1_databases]]
+binding = "DB"
+database_name = "tripzi-ai-db"
+database_id = "d26496d4-0ebd-45a4-9f98-60cc4f663cb1"
 
 # Environment variables (non-secret)
 [vars]
@@ -22,3 +33,7 @@ R2_PUBLIC_BASE_URL = "https://pub-d648f382c69b4f7a90803d45f550a1aa.r2.dev"
 # R2_ACCOUNT_ID
 # R2_BUCKET_NAME
 # FIREBASE_SERVICE_ACCOUNT_JSON
+# ZILLIZ_ENDPOINT          (Zilliz Cloud cluster public endpoint)
+# ZILLIZ_API_KEY            (Zilliz Cloud API key)
+# CF_ACCOUNT_ID             (your Cloudflare account ID)
+# AI_GATEWAY_SLUG           (AI Gateway name, e.g. "tripzi-gateway")

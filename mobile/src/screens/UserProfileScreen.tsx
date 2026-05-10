@@ -159,7 +159,7 @@ const UserProfileScreen = ({ route, navigation }) => {
     }, [userId]);
 
     const handleCreateButtonPress = () => setShowCreateModal(true);
-    const handleEditProfile = () => navigation.navigate('EditProfile');
+
 
     const handleMessage = async () => {
         if (!currentUser) {
@@ -331,17 +331,14 @@ const UserProfileScreen = ({ route, navigation }) => {
 
                     {user.bio ? <Text style={[styles.bioText, { color: colors.text }]}>{user.bio}</Text> : null}
 
-                    <View style={styles.actionButtonsContainer}>
-                        {isOwnProfile ? (
-                            <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border }]} onPress={handleEditProfile}>
-                                <Text style={[styles.secondaryBtnText, { color: colors.text }]}>Edit Profile</Text>
-                            </TouchableOpacity>
-                        ) : (
+                    {!isOwnProfile && (
+                        <View style={styles.actionButtonsContainer}>
                             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.primary }]} onPress={handleMessage}>
                                 <Text style={[styles.primaryBtnText, { color: '#fff' }]}>Message</Text>
                             </TouchableOpacity>
-                        )}
-                    </View>
+                        </View>
+                    )}
+
                 </View>
 
                 <View style={styles.contentSection}>
