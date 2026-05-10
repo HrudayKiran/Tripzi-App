@@ -2,14 +2,17 @@ import { useState, useEffect, useCallback } from 'react';
 import { database } from '../database';
 import { syncDatabase } from '../database/sync';
 import Trip from '../database/models/Trip';
+import Profile from '../database/models/Profile';
 import { Q } from '@nozbe/watermelondb';
 import { supabase } from '../lib/supabase';
+import { combineLatest } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 /**
  * Maps a WatermelonDB Trip model instance to the flat object format
  * that TripCard, filterUtils, and other UI components expect.
  */
-const mapTripToFeedFormat = (trip: Trip) => ({
+const mapTripToFeedFormat = (trip: Trip, profile?: Profile) => ({
     id: trip.id,
     userId: trip.userId,
     title: trip.title,
@@ -44,9 +47,9 @@ const mapTripToFeedFormat = (trip: Trip) => ({
     updatedAt: trip.updatedAt,
     // Map owner fields to the `user` object that TripCard expects
     user: {
-        displayName: trip.ownerDisplayName || 'Traveler',
-        photoURL: trip.ownerPhotoUrl || null,
-        name: trip.ownerDisplayName || 'Traveler',
+        displayName: profile?.name || trip.ownerDisplayName || 'Traveler',
+        photoURL: profile?.photoUrl || trip.ownerPhotoUrl || null,
+        name: profile?.name || trip.ownerDisplayName || 'Traveler',
         uid: trip.userId,
     },
 });
@@ -80,21 +83,31 @@ const useTrips = () => {
 
         setLoading(true);
 
-        // Observe all trips
-        const subscription = database.get<Trip>('trips')
+        // Observe trips and profiles together
+        const tripsObservable = database.get<Trip>('trips')
             .query(Q.sortBy('created_at', Q.desc))
-            .observe()
-            .subscribe((newTrips) => {
-                const mappedAll = newTrips.map(mapTripToFeedFormat);
-                setAllTrips(mappedAll);
+            .observe();
 
+        const profilesObservable = database.get<Profile>('profiles')
+            .query()
+            .observe();
+
+        const subscription = combineLatest([tripsObservable, profilesObservable]).pipe(
+            map(([newTrips, newProfiles]) => {
+                // Create a map of profiles for quick lookup
+                const profilesMap = newProfiles.reduce((acc, p) => {
+                    acc[p.id] = p;
+                    return acc;
+                }, {} as Record<string, Profile>);
+
+                const mappedAll = newTrips.map(t => mapTripToFeedFormat(t, profilesMap[t.userId]));
+                
                 // Filter for feed
                 const now = new Date();
                 const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
                 
                 const feedTrips = mappedAll.filter((trip) => {
                     // CRITICAL: Always exclude current user's own trips from home feed
-                    // This prevents "flickering" where own posts appear for a split second
                     if (currentUserId && trip.userId === currentUserId) return false;
 
                     if (trip.isExpired || trip.isCancelled || trip.isCompleted) return false;
@@ -107,9 +120,13 @@ const useTrips = () => {
                     return participants < maxTravelers;
                 });
 
-                setTrips(feedTrips);
-                setLoading(false);
-            });
+                return { mappedAll, feedTrips };
+            })
+        ).subscribe(({ mappedAll, feedTrips }) => {
+            setAllTrips(mappedAll);
+            setTrips(feedTrips);
+            setLoading(false);
+        });
 
         // Initial sync
         syncDatabase().catch(() => { });

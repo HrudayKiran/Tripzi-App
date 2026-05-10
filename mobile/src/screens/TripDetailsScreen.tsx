@@ -113,7 +113,13 @@ const TripDetailsScreen = ({ route, navigation }) => {
           tripData.imageLocations = tripData.image_locations || tripData.imageLocations;
           if (tripData.userId) {
             const { data: profile } = await supabase.from('public_profiles').select('*').eq('id', tripData.userId).maybeSingle();
-            if (profile) tripData.user = profile;
+            if (profile) {
+              tripData.user = {
+                ...profile,
+                displayName: profile.display_name || profile.name,
+                photoURL: profile.photo_url
+              };
+            }
           }
           setTrip(tripData);
           setIsJoined(user ? (tripData.participants || []).includes(user.id) : false);
@@ -145,7 +151,13 @@ const TripDetailsScreen = ({ route, navigation }) => {
         tripData.imageLocations = tripData.image_locations || tripData.imageLocations;
         if (tripData.userId) {
           const { data: profile } = await supabase.from('public_profiles').select('*').eq('id', tripData.userId).maybeSingle();
-          if (profile) tripData.user = profile;
+          if (profile) {
+            tripData.user = {
+              ...profile,
+              displayName: profile.display_name || profile.name,
+              photoURL: profile.photo_url
+            };
+          }
         }
         setTrip(tripData);
         setIsJoined(user ? (tripData.participants || []).includes(user.id) : false);
