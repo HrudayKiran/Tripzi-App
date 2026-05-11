@@ -26,8 +26,11 @@ import {
 } from '../utils/notificationPermissions';
 import { PREFERENCE_KEYS, setBooleanPreference } from '../utils/preferences';
 import { supabase } from '../lib/supabase';
+import { workersApi } from '../lib/workersApi';
+import { database } from '../database';
 
 const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/;
+
 
 const sanitizeUsername = (value: string): string => value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
 
@@ -89,23 +92,16 @@ const CompleteProfileScreen = ({ navigation, route }) => {
             setUsernameError('');
             setUsernameOk(false);
             try {
-                // Check username availability via Supabase
-                const { data, error } = await supabase
-                    .from('profiles')
-                    .select('id')
-                    .eq('username', value)
-                    .maybeSingle();
-
+                // Check username availability via Worker
+                const response = await workersApi(`/account/check-username/${value}`, { method: 'GET' });
+                
                 if (!active) return;
 
-                if (error) {
-                    setUsernameError('Could not validate username. Try again.');
-                    setUsernameOk(false);
-                } else if (data) {
+                if (response.available) {
+                    setUsernameOk(true);
+                } else {
                     setUsernameError('Username is already taken');
                     setUsernameOk(false);
-                } else {
-                    setUsernameOk(true);
                 }
             } catch (error) {
                 if (!active) return;
@@ -116,6 +112,7 @@ const CompleteProfileScreen = ({ navigation, route }) => {
                     setCheckingUsername(false);
                 }
             }
+
         };
 
         timeout = setTimeout(run, 350);
@@ -233,9 +230,28 @@ const CompleteProfileScreen = ({ navigation, route }) => {
                 throw new Error(profileError.message || 'Failed to create profile.');
             }
 
-            // Notifications prompt moved to FeedScreen
+            // Write to WatermelonDB immediately
+            try {
+                await database.write(async () => {
+                    await database.get('profiles').create((profile: any) => {
+
+                        profile._raw.id = user.id; // Set ID explicitly to match Supabase
+                        profile.name = fullName.trim();
+                        profile.username = sanitizeUsername(username.trim());
+                        profile.bio = bio.trim();
+                        profile.photo_url = user.user_metadata?.avatar_url || null;
+                        profile.push_notifications_enabled = false;
+                        profile.save_to_gallery = false;
+                        profile.updated_at = Date.now();
+                    });
+                });
+            } catch (dbError) {
+                console.error('Failed to write to WatermelonDB:', dbError);
+                // We still proceed as the server has the data
+            }
 
             navigation.reset({ index: 0, routes: [{ name: 'App' }] });
+
         } catch (error: any) {
             Alert.alert('Error', error?.message || 'Failed to complete profile setup.');
         } finally {
@@ -253,168 +269,192 @@ const CompleteProfileScreen = ({ navigation, route }) => {
                 <ScrollView
                     contentContainerStyle={styles.content}
                     keyboardShouldPersistTaps="handled"
-                    keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
                     showsVerticalScrollIndicator={false}
                 >
-                    <Text style={[styles.title, { color: colors.text }]}>Complete your profile</Text>
-                    <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Required to continue to Tripzi.</Text>
-
-                    <Text style={[styles.label, { color: colors.textSecondary }]}>Full Name *</Text>
-                    <TextInput
-                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                        value={fullName}
-                        onChangeText={setFullName}
-                        placeholder="Your full name"
-                        placeholderTextColor={colors.textSecondary}
-                    />
-
-                    <Text style={[styles.label, { color: colors.textSecondary }]}>Username *</Text>
-                    <TextInput
-                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: usernameError ? STATUS.error : colors.border }]}
-                        value={username}
-                        onChangeText={(value) => setUsername(sanitizeUsername(value))}
-                        autoCapitalize="none"
-                        maxLength={20}
-                        placeholder="username"
-                        placeholderTextColor={colors.textSecondary}
-                    />
-                    {checkingUsername ? (
-                        <Text style={[styles.hintText, { color: colors.textSecondary }]}>Checking availability...</Text>
-                    ) : usernameError ? (
-                        <Text style={styles.errorText}>{usernameError}</Text>
-                    ) : usernameOk ? (
-                        <Text style={styles.okText}>Username available</Text>
-                    ) : null}
-
-                    <Text style={[styles.label, { color: colors.textSecondary }]}>Gender *</Text>
-                    <View style={styles.genderRow}>
-                        <TouchableOpacity
-                            style={[
-                                styles.genderOption,
-                                { borderColor: colors.border, backgroundColor: colors.inputBackground },
-                                gender === 'male' && styles.genderSelected,
-                            ]}
-                            onPress={() => setGender('male')}
-                        >
-                            <Text style={[styles.genderText, gender === 'male' && styles.genderTextSelected]}>Male</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[
-                                styles.genderOption,
-                                { borderColor: colors.border, backgroundColor: colors.inputBackground },
-                                gender === 'female' && styles.genderSelected,
-                            ]}
-                            onPress={() => setGender('female')}
-                        >
-                            <Text style={[styles.genderText, gender === 'female' && styles.genderTextSelected]}>Female</Text>
-                        </TouchableOpacity>
+                    <View style={styles.header}>
+                        <Text style={[styles.title, { color: colors.text }]}>Complete Profile</Text>
+                        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Tell us a bit about yourself to get started.</Text>
                     </View>
 
-                    <Text style={[styles.label, { color: colors.textSecondary }]}>Date of Birth *</Text>
-                    <TouchableOpacity
-                        style={[styles.input, styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
-                        onPress={openDatePicker}
-                    >
-                        <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} />
-                        <Text style={[styles.dateText, { color: dob ? colors.text : colors.textSecondary }]}>
-                            {dob ? dob.toLocaleDateString('en-IN') : 'Select your date of birth'}
-                        </Text>
-                    </TouchableOpacity>
-
-                    {showDatePicker && Platform.OS === 'android' && (
-                        <DateTimePicker
-                            value={dob || new Date(2000, 0, 1)}
-                            mode="date"
-                            display="default"
-                            onChange={handleDateChange}
-                            maximumDate={new Date()}
-                            minimumDate={new Date(1920, 0, 1)}
-                        />
-                    )}
-
-                    {showDatePicker && Platform.OS === 'ios' && (
-                        <Modal transparent animationType="fade" visible={showDatePicker} onRequestClose={closeDatePicker}>
-                            <Pressable style={styles.datePickerOverlay} onPress={closeDatePicker}>
-                                <Pressable style={[styles.datePickerCard, { backgroundColor: colors.card }]} onPress={() => { }}>
-                                    <View style={[styles.datePickerHeader, { borderBottomColor: colors.border }]}>
-                                        <TouchableOpacity onPress={closeDatePicker}>
-                                            <Text style={[styles.datePickerAction, { color: colors.textSecondary }]}>Cancel</Text>
-                                        </TouchableOpacity>
-                                        <Text style={[styles.datePickerTitle, { color: colors.text }]}>Select Date of Birth</Text>
-                                        <TouchableOpacity onPress={confirmDatePicker}>
-                                            <Text style={[styles.datePickerAction, { color: colors.primary }]}>Done</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                    <DateTimePicker
-                                        value={draftDob}
-                                        mode="date"
-                                        display="spinner"
-                                        onChange={handleDateChange}
-                                        maximumDate={new Date()}
-                                        minimumDate={new Date(1920, 0, 1)}
-                                    />
-                                </Pressable>
-                            </Pressable>
-                        </Modal>
-                    )}
-
-                    <Text style={[styles.label, { color: colors.textSecondary }]}>Bio (Optional)</Text>
-                    <TextInput
-                        style={[styles.input, styles.bioInput, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                        value={bio}
-                        onChangeText={setBio}
-                        placeholder="Tell people about yourself..."
-                        placeholderTextColor={colors.textSecondary}
-                        multiline
-                        maxLength={150}
-                    />
-
-                    <View style={styles.termsContainer}>
-                        <TouchableOpacity
-                            style={styles.checkbox}
-                            onPress={() => setAgreedToTerms(!agreedToTerms)}
-                            activeOpacity={0.7}
-                        >
-                            <Ionicons
-                                name={agreedToTerms ? 'checkbox' : 'square-outline'}
-                                size={22}
-                                color={agreedToTerms ? colors.primary : colors.textSecondary}
+                    <View style={styles.form}>
+                        {/* Full Name */}
+                        <View style={styles.inputGroup}>
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>Full Name</Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                                value={fullName}
+                                onChangeText={setFullName}
+                                placeholder="John Doe"
+                                placeholderTextColor={colors.textSecondary}
                             />
-                        </TouchableOpacity>
-                        <Text style={[styles.termsText, { color: colors.textSecondary }]}>
-                            I agree to Tripzi{' '}
-                            <Text
-                                style={[styles.linkText, { color: colors.primary }]}
-                                onPress={() => navigation.navigate('Terms')}
-                            >
-                                Terms
-                            </Text>
-                            {' '}and{' '}
-                            <Text
-                                style={[styles.linkText, { color: colors.primary }]}
-                                onPress={() => navigation.navigate('PrivacyPolicy')}
-                            >
-                                Privacy Policy
-                            </Text>
-                        </Text>
-                    </View>
+                        </View>
 
-                    <TouchableOpacity disabled={!canSubmit} onPress={handleSubmit} style={styles.submitWrap}>
-                        <LinearGradient
-                            colors={canSubmit ? [...BRAND.gradient] : ['#9CA3AF', '#9CA3AF']}
-                            style={styles.submitBtn}
+                        {/* Username */}
+                        <View style={styles.inputGroup}>
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>Username</Text>
+                            <View style={styles.usernameInputWrapper}>
+                                <TextInput
+                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: usernameError ? STATUS.error : colors.border, flex: 1 }]}
+                                    value={username}
+                                    onChangeText={(value) => setUsername(sanitizeUsername(value))}
+                                    autoCapitalize="none"
+                                    maxLength={20}
+                                    placeholder="username"
+                                    placeholderTextColor={colors.textSecondary}
+                                />
+                                {checkingUsername && (
+                                    <ActivityIndicator size="small" color={colors.primary} style={styles.inputIcon} />
+                                )}
+                                {!checkingUsername && usernameOk && (
+                                    <Ionicons name="checkmark-circle" size={20} color={STATUS.success} style={styles.inputIcon} />
+                                )}
+                                {!checkingUsername && usernameError && (
+                                    <Ionicons name="close-circle" size={20} color={STATUS.error} style={styles.inputIcon} />
+                                )}
+                            </View>
+                            {usernameError ? (
+                                <Text style={styles.errorText}>{usernameError}</Text>
+                            ) : usernameOk ? (
+                                <Text style={styles.okText}>Username is available</Text>
+                            ) : null}
+                        </View>
+
+                        {/* Gender */}
+                        <View style={styles.inputGroup}>
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>Gender</Text>
+                            <View style={styles.genderRow}>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.genderOption,
+                                        { backgroundColor: colors.inputBackground, borderColor: colors.border },
+                                        gender === 'male' && [styles.genderSelected, { borderColor: colors.primary, backgroundColor: colors.primaryLight }],
+                                    ]}
+                                    onPress={() => setGender('male')}
+                                >
+                                    <Text style={[styles.genderText, { color: gender === 'male' ? colors.primary : colors.text }]}>Male</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.genderOption,
+                                        { backgroundColor: colors.inputBackground, borderColor: colors.border },
+                                        gender === 'female' && [styles.genderSelected, { borderColor: colors.primary, backgroundColor: colors.primaryLight }],
+                                    ]}
+                                    onPress={() => setGender('female')}
+                                >
+                                    <Text style={[styles.genderText, { color: gender === 'female' ? colors.primary : colors.text }]}>Female</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        {/* Date of Birth */}
+                        <View style={styles.inputGroup}>
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>Date of Birth</Text>
+                            <TouchableOpacity
+                                style={[styles.input, styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
+                                onPress={openDatePicker}
+                            >
+                                <Text style={[styles.dateText, { color: dob ? colors.text : colors.textSecondary }]}>
+                                    {dob ? dob.toLocaleDateString('en-IN') : 'Select date'}
+                                </Text>
+                                <Ionicons name="calendar-outline" size={20} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Bio */}
+                        <View style={styles.inputGroup}>
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>Bio (Optional)</Text>
+                            <TextInput
+                                style={[styles.input, styles.bioInput, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                                value={bio}
+                                onChangeText={setBio}
+                                placeholder="Write a short bio..."
+                                placeholderTextColor={colors.textSecondary}
+                                multiline
+                                maxLength={150}
+                            />
+                        </View>
+
+                        {/* Terms */}
+                        <View style={styles.termsContainer}>
+                            <TouchableOpacity
+                                style={styles.checkbox}
+                                onPress={() => setAgreedToTerms(!agreedToTerms)}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons
+                                    name={agreedToTerms ? 'checkbox' : 'square-outline'}
+                                    size={22}
+                                    color={agreedToTerms ? colors.primary : colors.textSecondary}
+                                />
+                            </TouchableOpacity>
+                            <Text style={[styles.termsText, { color: colors.textSecondary }]}>
+                                I agree to the{' '}
+                                <Text style={{ color: colors.primary }} onPress={() => navigation.navigate('Terms')}>Terms</Text>
+                                {' '}and{' '}
+                                <Text style={{ color: colors.primary }} onPress={() => navigation.navigate('PrivacyPolicy')}>Privacy Policy</Text>
+                            </Text>
+                        </View>
+
+                        {/* Submit */}
+                        <TouchableOpacity
+                            disabled={!canSubmit}
+                            onPress={handleSubmit}
+                            style={[styles.submitBtn, { opacity: canSubmit ? 1 : 0.6 }]}
                         >
-                            {submitting ? (
-                                <ActivityIndicator color="#fff" />
-                            ) : (
-                                <Text style={styles.submitText}>Submit</Text>
-                            )}
-                        </LinearGradient>
-                    </TouchableOpacity>
+                            <LinearGradient
+                                colors={canSubmit ? [colors.primary, colors.gradientEnd || colors.primary] : [NEUTRAL.gray300, NEUTRAL.gray300]}
+                                style={styles.submitGradient}
+                            >
+                                {submitting ? (
+                                    <ActivityIndicator color="#fff" />
+                                ) : (
+                                    <Text style={styles.submitText}>Continue</Text>
+                                )}
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    </View>
                 </ScrollView>
             </KeyboardAvoidingView>
+
+            {showDatePicker && Platform.OS === 'android' && (
+                <DateTimePicker
+                    value={dob || new Date(2000, 0, 1)}
+                    mode="date"
+                    display="default"
+                    onChange={handleDateChange}
+                    maximumDate={new Date()}
+                    minimumDate={new Date(1920, 0, 1)}
+                />
+            )}
+
+            {showDatePicker && Platform.OS === 'ios' && (
+                <Modal transparent animationType="fade" visible={showDatePicker} onRequestClose={closeDatePicker}>
+                    <Pressable style={styles.datePickerOverlay} onPress={closeDatePicker}>
+                        <Pressable style={[styles.datePickerCard, { backgroundColor: colors.card }]} onPress={() => { }}>
+                            <View style={[styles.datePickerHeader, { borderBottomColor: colors.border }]}>
+                                <TouchableOpacity onPress={closeDatePicker}>
+                                    <Text style={[styles.datePickerAction, { color: colors.textSecondary }]}>Cancel</Text>
+                                </TouchableOpacity>
+                                <Text style={[styles.datePickerTitle, { color: colors.text }]}>Select Date of Birth</Text>
+                                <TouchableOpacity onPress={confirmDatePicker}>
+                                    <Text style={[styles.datePickerAction, { color: colors.primary }]}>Done</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <DateTimePicker
+                                value={draftDob}
+                                mode="date"
+                                display="spinner"
+                                onChange={handleDateChange}
+                                maximumDate={new Date()}
+                                minimumDate={new Date(1920, 0, 1)}
+                            />
+                        </Pressable>
+                    </Pressable>
+                </Modal>
+            )}
         </SafeAreaView>
     );
+
 };
 
 const styles = StyleSheet.create({
@@ -423,6 +463,9 @@ const styles = StyleSheet.create({
     content: {
         padding: SPACING.xl,
     },
+    header: {
+        marginBottom: SPACING.xl,
+    },
     title: {
         fontSize: FONT_SIZE.xxl,
         fontWeight: FONT_WEIGHT.bold,
@@ -430,12 +473,16 @@ const styles = StyleSheet.create({
     subtitle: {
         fontSize: FONT_SIZE.sm,
         marginTop: SPACING.xs,
-        marginBottom: SPACING.lg,
+    },
+    form: {
+        gap: SPACING.lg,
+    },
+    inputGroup: {
+        gap: SPACING.xs,
     },
     label: {
         fontSize: FONT_SIZE.xs,
-        marginTop: SPACING.md,
-        marginBottom: SPACING.xs,
+        fontWeight: FONT_WEIGHT.semibold,
     },
     input: {
         borderWidth: 1,
@@ -444,23 +491,27 @@ const styles = StyleSheet.create({
         paddingVertical: SPACING.md,
         fontSize: FONT_SIZE.md,
     },
+    usernameInputWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    inputIcon: {
+        position: 'absolute',
+        right: SPACING.md,
+    },
     bioInput: {
         minHeight: 100,
         textAlignVertical: 'top',
     },
-    hintText: {
-        fontSize: FONT_SIZE.xs,
-        marginTop: SPACING.xs,
-    },
     errorText: {
         fontSize: FONT_SIZE.xs,
-        marginTop: SPACING.xs,
         color: STATUS.error,
+        marginTop: SPACING.xs,
     },
     okText: {
         fontSize: FONT_SIZE.xs,
-        marginTop: SPACING.xs,
         color: STATUS.success,
+        marginTop: SPACING.xs,
     },
     genderRow: {
         flexDirection: 'row',
@@ -474,25 +525,47 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     genderSelected: {
-        borderColor: '#7C3AED',
-        backgroundColor: '#F5F3FF',
+        borderWidth: 1,
     },
     genderText: {
         fontSize: FONT_SIZE.md,
-        color: '#374151',
-        fontWeight: FONT_WEIGHT.medium,
-    },
-    genderTextSelected: {
-        color: '#7C3AED',
-        fontWeight: FONT_WEIGHT.bold,
+        fontWeight: FONT_WEIGHT.semibold,
     },
     dateButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: SPACING.sm,
+        justifyContent: 'space-between',
     },
     dateText: {
         fontSize: FONT_SIZE.md,
+    },
+    termsContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: SPACING.sm,
+    },
+    checkbox: {
+        marginRight: SPACING.sm,
+    },
+    termsText: {
+        flex: 1,
+        fontSize: FONT_SIZE.sm,
+        lineHeight: 20,
+    },
+    submitBtn: {
+        borderRadius: BORDER_RADIUS.lg,
+        overflow: 'hidden',
+        marginTop: SPACING.md,
+    },
+    submitGradient: {
+        paddingVertical: SPACING.lg,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    submitText: {
+        color: NEUTRAL.white,
+        fontSize: FONT_SIZE.md,
+        fontWeight: FONT_WEIGHT.bold,
     },
     datePickerOverlay: {
         flex: 1,
@@ -520,38 +593,7 @@ const styles = StyleSheet.create({
         fontSize: FONT_SIZE.sm,
         fontWeight: FONT_WEIGHT.semibold,
     },
-    submitWrap: {
-        marginTop: SPACING.xl,
-        marginBottom: SPACING.xxxl,
-    },
-    submitBtn: {
-        paddingVertical: SPACING.lg,
-        borderRadius: BORDER_RADIUS.lg,
-        alignItems: 'center',
-    },
-    submitText: {
-        color: NEUTRAL.white,
-        fontSize: FONT_SIZE.md,
-        fontWeight: FONT_WEIGHT.bold,
-    },
-    termsContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: SPACING.lg,
-        paddingHorizontal: 2,
-    },
-    checkbox: {
-        marginRight: SPACING.sm,
-    },
-    termsText: {
-        flex: 1,
-        fontSize: FONT_SIZE.sm,
-        lineHeight: 20,
-    },
-    linkText: {
-        fontWeight: FONT_WEIGHT.bold,
-        textDecorationLine: 'underline',
-    },
 });
+
 
 export default CompleteProfileScreen;

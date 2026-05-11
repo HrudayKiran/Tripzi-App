@@ -92,30 +92,52 @@ export async function syncDatabase() {
         }
         console.log(`[Sync] Pulled ${tripsData?.length || 0} trips.`);
 
-        // 2. Pull Profiles (Public)
-        // Optimization: Only pull profiles for users who actually have trips. 
-        // This avoids pulling thousands of "empty" user profiles.
+        // 2. Pull Profiles
         let profilesData: any[] = [];
-        if (tripsData && tripsData.length > 0) {
-            const uniqueUserIds = [...new Set(tripsData.map(t => t.user_id))];
-            console.log(`[Sync] Fetching profiles for ${uniqueUserIds.length} unique users...`);
+
+        // 2a. ALWAYS pull the current user's own profile from `profiles` table
+        // This is critical — without this, WatermelonDB won't have the user's record
+        // and local reads/writes will fail with "Record not found".
+        if (user) {
+            const { data: ownProfile, error: ownProfileError } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .maybeSingle();
             
-            // We fetch in chunks of 50 to avoid URL length issues or Supabase limits
-            for (let i = 0; i < uniqueUserIds.length; i += 50) {
-                const chunk = uniqueUserIds.slice(i, i + 50);
-                const { data: pData, error: profilesError } = await supabase
-                    .from('public_profiles')
-                    .select('*')
-                    .in('id', chunk);
+            if (ownProfileError) {
+                console.error('[Sync] Error pulling own profile:', ownProfileError);
+            } else if (ownProfile) {
+                // Map from profiles table (uses `name` not `display_name`)
+                profilesData.push(ownProfile);
+                console.log('[Sync] Pulled current user\'s own profile.');
+            }
+        }
+
+        // 2b. Pull public profiles for trip owners
+        if (tripsData && tripsData.length > 0) {
+            const uniqueUserIds = [...new Set(tripsData.map(t => t.user_id))]
+                .filter(uid => uid !== user?.id); // Skip own profile, already pulled
+            
+            if (uniqueUserIds.length > 0) {
+                console.log(`[Sync] Fetching profiles for ${uniqueUserIds.length} unique trip owners...`);
                 
-                if (profilesError) {
-                    console.error('[Sync] Error pulling profiles chunk:', profilesError);
-                } else if (pData) {
-                    profilesData = [...profilesData, ...pData];
+                for (let i = 0; i < uniqueUserIds.length; i += 50) {
+                    const chunk = uniqueUserIds.slice(i, i + 50);
+                    const { data: pData, error: profilesError } = await supabase
+                        .from('public_profiles')
+                        .select('*')
+                        .in('id', chunk);
+                    
+                    if (profilesError) {
+                        console.error('[Sync] Error pulling profiles chunk:', profilesError);
+                    } else if (pData) {
+                        profilesData = [...profilesData, ...pData];
+                    }
                 }
             }
         }
-        console.log(`[Sync] Pulled ${profilesData.length} relevant profiles.`);
+        console.log(`[Sync] Pulled ${profilesData.length} total profiles.`);
 
         // 3. Pull Chats & Messages (Conditional on Auth)
         // Reuse the 'user' variable fetched at the start of pullChanges
@@ -226,12 +248,12 @@ export async function syncDatabase() {
 
         const mapProfile = (p: any) => ({
           id: p.id,
-          name: p.display_name || p.name || 'Traveler',
+          name: p.name || p.display_name || 'Traveler',
           username: p.username,
           photo_url: p.photo_url,
           bio: p.bio,
-          push_notifications_enabled: p.push_notifications_enabled,
-          save_to_gallery: p.save_to_gallery,
+          push_notifications_enabled: p.push_notifications_enabled ?? false,
+          save_to_gallery: p.save_to_gallery ?? false,
           created_at: new Date(p.created_at).getTime(),
           updated_at: new Date(p.updated_at).getTime(),
         });
@@ -314,7 +336,9 @@ export async function syncDatabase() {
       },
       pushChanges: async ({ changes }: { changes: any }) => {
         const prepareForSupabase = (record: any) => {
-          const result = { ...record, _status: undefined, _changed: undefined };
+          const result = { ...record };
+          delete result._status;
+          delete result._changed;
           
           // List of fields that are arrays in Supabase but strings in WatermelonDB
           const arrayFields = [
@@ -331,6 +355,19 @@ export async function syncDatabase() {
               } catch (e) {
                 // Not a JSON string or parse failed, keep as is
               }
+            }
+          });
+
+          // Handle status field (convert 'pending' to 'sent' for Supabase)
+          if (result.status === 'pending') {
+            result.status = 'sent';
+          }
+
+          // Handle date fields (convert ms timestamp to ISO string)
+          const dateFields = ['created_at', 'updated_at', 'edited_at'];
+          dateFields.forEach(field => {
+            if (typeof result[field] === 'number') {
+              result[field] = new Date(result[field]).toISOString();
             }
           });
 
@@ -398,3 +435,69 @@ export async function syncDatabase() {
   }
 }
 
+/**
+ * Lightweight helper that syncs only the current user's profile.
+ * Call this after profile edits, settings changes, etc.
+ * Much faster than a full syncDatabase() call.
+ */
+export async function syncCurrentUserProfile(): Promise<void> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (error || !profile) return;
+
+    const mapped = {
+      id: profile.id,
+      name: profile.name || profile.display_name || 'Traveler',
+      username: profile.username,
+      photo_url: profile.photo_url,
+      bio: profile.bio,
+      push_notifications_enabled: profile.push_notifications_enabled ?? false,
+      save_to_gallery: profile.save_to_gallery ?? false,
+      created_at: new Date(profile.created_at).getTime(),
+      updated_at: new Date(profile.updated_at).getTime(),
+    };
+
+    const { created, updated } = await splitCreatedUpdated('profiles', [mapped]);
+
+    await database.write(async () => {
+      const collection = database.get('profiles');
+      const batch: any[] = [];
+
+      for (const record of created) {
+        batch.push(
+          collection.prepareCreate((rec: any) => {
+            rec._raw.id = record.id;
+            Object.keys(record).forEach(key => {
+              if (key !== 'id') rec._raw[key] = record[key];
+            });
+          })
+        );
+      }
+
+      for (const record of updated) {
+        const existing = await collection.find(record.id);
+        batch.push(
+          existing.prepareUpdate((rec: any) => {
+            Object.keys(record).forEach(key => {
+              if (key !== 'id') rec._raw[key] = record[key];
+            });
+          })
+        );
+      }
+
+      await database.batch(...batch);
+    });
+
+    console.log('[Sync] Current user profile synced locally.');
+  } catch (error) {
+    console.error('[Sync] Failed to sync current user profile:', error);
+  }
+}

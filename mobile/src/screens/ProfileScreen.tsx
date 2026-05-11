@@ -9,7 +9,8 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, STATUS, N
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import DefaultAvatar from '../components/DefaultAvatar';
 import { navigationRef } from '../navigation/RootNavigation';
-import { resetDatabase } from '../database';
+import { resetDatabase, database } from '../database';
+import { useFocusEffect } from '@react-navigation/native';
 
 
 
@@ -19,78 +20,99 @@ const ProfileScreen = ({ navigation }) => {
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [switchingAccount, setSwitchingAccount] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
+  // Load profile from WatermelonDB first (instant), then subscribe to Supabase realtime
+  useFocusEffect(
+    React.useCallback(() => {
+      let isMounted = true;
 
-    const loadProfile = async () => {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser || !isMounted) return;
+      const loadProfile = async () => {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (!authUser || !isMounted) return;
 
-      // Configure Google Signin
-      const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-      if (webClientId) {
-        GoogleSignin.configure({
-          webClientId,
-          offlineAccess: true,
-          scopes: ['profile', 'email'],
-        });
-      }
+        // Configure Google Signin
+        const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+        if (webClientId) {
+          GoogleSignin.configure({
+            webClientId,
+            offlineAccess: true,
+            scopes: ['profile', 'email'],
+          });
+        }
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authUser.id)
-        .maybeSingle();
-
-      if (isMounted && profile) {
-        setUser({
-          id: profile.id,
-          ...profile,
-          displayName: profile.name || 'User',
-          photoURL: profile.photo_url,
-          email: profile.email,
-          username: profile.username,
-        });
-      } else if (isMounted) {
-        setUser({
-          displayName: authUser.user_metadata?.full_name || 'User',
-          email: authUser.email,
-          photoURL: authUser.user_metadata?.avatar_url,
-        });
-      }
-    };
-
-    loadProfile();
-
-    // Subscribe to profile changes via Supabase Realtime
-    const channel = supabase
-      .channel('profile-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'profiles',
-        },
-        (payload) => {
-          if (payload.new && isMounted) {
-            const p = payload.new as any;
+        // 1. Try WatermelonDB first (instant)
+        try {
+          const localProfile = await database.get('profiles').find(authUser.id);
+          if (isMounted && localProfile) {
+            const lp = localProfile as any;
             setUser({
-              id: p.id,
-              ...p,
-              displayName: p.name || 'User',
-              photoURL: p.photo_url,
+              id: authUser.id,
+              displayName: lp._raw.name || 'User',
+              photoURL: lp._raw.photo_url,
+              email: authUser.email,
+              username: lp._raw.username,
             });
           }
+        } catch {
+          // Not in local DB — fall through to Supabase
         }
-      )
-      .subscribe();
 
-    return () => {
-      isMounted = false;
-      supabase.removeChannel(channel);
-    };
-  }, []);
+        // 2. Fetch from Supabase (fresh data, updates local state)
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authUser.id)
+          .maybeSingle();
+
+        if (isMounted && profile) {
+          setUser({
+            id: profile.id,
+            ...profile,
+            displayName: profile.name || 'User',
+            photoURL: profile.photo_url,
+            email: profile.email,
+            username: profile.username,
+          });
+        } else if (isMounted) {
+          setUser(prev => prev || {
+            displayName: authUser.user_metadata?.full_name || 'User',
+            email: authUser.email,
+            photoURL: authUser.user_metadata?.avatar_url,
+          });
+        }
+      };
+
+      loadProfile();
+
+      // Subscribe to profile changes via Supabase Realtime
+      const channel = supabase
+        .channel('profile-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'profiles',
+          },
+          (payload) => {
+            if (payload.new && isMounted) {
+              const p = payload.new as any;
+              setUser({
+                id: p.id,
+                ...p,
+                displayName: p.name || 'User',
+                photoURL: p.photo_url,
+              });
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        isMounted = false;
+        supabase.removeChannel(channel);
+      };
+    }, [])
+  );
 
   const handleLogout = async () => {
     Alert.alert(

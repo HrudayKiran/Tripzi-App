@@ -5,6 +5,26 @@ import { deleteR2Prefix } from '../lib/r2';
 const account = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
 
 /**
+ * GET /account/check-username/:username
+ */
+account.get('/check-username/:username', async (c) => {
+  const username = c.req.param('username');
+  const supabase = getSupabaseAdmin(c.env);
+  
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('username', username)
+    .maybeSingle();
+  
+  if (error) {
+    return c.json({ error: 'Database error' }, 500);
+  }
+  
+  return c.json({ available: !data });
+});
+
+/**
  * POST /account/delete
  * Body: { reason: string }
  */

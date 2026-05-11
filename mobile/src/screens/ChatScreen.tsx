@@ -72,7 +72,8 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     const clearedAt = currentUser ? chat?.clearedAt?.[currentUser.id] : undefined;
 
 
-    const { messages, loading, sendMessage, markAsRead } = useChatMessages(chatId, clearedAt);
+    const chatType = chatCollection === 'group_chats' ? 'group' : 'direct';
+    const { messages, loading, sendMessage, markAsRead } = useChatMessages(chatId, chatType, clearedAt);
     const [inputText, setInputText] = useState('');
     const [sending, setSending] = useState(false);
     const [uploading, setUploading] = useState(false);

@@ -15,27 +15,18 @@ import {
     requestNotificationPermission,
     syncNotificationPreference,
 } from '../utils/notificationPermissions';
-import { resetDatabase } from '../database';
+import { resetDatabase, database } from '../database';
 
-const DELETE_REASONS = [
-    'I have privacy concerns',
-    'I found a better app',
-    'I don\'t use it anymore',
-    'Too many notifications',
-    'App is not working properly',
-    'Other',
-];
+
 
 const SettingsScreen = ({ navigation }) => {
-    const { colors, isDarkMode, toggleTheme } = useTheme();
+    const { colors, isDarkMode, themeMode, setThemeMode } = useTheme();
+
     const [pushEnabled, setPushEnabled] = useState(false);
     const [loadingSettings, setLoadingSettings] = useState(true);
-    const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const [deleteReason, setDeleteReason] = useState('');
-    const [customReason, setCustomReason] = useState('');
-    const [deleting, setDeleting] = useState(false);
     const [notificationPermissionGranted, setNotificationPermissionGranted] = useState(false);
     const [currentUser, setCurrentUser] = React.useState<any>(null);
+
 
     React.useEffect(() => {
         supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
@@ -43,21 +34,34 @@ const SettingsScreen = ({ navigation }) => {
 
     const loadSettings = useCallback(async () => {
         if (!currentUser) return;
-        
+
         setLoadingSettings(true);
         try {
             const permissionStatus = await getNotificationPermissionStatus();
             const isGranted = permissionStatus === 'granted';
             setNotificationPermissionGranted(isGranted);
 
+            // 1. Try WatermelonDB first (instant)
+            try {
+                const localProfile = await database.get('profiles').find(currentUser.id);
+                if (localProfile) {
+                    const lp = localProfile as any;
+                    const isEnabled = lp._raw.push_notifications_enabled === true && isGranted;
+                    setPushEnabled(isEnabled);
+                    setLoadingSettings(false);
+                }
+            } catch {
+                // Not in local DB, fall through
+            }
+
+            // 2. Verify with Supabase (background)
             const { data: profile } = await supabase
                 .from('profiles')
                 .select('push_notifications_enabled')
                 .eq('id', currentUser.id)
                 .maybeSingle();
-            
+
             if (profile) {
-                // Only enable if BOTH profile says true AND OS permission is granted
                 const isEnabled = profile.push_notifications_enabled === true && isGranted;
                 setPushEnabled(isEnabled);
             } else {
@@ -90,7 +94,21 @@ const SettingsScreen = ({ navigation }) => {
             setNotificationPermissionGranted(permissionStatus === 'granted');
             setPushEnabled(enabled);
 
-            await syncNotificationPreference(currentUser.id, permissionStatus, enabled);
+            // Write to WatermelonDB immediately
+            try {
+                const localProfile = await database.get('profiles').find(currentUser.id);
+                await database.write(async () => {
+                    await (localProfile as any).update((p: any) => {
+                        p._raw.push_notifications_enabled = enabled;
+                        p._raw.updated_at = Date.now();
+                    });
+                });
+            } catch {
+                // Local DB record may not exist yet
+            }
+
+            // Sync to Supabase in background
+            syncNotificationPreference(currentUser.id, permissionStatus, enabled).catch(() => {});
 
             if (value && permissionStatus !== 'granted') {
                 setPushEnabled(false);
@@ -106,53 +124,7 @@ const SettingsScreen = ({ navigation }) => {
 
 
 
-    const handleDeleteAccount = () => {
-        setDeleteReason('');
-        setCustomReason('');
-        setShowDeleteModal(true);
-    };
 
-    const confirmDelete = async () => {
-        const reason = deleteReason === 'Other' ? customReason.trim() : deleteReason;
-        if (!reason) {
-            Alert.alert('Required', 'Please select or type a reason for deleting your account.');
-            return;
-        }
-
-        Alert.alert(
-            "Final Confirmation",
-            "This will permanently delete your profile, trips, photos, chats, and messages. This action CANNOT be undone.",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Delete Forever",
-                    style: "destructive",
-                    onPress: async () => {
-                        setDeleting(true);
-                        try {
-                            await workersApi('/account/delete', { body: { reason } });
-                            // Sign out locally
-                            try { await supabase.auth.signOut(); } catch (e) { }
-                            
-                            // Clear local database
-                            await resetDatabase();
-                            
-                            setShowDeleteModal(false);
-                            // Navigate to auth screen
-                            navigation.reset({
-                                index: 0,
-                                routes: [{ name: 'Start' }],
-                            });
-                        } catch (error: any) {
-                            Alert.alert("Error", error.message || "Could not delete account. Please try again later.");
-                        } finally {
-                            setDeleting(false);
-                        }
-                    }
-                }
-            ]
-        );
-    };
 
     return (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
@@ -172,149 +144,98 @@ const SettingsScreen = ({ navigation }) => {
                 </View>
 
                 <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                    {/* Push Notifications */}
+                    {/* Notifications Section */}
                     <Animatable.View animation="fadeInUp" duration={400} delay={0}>
-                        <View style={[styles.settingCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                            <View style={[styles.iconBox, { backgroundColor: CATEGORY.purple }]}>
-                                <Ionicons name={ICONS.notifications} size={24} color={BRAND.primary} />
-                            </View>
-                            <View style={styles.settingInfo}>
-                                <Text style={[styles.settingTitle, { color: colors.text }]}>Push Notifications</Text>
-                                <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
-                                    Receive notifications about new trips and messages
-                                </Text>
-                            </View>
-                            {loadingSettings ? (
-                                <ActivityIndicator size="small" color={BRAND.primary} />
-                            ) : (
+                        <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                            <View style={styles.settingRow}>
+                                <View style={styles.settingInfo}>
+                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Push Notifications</Text>
+                                    <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
+                                        Receive updates about trips and messages
+                                    </Text>
+                                </View>
                                 <Switch
                                     value={pushEnabled}
                                     onValueChange={handlePushToggle}
                                     trackColor={{ false: NEUTRAL.gray200, true: STATUS.success }}
                                     thumbColor={NEUTRAL.white}
+                                    disabled={loadingSettings}
                                 />
-                            )}
+                            </View>
                         </View>
+
                     </Animatable.View>
 
-                    {/* Dark Mode */}
+                    {/* Appearance Section */}
                     <Animatable.View animation="fadeInUp" duration={400} delay={100}>
-                        <View style={[styles.settingCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                            <View style={[styles.iconBox, { backgroundColor: '#FEF3C7' }]}>
-                                <Ionicons name={ICONS.moon} size={24} color={STATUS.warning} />
+                        <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                            <Text style={[styles.sectionTitle, { color: colors.text }]}>Appearance</Text>
+
+                            <View style={styles.themeSelector}>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.themeOption,
+                                        { backgroundColor: colors.inputBackground },
+                                        themeMode === 'light' && [styles.themeOptionActive, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]
+                                    ]}
+                                    onPress={() => setThemeMode('light')}
+                                >
+                                    <Ionicons name="sunny-outline" size={20} color={themeMode === 'light' ? colors.primary : colors.textSecondary} />
+                                    <Text style={[styles.themeText, { color: themeMode === 'light' ? colors.primary : colors.textSecondary }]}>Light</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={[
+                                        styles.themeOption,
+                                        { backgroundColor: colors.inputBackground },
+                                        themeMode === 'dark' && [styles.themeOptionActive, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]
+                                    ]}
+                                    onPress={() => setThemeMode('dark')}
+                                >
+                                    <Ionicons name="moon-outline" size={20} color={themeMode === 'dark' ? colors.primary : colors.textSecondary} />
+                                    <Text style={[styles.themeText, { color: themeMode === 'dark' ? colors.primary : colors.textSecondary }]}>Dark</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={[
+                                        styles.themeOption,
+                                        { backgroundColor: colors.inputBackground },
+                                        themeMode === 'system' && [styles.themeOptionActive, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]
+                                    ]}
+                                    onPress={() => setThemeMode('system')}
+                                >
+                                    <Ionicons name="contrast-outline" size={20} color={themeMode === 'system' ? colors.primary : colors.textSecondary} />
+                                    <Text style={[styles.themeText, { color: themeMode === 'system' ? colors.primary : colors.textSecondary }]}>System</Text>
+                                </TouchableOpacity>
                             </View>
-                            <View style={styles.settingInfo}>
-                                <Text style={[styles.settingTitle, { color: colors.text }]}>Dark Mode</Text>
-                                <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
-                                    Toggle between light and dark theme
-                                </Text>
-                            </View>
-                            <Switch
-                                value={isDarkMode}
-                                onValueChange={toggleTheme}
-                                trackColor={{ false: NEUTRAL.gray200, true: STATUS.success }}
-                                thumbColor={NEUTRAL.white}
-                            />
                         </View>
                     </Animatable.View>
 
-                    {/* Delete Account */}
+                    {/* Account Section */}
                     <Animatable.View animation="fadeInUp" duration={400} delay={150}>
-                        <TouchableOpacity
-                            style={[styles.settingCard, { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}
-                            onPress={handleDeleteAccount}
-                            activeOpacity={0.7}
-                        >
-                            <View style={[styles.iconBox, { backgroundColor: '#FEF2F2' }]}>
-                                <Ionicons name={ICONS.delete} size={24} color={STATUS.errorDark} />
-                            </View>
-                            <View style={styles.settingInfo}>
-                                <Text style={[styles.settingTitle, { color: STATUS.errorDark }]}>Delete Account</Text>
-                                <Text style={[styles.settingDescription, { color: STATUS.error }]}>
-                                    Permanently remove your account and data
-                                </Text>
-                            </View>
-                        </TouchableOpacity>
+                        <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                            <TouchableOpacity
+                                style={styles.dangerRow}
+                                onPress={() => navigation.navigate('DeleteAccount')}
+                                activeOpacity={0.7}
+                            >
+
+
+                                <View style={styles.settingInfo}>
+                                    <Text style={[styles.dangerText, styles.sectionTitle, { color: STATUS.errorDark }]}>Delete Account</Text>
+                                    <Text style={[styles.settingDescription, { color: STATUS.error }]}>
+                                        Permanently remove your account and data
+                                    </Text>
+                                </View>
+                                <Ionicons name="chevron-forward" size={20} color={STATUS.error} />
+                            </TouchableOpacity>
+                        </View>
                     </Animatable.View>
                 </ScrollView>
+
             </View>
 
-            {/* Delete Reason Modal */}
-            <Modal
-                visible={showDeleteModal}
-                transparent
-                animationType="fade"
-                onRequestClose={() => !deleting && setShowDeleteModal(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-                        <Text style={[styles.modalTitle, { color: colors.text }]}>Why are you leaving?</Text>
-                        <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
-                            Help us improve by telling us why you want to delete your account.
-                        </Text>
 
-                        <ScrollView style={styles.reasonList} showsVerticalScrollIndicator={false}>
-                            {DELETE_REASONS.map((reason) => (
-                                <TouchableOpacity
-                                    key={reason}
-                                    style={[
-                                        styles.reasonOption,
-                                        { borderColor: colors.border, backgroundColor: colors.inputBackground },
-                                        deleteReason === reason && [styles.reasonSelected, { backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2' }],
-                                    ]}
-                                    onPress={() => setDeleteReason(reason)}
-                                    activeOpacity={0.7}
-                                >
-                                    <View style={[
-                                        styles.radioCircle,
-                                        { borderColor: deleteReason === reason ? STATUS.errorDark : colors.border },
-                                    ]}>
-                                        {deleteReason === reason && <View style={styles.radioFill} />}
-                                    </View>
-                                    <Text style={[styles.reasonText, { color: colors.text }]}>{reason}</Text>
-                                </TouchableOpacity>
-                            ))}
-
-                            {deleteReason === 'Other' && (
-                                <TextInput
-                                    style={[styles.reasonInput, {
-                                        backgroundColor: colors.inputBackground,
-                                        color: colors.text,
-                                        borderColor: colors.border,
-                                    }]}
-                                    value={customReason}
-                                    onChangeText={setCustomReason}
-                                    placeholder="Please tell us more..."
-                                    placeholderTextColor={colors.textSecondary}
-                                    multiline
-                                    maxLength={200}
-                                />
-                            )}
-                        </ScrollView>
-
-                        <View style={styles.modalActions}>
-                            <TouchableOpacity
-                                style={[styles.modalBtn, styles.modalCancelBtn, { borderColor: colors.border }]}
-                                onPress={() => setShowDeleteModal(false)}
-                                disabled={deleting}
-                            >
-                                <Text style={[styles.modalBtnText, { color: colors.text }]}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.modalBtn, styles.modalDeleteBtn, (deleting || !deleteReason || (deleteReason === 'Other' && !customReason.trim())) ? { opacity: 0.5 } : null]}
-                                onPress={confirmDelete}
-                                disabled={deleting || !deleteReason || (deleteReason === 'Other' && !customReason.trim())}
-                            >
-                                {deleting ? (
-                                    <ActivityIndicator color={NEUTRAL.white} size="small" />
-                                ) : (
-                                    <Text style={[styles.modalBtnText, { color: NEUTRAL.white }]}>Delete Account</Text>
-                                )}
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
         </SafeAreaView>
     );
 };
@@ -488,6 +409,66 @@ const styles = StyleSheet.create({
         fontSize: FONT_SIZE.sm,
         fontWeight: FONT_WEIGHT.semibold,
     },
+    sectionCard: {
+        padding: SPACING.lg,
+        borderRadius: BORDER_RADIUS.lg,
+        marginBottom: SPACING.lg,
+        borderWidth: 1,
+    },
+    sectionTitle: {
+        fontSize: FONT_SIZE.md,
+        fontWeight: FONT_WEIGHT.bold,
+        marginBottom: SPACING.md,
+    },
+    settingRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: SPACING.sm,
+    },
+    settingLabel: {
+        fontSize: FONT_SIZE.sm,
+        fontWeight: FONT_WEIGHT.semibold,
+        marginBottom: SPACING.xs,
+    },
+    themeSelector: {
+        flexDirection: 'row',
+        gap: SPACING.md,
+    },
+    themeOption: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: SPACING.xs,
+        paddingVertical: SPACING.md,
+        borderRadius: BORDER_RADIUS.md,
+        borderWidth: 1,
+        borderColor: 'transparent',
+    },
+    themeOptionActive: {
+        borderWidth: 1,
+    },
+    themeText: {
+        fontSize: FONT_SIZE.sm,
+        fontWeight: FONT_WEIGHT.semibold,
+    },
+    dangerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: SPACING.sm,
+    },
+    dangerText: {
+        fontSize: FONT_SIZE.sm,
+        fontWeight: FONT_WEIGHT.semibold,
+        marginBottom: SPACING.xs,
+    },
+    loadingText: {
+        fontSize: FONT_SIZE.xs,
+        marginTop: SPACING.xs,
+    },
 });
+
 
 export default SettingsScreen;

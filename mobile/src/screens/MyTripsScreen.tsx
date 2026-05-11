@@ -5,6 +5,9 @@ import { useTheme } from '../contexts/ThemeContext';
 import * as Animatable from 'react-native-animatable';
 import { supabase } from '../lib/supabase';
 import { leaveTrip } from '../utils/tripActions';
+import { database } from '../database';
+import { syncDatabase } from '../database/sync';
+import { Q } from '@nozbe/watermelondb';
 
 import { Ionicons } from '@expo/vector-icons';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, NEUTRAL, TOUCH_TARGET } from '../styles';
@@ -38,8 +41,34 @@ const MyTripsScreen = ({ navigation, route }) => {
           setLoading(false);
           return;
         }
-        setLoading(true);
-        const { data, error } = await supabase
+
+        // 1. Try WatermelonDB first (instant display)
+        try {
+          const localTrips = await database.get('trips')
+            .query(Q.sortBy('created_at', Q.desc))
+            .fetch();
+          
+          const myLocalTrips = localTrips.filter((t: any) => {
+            try {
+              const participants = t._raw.participants
+                ? (typeof t._raw.participants === 'string' ? JSON.parse(t._raw.participants) : t._raw.participants)
+                : [];
+              return Array.isArray(participants) && participants.includes(currentUser.id);
+            } catch {
+              return false;
+            }
+          });
+
+          if (!cancelled && myLocalTrips.length > 0) {
+            setJoinedTrips(myLocalTrips.map((t: any) => t._raw));
+            setLoading(false);
+          }
+        } catch {
+          // Local DB error, continue to Supabase
+        }
+
+        // 2. Fetch from Supabase (fresh data)
+        const { data } = await supabase
           .from('trips')
           .select('*')
           .contains('participants', [currentUser.id]);
@@ -125,7 +154,7 @@ const MyTripsScreen = ({ navigation, route }) => {
   const filteredTrips = filterTrips();
 
   const renderTripCard = ({ item }) => (
-    <Animatable.View animation="fadeInUp" duration={400} style={[styles.tripCard, { backgroundColor: colors.card }]}>
+    <Animatable.View animation="fadeInUp" duration={400} style={[styles.tripCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <TouchableOpacity
         onPress={() => navigation.navigate('TripDetails', { tripId: item.id })}
         style={styles.cardContent}
@@ -140,15 +169,21 @@ const MyTripsScreen = ({ navigation, route }) => {
           <Text style={[styles.tripTitle, { color: colors.text }]} numberOfLines={1}>
             {item.title || 'Trip'}
           </Text>
-          <Text style={[styles.tripLocation, { color: colors.textSecondary }]} numberOfLines={1}>
-            📍 {item.toLocation || item.location || 'Location TBD'}
-          </Text>
-          <Text style={[styles.tripDate, { color: colors.textSecondary }]}>
-            📅 {item.from_date ? new Date(item.from_date).toLocaleDateString() : (item.fromDate ? new Date(item.fromDate).toLocaleDateString() : 'Date TBD')}
-          </Text>
+          <View style={styles.locationRow}>
+            <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
+            <Text style={[styles.tripLocation, { color: colors.textSecondary }]} numberOfLines={1}>
+              {item.toLocation || item.location || 'Location TBD'}
+            </Text>
+          </View>
+          <View style={styles.dateRow}>
+            <Ionicons name="calendar-outline" size={14} color={colors.textSecondary} />
+            <Text style={[styles.tripDate, { color: colors.textSecondary }]}>
+              {item.from_date ? new Date(item.from_date).toLocaleDateString('en-IN') : (item.fromDate ? new Date(item.fromDate).toLocaleDateString('en-IN') : 'Date TBD')}
+            </Text>
+          </View>
         </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} style={styles.chevron} />
       </TouchableOpacity>
-
     </Animatable.View >
   );
 
@@ -306,6 +341,7 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
     borderRadius: BORDER_RADIUS.lg,
     marginBottom: SPACING.md,
+    borderWidth: 1,
   },
   tab: {
     flex: 1,
@@ -316,12 +352,12 @@ const styles = StyleSheet.create({
   activeTab: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.05,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
   },
   tabText: {
-    fontSize: FONT_SIZE.md,
+    fontSize: FONT_SIZE.sm,
     fontWeight: FONT_WEIGHT.semibold,
   },
   contentContainer: { flex: 1 },
@@ -340,37 +376,46 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.lg,
     marginBottom: SPACING.md,
     overflow: 'hidden',
+    borderWidth: 1,
   },
   cardContent: {
     flexDirection: 'row',
     padding: SPACING.md,
+    alignItems: 'center',
   },
   tripImage: {
-    width: 80,
-    height: 80,
+    width: 70,
+    height: 70,
     borderRadius: BORDER_RADIUS.md,
   },
   tripInfo: {
     flex: 1,
     marginLeft: SPACING.md,
-    justifyContent: 'center',
+    gap: 4,
   },
   tripTitle: {
     fontSize: FONT_SIZE.md,
     fontWeight: FONT_WEIGHT.bold,
-    marginBottom: SPACING.xs,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   tripLocation: {
     fontSize: FONT_SIZE.sm,
-    marginBottom: SPACING.xs,
+    flex: 1,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   tripDate: {
     fontSize: FONT_SIZE.xs,
   },
-  toggleSection: {
-    paddingHorizontal: SPACING.md,
-    paddingBottom: SPACING.md,
-    alignItems: 'flex-end',
+  chevron: {
+    marginLeft: SPACING.xs,
   },
   emptyContainer: {
     flex: 1,
@@ -386,11 +431,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: SPACING.xl,
-  },
-  emptyIconImage: {
-    width: 60,
-    height: 60,
-    borderRadius: BORDER_RADIUS.md,
   },
   emptyTitle: {
     fontSize: FONT_SIZE.xl,

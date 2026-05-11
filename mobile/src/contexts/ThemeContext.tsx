@@ -1,7 +1,12 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import { useColorScheme } from 'react-native';
 import { getStringPreference, PREFERENCE_KEYS, setStringPreference } from '../utils/preferences';
 
+export type ThemeMode = 'light' | 'dark' | 'system';
+
 type ThemeContextType = {
+    themeMode: ThemeMode;
+    setThemeMode: (mode: ThemeMode) => void;
     isDarkMode: boolean;
     toggleTheme: () => void;
     colors: ColorScheme;
@@ -65,13 +70,16 @@ const darkColors: ColorScheme = {
 };
 
 const ThemeContext = createContext<ThemeContextType>({
+    themeMode: 'system',
+    setThemeMode: () => { },
     isDarkMode: false,
     toggleTheme: () => { },
     colors: lightColors,
 });
 
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
-    const [isDarkMode, setIsDarkMode] = useState(false);
+    const [themeMode, setThemeModeState] = useState<ThemeMode>('system');
+    const systemColorScheme = useColorScheme();
 
     useEffect(() => {
         loadTheme();
@@ -79,29 +87,35 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
 
     const loadTheme = async () => {
         try {
-            const savedTheme = await getStringPreference(PREFERENCE_KEYS.theme);
+            const savedTheme = await getStringPreference(PREFERENCE_KEYS.theme) as ThemeMode | null;
             if (savedTheme !== null) {
-                setIsDarkMode(savedTheme === 'dark');
+                setThemeModeState(savedTheme);
             }
         } catch {
             // Theme loading failed silently
         }
     };
 
-    const toggleTheme = async () => {
-        const newTheme = !isDarkMode;
-        setIsDarkMode(newTheme);
+    const setThemeMode = async (mode: ThemeMode) => {
+        setThemeModeState(mode);
         try {
-            await setStringPreference(PREFERENCE_KEYS.theme, newTheme ? 'dark' : 'light');
+            await setStringPreference(PREFERENCE_KEYS.theme, mode);
         } catch {
             // Theme saving failed silently
         }
     };
 
+    const toggleTheme = async () => {
+        const currentEffectiveDark = themeMode === 'system' ? systemColorScheme === 'dark' : themeMode === 'dark';
+        const newMode: ThemeMode = currentEffectiveDark ? 'light' : 'dark';
+        setThemeMode(newMode);
+    };
+
+    const isDarkMode = themeMode === 'system' ? systemColorScheme === 'dark' : themeMode === 'dark';
     const colors = isDarkMode ? darkColors : lightColors;
 
     return (
-        <ThemeContext.Provider value={{ isDarkMode, toggleTheme, colors }}>
+        <ThemeContext.Provider value={{ themeMode, setThemeMode, isDarkMode, toggleTheme, colors }}>
             {children}
         </ThemeContext.Provider>
     );

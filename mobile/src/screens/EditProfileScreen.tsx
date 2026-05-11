@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
     View,
     Text,
@@ -11,10 +11,16 @@ import {
     KeyboardAvoidingView,
     Platform,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
+import { workersApi } from '../lib/workersApi';
 import { LinearGradient } from 'expo-linear-gradient';
+import { database } from '../database';
+
+
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, STATUS, NEUTRAL } from '../styles';
 import DefaultAvatar from '../components/DefaultAvatar';
@@ -42,8 +48,16 @@ const EditProfileScreen = ({ navigation }) => {
     const [checkingUsername, setCheckingUsername] = useState(false);
     const [usernameError, setUsernameError] = useState('');
     const [usernameOk, setUsernameOk] = useState(false);
+    const isMounted = useRef(true);
 
     useEffect(() => {
+        return () => {
+            isMounted.current = false;
+        };
+    }, []);
+
+    useEffect(() => {
+
         const loadUser = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) {
@@ -52,6 +66,24 @@ const EditProfileScreen = ({ navigation }) => {
             }
             setCurrentUser(user);
 
+            // 1. Try WatermelonDB first (instant)
+            try {
+                const localProfile = await database.get('profiles').find(user.id);
+                if (localProfile) {
+                    const lp = (localProfile as any)._raw;
+                    const displayName = lp.name || user.user_metadata?.full_name || '';
+                    setUser({ id: user.id, ...lp, displayName, email: user.email });
+                    setName(displayName);
+                    setUsername(lp.username || '');
+                    setBio(lp.bio || '');
+                    setProfileImage(lp.photo_url || user.user_metadata?.avatar_url || null);
+                    setLoading(false);
+                }
+            } catch {
+                // Not in local DB, fall through
+            }
+
+            // 2. Fetch from Supabase (fresh data)
             const { data: profile } = await supabase
                 .from('profiles')
                 .select('*')
@@ -89,23 +121,25 @@ const EditProfileScreen = ({ navigation }) => {
                 return;
             }
 
+            if (value === user?.username) {
+                setUsernameOk(true);
+                setUsernameError('');
+                return;
+            }
+
             setCheckingUsername(true);
             setUsernameError('');
             setUsernameOk(false);
             try {
-            const snapshot = await supabase
-                .from('public_profiles')
-                .select('id')
-                .eq('username', value);
+                const response = await workersApi(`/account/check-username/${value}`, { method: 'GET' });
+                
+                if (!active) return;
 
-            if (!active) return;
-
-            const isTaken = (snapshot.data || []).some(row => row.id !== currentUser?.id);
-                if (isTaken) {
+                if (response.available) {
+                    setUsernameOk(true);
+                } else {
                     setUsernameError('Username is already taken');
                     setUsernameOk(false);
-                } else {
-                    setUsernameOk(true);
                 }
             } catch {
                 if (!active) return;
@@ -114,10 +148,12 @@ const EditProfileScreen = ({ navigation }) => {
             } finally {
                 if (active) setCheckingUsername(false);
             }
+
         };
 
-        timeout = setTimeout(run, 350);
+        timeout = setTimeout(run, 150);
         return () => {
+
             active = false;
             clearTimeout(timeout);
         };
@@ -130,6 +166,30 @@ const EditProfileScreen = ({ navigation }) => {
     const pickProfile = async () => {
         if (!currentUser) return;
         try {
+            // 1. Pick the image
+            const hasPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (hasPermission.status !== 'granted') {
+                Alert.alert('Permission Required', 'Please allow access to your photos to upload images.');
+                return;
+            }
+
+            const pickerResult = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.7,
+            });
+
+            if (pickerResult.canceled || !pickerResult.assets[0]) {
+                return;
+            }
+
+            const localUri = pickerResult.assets[0].uri;
+            
+            // 2. Show image immediately
+            setProfileImage(localUri);
+
+            // 3. Upload image
             const previousObjectKey = profileImageObjectKey || user?.photoObjectKey || null;
             const result = await pickAndUploadImage({
                 folder: 'profiles',
@@ -137,6 +197,7 @@ const EditProfileScreen = ({ navigation }) => {
                 aspect: [1, 1],
                 quality: 0.7,
                 allowsEditing: true,
+                existingUri: localUri, // Use the picked URI
             });
 
             if (result.success && result.url && result.objectKey) {
@@ -156,9 +217,11 @@ const EditProfileScreen = ({ navigation }) => {
                         await deleteProfileImageFromR2(previousObjectKey);
                     }
 
-                    setProfileImage(result.url);
-                    setProfileImageObjectKey(result.objectKey);
-                    setUser((prev: any) => ({ ...prev, photoURL: result.url, photoObjectKey: result.objectKey }));
+                    if (isMounted.current) {
+                        setProfileImage(result.url); // Update with remote URL
+                        setProfileImageObjectKey(result.objectKey);
+                        setUser((prev: any) => ({ ...prev, photoURL: result.url, photoObjectKey: result.objectKey }));
+                    }
                 } catch {
                     await deleteProfileImageFromR2(result.objectKey);
                     Alert.alert('Error', 'Could not upload profile image.');
@@ -171,6 +234,7 @@ const EditProfileScreen = ({ navigation }) => {
         }
     };
 
+
     const handleSave = async () => {
         if (!currentUser) return;
         if (!name.trim()) {
@@ -182,30 +246,66 @@ const EditProfileScreen = ({ navigation }) => {
             return;
         }
 
-        setSaving(true);
+        const sanitized = sanitizeUsername(username.trim());
+
+        // 1. Write to WatermelonDB immediately (so local UI updates right away)
         try {
-            const sanitized = sanitizeUsername(username.trim());
-            await supabase.from('profiles').update({
-                name: name.trim(),
-                username: sanitized,
-                bio: bio.trim(),
-                photo_url: profileImage || null,
-                photo_object_key: profileImageObjectKey || null,
-            }).eq('id', currentUser.id);
-
+            const profilesCollection = database.get('profiles');
+            let localProfile: any = null;
+            
             try {
-                await supabase.auth.updateUser({
-                    data: { full_name: name.trim(), avatar_url: profileImage || undefined },
-                });
-            } catch (e) { }
-
-            Alert.alert('Saved', 'Profile updated successfully.');
-            navigation.goBack();
-        } catch (error: any) {
-            Alert.alert('Error', error?.message || 'Could not save profile.');
-        } finally {
-            setSaving(false);
+                localProfile = await profilesCollection.find(currentUser.id);
+            } catch (e) {
+                // Record not found in local DB
+                localProfile = null;
+            }
+            
+            await database.write(async () => {
+                if (localProfile) {
+                    await localProfile.update((profile: any) => {
+                        profile.name = name.trim();
+                        profile.username = sanitized;
+                        profile.bio = bio.trim();
+                        profile.photo_url = profileImage || null;
+                        profile.updated_at = Date.now();
+                    });
+                } else {
+                    // Create if not exists
+                    await profilesCollection.create((profile: any) => {
+                        profile._raw.id = currentUser.id;
+                        profile.name = name.trim();
+                        profile.username = sanitized;
+                        profile.bio = bio.trim();
+                        profile.photo_url = profileImage || null;
+                        profile.push_notifications_enabled = false;
+                        profile.save_to_gallery = false;
+                        profile.updated_at = Date.now();
+                    });
+                }
+            });
+        } catch (dbError) {
+            console.error('Failed to write to WatermelonDB:', dbError);
         }
+
+
+        // 2. Fire and forget the remote updates (Supabase) in background
+        supabase.from('profiles').update({
+            name: name.trim(),
+            username: sanitized,
+            bio: bio.trim(),
+            photo_url: profileImage || null,
+            photo_object_key: profileImageObjectKey || null,
+        }).eq('id', currentUser.id).then(({ error }) => {
+            if (error) console.error('Failed to update Supabase profile:', error);
+        });
+
+        supabase.auth.updateUser({
+            data: { full_name: name.trim(), avatar_url: profileImage || undefined },
+        }).catch(e => console.error('Failed to update auth user:', e));
+
+        // 3. Navigate back immediately
+        navigation.goBack();
+
     };
 
     if (loading) {
@@ -233,6 +333,8 @@ const EditProfileScreen = ({ navigation }) => {
                     >
                         <Ionicons name="chevron-back" size={24} color={colors.text} />
                     </TouchableOpacity>
+
+
                     <Text style={[styles.headerTitle, { color: colors.text }]}>Edit Profile</Text>
                     <View style={styles.headerBtn} />
                 </View>

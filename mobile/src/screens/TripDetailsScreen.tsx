@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
+import { database } from '../database';
 import { Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useTheme } from '../contexts/ThemeContext';
@@ -129,6 +130,76 @@ const TripDetailsScreen = ({ route, navigation }) => {
 
     // Initial fetch
     const fetchTrip = async () => {
+      // 1. Try WatermelonDB first (instant display)
+      try {
+        const localTrip = await database.get('trips').find(tripId);
+        if (localTrip) {
+          const raw = (localTrip as any)._raw;
+          const tripData: any = { id: raw.id };
+          // Map raw fields to camelCase
+          tripData.userId = raw.user_id;
+          tripData.title = raw.title;
+          tripData.description = raw.description;
+          tripData.location = raw.location;
+          tripData.coverImage = raw.cover_image;
+          tripData.toLocation = raw.to_location;
+          tripData.fromLocation = raw.from_location;
+          tripData.maxTravelers = raw.max_travelers;
+          tripData.currentTravelers = raw.current_travelers;
+          tripData.costPerPerson = raw.cost_per_person;
+          tripData.cost = raw.cost;
+          tripData.duration = raw.duration;
+          tripData.tripTypes = raw.trip_types ? (typeof raw.trip_types === 'string' ? JSON.parse(raw.trip_types) : raw.trip_types) : null;
+          tripData.transportModes = raw.transport_modes ? (typeof raw.transport_modes === 'string' ? JSON.parse(raw.transport_modes) : raw.transport_modes) : null;
+          tripData.fromDate = raw.from_date;
+          tripData.toDate = raw.to_date;
+          tripData.accommodationType = raw.accommodation_type;
+          tripData.accommodationDays = raw.accommodation_days;
+          tripData.bookingStatus = raw.booking_status;
+          tripData.genderPreference = raw.gender_preference;
+          tripData.mandatoryItems = raw.mandatory_items ? (typeof raw.mandatory_items === 'string' ? JSON.parse(raw.mandatory_items) : raw.mandatory_items) : null;
+          tripData.placesToVisit = raw.places_to_visit ? (typeof raw.places_to_visit === 'string' ? JSON.parse(raw.places_to_visit) : raw.places_to_visit) : null;
+          tripData.imageLocations = raw.image_locations ? (typeof raw.image_locations === 'string' ? JSON.parse(raw.image_locations) : raw.image_locations) : null;
+          tripData.images = raw.images ? (typeof raw.images === 'string' ? JSON.parse(raw.images) : raw.images) : null;
+          tripData.participants = raw.participants ? (typeof raw.participants === 'string' ? JSON.parse(raw.participants) : raw.participants) : null;
+          tripData.status = raw.status;
+          tripData.tripType = raw.trip_type;
+          tripData.transportMode = raw.transport_mode;
+          tripData.isExpired = raw.is_expired;
+          tripData.isCancelled = raw.is_cancelled;
+          tripData.isCompleted = raw.is_completed;
+          tripData.mapsLink = raw.maps_link;
+          tripData.ownerDisplayName = raw.owner_display_name;
+          tripData.ownerPhotoUrl = raw.owner_photo_url;
+          tripData.ownerUsername = raw.owner_username;
+          tripData.user = {
+            displayName: raw.owner_display_name || 'Traveler',
+            photoURL: raw.owner_photo_url,
+          };
+
+          // Show local profile if available
+          if (tripData.userId) {
+            try {
+              const localProfile = await database.get('profiles').find(tripData.userId);
+              if (localProfile) {
+                const lp = (localProfile as any)._raw;
+                tripData.user = {
+                  displayName: lp.name || tripData.ownerDisplayName || 'Traveler',
+                  photoURL: lp.photo_url || tripData.ownerPhotoUrl,
+                };
+              }
+            } catch { /* profile not in local DB */ }
+          }
+
+          setTrip(tripData);
+          setIsJoined(user ? (tripData.participants || []).includes(user.id) : false);
+          setLoading(false);
+        }
+      } catch {
+        // Trip not in local DB, fall through to Supabase
+      }
+
+      // 2. Fetch from Supabase (fresh data)
       const { data: doc } = await supabase.from('trips').select('*').eq('id', tripId).maybeSingle();
       if (doc) {
         const tripData: any = { id: doc.id, ...doc };
@@ -374,9 +445,9 @@ const TripDetailsScreen = ({ route, navigation }) => {
             trip_id: tripId,
             group_name: trip.title || 'Trip Group',
             trip_image: trip.coverImage || trip.images?.[0] || null,
-            participants: trip.participants || [user.id],
+            participants: Array.from(new Set([trip.userId, ...(trip.participants || []), user.id])),
             participant_details: {}, // Minimal, will be populated
-            member_count: trip.participants?.length || 1,
+            member_count: Array.from(new Set([trip.userId, ...(trip.participants || []), user.id])).length,
             created_by: trip.userId, // Owner
             last_message: { text: 'Group auto-created', sender_id: null, created_at: new Date().toISOString() },
         }).select('id').single();

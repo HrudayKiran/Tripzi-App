@@ -57,7 +57,6 @@ const mapModelToMessage = (m: MessageModel): ChatMessage => ({
     type: m.type as MessageType,
     text: m.text,
     mediaUrl: m.mediaUrl,
-    mediaThumbnail: m.mediaThumbnail,
     location: m.locationData,
     voiceDuration: m.voiceDuration,
     replyTo: m.replyToData,
@@ -73,6 +72,7 @@ const mapModelToMessage = (m: MessageModel): ChatMessage => ({
 
 export function useChatMessages(
     chatId: string | undefined,
+    chatType: 'direct' | 'group' | undefined,
     clearedAt?: Date | null
 ): UseChatMessagesReturn {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -102,7 +102,7 @@ export function useChatMessages(
     }, [chatId]);
 
     const sendMessage = useCallback(async (text: string, replyTo?: ReplyTo, mentions?: string[]) => {
-        if (!chatId || !userId || !text.trim()) return;
+        if (!chatId || !userId || !text.trim() || !chatType) return;
 
         const { data: profile } = await supabase.from('profiles').select('name').eq('id', userId).maybeSingle();
         const senderName = profile?.name || 'User';
@@ -110,6 +110,7 @@ export function useChatMessages(
         await database.write(async () => {
             await database.get<MessageModel>('messages').create((m: MessageModel) => {
                 m.chatId = chatId;
+                m.chatType = chatType;
                 m.senderId = userId;
                 m.senderName = senderName;
                 m.type = 'text';
