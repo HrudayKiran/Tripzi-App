@@ -11,12 +11,11 @@ import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 import { supabase } from '../lib/supabase';
+import { syncDatabase } from '../database/sync';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
 import { deleteTripImagesFromR2, uploadTripImageToR2 } from '../utils/imageUpload';
 import { showUploadNotification, completeUploadNotification, failUploadNotification } from '../utils/notifications';
-
-
 const { width } = Dimensions.get('window');
 
 const TRIP_TYPES = [
@@ -327,20 +326,31 @@ const CreateTripScreen = ({ navigation, route }: any) => {
 
             // Create group chat for the trip
             try {
-                await supabase.from('chats').insert({
-                    type: 'group',
+                await supabase.from('group_chats').insert({
                     trip_id: tripRow.id,
-                    trip_title: title,
+                    group_name: title,
+                    trip_image: finalImages[0] || null,
                     participants: [currentUser.id],
+                    participant_details: {
+                        [currentUser.id]: {
+                            displayName: tripData.owner_display_name,
+                            photoURL: tripData.owner_photo_url || '',
+                        },
+                    },
+                    member_count: 1,
                     created_by: currentUser.id,
-                    last_message: 'Trip group created!',
+                    last_message: { text: 'Trip group created!', sender_id: null, created_at: new Date().toISOString() },
                 });
             } catch {
-                // Group chat creation failed (non-critical)
+                // Group chat creation is non-critical — user can still access the trip
             }
 
             setIsPosting(false);
             await completeUploadNotification('Trip Posted! 🎉', 'Your trip has been posted successfully.');
+            
+            // Trigger sync to update local database immediately
+            syncDatabase().catch(err => console.error('[CreateTrip] Post-creation sync failed:', err));
+            
             navigation.navigate('UserProfile', { userId: currentUser.id });
         } catch (error: any) {
             if (newObjectKeys.length > 0) {

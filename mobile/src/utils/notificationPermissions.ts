@@ -1,48 +1,65 @@
-import * as Notifications from 'expo-notifications';
-import { supabase } from '../lib/supabase';
+import messaging from '@react-native-firebase/messaging';
 
-export type NotificationPermissionStatus = 'granted' | 'denied' | 'not_determined';
-
-export const getNotificationPermissionStatus = async (): Promise<NotificationPermissionStatus> => {
+/**
+ * Check current push notification permission status using Firebase Messaging.
+ */
+export const getNotificationPermissionStatus = async (): Promise<'granted' | 'denied' | 'undetermined'> => {
     try {
-        const { status } = await Notifications.getPermissionsAsync();
-        if (status === 'undetermined') return 'not_determined';
-        return status;
+        const authStatus = await messaging().hasPermission();
+
+        if (
+            authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+            authStatus === messaging.AuthorizationStatus.PROVISIONAL
+        ) {
+            return 'granted';
+        }
+
+        if (authStatus === messaging.AuthorizationStatus.DENIED) {
+            return 'denied';
+        }
+
+        return 'undetermined';
     } catch {
-        return 'denied';
+        return 'undetermined';
     }
 };
 
-export const requestNotificationPermission = async (): Promise<NotificationPermissionStatus> => {
+/**
+ * Request push notification permission using Firebase Messaging.
+ */
+export const requestNotificationPermission = async (): Promise<'granted' | 'denied' | 'undetermined'> => {
     try {
-        const { status } = await Notifications.requestPermissionsAsync({
-            ios: {
-                allowAlert: true,
-                allowBadge: true,
-                allowSound: true,
-            },
-        });
-        if (status === 'undetermined') return 'not_determined';
-        return status;
+        const authStatus = await messaging().requestPermission();
+        if (
+            authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+            authStatus === messaging.AuthorizationStatus.PROVISIONAL
+        ) {
+            return 'granted';
+        }
+        if (authStatus === messaging.AuthorizationStatus.DENIED) {
+            return 'denied';
+        }
+        return 'undetermined';
     } catch {
-        return 'denied';
+        return 'undetermined';
     }
 };
 
+/**
+ * Sync the user's explicit preference for push notifications to the database.
+ */
 export const syncNotificationPreference = async (
-    uid: string,
-    permissionStatus: NotificationPermissionStatus,
+    userId: string,
+    permissionStatus: string,
     enabled: boolean
 ): Promise<void> => {
     try {
+        const { supabase } = await import('../lib/supabase');
         await supabase
             .from('profiles')
-            .update({
-                notification_permission_status: permissionStatus,
-                push_notifications_enabled: enabled && permissionStatus === 'granted',
-            })
-            .eq('id', uid);
-    } catch {
-        // Sync failures should not block user flow.
+            .update({ push_notifications_enabled: enabled })
+            .eq('id', userId);
+    } catch (e) {
+        console.error('Failed to sync notification preference:', e);
     }
 };

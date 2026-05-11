@@ -27,7 +27,6 @@ export interface AppNotification {
     entityType: 'trip' | 'chat' | 'user' | 'report' | null;
     actorId: string | null;
     actorName: string | null;
-    actorPhotoUrl: string | null;
     deepLinkRoute: string;
     deepLinkParams: Record<string, any>;
     read: boolean;
@@ -74,7 +73,7 @@ export function useNotifications(): UseNotificationsReturn {
                 const { data, error: fetchError } = await supabase
                     .from('notifications')
                     .select('*')
-                    .eq('user_id', user.id)
+                    .eq('recipient_id', user.id)
                     .order('created_at', { ascending: false })
                     .limit(50);
 
@@ -86,15 +85,14 @@ export function useNotifications(): UseNotificationsReturn {
                         recipientId: user.id,
                         type: row.type as NotificationType,
                         title: row.title,
-                        message: row.body || row.message || '',
+                        message: row.message || '',
                         entityId: row.entity_id || null,
                         entityType: row.entity_type || null,
                         actorId: row.actor_id || null,
                         actorName: row.actor_name || null,
-                        actorPhotoUrl: row.actor_photo_url || null,
                         deepLinkRoute: row.deep_link_route || '',
                         deepLinkParams: row.deep_link_params || {},
-                        read: row.read || false,
+                        read: row.is_read || false,
                         readAt: row.read_at ? new Date(row.read_at) : null,
                         createdAt: row.created_at ? new Date(row.created_at) : new Date(),
                     }));
@@ -129,9 +127,9 @@ export function useNotifications(): UseNotificationsReturn {
         if (!user) return;
         await supabase
             .from('notifications')
-            .update({ read: true, read_at: new Date().toISOString() })
+            .update({ is_read: true, read_at: new Date().toISOString() })
             .eq('id', notificationId)
-            .eq('user_id', user.id);
+            .eq('recipient_id', user.id);
     }, []);
 
     const markAllAsRead = useCallback(async () => {
@@ -139,9 +137,9 @@ export function useNotifications(): UseNotificationsReturn {
         if (!user) return;
         await supabase
             .from('notifications')
-            .update({ read: true, read_at: new Date().toISOString() })
-            .eq('user_id', user.id)
-            .eq('read', false);
+            .update({ is_read: true, read_at: new Date().toISOString() })
+            .eq('recipient_id', user.id)
+            .eq('is_read', false);
     }, []);
 
     const deleteNotification = useCallback(async (notificationId: string) => {
@@ -151,7 +149,7 @@ export function useNotifications(): UseNotificationsReturn {
             .from('notifications')
             .delete()
             .eq('id', notificationId)
-            .eq('user_id', user.id);
+            .eq('recipient_id', user.id);
     }, []);
 
     return {

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { supabase } from '../lib/supabase';
 
-const writePresence = async (presence: 'online' | 'background' | 'offline') => {
+const writePresence = async (presence: 'online' | 'away' | 'offline') => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
@@ -30,7 +30,7 @@ export const usePresence = () => {
             }
 
             if (nextState === 'background' || nextState === 'inactive') {
-                writePresence('background');
+                writePresence('away');
             }
         });
 

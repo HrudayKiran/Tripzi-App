@@ -54,6 +54,8 @@ const mapTripToFeedFormat = (trip: Trip, profile?: Profile) => ({
     },
 });
 
+const DEBUG_SHOW_OWN_TRIPS = false; // Toggle this to true to verify sync pulls own trips locally
+
 const useTrips = () => {
     const [trips, setTrips] = useState<any[]>([]);
     const [allTrips, setAllTrips] = useState<any[]>([]);
@@ -62,17 +64,20 @@ const useTrips = () => {
 
     // Get the current user ID on mount
     useEffect(() => {
+        console.log('[useTrips] Fetching current user session...');
         supabase.auth.getUser().then(({ data: { user } }) => {
+            console.log(`[useTrips] Session loaded. User ID: ${user?.id || 'null'}`);
             setCurrentUserId(user?.id || null);
         });
     }, []);
 
     const refetch = useCallback(async () => {
+        console.log('[useTrips] Manual refetch requested.');
         setLoading(true);
         try {
             await syncDatabase();
         } catch (error) {
-            // Sync failed
+            console.error('[useTrips] Refetch sync failed:', error);
         } finally {
             setLoading(false);
         }
@@ -81,11 +86,15 @@ const useTrips = () => {
     useEffect(() => {
         if (currentUserId === undefined) return; // Wait until user ID is fetched
 
+        console.log('[useTrips] Initializing trip observers.');
         setLoading(true);
 
         // Observe trips and profiles together
         const tripsObservable = database.get<Trip>('trips')
-            .query(Q.sortBy('created_at', Q.desc))
+            .query(
+                Q.sortBy('created_at', Q.desc),
+                Q.take(50)
+            )
             .observe();
 
         const profilesObservable = database.get<Profile>('profiles')
@@ -101,37 +110,26 @@ const useTrips = () => {
                 }, {} as Record<string, Profile>);
 
                 const mappedAll = newTrips.map(t => mapTripToFeedFormat(t, profilesMap[t.userId]));
-                
-                // Filter for feed
-                const now = new Date();
-                const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                
-                const feedTrips = mappedAll.filter((trip) => {
-                    // CRITICAL: Always exclude current user's own trips from home feed
-                    if (currentUserId && trip.userId === currentUserId) return false;
-
-                    if (trip.isExpired || trip.isCancelled || trip.isCompleted) return false;
-                    
-                    const fromDate = trip.fromDate ? new Date(trip.fromDate) : null;
-                    if (fromDate && fromDate < todayStart) return false;
-                    
-                    const participants = trip.participants?.length || trip.currentTravelers || 1;
-                    const maxTravelers = trip.maxTravelers || 10;
-                    return participants < maxTravelers;
-                });
-
-                return { mappedAll, feedTrips };
+                return mappedAll;
             })
-        ).subscribe(({ mappedAll, feedTrips }) => {
+        ).subscribe((mappedAll) => {
+            console.log(`[useTrips] UI update: ${mappedAll.length} total synced trips.`);
             setAllTrips(mappedAll);
-            setTrips(feedTrips);
+            setTrips(mappedAll); // FeedScreen will apply filters via filterUtils
             setLoading(false);
         });
 
-        // Initial sync
-        syncDatabase().catch(() => { });
+        // Initial sync - only trigger if we have a user (or we're pulling public trips)
+        // Note: Even if no user, syncDatabase will pull public trips/profiles.
+        console.log('[useTrips] Triggering initial database sync.');
+        syncDatabase().catch((err) => {
+            console.error('[useTrips] Initial sync failed:', err);
+        });
 
-        return () => subscription.unsubscribe();
+        return () => {
+            console.log('[useTrips] Cleaning up observers.');
+            subscription.unsubscribe();
+        };
     }, [currentUserId]);
 
     return { trips, allTrips, loading, refetch, currentUserId };

@@ -1,9 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { Platform, Linking } from 'react-native';
-import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+import messaging from '@react-native-firebase/messaging';
 import { supabase } from '../lib/supabase';
 import * as RootNavigation from '../navigation/RootNavigation';
-import { getNotificationPermissionStatus } from '../utils/notificationPermissions';
 import { resolveNotificationTarget } from '../utils/notificationNavigation';
 
 interface NotificationData {
@@ -19,8 +18,8 @@ const usePushNotifications = () => {
   const hasHandledInitialNotification = useRef(false);
 
   useEffect(() => {
-    let notificationResponseSubscription: any = null;
-    let notificationSubscription: any = null;
+    let unsubscribeMessage: (() => void) | null = null;
+    let unsubscribeOpenedApp: (() => void) | null = null;
 
     const setup = async () => {
       try {
@@ -29,34 +28,33 @@ const usePushNotifications = () => {
           if (hasHandledInitialNotification.current) return;
           hasHandledInitialNotification.current = true;
 
-          const response = await Notifications.getLastNotificationResponseAsync();
-          if (response?.notification?.request?.content?.data) {
+          const remoteMessage = await messaging().getInitialNotification();
+          if (remoteMessage?.data) {
             setTimeout(() => {
-              void handleNotificationNavigation(response.notification.request.content.data as NotificationData);
+              void handleNotificationNavigation(remoteMessage.data as NotificationData);
             }, 1000);
           }
         };
 
-        // Handle notification when app is in background and user taps
-        notificationResponseSubscription = Notifications.addNotificationResponseReceivedListener(
-          (response) => {
-            const data = response.notification.request.content.data;
-            if (data) {
-              void handleNotificationNavigation(data as NotificationData);
-            }
+        // Handle notification tap when app is in background
+        unsubscribeOpenedApp = messaging().onNotificationOpenedApp((remoteMessage) => {
+          if (remoteMessage?.data) {
+            void handleNotificationNavigation(remoteMessage.data as NotificationData);
           }
-        );
-
-        // Foreground notification
-        notificationSubscription = Notifications.addNotificationReceivedListener(() => {
-          // System notification shows automatically
         });
 
-        // Listen for auth state changes via Supabase
+        // Handle foreground messages — FCM data messages are received here
+        unsubscribeMessage = messaging().onMessage(async (_remoteMessage) => {
+          // FCM notification messages are automatically displayed by the system
+          // on Android when the notification key is present in the payload.
+          // No additional handling needed for display.
+        });
+
+        // Listen for auth state changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
-          async (event, session) => {
+          async (_event, session) => {
             if (session?.user) {
-              await setupMessaging(session.user);
+              await registerFCMToken(session.user);
               handleInitialNotification();
             }
           }
@@ -65,19 +63,28 @@ const usePushNotifications = () => {
         // Check current session
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          await setupMessaging(user);
+          await registerFCMToken(user);
           handleInitialNotification();
         }
-      } catch (error) {
+
+        // Return cleanup for auth subscription
+        return () => subscription.unsubscribe();
+      } catch {
         // Push setup should not crash the app
       }
     };
 
-    const setupMessaging = async (user: any) => {
+    const registerFCMToken = async (user: any) => {
       try {
-        const permissionStatus = await getNotificationPermissionStatus();
-        if (permissionStatus !== 'granted') return;
+        // Request permission (required for iOS, Android 13+)
+        const authStatus = await messaging().requestPermission();
+        const isEnabled =
+          authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+          authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
+        if (!isEnabled) return;
+
+        // Check if user has push notifications enabled in their profile
         const { data: profile } = await supabase
           .from('profiles')
           .select('push_notifications_enabled')
@@ -86,25 +93,11 @@ const usePushNotifications = () => {
 
         if (profile?.push_notifications_enabled !== true) return;
 
-        await getAndSaveToken(user);
-      } catch {
-        // Non-critical
-      }
-    };
-
-    const getAndSaveToken = async (user: any) => {
-      try {
-        const token = (await Notifications.getExpoPushTokenAsync()).data;
+        // Get native FCM token
+        const token = await messaging().getToken();
         if (!token) return;
-        await saveTokenToSupabase(user, token);
-      } catch {
-        // Non-critical
-      }
-    };
 
-    const saveTokenToSupabase = async (user: any, token: string) => {
-      try {
-        // Upsert token — use user_id + token as unique constraint
+        // Save token to Supabase
         await supabase
           .from('push_tokens')
           .upsert(
@@ -117,15 +110,15 @@ const usePushNotifications = () => {
             { onConflict: 'user_id,token' }
           );
       } catch {
-        // Token save failure is non-critical
+        // Token registration is non-critical
       }
     };
 
     setup();
 
     return () => {
-      if (notificationResponseSubscription) notificationResponseSubscription.remove();
-      if (notificationSubscription) notificationSubscription.remove();
+      if (unsubscribeMessage) unsubscribeMessage();
+      if (unsubscribeOpenedApp) unsubscribeOpenedApp();
     };
   }, []);
 
@@ -154,6 +147,7 @@ const usePushNotifications = () => {
     if (!target) return;
 
     if (target.route === 'ExternalLink') {
+      const { Linking } = require('react-native');
       const url = target.params?.url;
       if (typeof url === 'string' && url.length > 0) {
         Linking.openURL(url).catch(() => { });

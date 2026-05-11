@@ -38,14 +38,14 @@ interface GroupData {
     groupDescription?: string;
     participants: string[];
     createdBy: string;
-    collectionName?: 'chats' | 'group_chats';
+    collectionName?: 'group_chats';
     memberCount?: number;
     participantDetails?: { [uid: string]: { displayName?: string; photoURL?: string } };
 }
 
 const GroupInfoScreen = ({ navigation, route }) => {
     const { chatId } = route.params;
-    const requestedCollection = route.params?.collectionName as 'chats' | 'group_chats' | undefined;
+    const requestedCollection = 'group_chats';
     const { colors } = useTheme();
     const [currentUser, setCurrentUser] = useState<any>(null);
 
@@ -72,29 +72,15 @@ const GroupInfoScreen = ({ navigation, route }) => {
 
     const loadGroup = async () => {
         try {
-            const collections: Array<'group_chats' | 'chats'> = requestedCollection
-                ? [requestedCollection, requestedCollection === 'chats' ? 'group_chats' : 'chats']
-                : ['group_chats', 'chats'];
+            const { data: doc } = await supabase.from('group_chats').select('*').eq('id', chatId).maybeSingle();
 
-            let doc = null as any;
-            let collectionName: 'group_chats' | 'chats' | null = null;
-
-            for (const name of collections) {
-                const { data: row } = await supabase.from(name).select('*').eq('id', chatId).maybeSingle();
-                if (row) {
-                    doc = row;
-                    collectionName = name;
-                    break;
-                }
-            }
-
-            if (!doc || !collectionName) {
+            if (!doc) {
                 Alert.alert('Error', 'Group not found.');
                 navigation.goBack();
                 return;
             }
 
-            const data = { id: doc.id, collectionName, groupName: doc.group_name || doc.trip_title || 'Group', groupIcon: doc.group_icon || doc.trip_image, groupDescription: doc.group_description, participants: doc.participants || [], createdBy: doc.created_by, participantDetails: doc.participant_details } as GroupData;
+            const data = { id: doc.id, collectionName: 'group_chats' as const, groupName: doc.group_name || 'Group', groupIcon: doc.group_icon || doc.trip_image, groupDescription: doc.group_description, participants: doc.participants || [], createdBy: doc.created_by, participantDetails: doc.participant_details } as GroupData;
             setGroup(data);
             setEditName(data.groupName);
 
@@ -129,7 +115,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
     const updateGroupName = async () => {
         if (!editName.trim() || !isAdmin) return;
         try {
-            const table = group?.collectionName || requestedCollection || 'group_chats';
+            const table = 'group_chats';
             await supabase.from(table).update({ group_name: editName.trim() }).eq('id', chatId);
             setGroup((prev) => prev ? { ...prev, groupName: editName.trim() } : null);
             setEditing(false);
@@ -157,7 +143,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
             if (!result.canceled && result.assets[0]) {
                 const uploadResult = await uploadTripImageToR2(result.assets[0].uri, currentUser.id);
                 if (uploadResult.success && uploadResult.url) {
-                    const table = group?.collectionName || requestedCollection || 'group_chats';
+                    const table = 'group_chats';
                     await supabase.from(table).update({ group_icon: uploadResult.url }).eq('id', chatId);
                     setGroup((prev) => prev ? { ...prev, groupIcon: uploadResult.url } : null);
                 }
@@ -195,7 +181,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
             await workersApi('/groups/add-member', { body: {
                 chatId,
                 memberId: user.id,
-                collectionName: group?.collectionName || requestedCollection || 'group_chats',
+                collectionName: 'group_chats',
             } });
 
             setShowAddMember(false);
@@ -223,7 +209,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
                             await workersApi('/groups/remove-member', { body: {
                                 chatId,
                                 memberId: member.id,
-                                collectionName: group?.collectionName || requestedCollection || 'group_chats',
+                                collectionName: 'group_chats',
                             } });
 
                             loadGroup();
@@ -255,7 +241,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
                             await workersApi(endpoint, { body: {
                                 chatId,
                                 memberId: member.id,
-                                collectionName: group?.collectionName || requestedCollection || 'group_chats',
+                                collectionName: 'group_chats',
                             } });
                             loadGroup();
                         } catch (error) {
@@ -280,7 +266,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
                         try {
                             await workersApi('/groups/leave', { body: {
                                 chatId,
-                                collectionName: group?.collectionName || requestedCollection || 'group_chats',
+                                collectionName: 'group_chats',
                             } });
 
                             navigation.navigate('ChatsList');

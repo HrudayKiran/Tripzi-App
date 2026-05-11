@@ -8,12 +8,12 @@ export default class Message extends Model {
   } as const;
 
   @field('chat_id') chatId!: string;
+  @field('chat_type') chatType!: string;
   @field('sender_id') senderId!: string;
   @field('sender_name') senderName!: string;
   @field('text') text?: string;
   @field('type') type!: string;
   @field('media_url') mediaUrl?: string;
-  @field('media_thumbnail') mediaThumbnail?: string;
   @field('location') locationRaw?: string; // JSON string
   @field('voice_duration') voiceDuration?: number;
   @field('reply_to') replyToRaw?: string; // JSON string

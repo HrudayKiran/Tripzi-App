@@ -269,6 +269,18 @@ const TripDetailsScreen = ({ route, navigation }) => {
       } else {
         await joinTrip(tripId);
         setIsJoined(true);
+        // Trigger sync in background
+        require('../database/sync').syncDatabase().catch(() => { });
+        // Re-fetch trip data to update spots count and participants immediately
+        const { data: updatedTrip } = await supabase.from('trips').select('participants, current_travelers').eq('id', tripId).maybeSingle();
+        if (updatedTrip) {
+          setTrip(prev => ({
+            ...prev,
+            participants: updatedTrip.participants,
+            currentTravelers: updatedTrip.current_travelers,
+            current_travelers: updatedTrip.current_travelers,
+          }));
+        }
       }
     } catch (error: any) {
       Alert.alert('Error', error?.message || 'Could not update trip participation.');
@@ -340,18 +352,52 @@ const TripDetailsScreen = ({ route, navigation }) => {
     }
   };
 
-  const handleMessage = () => {
+  const handleMessage = async () => {
     if (isOwner && (!trip.participants || trip.participants.length <= 1)) {
       Alert.alert('No Joined Users', 'Wait for someone to join your trip to start chatting!');
       return;
     }
-    const chatId = `trip_${tripId}`;
-    navigation.navigate('Chat', {
-      chatId,
-      tripTitle: trip?.title,
-      tripImage: trip?.coverImage || trip?.images?.[0],
-      isGroupChat: true,
-    });
+    try {
+      // Look up the actual group chat for this trip in group_chats
+      let { data: groupChat } = await supabase
+        .from('group_chats')
+        .select('id')
+        .eq('trip_id', tripId)
+        .maybeSingle();
+
+      if (!groupChat) {
+        // Auto-create missing group chat
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        
+        const { data: newChat, error } = await supabase.from('group_chats').insert({
+            trip_id: tripId,
+            group_name: trip.title || 'Trip Group',
+            trip_image: trip.coverImage || trip.images?.[0] || null,
+            participants: trip.participants || [user.id],
+            participant_details: {}, // Minimal, will be populated
+            member_count: trip.participants?.length || 1,
+            created_by: trip.userId, // Owner
+            last_message: { text: 'Group auto-created', sender_id: null, created_at: new Date().toISOString() },
+        }).select('id').single();
+        
+        if (error || !newChat) {
+             Alert.alert('Group Chat', 'Failed to initialize group chat for this trip.');
+             return;
+        }
+        groupChat = newChat;
+      }
+
+      navigation.navigate('Chat', {
+        chatId: groupChat.id,
+        tripTitle: trip?.title,
+        tripImage: trip?.coverImage || trip?.images?.[0],
+        isGroupChat: true,
+        collectionName: 'group_chats',
+      });
+    } catch (error) {
+      Alert.alert('Error', 'Could not open group chat.');
+    }
   };
 
   const formatDate = (timestamp: any) => {
@@ -891,6 +937,18 @@ const TripDetailsScreen = ({ route, navigation }) => {
           try {
             await leaveTrip(tripId, reason);
             setIsJoined(false);
+            // Trigger sync in background
+            require('../database/sync').syncDatabase().catch(() => { });
+            // Re-fetch trip data to update spots count and participants immediately
+            const { data: updatedTrip } = await supabase.from('trips').select('participants, current_travelers').eq('id', tripId).maybeSingle();
+            if (updatedTrip) {
+              setTrip(prev => ({
+                ...prev,
+                participants: updatedTrip.participants,
+                currentTravelers: updatedTrip.current_travelers,
+                current_travelers: updatedTrip.current_travelers,
+              }));
+            }
             setPendingAction(null);
             Alert.alert('Trip Left', 'You have left this trip.');
           } catch (error: any) {

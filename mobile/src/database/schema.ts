@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-  version: 3,
+  version: 7,
   tables: [
     tableSchema({
       name: 'profiles',
@@ -22,6 +22,8 @@ export default appSchema({
         { name: 'title', type: 'string' },
         { name: 'description', type: 'string', isOptional: true },
         { name: 'location', type: 'string' },
+        { name: 'from_location', type: 'string', isOptional: true },
+        { name: 'to_location', type: 'string', isOptional: true },
         { name: 'from_date', type: 'string' },
         { name: 'to_date', type: 'string' },
         { name: 'max_travelers', type: 'number' },
@@ -35,6 +37,15 @@ export default appSchema({
         { name: 'booking_status', type: 'string', isOptional: true },
         { name: 'places_to_visit', type: 'string', isOptional: true }, // JSON string
         { name: 'mandatory_items', type: 'string', isOptional: true }, // JSON string
+        { name: 'itinerary', type: 'string', isOptional: true }, // JSON string
+        { name: 'image_object_keys', type: 'string', isOptional: true }, // JSON string
+        { name: 'cancel_reason', type: 'string', isOptional: true },
+        { name: 'cancelled_at', type: 'number', isOptional: true },
+        { name: 'completed_at', type: 'number', isOptional: true },
+        { name: 'delete_reason', type: 'string', isOptional: true },
+        { name: 'deleted_at', type: 'number', isOptional: true },
+        { name: 'last_leave_reason', type: 'string', isOptional: true },
+        { name: 'owner_profile_updated_at', type: 'number', isOptional: true },
         { name: 'is_expired', type: 'boolean' },
         { name: 'is_cancelled', type: 'boolean' },
         { name: 'is_completed', type: 'boolean' },
@@ -60,7 +71,6 @@ export default appSchema({
     tableSchema({
       name: 'chats',
       columns: [
-        { name: 'type', type: 'string' },
         { name: 'participants', type: 'string' }, // JSON string (array of IDs)
         { name: 'last_message', type: 'string', isOptional: true },
         { name: 'last_message_at', type: 'number', isOptional: true },
@@ -73,15 +83,38 @@ export default appSchema({
       ],
     }),
     tableSchema({
+      name: 'group_chats',
+      columns: [
+        { name: 'trip_id', type: 'string', isIndexed: true },
+        { name: 'group_name', type: 'string' },
+        { name: 'group_description', type: 'string', isOptional: true },
+        { name: 'group_icon', type: 'string', isOptional: true },
+        { name: 'trip_image', type: 'string', isOptional: true },
+        { name: 'participants', type: 'string' }, // JSON string
+        { name: 'participant_details', type: 'string', isOptional: true }, // JSON string
+        { name: 'created_by', type: 'string', isOptional: true },
+        { name: 'member_count', type: 'number', isOptional: true },
+        { name: 'hidden', type: 'boolean' },
+        { name: 'admins', type: 'string', isOptional: true }, // JSON string
+        { name: 'last_message', type: 'string', isOptional: true }, // JSON string
+        { name: 'unread_count', type: 'string', isOptional: true }, // JSON string
+        { name: 'deleted_for', type: 'string', isOptional: true }, // JSON string
+        { name: 'cleared_at', type: 'string', isOptional: true }, // JSON string
+        { name: 'typing', type: 'string', isOptional: true }, // JSON string
+        { name: 'created_at', type: 'number' },
+        { name: 'updated_at', type: 'number' },
+      ],
+    }),
+    tableSchema({
       name: 'messages',
       columns: [
         { name: 'chat_id', type: 'string', isIndexed: true },
+        { name: 'chat_type', type: 'string' },
         { name: 'sender_id', type: 'string', isIndexed: true },
         { name: 'sender_name', type: 'string' },
         { name: 'text', type: 'string', isOptional: true },
         { name: 'type', type: 'string' },
         { name: 'media_url', type: 'string', isOptional: true },
-        { name: 'media_thumbnail', type: 'string', isOptional: true },
         { name: 'location', type: 'string', isOptional: true }, // JSON string
         { name: 'voice_duration', type: 'number', isOptional: true },
         { name: 'reply_to', type: 'string', isOptional: true }, // JSON string

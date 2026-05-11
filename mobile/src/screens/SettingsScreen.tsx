@@ -15,6 +15,7 @@ import {
     requestNotificationPermission,
     syncNotificationPreference,
 } from '../utils/notificationPermissions';
+import { resetDatabase } from '../database';
 
 const DELETE_REASONS = [
     'I have privacy concerns',
@@ -132,6 +133,10 @@ const SettingsScreen = ({ navigation }) => {
                             await workersApi('/account/delete', { body: { reason } });
                             // Sign out locally
                             try { await supabase.auth.signOut(); } catch (e) { }
+                            
+                            // Clear local database
+                            await resetDatabase();
+                            
                             setShowDeleteModal(false);
                             // Navigate to auth screen
                             navigation.reset({

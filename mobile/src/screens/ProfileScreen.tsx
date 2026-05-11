@@ -9,6 +9,7 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, STATUS, N
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import DefaultAvatar from '../components/DefaultAvatar';
 import { navigationRef } from '../navigation/RootNavigation';
+import { resetDatabase } from '../database';
 
 
 
@@ -118,6 +119,9 @@ const ProfileScreen = ({ navigation }) => {
             } catch (e: any) {
               // Ignore sign out errors
             }
+
+            // Clear local database on logout
+            await resetDatabase();
 
             // Use root navigationRef to reset to Start
             if (navigationRef.isReady()) {

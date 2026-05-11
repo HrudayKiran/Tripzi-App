@@ -1,18 +1,27 @@
 import { Model } from '@nozbe/watermelondb';
 import { field, date, children, readonly } from '@nozbe/watermelondb/decorators';
 
-export default class Chat extends Model {
-  static table = 'chats';
+export default class GroupChat extends Model {
+  static table = 'group_chats';
   static associations = {
     messages: { type: 'has_many', foreignKey: 'chat_id' },
   } as const;
 
+  @field('trip_id') tripId!: string;
+  @field('group_name') groupName!: string;
+  @field('group_description') groupDescription?: string;
+  @field('group_icon') groupIcon?: string;
+  @field('trip_image') tripImage?: string;
   @field('participants') participantsRaw!: string; // JSON string
+  @field('participant_details') participantDetailsRaw?: string; // JSON string
+  @field('created_by') createdBy?: string;
+  @field('member_count') memberCount?: number;
+  @field('hidden') hidden!: boolean;
+  @field('admins') adminsRaw?: string; // JSON string
   @field('last_message') lastMessage?: string;
-  @field('last_message_at') lastMessageAt?: number;
   @field('unread_count') unreadCountRaw?: string; // JSON string
-  @field('cleared_at') clearedAtRaw?: string; // JSON string
   @field('deleted_for') deletedForRaw?: string; // JSON string
+  @field('cleared_at') clearedAtRaw?: string; // JSON string
   @field('typing') typingRaw?: string; // JSON string
 
   @readonly @date('created_at') createdAt!: Date;

@@ -233,14 +233,7 @@ const CompleteProfileScreen = ({ navigation, route }) => {
                 throw new Error(profileError.message || 'Failed to create profile.');
             }
 
-            // --- PROMPT FOR NOTIFICATIONS ---
-            // This ensures every new user is asked for permission and setup in Supabase.
-            try {
-                const status = await requestNotificationPermission();
-                await syncNotificationPreference(user.id, status, status === 'granted');
-            } catch {
-                // Non-critical, but logging it would be good
-            }
+            // Notifications prompt moved to FeedScreen
 
             navigation.reset({ index: 0, routes: [{ name: 'App' }] });
         } catch (error: any) {

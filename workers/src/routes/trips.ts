@@ -33,9 +33,39 @@ trips.post('/join', async (c) => {
 
   const newParticipants = [...participants, userId];
   await sb.from('trips').update({ 
-    participants: JSON.stringify(newParticipants),
+    participants: newParticipants,
     current_travelers: newParticipants.length 
   }).eq('id', tripId);
+
+  // Add user to the trip's group chat or create it if missing
+  const { data: groupChat } = await sb.from('group_chats')
+    .select('id, participants')
+    .eq('trip_id', tripId)
+    .maybeSingle();
+
+  if (groupChat) {
+    const chatParticipants = Array.isArray(groupChat.participants) ? groupChat.participants : [];
+    if (!chatParticipants.includes(userId)) {
+      await sb.from('group_chats').update({
+        participants: [...chatParticipants, userId],
+        member_count: chatParticipants.length + 1,
+        updated_at: new Date().toISOString(),
+      }).eq('id', groupChat.id);
+    }
+  } else {
+    // Auto-create group chat
+    await sb.from('group_chats').insert({
+      trip_id: tripId,
+      group_name: trip.title || 'Trip Group',
+      trip_image: trip.cover_image || null,
+      participants: [trip.user_id, userId], // Owner and joiner
+      created_by: trip.user_id, // Owner
+      member_count: 2,
+      hidden: false,
+      admins: [trip.user_id],
+      last_message: { text: 'Group created', sender_id: null, created_at: new Date().toISOString() },
+    });
+  }
 
   const actor = await getProfile(sb, userId);
   const hostId = trip.user_id;
@@ -44,7 +74,7 @@ trips.post('/join', async (c) => {
     recipientId: hostId,
     type: 'join_trip',
     title: 'New Trip Companion!',
-    message: `${actor?.display_name || 'Someone'} joined your trip to ${trip.destination || trip.location}`,
+    message: `${actor?.display_name || 'Someone'} joined your trip to ${trip.to_location || trip.location || trip.title}`,
     entityId: tripId,
     entityType: 'trip',
     actorId: userId,
@@ -57,7 +87,7 @@ trips.post('/join', async (c) => {
   await sendPushToUser(sb, c.env.FIREBASE_SERVICE_ACCOUNT_JSON, hostId, {
     title: notifPayload.title,
     body: notifPayload.message,
-    data: { screen: 'TripDetails', tripId }
+    data: { route: 'TripDetails', tripId }
   });
 
   return c.json({ success: true });
@@ -79,9 +109,26 @@ trips.post('/leave', async (c) => {
   const newParticipants = participants.filter((p: string) => p !== userId);
   
   await sb.from('trips').update({ 
-    participants: JSON.stringify(newParticipants),
+    participants: newParticipants,
     current_travelers: newParticipants.length 
   }).eq('id', tripId);
+
+  // Remove user from the trip's group chat
+  const { data: groupChat } = await sb.from('chats')
+    .select('id, participants')
+    .eq('trip_id', tripId)
+    .eq('type', 'group')
+    .maybeSingle();
+
+  if (groupChat) {
+    const chatParticipants = Array.isArray(groupChat.participants) ? groupChat.participants : [];
+    const newChatParticipants = chatParticipants.filter((p: string) => p !== userId);
+    await sb.from('chats').update({
+      participants: newChatParticipants,
+      member_count: newChatParticipants.length,
+      updated_at: new Date().toISOString(),
+    }).eq('id', groupChat.id);
+  }
 
   const actor = await getProfile(sb, userId);
   const hostId = trip.user_id;
@@ -90,7 +137,7 @@ trips.post('/leave', async (c) => {
     recipientId: hostId,
     type: 'leave_trip',
     title: 'Traveler Left',
-    message: `${actor?.display_name || 'Someone'} left your trip to ${trip.destination || trip.location}`,
+    message: `${actor?.display_name || 'Someone'} left your trip to ${trip.to_location || trip.location || trip.title}`,
     entityId: tripId,
     entityType: 'trip',
     actorId: userId,
@@ -103,7 +150,7 @@ trips.post('/leave', async (c) => {
   await sendPushToUser(sb, c.env.FIREBASE_SERVICE_ACCOUNT_JSON, hostId, {
     title: notifPayload.title,
     body: notifPayload.message,
-    data: { screen: 'TripDetails', tripId }
+    data: { route: 'TripDetails', tripId }
   });
 
   return c.json({ success: true });
@@ -127,7 +174,7 @@ trips.post('/cancel', async (c) => {
     cancelled_at: new Date().toISOString() 
   }).eq('id', tripId);
   
-  await sb.from('group_chats').update({ hidden: true }).eq('trip_id', tripId);
+  await sb.from('chats').update({ hidden: true }).eq('trip_id', tripId);
 
   const participants = Array.isArray(trip.participants) ? trip.participants : (trip.participants ? JSON.parse(trip.participants) : []);
   const actor = await getProfile(sb, userId);
@@ -139,7 +186,7 @@ trips.post('/cancel', async (c) => {
       recipientId: participantId,
       type: 'trip_cancelled',
       title: 'Trip Cancelled',
-      message: `The trip to ${trip.destination || trip.location} has been cancelled by the host.`,
+      message: `The trip to ${trip.to_location || trip.location || trip.title} has been cancelled by the host.`,
       entityId: tripId,
       entityType: 'trip',
       actorId: userId,
@@ -152,7 +199,7 @@ trips.post('/cancel', async (c) => {
     await sendPushToUser(sb, c.env.FIREBASE_SERVICE_ACCOUNT_JSON, participantId, {
       title: notifPayload.title,
       body: notifPayload.message,
-      data: { screen: 'MyTrips', tripId }
+      data: { route: 'TripDetails', tripId }
     });
   }
 

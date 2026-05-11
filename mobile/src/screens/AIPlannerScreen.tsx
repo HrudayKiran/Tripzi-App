@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, KeyboardAvoidingView, FlatList, TextInput, ActivityIndicator, Alert, Animated, Keyboard, Modal, Dimensions, TouchableWithoutFeedback, ScrollView, Linking } from 'react-native';
 import { Image } from 'expo-image';
 import { supabase } from '../lib/supabase';
+import { syncDatabase } from '../database/sync';
 import { showUploadNotification, completeUploadNotification, failUploadNotification } from '../utils/notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
@@ -552,6 +553,8 @@ export default function AIPlannerScreen({ navigation, route }: any) {
                             places_to_visit: trip.placesToVisit || [],
                             user_id: currentUser.id,
                             owner_display_name: profile?.name || 'Traveler',
+                            owner_photo_url: profile?.photo_url || null,
+                            owner_username: profile?.username || null,
                             participants: [currentUser.id],
                             location: trip.toLocation, trip_type: trip.tripType || 'adventure',
                             cover_image: images[0],
@@ -561,8 +564,21 @@ export default function AIPlannerScreen({ navigation, route }: any) {
                         if (tripErr) throw tripErr;
 
                         await supabase.from('chats').insert({
-                            type: 'group', trip_id: tripRow.id, trip_title: trip.title,
-                            participants: [currentUser.id], created_by: currentUser.id, last_message: 'Trip created by Tripzi AI!',
+                            type: 'group',
+                            trip_id: tripRow.id,
+                            trip_title: trip.title,
+                            group_name: trip.title,
+                            trip_image: images[0] || null,
+                            participants: [currentUser.id],
+                            participant_details: {
+                                [currentUser.id]: {
+                                    displayName: profile?.name || 'Traveler',
+                                    photoURL: profile?.photo_url || '',
+                                },
+                            },
+                            member_count: 1,
+                            created_by: currentUser.id, 
+                            last_message: { text: 'Trip created by Tripzi AI!', sender_id: null, created_at: new Date().toISOString() },
                         });
 
                         const successMsg: AIMessage = {
@@ -572,6 +588,10 @@ export default function AIPlannerScreen({ navigation, route }: any) {
                             user: { _id: 'tripzi-ai', name: 'Tripzi AI' },
                         };
                         await completeUploadNotification('Trip Posted!', `"${trip.title}" has been posted.`);
+                        
+                        // Trigger sync
+                        syncDatabase().catch(err => console.error('[AIPlanner] Post-creation sync failed:', err));
+                        
                         setMessages(prev => [successMsg, ...prev]);
                     } catch {
                         await failUploadNotification('Auto-post failed');

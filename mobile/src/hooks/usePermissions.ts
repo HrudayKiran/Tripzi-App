@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { Platform, PermissionsAndroid } from 'react-native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import * as Notifications from 'expo-notifications';
+import messaging from '@react-native-firebase/messaging';
 
 interface PermissionStatus {
     notifications: boolean;
@@ -38,25 +37,13 @@ export function usePermissions(): UsePermissionsReturn {
 
     const requestNotificationPermission = async (): Promise<boolean> => {
         try {
-            if (Platform.OS === 'android' && Platform.Version >= 33) {
-                const granted = await PermissionsAndroid.request(
-                    PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-                );
-                if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-                    setPermissions(prev => ({ ...prev, notifications: true }));
-                    return true;
-                } else {
-                    setPermissions(prev => ({ ...prev, notifications: false }));
-                    return false;
-                }
-            } else {
-                // Use expo-notifications for permission
-                const { status } = await Notifications.requestPermissionsAsync();
-                const enabled = status === 'granted';
-                setPermissions(prev => ({ ...prev, notifications: enabled }));
-                return enabled;
-            }
-        } catch (error) {
+            const authStatus = await messaging().requestPermission();
+            const enabled =
+                authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+                authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+            setPermissions(prev => ({ ...prev, notifications: enabled }));
+            return enabled;
+        } catch {
             return false;
         }
     };
@@ -67,7 +54,7 @@ export function usePermissions(): UsePermissionsReturn {
             const granted = status === 'granted';
             setPermissions(prev => ({ ...prev, location: granted }));
             return granted;
-        } catch (error) {
+        } catch {
             return false;
         }
     };
@@ -78,7 +65,7 @@ export function usePermissions(): UsePermissionsReturn {
             const granted = status === 'granted';
             setPermissions(prev => ({ ...prev, camera: granted }));
             return granted;
-        } catch (error) {
+        } catch {
             return false;
         }
     };
@@ -89,7 +76,7 @@ export function usePermissions(): UsePermissionsReturn {
             const granted = status === 'granted';
             setPermissions(prev => ({ ...prev, mediaLibrary: granted }));
             return granted;
-        } catch (error) {
+        } catch {
             return false;
         }
     };

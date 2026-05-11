@@ -8,6 +8,8 @@ export default class Trip extends Model {
   @field('title') title!: string;
   @field('description') description?: string;
   @field('location') location!: string;
+  @field('from_location') fromLocation?: string;
+  @field('to_location') toLocation?: string;
   @field('from_date') fromDate!: string;
   @field('to_date') toDate!: string;
   @field('max_travelers') maxTravelers!: number;
@@ -21,6 +23,15 @@ export default class Trip extends Model {
   @field('booking_status') bookingStatus?: string;
   @field('places_to_visit') placesToVisitRaw?: string; // JSON string
   @field('mandatory_items') mandatoryItemsRaw?: string; // JSON string
+  @field('itinerary') itineraryRaw?: string; // JSON string
+  @field('image_object_keys') imageObjectKeysRaw?: string; // JSON string
+  @field('cancel_reason') cancelReason?: string;
+  @field('cancelled_at') cancelledAt?: number;
+  @field('completed_at') completedAt?: number;
+  @field('delete_reason') deleteReason?: string;
+  @field('deleted_at') deletedAt?: number;
+  @field('last_leave_reason') lastLeaveReason?: string;
+  @field('owner_profile_updated_at') ownerProfileUpdatedAt?: number;
   
   @field('is_expired') isExpired!: boolean;
   @field('is_cancelled') isCancelled!: boolean;
@@ -48,6 +59,14 @@ export default class Trip extends Model {
   get placesToVisit(): string[] {
     try {
       return this.placesToVisitRaw ? JSON.parse(this.placesToVisitRaw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  get itinerary(): string[] {
+    try {
+      return this.itineraryRaw ? JSON.parse(this.itineraryRaw) : [];
     } catch {
       return [];
     }

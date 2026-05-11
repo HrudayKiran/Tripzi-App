@@ -49,7 +49,7 @@ interface UseChatsReturn {
 
 const normalizeRow = (row: any, collectionName: 'chats' | 'group_chats'): Chat => {
     const participants = Array.isArray(row.participants) ? row.participants : [];
-    const type: 'direct' | 'group' = row.type === 'group' ? 'group' : 'direct';
+    const type: 'direct' | 'group' = collectionName === 'group_chats' ? 'group' : 'direct';
 
     return {
         id: row.id,
@@ -116,8 +116,9 @@ export function useChats(): UseChatsReturn {
 
         fetchDirect();
 
+        const channelName = `chats-direct-${userId}-${Date.now()}`;
         const channel = supabase
-            .channel('chats-direct')
+            .channel(channelName)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'chats' }, () => fetchDirect())
             .subscribe();
 
@@ -147,8 +148,9 @@ export function useChats(): UseChatsReturn {
 
         fetchGroups();
 
+        const channelName = `chats-group-${userId}-${Date.now()}`;
         const channel = supabase
-            .channel('chats-group')
+            .channel(channelName)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'group_chats' }, () => fetchGroups())
             .subscribe();
 
@@ -172,7 +174,6 @@ export function useChats(): UseChatsReturn {
                 .maybeSingle();
 
             const chatData = {
-                type: 'direct',
                 participants: [userId, otherUserId],
                 participant_details: {
                     [userId]: {

@@ -13,9 +13,11 @@ export const applyTripFilters = (
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
+    const DEBUG_SHOW_OWN_TRIPS = false; // Set to true to verify sync
+    
     result = result.filter((trip) => {
         // Exclude current user's trips only on Home Feed
-        if (isHomeFeed && currentUserUid && trip.userId === currentUserUid) {
+        if (!DEBUG_SHOW_OWN_TRIPS && isHomeFeed && currentUserUid && trip.userId === currentUserUid) {
             return false;
         }
 

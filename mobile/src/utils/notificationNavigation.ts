@@ -6,7 +6,7 @@ type ValidTarget =
     | null;
 
 const getChatIfAccessible = async (
-    table: 'chats' | 'group_chats',
+    table: 'chats',
     chatId: string,
     uid: string
 ) => {
@@ -54,17 +54,16 @@ export const resolveNotificationTarget = async (
         const chatId = String(params.chatId || notification.entityId || '');
         if (!chatId) return null;
 
-        const directChat = await getChatIfAccessible('chats', chatId, uid);
-        const groupChat = directChat ? null : await getChatIfAccessible('group_chats', chatId, uid);
-        const collectionName = directChat ? 'chats' : groupChat ? 'group_chats' : null;
-        if (!collectionName) return null;
+        // All chats (direct + group) are stored in the 'chats' table
+        const chat = await getChatIfAccessible('chats', chatId, uid);
+        if (!chat) return null;
 
         return {
             route,
             params: {
                 chatId,
-                collectionName,
-                isGroupChat: collectionName === 'group_chats',
+                collectionName: 'chats',
+                isGroupChat: false, // ChatScreen determines this from chat.type
             },
         };
     }

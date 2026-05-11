@@ -68,7 +68,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     }, []);
     const chat = chats.find((c) => c.id === chatId);
     const isGroupChat = isGroupParam || chat?.type === 'group';
-    const chatCollection = routeCollectionName || chat?.collectionName || (isGroupChat ? 'group_chats' : 'chats');
+    const chatCollection = routeCollectionName || (isGroupChat ? 'group_chats' : 'chats');
     const clearedAt = currentUser ? chat?.clearedAt?.[currentUser.id] : undefined;
 
 
@@ -312,9 +312,9 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     useEffect(() => {
         if (!chatId || !currentUser) return;
 
-        const table = chatCollection === 'group_chats' ? 'group_chats' : 'chats';
+        const table = chatCollection;
         const channel = supabase
-            .channel(`typing-${chatId}`)
+            .channel(`typing-${chatId}-${Date.now()}`)
             .on('postgres_changes', {
                 event: 'UPDATE',
                 schema: 'public',
@@ -413,7 +413,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
             clearTimeout(typingTimeoutRef.current);
         }
 
-        const table = chatCollection === 'group_chats' ? 'group_chats' : 'chats';
+        const table = chatCollection;
 
         if (isTypingParam) {
             const now = Date.now();
@@ -597,7 +597,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 read_by: {},
                 delivered_to: [],
             });
-            const table = isGroup ? 'group_chats' : 'chats';
+            const table = 'chats';
             await supabase
                 .from(table)
                 .update({
@@ -727,7 +727,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 delivered_to: [],
                 deleted_for: [],
             });
-            const table = isGroup ? 'group_chats' : 'chats';
+            const table = 'chats';
             await supabase
                 .from(table)
                 .update({
@@ -990,7 +990,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     onPress: async () => {
                         try {
                             if (!currentUser || !chatId) return;
-                            const table = chatCollection === 'group_chats' ? 'group_chats' : 'chats';
+                            const table = 'chats';
 
                             const { data } = await supabase.from(table).select('cleared_at').eq('id', chatId).maybeSingle();
                             const clearedAt = data?.cleared_at || {};

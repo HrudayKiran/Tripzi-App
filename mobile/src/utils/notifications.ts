@@ -1,68 +1,23 @@
-import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import messaging from '@react-native-firebase/messaging';
 
-// Configure notifications to show when app is in foreground
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
-
-export const showUploadNotification = async (progress: number, title: string = 'Uploading Post...') => {
-  // progress is 0 to 1
-  const percentage = Math.round(progress * 100);
-  
-  const notificationId = 'trip-upload-progress';
-
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title,
-      body: `${percentage}% completed`,
-      data: { progress },
-      // @ts-ignore
-      sticky: true,
-      categoryIdentifier: 'upload-progress',
-    },
-    trigger: null,
-    identifier: notificationId,
-  });
-
-  return notificationId;
-};
-
-export const completeUploadNotification = async (title: string = 'Trip Posted! ✨', body: string = 'Your trip is now live.') => {
-  await Notifications.dismissNotificationAsync('trip-upload-progress');
-  
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title,
-      body,
-    },
-    trigger: null,
+/**
+ * Register the background message handler for FCM.
+ * This must be called outside of any React component — typically in index.js.
+ */
+export const registerBackgroundHandler = () => {
+  messaging().setBackgroundMessageHandler(async (_remoteMessage) => {
+    // FCM notification messages are automatically displayed by the system.
   });
 };
 
-export const failUploadNotification = async (error: string = 'Upload failed. Please try again.') => {
-  await Notifications.dismissNotificationAsync('trip-upload-progress');
-  
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'Post Upload Failed ❌',
-      body: error,
-    },
-    trigger: null,
-  });
+/**
+ * No-op stubs — previously used expo-notifications for local upload progress.
+ * The create screens already show their own in-app loading indicators.
+ */
+export const showUploadNotification = async (_progress: number, _title?: string): Promise<string> => {
+  return 'no-op';
 };
 
-// Initialize notification channel for Android
-if (Platform.OS === 'android') {
-  Notifications.setNotificationChannelAsync('upload-progress', {
-    name: 'Upload Progress',
-    importance: Notifications.AndroidImportance.LOW,
-    showBadge: false,
-  });
-}
+export const completeUploadNotification = async (_title?: string, _body?: string): Promise<void> => {};
+
+export const failUploadNotification = async (_error?: string): Promise<void> => {};

@@ -27,17 +27,17 @@ export const createNotification = async (
     const { recipientId, ...data } = payload;
 
     await supabase.from('notifications').insert({
-      user_id: recipientId,
+      recipient_id: recipientId,
       type: data.type,
       title: data.title,
-      body: data.message,
+      message: data.message,
       entity_id: data.entityId || null,
       entity_type: data.entityType || null,
       deep_link_route: data.deepLinkRoute || null,
       deep_link_params: data.deepLinkParams || null,
       actor_id: data.actorId || null,
       actor_name: data.actorName || null,
-      read: false,
+      is_read: false,
     });
   } catch (error) {
     console.error('Error creating notification:', error);
@@ -69,7 +69,7 @@ export const sendPushToUser = async (
 
     for (const tokenRow of tokens) {
       try {
-        await fetch(
+        const response = await fetch(
           `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
           {
             method: 'POST',
@@ -84,11 +84,28 @@ export const sendPushToUser = async (
                   title: payload.title,
                   body: payload.body,
                 },
+                android: {
+                  priority: 'high',
+                  notification: {
+                    channel_id: 'default',
+                    sound: 'default',
+                  },
+                },
                 data: payload.data || {},
               },
             }),
           }
         );
+
+        if (!response.ok) {
+          const errBody = await response.text();
+          console.error(`FCM send failed (${response.status}):`, errBody);
+
+          // Clean up invalid/expired tokens
+          if (response.status === 404 || errBody.includes('UNREGISTERED')) {
+            await supabase.from('push_tokens').delete().eq('token', tokenRow.token);
+          }
+        }
       } catch (e) {
         console.error(`FCM send error for token:`, e);
       }
