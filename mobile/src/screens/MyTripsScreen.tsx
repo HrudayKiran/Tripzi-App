@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ActivityIndicator, RefreshControl, Alert } from 'react-native';
 import { FlashList } from "@shopify/flash-list";
 
@@ -15,14 +16,15 @@ import { Q } from '@nozbe/watermelondb';
 import { Ionicons } from '@expo/vector-icons';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, NEUTRAL, TOUCH_TARGET } from '../styles';
 import AppLogo from '../components/AppLogo';
-import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import useMyTripsQuery from '../hooks/useMyTripsQuery';
 
 const MyTripsScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const queryClient = useQueryClient();
   const { colors } = useTheme();
-  const [joinedTrips, setJoinedTrips] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { trips: joinedTrips, loading, refetch, userId } = useMyTripsQuery();
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('Upcoming');
 
@@ -36,57 +38,7 @@ const MyTripsScreen = () => {
     if (tabKey === 'cancelled') setActiveTab('Cancelled');
   }, [params?.initialTab]);
 
-  useFocusEffect(
-    React.useCallback(() => {
-      let cancelled = false;
-      const loadTrips = async () => {
-        const { data: { user: currentUser } } = await supabase.auth.getUser();
-        if (!currentUser?.id) {
-          setJoinedTrips([]);
-          setLoading(false);
-          return;
-        }
 
-        // 1. Try WatermelonDB first (instant display)
-        try {
-          const localTrips = await database.get('trips')
-            .query(Q.sortBy('created_at', Q.desc))
-            .fetch();
-          
-          const myLocalTrips = localTrips.filter((t: any) => {
-            try {
-              const participants = t._raw.participants
-                ? (typeof t._raw.participants === 'string' ? JSON.parse(t._raw.participants) : t._raw.participants)
-                : [];
-              return Array.isArray(participants) && participants.includes(currentUser.id);
-            } catch {
-              return false;
-            }
-          });
-
-          if (!cancelled && myLocalTrips.length > 0) {
-            setJoinedTrips(myLocalTrips.map((t: any) => t._raw));
-            setLoading(false);
-          }
-        } catch {
-          // Local DB error, continue to Supabase
-        }
-
-        // 2. Fetch from Supabase (fresh data)
-        const { data } = await supabase
-          .from('trips')
-          .select('*')
-          .contains('participants', [currentUser.id]);
-        if (!cancelled) {
-          setJoinedTrips(data || []);
-          setLoading(false);
-          setRefreshing(false);
-        }
-      };
-      loadTrips();
-      return () => { cancelled = true; };
-    }, [])
-  );
 
   const handleLeaveTrip = async (tripId: string) => {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
@@ -103,7 +55,7 @@ const MyTripsScreen = () => {
             onPress: async () => {
                 try {
               await leaveTrip(tripId, 'Plans changed');
-              setJoinedTrips(prev => prev.filter(trip => trip.id !== tripId));
+              queryClient.invalidateQueries({ queryKey: ['myTrips', userId] });
             } catch {
               Alert.alert('Error', 'Could not leave trip. Please try again.');
             }

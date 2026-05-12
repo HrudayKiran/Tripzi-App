@@ -49,7 +49,7 @@ const WelcomeScreen = () => {
                         transition={{ type: 'timing', duration: 1000 }}
                         style={styles.topSection}
                     >
-                        <AppLogo size={64} showDot={true} />
+                        <AppLogo size={96} showDot={true} />
                         <Text style={styles.appName}>Tripzi</Text>
                     </MotiView>
 
@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
         marginTop: height * 0.05,
     },
     appName: {
-        fontSize: 32,
+        fontSize: 40,
         fontWeight: '800',
         color: NEUTRAL.white,
         marginTop: SPACING.md,
@@ -160,11 +160,6 @@ const styles = StyleSheet.create({
         borderRadius: BORDER_RADIUS.xl,
         alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: BRAND.primaryDark,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.4,
-        shadowRadius: 10,
-        elevation: 8,
     },
     buttonText: {
         color: NEUTRAL.white,

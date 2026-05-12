@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Dimensions, Animated, Alert, Modal, TextInput } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +18,7 @@ import ActionReasonModal from '../components/ActionReasonModal';
 import { deleteProfileImageFromR2, pickAndUploadImage } from '../utils/imageUpload';
 import { cancelTrip } from '../utils/tripActions';
 import ReportTripModal from '../components/ReportTripModal';
+import useUserProfileQuery from '../hooks/useUserProfileQuery';
 
 const { width } = Dimensions.get('window');
 
@@ -31,6 +33,7 @@ const CANCEL_REASONS = [
 const UserProfileScreen = () => {
     const router = useRouter();
     const params = useLocalSearchParams();
+    const queryClient = useQueryClient();
     const [currentUser, setCurrentUser] = useState<any>(null);
     const userId = (params.id as string) || (params.userId as string) || currentUser?.id;
 
@@ -44,13 +47,18 @@ const UserProfileScreen = () => {
 
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
-    const [user, setUser] = useState(null);
-    const [trips, setTrips] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [profileImage, setProfileImage] = useState(null);
+    const isOwnProfile = userId === currentUser?.id;
+    const { user, trips, hostRating, loading } = useUserProfileQuery(userId, isOwnProfile);
+    const [profileImage, setProfileImage] = useState<string | null>(null);
     const [profileImageObjectKey, setProfileImageObjectKey] = useState<string | null>(null);
-    const [hostRating, setHostRating] = useState<{ average: number; count: number } | null>(null);
     const [showFullImage, setShowFullImage] = useState(false);
+
+    useEffect(() => {
+        if (user) {
+            setProfileImage(user.photoURL);
+            setProfileImageObjectKey(user.photoObjectKey);
+        }
+    }, [user]);
 
     // Modal States
     const [activeModal, setActiveModal] = useState<'none' | 'report'>('none');
@@ -63,8 +71,6 @@ const UserProfileScreen = () => {
     const headerTranslateY = useRef(new Animated.Value(0)).current;
     const lastScrollY = useRef(0);
     const HEADER_HEIGHT = 60 + insets.top;
-
-    const isOwnProfile = userId === currentUser?.id;
 
     const handleScroll = (event: any) => {
         const currentScrollY = event.nativeEvent.contentOffset.y;
@@ -94,69 +100,7 @@ const UserProfileScreen = () => {
         lastScrollY.current = currentScrollY;
     };
 
-    const loadUserData = useCallback(async () => {
-        if (!userId) {
-            setLoading(false);
-            return;
-        }
 
-        try {
-            const table = isOwnProfile ? 'profiles' : 'public_profiles';
-            const { data: userData, error: profileErr } = await supabase.from(table).select('*').eq('id', userId).maybeSingle();
-
-            if (!profileErr && userData) {
-                const normalizedDisplayName = userData.name || userData.display_name || currentUser?.user_metadata?.full_name || 'User';
-                setUser({ ...userData, displayName: normalizedDisplayName, name: userData.name || normalizedDisplayName, photoURL: userData.photo_url, photoObjectKey: userData.photo_object_key });
-                setProfileImage(userData.photo_url);
-                setProfileImageObjectKey(userData.photo_object_key || null);
-
-                // Fetch host ratings
-                const { data: ratings } = await supabase.from('ratings').select('rating').eq('host_id', userId);
-                if (ratings && ratings.length > 0) {
-                    const totalRating = ratings.reduce((sum, r) => sum + (r.rating || 0), 0);
-                    setHostRating({ average: Math.round((totalRating / ratings.length) * 10) / 10, count: ratings.length });
-                }
-            } else if (isOwnProfile && currentUser) {
-                const meta = currentUser.user_metadata || {};
-                setUser({
-                    id: currentUser.id,
-                    name: meta.full_name || 'User',
-                    displayName: meta.full_name || 'User',
-                    email: currentUser.email,
-                    photoURL: meta.avatar_url || null,
-                    photoObjectKey: null,
-                    bio: '',
-                    ageVerified: false,
-                });
-                setProfileImage(meta.avatar_url);
-                setProfileImageObjectKey(null);
-            }
-        } catch (error) {
-            console.error('Error loading user data:', error);
-        } finally {
-            setLoading(false);
-        }
-    }, [userId, isOwnProfile, currentUser]);
-
-    useEffect(() => {
-        loadUserData();
-    }, [loadUserData]);
-
-    useEffect(() => {
-        if (!userId) return;
-
-        const loadTrips = async () => {
-            const { data } = await supabase.from('trips').select('*').eq('user_id', userId).order('created_at', { ascending: false });
-            if (data) setTrips(data);
-        };
-        loadTrips();
-
-        const channel = supabase.channel(`trips-${userId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'trips', filter: `user_id=eq.${userId}` }, () => { loadTrips(); })
-            .subscribe();
-
-        return () => { supabase.removeChannel(channel); };
-    }, [userId]);
 
     const handleCreateButtonPress = () => setShowCreateModal(true);
 
@@ -334,7 +278,7 @@ const UserProfileScreen = () => {
 
                     {user.bio ? <Text style={[styles.bioText, { color: colors.text }]}>{user.bio}</Text> : null}
 
-                    {!isOwnProfile && (
+                    {currentUser && !isOwnProfile && (
                         <View style={styles.actionButtonsContainer}>
                             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.primary }]} onPress={handleMessage}>
                                 <Text style={[styles.primaryBtnText, { color: '#fff' }]}>Message</Text>
@@ -373,7 +317,7 @@ const UserProfileScreen = () => {
                 onDeleted={() => {
                     setProfileImage(null);
                     setProfileImageObjectKey(null);
-                    setUser(prev => ({ ...prev, photoURL: null, photoObjectKey: null }));
+                    queryClient.invalidateQueries({ queryKey: ['profile', userId] });
                 }}
             />
 
@@ -397,7 +341,7 @@ const UserProfileScreen = () => {
                     setCancellingTrip(true);
                     try {
                         await cancelTrip(tripCancelTargetId, reason);
-                        setTrips(prev => prev.map(t => t.id === tripCancelTargetId ? { ...t, status: 'cancelled', isCancelled: true } : t));
+                        queryClient.invalidateQueries({ queryKey: ['userTrips', userId] });
                         setTripCancelTargetId(null);
                     } catch (error: any) {
                         Alert.alert('Error', error?.message || 'Failed to cancel trip.');

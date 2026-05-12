@@ -10,7 +10,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import FilterModal, { FilterOptions } from '../components/FilterModal';
 import DefaultAvatar from '../components/DefaultAvatar';
 import TripCard from '../components/TripCard';
-import useTrips from '../hooks/useTrips';
+import useTripsQuery from '../hooks/useTripsQuery';
+import useUserSearchQuery from '../hooks/useUserSearchQuery';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { useRouter } from 'expo-router';
 import { searchUsersByPrefix } from '../utils/searchUsers';
@@ -22,44 +23,12 @@ const { width } = Dimensions.get('window');
 const SearchScreen = () => {
     const router = useRouter();
     const { colors } = useTheme();
-    const { allTrips } = useTrips();
+    const { allTrips } = useTripsQuery();
     const [searchQuery, setSearchQuery] = useState('');
     const [filterVisible, setFilterVisible] = useState(false);
     const [filters, setFilters] = useState<FilterOptions | null>(null);
-    const [searchedUsers, setSearchedUsers] = useState<any[]>([]);
-    const [searchingUsers, setSearchingUsers] = useState(false);
-    const searchTimeout = useRef<NodeJS.Timeout | null>(null);
+    const { searchedUsers, searchingUsers } = useUserSearchQuery(searchQuery);
     const searchInputRef = useRef<TextInput>(null);
-
-    // Search users when query changes
-    useEffect(() => {
-        if (searchTimeout.current) {
-            clearTimeout(searchTimeout.current);
-        }
-
-        if (searchQuery.length < 2) {
-            setSearchedUsers([]);
-            return;
-        }
-
-        setSearchingUsers(true);
-        searchTimeout.current = setTimeout(async () => {
-            try {
-                const matchedUsers = await searchUsersByPrefix(searchQuery, 5);
-                setSearchedUsers(matchedUsers);
-            } catch (error) {
-                setSearchedUsers([]);
-            } finally {
-                setSearchingUsers(false);
-            }
-        }, 300);
-
-        return () => {
-            if (searchTimeout.current) {
-                clearTimeout(searchTimeout.current);
-            }
-        };
-    }, [searchQuery]);
 
     // Filter trips using centralized utility
     const filteredTrips = useMemo(() => {
@@ -160,7 +129,6 @@ const SearchScreen = () => {
                             style={styles.userResultItem}
                             onPress={() => {
                                 setSearchQuery('');
-                                setSearchedUsers([]);
                                 router.push({
                                     pathname: '/profile/[id]',
                                     params: { id: user.id }

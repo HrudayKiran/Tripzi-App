@@ -9,7 +9,7 @@ import { MotiView } from 'moti';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles';
-import { useNotifications, AppNotification, NotificationType } from '../hooks/useNotifications';
+import { useNotificationsQuery, AppNotification, NotificationType } from '../hooks/useNotificationsQuery';
 import { useRouter } from 'expo-router';
 import { resolveNotificationTarget } from '../utils/notificationNavigation';
 
@@ -139,7 +139,7 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
         markAsRead,
         markAllAsRead,
         deleteNotification
-    } = useNotifications();
+    } = useNotificationsQuery();
 
     useEffect(() => {
         if (visible) {
@@ -253,7 +253,7 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                                         {unreadCount > 0 && (
                                             <TouchableOpacity
                                                 style={styles.markAllButton}
-                                                onPress={markAllAsRead}
+                                                onPress={() => markAllAsRead()}
                                                 activeOpacity={0.7}
                                             >
                                                 <Ionicons name="checkmark-done" size={16} color={colors.primary} />

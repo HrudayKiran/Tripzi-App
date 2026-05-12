@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Switch, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,68 +23,53 @@ import { resetDatabase, database } from '../database';
 const SettingsScreen = () => {
     const router = useRouter();
     const { colors, isDarkMode, themeMode, setThemeMode } = useTheme();
+    const queryClient = useQueryClient();
 
     const [pushEnabled, setPushEnabled] = useState(false);
-    const [loadingSettings, setLoadingSettings] = useState(true);
     const [notificationPermissionGranted, setNotificationPermissionGranted] = useState(false);
     const [currentUser, setCurrentUser] = React.useState<any>(null);
-
 
     React.useEffect(() => {
         supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
     }, []);
 
-    const loadSettings = useCallback(async () => {
-        if (!currentUser) return;
-
-        setLoadingSettings(true);
-        try {
+    const { data: profile, isLoading: loadingSettings } = useQuery({
+        queryKey: ['ownProfileSettings', currentUser?.id],
+        queryFn: async () => {
+            if (!currentUser?.id) return null;
+            
             const permissionStatus = await getNotificationPermissionStatus();
             const isGranted = permissionStatus === 'granted';
             setNotificationPermissionGranted(isGranted);
 
-            // 1. Try WatermelonDB first (instant)
-            try {
-                const localProfile = await database.get('profiles').find(currentUser.id);
-                if (localProfile) {
-                    const lp = localProfile as any;
-                    const isEnabled = lp._raw.push_notifications_enabled === true && isGranted;
-                    setPushEnabled(isEnabled);
-                    setLoadingSettings(false);
-                }
-            } catch {
-                // Not in local DB, fall through
-            }
-
-            // 2. Verify with Supabase (background)
-            const { data: profile } = await supabase
+            const { data } = await supabase
                 .from('profiles')
                 .select('push_notifications_enabled')
                 .eq('id', currentUser.id)
                 .maybeSingle();
 
-            if (profile) {
-                const isEnabled = profile.push_notifications_enabled === true && isGranted;
-                setPushEnabled(isEnabled);
-            } else {
-                setPushEnabled(false);
-            }
-        } catch (error) {
-            setPushEnabled(false);
-        } finally {
-            setLoadingSettings(false);
-        }
-    }, [currentUser]);
+            return data;
+        },
+        enabled: !!currentUser?.id,
+    });
 
-    // Refresh settings when screen comes into focus (captures OS-level permission changes)
-    useFocusEffect(
-        useCallback(() => {
-            loadSettings();
-        }, [loadSettings])
-    );
+    const initialLoadDone = React.useRef(false);
+
+    React.useEffect(() => {
+        if (profile && !initialLoadDone.current) {
+            setPushEnabled(profile.push_notifications_enabled === true);
+            initialLoadDone.current = true;
+        }
+    }, [profile]);
+
+
 
     const handlePushToggle = async (value: boolean) => {
         if (!currentUser) return;
+        
+        const previousPushEnabled = pushEnabled;
+        const previousPermissionGranted = notificationPermissionGranted;
+        
         try {
             let permissionStatus = await getNotificationPermissionStatus();
 
@@ -108,8 +94,9 @@ const SettingsScreen = () => {
                 // Local DB record may not exist yet
             }
 
-            // Sync to Supabase in background
-            syncNotificationPreference(currentUser.id, permissionStatus, enabled).catch(() => {});
+            // Sync to Supabase
+            await syncNotificationPreference(currentUser.id, permissionStatus, enabled);
+            queryClient.invalidateQueries({ queryKey: ['ownProfileSettings', currentUser.id] });
 
             if (value && permissionStatus !== 'granted') {
                 setPushEnabled(false);
@@ -119,7 +106,11 @@ const SettingsScreen = () => {
                 );
             }
         } catch (error) {
-            // Error updating settings
+            console.error('Failed to update push settings:', error);
+            // Revert state
+            setPushEnabled(previousPushEnabled);
+            setNotificationPermissionGranted(previousPermissionGranted);
+            Alert.alert('Error', 'Failed to update notification settings.');
         }
     };
 
@@ -159,13 +150,16 @@ const SettingsScreen = () => {
                                         Receive updates about trips and messages
                                     </Text>
                                 </View>
-                                <Switch
-                                    value={pushEnabled}
-                                    onValueChange={handlePushToggle}
-                                    trackColor={{ false: NEUTRAL.gray200, true: STATUS.success }}
-                                    thumbColor={NEUTRAL.white}
-                                    disabled={loadingSettings}
-                                />
+                                {loadingSettings ? (
+                                    <ActivityIndicator size="small" color={colors.primary} />
+                                ) : (
+                                        <Switch
+                                            value={pushEnabled}
+                                            onValueChange={handlePushToggle}
+                                            trackColor={{ false: NEUTRAL.gray200, true: STATUS.success }}
+                                            thumbColor={NEUTRAL.white}
+                                        />
+                                )}
                             </View>
                         </View>
 

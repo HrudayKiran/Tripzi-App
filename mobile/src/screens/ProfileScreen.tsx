@@ -124,12 +124,6 @@ const ProfileScreen = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await GoogleSignin.revokeAccess();
-            } catch (error: any) {
-              // Ignore if already revoked
-            }
-
-            try {
               await GoogleSignin.signOut();
             } catch (error: any) {
               // Ignore if already signed out
@@ -141,11 +135,11 @@ const ProfileScreen = () => {
               // Ignore sign out errors
             }
 
-            // Clear local database on logout
-            await resetDatabase();
+            // Clear local database on logout in background
+            resetDatabase().catch(() => {});
 
-            // Route to entry point after logout
-            router.replace('/');
+            // Route to welcome screen after logout
+            router.replace('/(auth)/welcome');
           }
         },
       ]

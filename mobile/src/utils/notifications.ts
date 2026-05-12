@@ -1,12 +1,23 @@
 import messaging from '@react-native-firebase/messaging';
+import { syncDatabase } from '../database/sync';
 
 /**
  * Register the background message handler for FCM.
  * This must be called outside of any React component — typically in index.js.
  */
 export const registerBackgroundHandler = () => {
-  messaging().setBackgroundMessageHandler(async (_remoteMessage) => {
-    // FCM notification messages are automatically displayed by the system.
+  messaging().setBackgroundMessageHandler(async (remoteMessage) => {
+    console.log('Background message received:', remoteMessage);
+    
+    // Handle silent notification (data only)
+    if (remoteMessage.data && !remoteMessage.notification) {
+        console.log('Handling silent notification, triggering sync...');
+        try {
+            await syncDatabase();
+        } catch (e) {
+            console.error('Failed to sync in background:', e);
+        }
+    }
   });
 };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     View,
     Text,
@@ -26,6 +26,7 @@ import { searchUsersByPrefix } from '../utils/searchUsers';
 import { getPublicProfilesByIds } from '../utils/publicProfiles';
 import DefaultAvatar from '../components/DefaultAvatar';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface Member {
     id: string;
@@ -58,9 +59,61 @@ const GroupInfoScreen = () => {
         supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
     }, []);
 
-    const [group, setGroup] = useState<GroupData | null>(null);
-    const [members, setMembers] = useState<Member[]>([]);
-    const [loading, setLoading] = useState(true);
+    const queryClient = useQueryClient();
+
+    const { data: groupData, isLoading: loadingGroup } = useQuery({
+        queryKey: ['groupChat', chatId],
+        queryFn: async () => {
+            const { data } = await supabase.from('group_chats').select('*').eq('id', chatId).maybeSingle();
+            return data;
+        },
+        enabled: !!chatId,
+    });
+
+    const { data: publicProfiles } = useQuery({
+        queryKey: ['publicProfiles', groupData?.participants],
+        queryFn: async () => {
+            if (!groupData?.participants) return new Map();
+            return getPublicProfilesByIds(groupData.participants);
+        },
+        enabled: !!groupData?.participants,
+    });
+
+    const group = groupData ? {
+        id: groupData.id,
+        collectionName: 'group_chats' as const,
+        groupName: groupData.group_name || 'Group',
+        groupIcon: groupData.group_icon || groupData.trip_image,
+        groupDescription: groupData.group_description,
+        participants: groupData.participants || [],
+        createdBy: groupData.created_by,
+        participantDetails: groupData.participant_details
+    } as GroupData : null;
+
+    const members = useMemo(() => {
+        if (!groupData || !publicProfiles) return [];
+        const memberList = (groupData.participants || []).map((uid: string) => {
+            const profile = publicProfiles.get(uid);
+            const fallback = groupData.participant_details?.[uid] || {};
+            return {
+                id: uid,
+                displayName: profile?.displayName || fallback.displayName || 'User',
+                photoURL: profile?.photoURL || fallback.photoURL || undefined,
+                role: groupData.created_by === uid ? 'admin' : 'member',
+            };
+        });
+
+        memberList.sort((a: any, b: any) => {
+            if (a.role === 'admin' && b.role !== 'admin') return -1;
+            if (a.role !== 'admin' && b.role === 'admin') return 1;
+            return a.displayName.localeCompare(b.displayName);
+        });
+
+        return memberList;
+    }, [groupData, publicProfiles]);
+
+    const loading = loadingGroup;
+
     const [editing, setEditing] = useState(false);
     const [editName, setEditName] = useState('');
     const [showAddMember, setShowAddMember] = useState(false);
@@ -72,57 +125,17 @@ const GroupInfoScreen = () => {
     const isCreator = group?.createdBy === currentUser?.id;
 
     useEffect(() => {
-        loadGroup();
-    }, [chatId]);
-
-    const loadGroup = async () => {
-        try {
-            const { data: doc } = await supabase.from('group_chats').select('*').eq('id', chatId).maybeSingle();
-
-            if (!doc) {
-                Alert.alert('Error', 'Group not found.');
-                router.back();
-                return;
-            }
-
-            const data = { id: doc.id, collectionName: 'group_chats' as const, groupName: doc.group_name || 'Group', groupIcon: doc.group_icon || doc.trip_image, groupDescription: doc.group_description, participants: doc.participants || [], createdBy: doc.created_by, participantDetails: doc.participant_details } as GroupData;
-            setGroup(data);
-            setEditName(data.groupName);
-
-            // Load member details from public profile mirror.
-            const publicProfiles = await getPublicProfilesByIds(data.participants || []);
-            const memberList: Member[] = (data.participants || []).map((uid) => {
-                const profile = publicProfiles.get(uid);
-                const fallback = data.participantDetails?.[uid] || {};
-                return {
-                    id: uid,
-                    displayName: profile?.displayName || fallback.displayName || 'User',
-                    photoURL: profile?.photoURL || fallback.photoURL || undefined,
-                    role: data.createdBy === uid ? 'admin' : 'member',
-                };
-            });
-
-            // Sort: admins first, then alphabetically
-            memberList.sort((a, b) => {
-                if (a.role === 'admin' && b.role !== 'admin') return -1;
-                if (a.role !== 'admin' && b.role === 'admin') return 1;
-                return a.displayName.localeCompare(b.displayName);
-            });
-
-            setMembers(memberList);
-        } catch (error) {
-
-        } finally {
-            setLoading(false);
+        if (groupData?.group_name) {
+            setEditName(groupData.group_name);
         }
-    };
+    }, [groupData]);
 
     const updateGroupName = async () => {
         if (!editName.trim() || !isAdmin) return;
         try {
             const table = 'group_chats';
             await supabase.from(table).update({ group_name: editName.trim() }).eq('id', chatId);
-            setGroup((prev) => prev ? { ...prev, groupName: editName.trim() } : null);
+            queryClient.invalidateQueries({ queryKey: ['groupChat', chatId] });
             setEditing(false);
         } catch (error) {
             Alert.alert('Error', 'Failed to update group name.');
@@ -150,7 +163,7 @@ const GroupInfoScreen = () => {
                 if (uploadResult.success && uploadResult.url) {
                     const table = 'group_chats';
                     await supabase.from(table).update({ group_icon: uploadResult.url }).eq('id', chatId);
-                    setGroup((prev) => prev ? { ...prev, groupIcon: uploadResult.url } : null);
+                    queryClient.invalidateQueries({ queryKey: ['groupChat', chatId] });
                 }
             }
         } catch (error) {
@@ -192,7 +205,7 @@ const GroupInfoScreen = () => {
             setShowAddMember(false);
             setSearchQuery('');
             setSearchResults([]);
-            loadGroup();
+            queryClient.invalidateQueries({ queryKey: ['groupChat', chatId] });
         } catch (error) {
             Alert.alert('Error', 'Failed to add member.');
         }
@@ -217,7 +230,7 @@ const GroupInfoScreen = () => {
                                 collectionName: 'group_chats',
                             } });
 
-                            loadGroup();
+                            queryClient.invalidateQueries({ queryKey: ['groupChat', chatId] });
                         } catch (error) {
                             Alert.alert('Error', 'Failed to remove member.');
                         }
@@ -248,7 +261,7 @@ const GroupInfoScreen = () => {
                                 memberId: member.id,
                                 collectionName: 'group_chats',
                             } });
-                            loadGroup();
+                            queryClient.invalidateQueries({ queryKey: ['groupChat', chatId] });
                         } catch (error) {
                             Alert.alert('Error', 'Failed to update admin status.');
                         }

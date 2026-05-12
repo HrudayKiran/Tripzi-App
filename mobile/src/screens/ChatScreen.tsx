@@ -27,8 +27,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
-import { useChatMessages, ChatMessage, ReplyTo } from '../hooks/useChatMessages';
-import { useChats } from '../hooks/useChats';
+import { useChatMessagesQuery, ChatMessage, ReplyTo } from '../hooks/useChatMessagesQuery';
+import { useChatsQuery } from '../hooks/useChatsQuery';
 import { getPublicProfilesByIds } from '../utils/publicProfiles';
 import { getBooleanPreference, PREFERENCE_KEYS } from '../utils/preferences';
 import DefaultAvatar from '../components/DefaultAvatar';
@@ -57,7 +57,7 @@ const ChatScreen = () => {
     const tripTitle = params.tripTitle as string | undefined;
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
-    const { chats } = useChats();
+    const { chats } = useChatsQuery();
     const [currentUser, setCurrentUser] = useState<any>(null);
     useEffect(() => {
         supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
@@ -69,7 +69,7 @@ const ChatScreen = () => {
 
 
     const chatType = chatCollection === 'group_chats' ? 'group' : 'direct';
-    const { messages, loading, sendMessage, markAsRead } = useChatMessages(chatId, chatType, clearedAt);
+    const { messages, loading, sendMessage, markAsRead } = useChatMessagesQuery(chatId, chatType);
     const [inputText, setInputText] = useState('');
     const [sending, setSending] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -1340,36 +1340,36 @@ const ChatScreen = () => {
                     onPress={() => {
                         const isGroup = chat?.type === 'group' || isGroupParam;
                         if (isGroup) {
-                            router.push({ pathname: '/group-info', params: { chatId, collectionName: chatCollection } });
+                            router.push({ pathname: '/chat/info', params: { id: chatId } });
                         } else if (otherParticipantUid) {
                             router.push({ pathname: '/profile/[id]', params: { id: otherParticipantUid } });
                         }
                     }}
                     activeOpacity={0.7}
                 >
-                        <DefaultAvatar
-                            uri={displayPhoto}
-                            name={displayName}
-                            size={40}
-                            style={styles.headerAvatar}
-                            isGroup={chat?.type === 'group' || isGroupParam}
-                        />
-                        <View style={styles.headerTextContainer}>
-                            <Text style={[styles.headerName, { color: colors.text }]} numberOfLines={1}>{displayName}</Text>
-                            <Text style={[styles.headerStatus, { color: otherUserTyping ? colors.primary : colors.textSecondary }]} numberOfLines={1}>
-                                {otherUserTyping ? 'typing...' : (
-                                    (chat?.type === 'group' || isGroupParam)
-                                        ? `${chat?.memberCount || chat?.participants?.length || 0} members${chat?.groupDescription ? ' · ' + chat.groupDescription.substring(0, 30) : ''}`
-                                        : (lastSeenText || '')
-                                )}
-                            </Text>
+                    <DefaultAvatar
+                        uri={displayPhoto}
+                        name={displayName}
+                        size={40}
+                        style={styles.headerAvatar}
+                        isGroup={chat?.type === 'group' || isGroupParam}
+                    />
+                    <View style={styles.headerTextContainer}>
+                        <Text style={[styles.headerName, { color: colors.text }]} numberOfLines={1}>{displayName}</Text>
+                        <Text style={[styles.headerStatus, { color: otherUserTyping ? colors.primary : colors.textSecondary }]} numberOfLines={1}>
+                            {otherUserTyping ? 'typing...' : (
+                                (chat?.type === 'group' || isGroupParam)
+                                    ? `${chat?.memberCount || chat?.participants?.length || 0} members${chat?.groupDescription ? ' · ' + chat.groupDescription.substring(0, 30) : ''}`
+                                    : (lastSeenText || '')
+                            )}
+                        </Text>
                     </View>
                 </TouchableOpacity>
 
                 {(chat?.type === 'group' || isGroupParam) && (
                     <TouchableOpacity
                         style={styles.infoButton}
-                        onPress={() => router.push({ pathname: '/group-info', params: { chatId, collectionName: chatCollection } })}
+                        onPress={() => router.push({ pathname: '/chat/info', params: { id: chatId } })}
                     >
                         <Ionicons name="information-circle-outline" size={24} color={colors.text} />
                     </TouchableOpacity>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated, Dimensions, Linking, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Image as RNImage } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,6 +14,8 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL 
 import ReportTripModal from '../components/ReportTripModal';
 import ActionReasonModal from '../components/ActionReasonModal';
 import { cancelTrip, deleteTrip, joinTrip, leaveTrip, rateTrip } from '../utils/tripActions';
+import useTripDetailsQuery from '../hooks/useTripDetailsQuery';
+import { useQueryClient } from '@tanstack/react-query';
 
 const { width } = Dimensions.get('window');
 
@@ -47,12 +49,15 @@ const TripDetailsScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { colors } = useTheme();
-  const [trip, setTrip] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [isJoined, setIsJoined] = useState(false);
-  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const queryClient = useQueryClient();
   const tripId = (params.id as string) || (params.tripId as string);
+  const { trip, loading, userId: currentUserId } = useTripDetailsQuery(tripId);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [user, setUser] = useState<any>(null);
+
+  const isJoined = useMemo(() => {
+    return user ? (trip?.participants || []).includes(user.id) : false;
+  }, [trip?.participants, user?.id]);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user: u } }) => setUser(u));
@@ -90,158 +95,7 @@ const TripDetailsScreen = () => {
   const scrollY = useRef(new Animated.Value(0)).current;
   const isOwner = trip?.userId === user?.id || trip?.user_id === user?.id;
 
-  useEffect(() => {
-    // Subscribe to trip changes via Supabase realtime
-    const channel = supabase
-      .channel(`trip_${tripId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'trips', filter: `id=eq.${tripId}` }, async (payload) => {
-        if (payload.new) {
-          const tripData: any = { id: (payload.new as any).id, ...payload.new };
-          // Normalize snake_case to camelCase for UI compatibility
-          tripData.userId = tripData.user_id || tripData.userId;
-          tripData.coverImage = tripData.cover_image || tripData.coverImage;
-          tripData.toLocation = tripData.to_location || tripData.toLocation;
-          tripData.fromLocation = tripData.from_location || tripData.fromLocation;
-          tripData.maxTravelers = tripData.max_travelers || tripData.maxTravelers;
-          tripData.costPerPerson = tripData.cost_per_person || tripData.costPerPerson;
-          tripData.tripTypes = tripData.trip_types || tripData.tripTypes;
-          tripData.transportModes = tripData.transport_modes || tripData.transportModes;
-          tripData.fromDate = tripData.from_date || tripData.fromDate;
-          tripData.toDate = tripData.to_date || tripData.toDate;
-          tripData.accommodationType = tripData.accommodation_type || tripData.accommodationType;
-          tripData.accommodationDays = tripData.accommodation_days || tripData.accommodationDays;
-          tripData.bookingStatus = tripData.booking_status || tripData.bookingStatus;
-          tripData.genderPreference = tripData.gender_preference || tripData.genderPreference;
-          tripData.mandatoryItems = tripData.mandatory_items || tripData.mandatoryItems;
-          tripData.placesToVisit = tripData.places_to_visit || tripData.placesToVisit;
-          tripData.imageLocations = tripData.image_locations || tripData.imageLocations;
-          if (tripData.userId) {
-            const { data: profile } = await supabase.from('public_profiles').select('*').eq('id', tripData.userId).maybeSingle();
-            if (profile) {
-              tripData.user = {
-                ...profile,
-                displayName: profile.display_name || profile.name,
-                photoURL: profile.photo_url
-              };
-            }
-          }
-          setTrip(tripData);
-          setIsJoined(user ? (tripData.participants || []).includes(user.id) : false);
-        }
-      })
-      .subscribe();
 
-    // Initial fetch
-    const fetchTrip = async () => {
-      // 1. Try WatermelonDB first (instant display)
-      try {
-        const localTrip = await database.get('trips').find(tripId);
-        if (localTrip) {
-          const raw = (localTrip as any)._raw;
-          const tripData: any = { id: raw.id };
-          // Map raw fields to camelCase
-          tripData.userId = raw.user_id;
-          tripData.title = raw.title;
-          tripData.description = raw.description;
-          tripData.location = raw.location;
-          tripData.coverImage = raw.cover_image;
-          tripData.toLocation = raw.to_location;
-          tripData.fromLocation = raw.from_location;
-          tripData.maxTravelers = raw.max_travelers;
-          tripData.currentTravelers = raw.current_travelers;
-          tripData.costPerPerson = raw.cost_per_person;
-          tripData.cost = raw.cost;
-          tripData.duration = raw.duration;
-          tripData.tripTypes = raw.trip_types ? (typeof raw.trip_types === 'string' ? JSON.parse(raw.trip_types) : raw.trip_types) : null;
-          tripData.transportModes = raw.transport_modes ? (typeof raw.transport_modes === 'string' ? JSON.parse(raw.transport_modes) : raw.transport_modes) : null;
-          tripData.fromDate = raw.from_date;
-          tripData.toDate = raw.to_date;
-          tripData.accommodationType = raw.accommodation_type;
-          tripData.accommodationDays = raw.accommodation_days;
-          tripData.bookingStatus = raw.booking_status;
-          tripData.genderPreference = raw.gender_preference;
-          tripData.mandatoryItems = raw.mandatory_items ? (typeof raw.mandatory_items === 'string' ? JSON.parse(raw.mandatory_items) : raw.mandatory_items) : null;
-          tripData.placesToVisit = raw.places_to_visit ? (typeof raw.places_to_visit === 'string' ? JSON.parse(raw.places_to_visit) : raw.places_to_visit) : null;
-          tripData.imageLocations = raw.image_locations ? (typeof raw.image_locations === 'string' ? JSON.parse(raw.image_locations) : raw.image_locations) : null;
-          tripData.images = raw.images ? (typeof raw.images === 'string' ? JSON.parse(raw.images) : raw.images) : null;
-          tripData.participants = raw.participants ? (typeof raw.participants === 'string' ? JSON.parse(raw.participants) : raw.participants) : null;
-          tripData.status = raw.status;
-          tripData.tripType = raw.trip_type;
-          tripData.transportMode = raw.transport_mode;
-          tripData.isExpired = raw.is_expired;
-          tripData.isCancelled = raw.is_cancelled;
-          tripData.isCompleted = raw.is_completed;
-          tripData.mapsLink = raw.maps_link;
-          tripData.ownerDisplayName = raw.owner_display_name;
-          tripData.ownerPhotoUrl = raw.owner_photo_url;
-          tripData.ownerUsername = raw.owner_username;
-          tripData.user = {
-            displayName: raw.owner_display_name || 'Traveler',
-            photoURL: raw.owner_photo_url,
-          };
-
-          // Show local profile if available
-          if (tripData.userId) {
-            try {
-              const localProfile = await database.get('profiles').find(tripData.userId);
-              if (localProfile) {
-                const lp = (localProfile as any)._raw;
-                tripData.user = {
-                  displayName: lp.name || tripData.ownerDisplayName || 'Traveler',
-                  photoURL: lp.photo_url || tripData.ownerPhotoUrl,
-                };
-              }
-            } catch { /* profile not in local DB */ }
-          }
-
-          setTrip(tripData);
-          setIsJoined(user ? (tripData.participants || []).includes(user.id) : false);
-          setLoading(false);
-        }
-      } catch {
-        // Trip not in local DB, fall through to Supabase
-      }
-
-      // 2. Fetch from Supabase (fresh data)
-      const { data: doc } = await supabase.from('trips').select('*').eq('id', tripId).maybeSingle();
-      if (doc) {
-        const tripData: any = { id: doc.id, ...doc };
-        tripData.userId = tripData.user_id || tripData.userId;
-        tripData.coverImage = tripData.cover_image || tripData.coverImage;
-        tripData.toLocation = tripData.to_location || tripData.toLocation;
-        tripData.fromLocation = tripData.from_location || tripData.fromLocation;
-        tripData.maxTravelers = tripData.max_travelers || tripData.maxTravelers;
-        tripData.costPerPerson = tripData.cost_per_person || tripData.costPerPerson;
-        tripData.tripTypes = tripData.trip_types || tripData.tripTypes;
-        tripData.transportModes = tripData.transport_modes || tripData.transportModes;
-        tripData.fromDate = tripData.from_date || tripData.fromDate;
-        tripData.toDate = tripData.to_date || tripData.toDate;
-        tripData.accommodationType = tripData.accommodation_type || tripData.accommodationType;
-        tripData.accommodationDays = tripData.accommodation_days || tripData.accommodationDays;
-        tripData.bookingStatus = tripData.booking_status || tripData.bookingStatus;
-        tripData.genderPreference = tripData.gender_preference || tripData.genderPreference;
-        tripData.mandatoryItems = tripData.mandatory_items || tripData.mandatoryItems;
-        tripData.placesToVisit = tripData.places_to_visit || tripData.placesToVisit;
-        tripData.imageLocations = tripData.image_locations || tripData.imageLocations;
-        if (tripData.userId) {
-          const { data: profile } = await supabase.from('public_profiles').select('*').eq('id', tripData.userId).maybeSingle();
-          if (profile) {
-            tripData.user = {
-              ...profile,
-              displayName: profile.display_name || profile.name,
-              photoURL: profile.photo_url
-            };
-          }
-        }
-        setTrip(tripData);
-        setIsJoined(user ? (tripData.participants || []).includes(user.id) : false);
-      }
-      setLoading(false);
-    };
-    fetchTrip();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [tripId, user?.id]);
 
   // Fetch participant data when trip.participants changes
   useEffect(() => {
@@ -342,19 +196,9 @@ const TripDetailsScreen = () => {
         return;
       } else {
         await joinTrip(tripId);
-        setIsJoined(true);
+        queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
         // Trigger sync in background
         require('../database/sync').syncDatabase().catch(() => { });
-        // Re-fetch trip data to update spots count and participants immediately
-        const { data: updatedTrip } = await supabase.from('trips').select('participants, current_travelers').eq('id', tripId).maybeSingle();
-        if (updatedTrip) {
-          setTrip(prev => ({
-            ...prev,
-            participants: updatedTrip.participants,
-            currentTravelers: updatedTrip.current_travelers,
-            current_travelers: updatedTrip.current_travelers,
-          }));
-        }
       }
     } catch (error: any) {
       Alert.alert('Error', error?.message || 'Could not update trip participation.');
@@ -1050,19 +894,9 @@ const TripDetailsScreen = () => {
           setDeleting(true);
           try {
             await leaveTrip(tripId, reason);
-            setIsJoined(false);
+            queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
             // Trigger sync in background
             require('../database/sync').syncDatabase().catch(() => { });
-            // Re-fetch trip data to update spots count and participants immediately
-            const { data: updatedTrip } = await supabase.from('trips').select('participants, current_travelers').eq('id', tripId).maybeSingle();
-            if (updatedTrip) {
-              setTrip(prev => ({
-                ...prev,
-                participants: updatedTrip.participants,
-                currentTravelers: updatedTrip.current_travelers,
-                current_travelers: updatedTrip.current_travelers,
-              }));
-            }
             setPendingAction(null);
             Alert.alert('Trip Left', 'You have left this trip.');
           } catch (error: any) {

@@ -16,6 +16,8 @@ import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { aiService, AIMessage, PlaceImage, AIModel, Conversation } from '../services/AIService';
+import useAIPlannerQuery from '../hooks/useAIPlannerQuery';
+import { useQueryClient } from '@tanstack/react-query';
 
 const { width, height } = Dimensions.get('window');
 const DRAWER_WIDTH = width * 0.8;
@@ -135,10 +137,16 @@ export default function AIPlannerScreen() {
     const [selectedModel, setSelectedModel] = useState<AIModel>('llama-3.1-8b-instant');
     const [showModelPicker, setShowModelPicker] = useState(false);
 
-    // Conversation State
     const [conversationId, setConversationId] = useState<string | null>((params.conversationId as string) || null);
-    const [conversations, setConversations] = useState<Conversation[]>([]);
+    const { conversations, messages: serverMsgs, loading: loadingQuery, refetchConversations } = useAIPlannerQuery(conversationId);
     const conversationCreated = useRef(false);
+    const queryClient = useQueryClient();
+
+    useEffect(() => {
+        if (serverMsgs.length > 0) {
+            setMessages(serverMsgs);
+        }
+    }, [serverMsgs]);
 
     // Refs
     const flatListRef = useRef<any>(null);
@@ -155,14 +163,9 @@ export default function AIPlannerScreen() {
 
     const initialPrompt = params.initialPrompt as string | undefined;
 
-    useEffect(() => {
-        loadConversations();
-        initChat();
-    }, []);
-
     useFocusEffect(
         useCallback(() => {
-            loadConversations();
+            refetchConversations();
             setConversationId(null);
             conversationCreated.current = false;
             setInputText('');
@@ -236,12 +239,7 @@ export default function AIPlannerScreen() {
         }
     };
 
-    const loadConversations = async () => {
-        try {
-            const convs = await aiService.listConversations(20);
-            setConversations(convs);
-        } catch { /* silent */ }
-    };
+
 
     const initChat = async (forceNew = false) => {
         if (conversationId && !forceNew) {
@@ -272,6 +270,10 @@ export default function AIPlannerScreen() {
             }, 800);
         }
     };
+
+    useEffect(() => {
+        initChat();
+    }, [conversationId]);
 
     const toggleDrawer = () => {
         const toValue = isDrawerOpen ? -DRAWER_WIDTH : 0;
@@ -322,7 +324,7 @@ export default function AIPlannerScreen() {
                     text: 'Delete', style: 'destructive',
                     onPress: async () => {
                         await aiService.deleteConversation(conv.id);
-                        setConversations(prev => prev.filter(c => c.id !== conv.id));
+                        queryClient.invalidateQueries({ queryKey: ['aiConversations'] });
                         if (conversationId === conv.id) {
                             handleNewChat();
                         }
@@ -343,7 +345,7 @@ export default function AIPlannerScreen() {
         setRenameModalVisible(false);
         try {
             await aiService.renameConversation(chatToRename.id, renameText.trim());
-            setConversations(prev => prev.map(c => c.id === chatToRename.id ? { ...c, title: renameText.trim() } : c));
+            queryClient.invalidateQueries({ queryKey: ['aiConversations'] });
         } catch {
             Alert.alert("Error", "Failed to rename chat");
         }
@@ -360,8 +362,7 @@ export default function AIPlannerScreen() {
             const conv = await aiService.createConversation(title, selectedModel);
             if (conv) {
                 setConversationId(conv.id);
-                // Prepend to list
-                setConversations(prev => [conv, ...prev]);
+                queryClient.invalidateQueries({ queryKey: ['aiConversations'] });
                 return conv.id;
             }
         } catch { /* fall through */ }

@@ -7,7 +7,7 @@ import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BRAND, NEUTRAL } from '../styles';
-import TripziAnimatedLogo from '../components/TripziAnimatedLogo';
+import AppLogo from '../components/AppLogo';
 import { supabase } from '../lib/supabase';
 
 import { useRouter } from 'expo-router';
@@ -144,7 +144,7 @@ const StartScreen = () => {
             transition={{ type: 'timing', duration: 1000, delay: 300 }}
             style={styles.logoSection}
           >
-            <TripziAnimatedLogo size={140} showGlow={true} />
+            <AppLogo size={140} showGlow={true} />
             <View style={styles.textContainer}>
               <Text style={styles.appName}>Tripzi</Text>
               <Text style={styles.tagline}>CONNECT. PLAN. TRAVEL.</Text>

@@ -4,6 +4,8 @@ import messaging from '@react-native-firebase/messaging';
 import { supabase } from '../lib/supabase';
 import { router } from 'expo-router';
 import { resolveNotificationTarget } from '../utils/notificationNavigation';
+import { requestNotificationPermission } from '../utils/notificationPermissions';
+import { Alert } from 'react-native';
 
 interface NotificationData {
   route?: string;
@@ -44,10 +46,14 @@ const usePushNotifications = () => {
         });
 
         // Handle foreground messages — FCM data messages are received here
-        unsubscribeMessage = messaging().onMessage(async (_remoteMessage) => {
-          // FCM notification messages are automatically displayed by the system
-          // on Android when the notification key is present in the payload.
-          // No additional handling needed for display.
+        unsubscribeMessage = messaging().onMessage(async (remoteMessage) => {
+          console.log('Foreground message received:', remoteMessage);
+          if (remoteMessage.notification) {
+            Alert.alert(
+              remoteMessage.notification.title || 'Notification',
+              remoteMessage.notification.body || ''
+            );
+          }
         });
 
         // Listen for auth state changes
@@ -77,12 +83,8 @@ const usePushNotifications = () => {
     const registerFCMToken = async (user: any) => {
       try {
         // Request permission (required for iOS, Android 13+)
-        const authStatus = await messaging().requestPermission();
-        const isEnabled =
-          authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-          authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-
-        if (!isEnabled) return;
+        const permissionStatus = await requestNotificationPermission();
+        if (permissionStatus !== 'granted') return;
 
         // Check if user has push notifications enabled in their profile
         const { data: profile } = await supabase

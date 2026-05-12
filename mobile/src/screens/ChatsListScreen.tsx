@@ -20,7 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, NEUTRAL } from '../styles';
-import { useChats, Chat } from '../hooks/useChats';
+import { useChatsQuery, Chat } from '../hooks/useChatsQuery';
 import { supabase } from '../lib/supabase';
 import { formatDistanceToNow } from 'date-fns';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -38,7 +38,7 @@ interface SearchUser {
 const ChatsListScreen = () => {
     const router = useRouter();
     const { colors } = useTheme();
-    const { chats, loading, refreshChats, deleteChat } = useChats();
+    const { chats, loading, refreshChats, deleteChat } = useChatsQuery();
 
     // Use state for currentUser to properly handle auth state
     const [currentUser, setCurrentUser] = useState<any>(null);

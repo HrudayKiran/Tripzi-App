@@ -8,7 +8,7 @@ import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import TripCard from '../components/TripCard';
 import DefaultAvatar from '../components/DefaultAvatar';
-import useTrips from '../hooks/useTrips';
+import useTripsQuery from '../hooks/useTripsQuery';
 import usePermissions from '../hooks/usePermissions';
 import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
@@ -45,7 +45,7 @@ const getActiveFilterCount = (filters: FilterOptions | null) => {
 };
 
 const FeedScreen = () => {
-    const { trips, loading, refetch, currentUserId } = useTrips();
+    const { trips, loading, refetch, currentUserId } = useTripsQuery();
     const { requestNotificationPermission } = usePermissions();
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
@@ -54,7 +54,7 @@ const FeedScreen = () => {
     useEffect(() => {
         if (loading) return; // Wait until feed is completely loaded
 
-        const checkAndRequestPermission = async () => {
+        const timer = setTimeout(async () => {
             try {
                 const hasPrompted = await getBooleanPreference(PREFERENCE_KEYS.notificationPrompted, false);
                 if (!hasPrompted) {
@@ -74,9 +74,9 @@ const FeedScreen = () => {
             } catch (error) {
                 // Ignore errors
             }
-        };
+        }, 1500); // Delay for 1.5 seconds after loading completes
 
-        checkAndRequestPermission();
+        return () => clearTimeout(timer);
     }, [loading]);
     const [searchQuery, setSearchQuery] = useState('');
     const [refreshing, setRefreshing] = useState(false);

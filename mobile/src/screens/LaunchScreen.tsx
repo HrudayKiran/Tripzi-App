@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Dimensions, Animated, Easing, StatusBar as RNSt
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
+import { supabase } from '../lib/supabase';
 import AppLogo from '../components/AppLogo';
 import { MotiView } from 'moti';
 import { BRAND, NEUTRAL } from '../styles';
@@ -19,24 +20,30 @@ const LaunchScreen = () => {
   useEffect(() => {
     isMountedRef.current = true;
 
-    // Animate the loading bar
-    const anim = Animated.timing(progress, {
-      toValue: 1,
-      duration: 3500, // Slightly longer for dramatic effect
-      useNativeDriver: false,
-      easing: Easing.out(Easing.cubic),
-    });
+    // Check session immediately
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session && isMountedRef.current) {
+        // If logged in, go directly to home
+        router.replace('/(tabs)');
+      } else if (isMountedRef.current) {
+        // If not logged in, show splash animation then go to welcome
+        const anim = Animated.timing(progress, {
+          toValue: 1,
+          duration: 3500,
+          useNativeDriver: false,
+          easing: Easing.out(Easing.cubic),
+        });
 
-    anim.start(({ finished }) => {
-      // Only navigate if animation completed naturally AND screen is still mounted/focused
-      if (finished && isMountedRef.current) {
-        router.replace('/(auth)/welcome');
+        anim.start(({ finished }) => {
+          if (finished && isMountedRef.current) {
+            router.replace('/(auth)/welcome');
+          }
+        });
       }
     });
 
     return () => {
       isMountedRef.current = false;
-      anim.stop(); // Cancel animation on unmount
     };
   }, []);
 
