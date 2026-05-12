@@ -4,7 +4,6 @@ import {
     Text,
     StyleSheet,
     TouchableOpacity,
-    FlatList,
     Image,
     ActivityIndicator,
     Alert,
@@ -12,6 +11,9 @@ import {
     Modal,
     ScrollView,
 } from 'react-native';
+import { FlashList } from "@shopify/flash-list";
+
+const TypedFlashList = FlashList as any;
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -23,6 +25,7 @@ import { uploadTripImageToR2 } from '../utils/imageUpload';
 import { searchUsersByPrefix } from '../utils/searchUsers';
 import { getPublicProfilesByIds } from '../utils/publicProfiles';
 import DefaultAvatar from '../components/DefaultAvatar';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 
 interface Member {
     id: string;
@@ -43,8 +46,10 @@ interface GroupData {
     participantDetails?: { [uid: string]: { displayName?: string; photoURL?: string } };
 }
 
-const GroupInfoScreen = ({ navigation, route }) => {
-    const { chatId } = route.params;
+const GroupInfoScreen = () => {
+    const router = useRouter();
+    const params = useLocalSearchParams();
+    const chatId = params.chatId as string || params.id as string;
     const requestedCollection = 'group_chats';
     const { colors } = useTheme();
     const [currentUser, setCurrentUser] = useState<any>(null);
@@ -76,7 +81,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
 
             if (!doc) {
                 Alert.alert('Error', 'Group not found.');
-                navigation.goBack();
+                router.back();
                 return;
             }
 
@@ -269,7 +274,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
                                 collectionName: 'group_chats',
                             } });
 
-                            navigation.navigate('ChatsList');
+                            router.replace('/');
                         } catch (error) {
                             Alert.alert('Error', 'Failed to leave group.');
                         }
@@ -286,7 +291,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
             <TouchableOpacity
                 style={[styles.memberItem, { backgroundColor: colors.card }]}
                 onPress={() => {
-                    if (!isMe) navigation.navigate('UserProfile', { userId: item.id });
+                    if (!isMe) router.push({ pathname: '/profile/[id]', params: { id: item.id } });
                 }}
                 onLongPress={() => {
                     if (isAdmin && !isMe) {
@@ -335,7 +340,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
             {/* Header */}
             <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+                <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
                     <Ionicons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Group Info</Text>
@@ -409,11 +414,12 @@ const GroupInfoScreen = ({ navigation, route }) => {
                 {/* Members */}
                 <View style={styles.membersSection}>
                     <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>MEMBERS</Text>
-                    <FlatList
+                    <TypedFlashList
                         data={members}
                         renderItem={renderMember}
                         keyExtractor={(item) => item.id}
                         scrollEnabled={false}
+                        estimatedItemSize={60}
                     />
                 </View>
             </ScrollView>
@@ -444,7 +450,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
                         {searching ? (
                             <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 20 }} />
                         ) : (
-                            <FlatList
+                            <TypedFlashList
                                 data={searchResults}
                                 keyExtractor={(item) => item.id}
                                 renderItem={({ item }) => (
@@ -467,6 +473,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
                                     ) : null
                                 }
                                 contentContainerStyle={{ paddingTop: SPACING.md }}
+                                estimatedItemSize={60}
                             />
                         )}
                     </View>

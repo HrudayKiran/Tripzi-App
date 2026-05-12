@@ -1,20 +1,22 @@
+import { Stack } from 'expo-router';
+import { ThemeProvider } from '../src/contexts/ThemeContext';
+import { NetworkProvider } from '../src/contexts/NetworkContext';
+import OfflineBanner from '../src/components/OfflineBanner';
 import React from 'react';
-import { Alert, Linking } from 'react-native';
 import analytics from '@react-native-firebase/analytics';
 import crashlytics from '@react-native-firebase/crashlytics';
 import perf from '@react-native-firebase/perf';
-import AppNavigator from './src/navigation/AppNavigator';
 import { DatabaseProvider } from '@nozbe/watermelondb/DatabaseProvider';
-import { database } from './src/database';
-import { syncDatabase } from './src/database/sync';
-import { registerBackgroundHandler } from './src/utils/notifications';
-import { useAppCheck } from './src/hooks/useAppCheck';
-import { useRemoteConfig } from './src/hooks/useRemoteConfig';
+import { database } from '../src/database';
+import { syncDatabase } from '../src/database/sync';
+import { registerBackgroundHandler } from '../src/utils/notifications';
+import { useAppCheck } from '../src/hooks/useAppCheck';
+import { useRemoteConfig } from '../src/hooks/useRemoteConfig';
 
 // Register FCM background message handler
 registerBackgroundHandler();
 
-export default function App() {
+export default function RootLayout() {
   const currentVersion = '1.0.0';
 
   // Initialize Firebase App Check
@@ -46,7 +48,18 @@ export default function App() {
 
   return (
     <DatabaseProvider database={database}>
-      <AppNavigator />
+      <ThemeProvider>
+        <NetworkProvider>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="chat" />
+            <Stack.Screen name="trip" />
+            <Stack.Screen name="profile" />
+          </Stack>
+          <OfflineBanner />
+        </NetworkProvider>
+      </ThemeProvider>
     </DatabaseProvider>
   );
 }

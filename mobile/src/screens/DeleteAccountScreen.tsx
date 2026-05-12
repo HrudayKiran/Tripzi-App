@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIn
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, STATUS, NEUTRAL } from '../styles';
 import { supabase } from '../lib/supabase';
@@ -19,7 +19,10 @@ const DELETE_REASONS = [
     'Other',
 ];
 
-const DeleteAccountScreen = ({ navigation }) => {
+import { useRouter } from 'expo-router';
+
+const DeleteAccountScreen = () => {
+    const router = useRouter();
     const { colors, isDarkMode } = useTheme();
     const [deleteReason, setDeleteReason] = useState('');
     const [customReason, setCustomReason] = useState('');
@@ -45,42 +48,32 @@ const DeleteAccountScreen = ({ navigation }) => {
                         try {
                             await workersApi('/account/delete', { body: { reason } });
                             // Sign out locally
-                            try { await supabase.auth.signOut(); } catch (e) { }
-                            
-                            // Clear local database
+                            await supabase.auth.signOut();
                             await resetDatabase();
-                            
-                            // Navigate to auth screen
-                            navigation.reset({
-                                index: 0,
-                                routes: [{ name: 'Start' }],
-                            });
+                            router.replace('/(auth)/welcome');
                         } catch (error: any) {
-                            Alert.alert("Error", error.message || "Could not delete account. Please try again later.");
+                            Alert.alert('Error', error.message || 'Failed to delete account');
                         } finally {
                             setDeleting(false);
                         }
-                    },
-                },
+                    }
+                }
             ]
         );
     };
 
     return (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-            <KeyboardAvoidingView
-                style={{ flex: 1 }}
+            <KeyboardAvoidingView 
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+                style={styles.container}
             >
-
-                <View style={styles.container}>
-                    {/* Header */}
-
-                <View style={[styles.header, { backgroundColor: colors.headerBackground }]}>
+            <View style={styles.container}>
+                {/* Header */}
+                <View style={styles.header}>
                     <TouchableOpacity
                         style={styles.backButton}
-                        onPress={() => navigation.goBack()}
+                        onPress={() => router.back()}
                         activeOpacity={0.7}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
@@ -97,7 +90,12 @@ const DeleteAccountScreen = ({ navigation }) => {
                 >
 
                     {/* Info Section */}
-                    <Animatable.View animation="fadeInUp" duration={400} style={styles.section}>
+                    <MotiView
+                        from={{ opacity: 0, translateY: 20 }}
+                        animate={{ opacity: 1, translateY: 0 }}
+                        transition={{ type: 'timing', duration: 400 }}
+                        style={styles.section}
+                    >
                         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                             <View style={styles.warningHeader}>
                                 <Ionicons name="warning" size={24} color={STATUS.errorDark} />
@@ -125,10 +123,15 @@ const DeleteAccountScreen = ({ navigation }) => {
                                 Your account data is deleted immediately from active use. However, a snapshot of your profile is retained in our secure backups for up to <Text style={{ fontWeight: 'bold' }}>30 days</Text> for safety, security, and legal compliance reasons before being purged.
                             </Text>
                         </View>
-                    </Animatable.View>
+                    </MotiView>
 
                     {/* Reasons Section */}
-                    <Animatable.View animation="fadeInUp" duration={400} delay={100} style={styles.section}>
+                    <MotiView
+                        from={{ opacity: 0, translateY: 20 }}
+                        animate={{ opacity: 1, translateY: 0 }}
+                        transition={{ type: 'timing', duration: 400, delay: 100 }}
+                        style={styles.section}
+                    >
                         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                             <Text style={[styles.subTitle, { color: colors.text }]}>Why are you leaving?</Text>
                             <Text style={[styles.infoText, { color: colors.textSecondary, marginBottom: SPACING.md }]}>
@@ -180,10 +183,15 @@ const DeleteAccountScreen = ({ navigation }) => {
                                 />
                             )}
                         </View>
-                    </Animatable.View>
+                    </MotiView>
 
                     {/* Delete Button */}
-                    <Animatable.View animation="fadeInUp" duration={400} delay={200} style={styles.section}>
+                    <MotiView
+                        from={{ opacity: 0, translateY: 20 }}
+                        animate={{ opacity: 1, translateY: 0 }}
+                        transition={{ type: 'timing', duration: 400, delay: 200 }}
+                        style={styles.section}
+                    >
                         <TouchableOpacity
                             style={[
                                 styles.deleteButton,
@@ -204,13 +212,13 @@ const DeleteAccountScreen = ({ navigation }) => {
                         
                         <TouchableOpacity
                             style={styles.cancelButton}
-                            onPress={() => navigation.goBack()}
+                            onPress={() => router.back()}
                             disabled={deleting}
                             activeOpacity={0.7}
                         >
                             <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>
                         </TouchableOpacity>
-                    </Animatable.View>
+                    </MotiView>
                 </ScrollView>
             </View>
             </KeyboardAvoidingView>

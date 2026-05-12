@@ -2,20 +2,17 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Dimensions, Animated, Easing, StatusBar as RNStatusBar } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useNavigation } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import AppLogo from '../components/AppLogo';
-import * as Animatable from 'react-native-animatable';
+import { MotiView } from 'moti';
 import { BRAND, NEUTRAL } from '../styles';
-
-import { useIsFocused } from '@react-navigation/native';
 
 const { width, height } = Dimensions.get('window');
 
 const MAP_PATTERN_URL = 'https://lh3.googleusercontent.com/aida-public/AB6AXuC2zQAHh1rkj2FOH71NZ5u5InNaK_bDbfoyy8O91U9Xmx-N7Qu3U5uuuQ386ncxJR4ZMfcZi2iglnw8Vqdn0-Q03VIJ0PK6sugqvEXcydEzxm1ulpMWGy1TwUT1RlTaUOhfBviPNgVlb_1sxRuF83KnmRjmtJFDQHj4gOSXjflVp27SQzE_Xm8m5r4kvyaGe2o-MucjQ5US4UfjqhIFXRIYfureKViEvplWqzhcJbeCbExN7KVaP8enyNUYXGu0PLp0gMNZ79-7WbA';
 
 const LaunchScreen = () => {
-  const navigation = useNavigation();
-  const isFocused = useIsFocused();
+  const router = useRouter();
   const progress = useRef(new Animated.Value(0)).current;
   const isMountedRef = useRef(true);
 
@@ -33,10 +30,7 @@ const LaunchScreen = () => {
     anim.start(({ finished }) => {
       // Only navigate if animation completed naturally AND screen is still mounted/focused
       if (finished && isMountedRef.current) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Welcome' } as any],
-        });
+        router.replace('/(auth)/welcome');
       }
     });
 
@@ -76,9 +70,10 @@ const LaunchScreen = () => {
 
         {/* Center Content */}
         <View style={styles.centerContent}>
-          <Animatable.View
-            animation="fadeInUp"
-            duration={1000}
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 1000 }}
             style={styles.logoWrapper}
           >
             {/* Logo with Glow */}
@@ -89,7 +84,7 @@ const LaunchScreen = () => {
               <Text style={styles.appName}>Tripzi</Text>
               <Text style={styles.tagline}>CONNECT. PLAN. TRAVEL.</Text>
             </View>
-          </Animatable.View>
+          </MotiView>
         </View>
 
         {/* Bottom Section: Loader & Meta */}

@@ -4,7 +4,6 @@ import {
     Text,
     StyleSheet,
     TouchableOpacity,
-    FlatList,
     Image,
     ActivityIndicator,
     RefreshControl,
@@ -12,9 +11,13 @@ import {
     Modal,
     Alert,
 } from 'react-native';
+import { FlashList } from "@shopify/flash-list";
+
+const TypedFlashList = FlashList as any;
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, NEUTRAL } from '../styles';
 import { useChats, Chat } from '../hooks/useChats';
@@ -32,7 +35,8 @@ interface SearchUser {
     ageVerified?: boolean;
 }
 
-const ChatsListScreen = ({ navigation }) => {
+const ChatsListScreen = () => {
+    const router = useRouter();
     const { colors } = useTheme();
     const { chats, loading, refreshChats, deleteChat } = useChats();
 
@@ -78,14 +82,18 @@ const ChatsListScreen = ({ navigation }) => {
             handleLongPress(chat.id);
         } else {
             const otherUser = chat.type === 'direct' ? getOtherParticipant(chat) : null;
-            navigation.navigate('Chat', {
-                chatId: chat.id,
-                collectionName: chat.collectionName,
-                otherUserId: otherUser?.uid,
-                otherUserName: chat.type === 'group' ? chat.groupName : otherUser?.displayName,
-                otherUserPhoto: chat.type === 'group' ? chat.groupIcon : otherUser?.photoURL,
-                isGroupChat: chat.type === 'group',
-                tripTitle: chat.type === 'group' ? chat.groupName : undefined,
+            router.push({
+                pathname: '/chat/[id]',
+                params: {
+                    id: chat.id,
+                    chatId: chat.id,
+                    collectionName: chat.collectionName,
+                    otherUserId: otherUser?.uid,
+                    otherUserName: chat.type === 'group' ? chat.groupName : otherUser?.displayName,
+                    otherUserPhoto: chat.type === 'group' ? chat.groupIcon : otherUser?.photoURL,
+                    isGroupChat: String(chat.type === 'group'),
+                    tripTitle: chat.type === 'group' ? chat.groupName : undefined,
+                }
             });
         }
     };
@@ -217,12 +225,16 @@ const ChatsListScreen = ({ navigation }) => {
             setSearchQuery('');
             setSearchResults([]);
 
-            navigation.navigate('Chat', {
-                chatId,
-                collectionName: 'chats',
-                otherUserId: user.id,
-                otherUserName: user.displayName,
-                otherUserPhoto: user.photoURL,
+            router.push({
+                pathname: '/chat/[id]',
+                params: {
+                    id: chatId,
+                    chatId,
+                    collectionName: 'chats',
+                    otherUserId: user.id,
+                    otherUserName: user.displayName,
+                    otherUserPhoto: user.photoURL,
+                }
             });
         } catch (error) {
             Alert.alert('Error', 'Could not start chat. Please try again.');
@@ -238,7 +250,11 @@ const ChatsListScreen = ({ navigation }) => {
         const unreadCount = currentUser ? item.unreadCount?.[currentUser.id] || (item as any).unread_count?.[currentUser.id] || 0 : 0;
 
         return (
-            <Animatable.View animation="fadeInUp" delay={index * 50} duration={300}>
+            <MotiView
+                from={{ opacity: 0, translateY: 20 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: 'timing', duration: 300, delay: index * 50 }}
+            >
                 <TouchableOpacity
                     style={[
                         styles.chatItem,
@@ -286,7 +302,7 @@ const ChatsListScreen = ({ navigation }) => {
                         </View>
                     </View>
                 </TouchableOpacity>
-            </Animatable.View>
+            </MotiView>
         );
     };
 
@@ -378,7 +394,7 @@ const ChatsListScreen = ({ navigation }) => {
             )}
 
             {/* Chat List */}
-            <FlatList
+            <TypedFlashList
                 data={chats}
                 renderItem={renderChatItem}
                 keyExtractor={(item) => item.id}
@@ -395,6 +411,7 @@ const ChatsListScreen = ({ navigation }) => {
                     />
                 }
                 showsVerticalScrollIndicator={false}
+                estimatedItemSize={80}
             />
 
             {/* Search Modal */}
@@ -438,7 +455,7 @@ const ChatsListScreen = ({ navigation }) => {
                                 </Text>
                             </View>
                         ) : (
-                            <FlatList
+                            <TypedFlashList
                                 data={searchResults}
                                 renderItem={renderSearchResult}
                                 keyExtractor={(item) => item.id}
@@ -451,6 +468,7 @@ const ChatsListScreen = ({ navigation }) => {
                                         </Text>
                                     ) : null
                                 }
+                                estimatedItemSize={60}
                             />
                         )}
 
@@ -476,7 +494,7 @@ const ChatsListScreen = ({ navigation }) => {
                             style={styles.dropdownItem}
                             onPress={() => {
                                 setShowMessagesSettings(false);
-                                navigation.navigate('MessageSettings');
+                                router.push('/chat/settings');
                             }}
                         >
                             <Ionicons name="settings" size={20} color={colors.text} />

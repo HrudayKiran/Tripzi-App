@@ -32,9 +32,10 @@ export const resolveNotificationTarget = async (
 
     if (!route) return null;
 
-    if (route === 'Home' || route === 'MyTrips' || route === 'Settings' || route === 'EditProfile') {
-        return { route, params };
-    }
+    if (route === 'Home') return { route: '/(tabs)/', params };
+    if (route === 'MyTrips') return { route: '/trip/my-trips', params };
+    if (route === 'Settings') return { route: '/profile/settings', params };
+    if (route === 'EditProfile') return { route: '/profile/edit', params };
 
     if (route === 'TripDetails') {
         const tripId = String(params.tripId || notification.entityId || '');
@@ -46,7 +47,7 @@ export const resolveNotificationTarget = async (
             .maybeSingle();
 
         if (!trip || trip.status === 'deleted') return null;
-        return { route: 'TripDetails', params: { tripId } };
+        return { route: '/trip/[id]', params: { id: tripId } };
     }
 
     if (route === 'Chat' || route === 'GroupInfo') {
@@ -54,16 +55,16 @@ export const resolveNotificationTarget = async (
         const chatId = String(params.chatId || notification.entityId || '');
         if (!chatId) return null;
 
-        // All chats (direct + group) are stored in the 'chats' table
         const chat = await getChatIfAccessible('chats', chatId, uid);
         if (!chat) return null;
 
         return {
-            route,
+            route: route === 'GroupInfo' ? '/chat/info' : '/chat/[id]',
             params: {
+                id: chatId,
                 chatId,
                 collectionName: 'chats',
-                isGroupChat: false, // ChatScreen determines this from chat.type
+                isGroupChat: 'false',
             },
         };
     }
@@ -76,23 +77,23 @@ export const resolveNotificationTarget = async (
                 .select('id')
                 .eq('id', requestedUserId)
                 .maybeSingle();
-            return data ? { route: 'UserProfile', params: { userId: requestedUserId } } : null;
+            return data ? { route: '/profile/[id]', params: { id: requestedUserId } } : null;
         }
-        return uid ? { route: 'Profile', params: {} } : null;
+        return uid ? { route: '/(tabs)/profile', params: {} } : null;
     }
 
     if (route === 'UserProfile') {
         const userId = String(params.userId || notification.entityId || uid || '');
         if (!userId) return null;
         if (uid && userId === uid) {
-            return { route: 'Profile', params: {} };
+            return { route: '/(tabs)/profile', params: {} };
         }
         const { data } = await supabase
             .from('public_profiles')
             .select('id')
             .eq('id', userId)
             .maybeSingle();
-        return data ? { route: 'UserProfile', params: { userId } } : null;
+        return data ? { route: '/profile/[id]', params: { id: userId } } : null;
     }
 
     if (route === 'ExternalLink') {
@@ -101,4 +102,4 @@ export const resolveNotificationTarget = async (
     }
 
     return null;
-};
+};;

@@ -2,11 +2,14 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles';
 
-const TermsScreen = ({ navigation }) => {
+import { useRouter } from 'expo-router';
+
+const TermsScreen = () => {
+  const router = useRouter();
   const { colors } = useTheme();
 
   return (
@@ -16,7 +19,7 @@ const TermsScreen = ({ navigation }) => {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => router.back()}
             activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
@@ -27,7 +30,11 @@ const TermsScreen = ({ navigation }) => {
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <Animatable.View animation="fadeInUp" duration={400}>
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 400 }}
+          >
             <Text style={[styles.lastUpdated, { color: colors.textSecondary }]}>
               Last updated: March 2026
             </Text>
@@ -81,7 +88,7 @@ const TermsScreen = ({ navigation }) => {
             </Section>
 
             <View style={{ height: SPACING.xxxl }} />
-          </Animatable.View>
+          </MotiView>
         </ScrollView>
       </View>
     </SafeAreaView>

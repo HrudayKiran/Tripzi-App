@@ -1,7 +1,7 @@
 {
   "name": "mobile",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
@@ -11,6 +11,7 @@
     "validate": "npm run typecheck && npm run test -- --watch=false --passWithNoTests"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
     "@morrowdigital/watermelondb-expo-plugin": "^2.3.3",
     "@nozbe/watermelondb": "^0.28.0",
     "@nozbe/with-observables": "^1.6.0",
@@ -24,10 +25,10 @@
     "@react-native-firebase/perf": "^23.8.6",
     "@react-native-firebase/remote-config": "^23.8.8",
     "@react-native-google-signin/google-signin": "^16.1.1",
-    "@react-navigation/bottom-tabs": "^6.6.1",
-    "@react-navigation/native": "^6.1.17",
-    "@react-navigation/stack": "^6.4.1",
+    "@react-navigation/native": "^7.2.4",
+    "@shopify/flash-list": "2.0.2",
     "@supabase/supabase-js": "^2.49.4",
+    "@tanstack/react-query": "^5.100.10",
     "date-fns": "^4.1.0",
     "expo": "~54.0.33",
     "expo-build-properties": "~1.0.10",
@@ -39,12 +40,18 @@
     "expo-image-manipulator": "~14.0.8",
     "expo-image-picker": "~17.0.10",
     "expo-linear-gradient": "~15.0.8",
+    "expo-linking": "~8.0.12",
     "expo-location": "~19.0.8",
     "expo-media-library": "~18.2.1",
+    "expo-router": "~6.0.23",
     "expo-splash-screen": "~31.0.13",
     "expo-sqlite": "~16.0.10",
     "expo-status-bar": "~3.0.9",
+    "moti": "^0.30.0",
+    "nativewind": "^4.2.3",
+    "phosphor-react-native": "^3.0.6",
     "react": "19.1.0",
+    "react-hook-form": "^7.75.0",
     "react-native": "0.81.5",
     "react-native-animatable": "^1.4.0",
     "react-native-draggable-flatlist": "^4.0.3",
@@ -60,7 +67,10 @@
     "react-native-svg": "15.12.1",
     "react-native-url-polyfill": "^2.0.0",
     "react-native-webview": "^13.16.1",
-    "react-native-worklets": "0.5.1"
+    "react-native-worklets": "0.5.1",
+    "tailwindcss": "^3.4.19",
+    "zod": "^4.4.3",
+    "zustand": "^5.0.13"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

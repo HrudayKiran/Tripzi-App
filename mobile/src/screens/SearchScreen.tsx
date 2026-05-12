@@ -1,21 +1,26 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ActivityIndicator, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Dimensions } from 'react-native';
+import { FlashList } from "@shopify/flash-list";
+
+const TypedFlashList = FlashList as any;
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import FilterModal, { FilterOptions } from '../components/FilterModal';
 import DefaultAvatar from '../components/DefaultAvatar';
 import TripCard from '../components/TripCard';
 import useTrips from '../hooks/useTrips';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
+import { useRouter } from 'expo-router';
 import { searchUsersByPrefix } from '../utils/searchUsers';
 import { applyTripFilters } from '../utils/filterUtils';
 import { supabase } from '../lib/supabase';
 
 const { width } = Dimensions.get('window');
 
-const SearchScreen = ({ navigation }) => {
+const SearchScreen = () => {
+    const router = useRouter();
     const { colors } = useTheme();
     const { allTrips } = useTrips();
     const [searchQuery, setSearchQuery] = useState('');
@@ -142,7 +147,12 @@ const SearchScreen = ({ navigation }) => {
 
             {/* User Search Results */}
             {searchQuery.length >= 2 && searchedUsers.length > 0 && (
-                <Animatable.View animation="fadeIn" style={[styles.userResultsContainer, { backgroundColor: colors.card }]}>
+                <MotiView
+                    from={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ type: 'timing', duration: 300 }}
+                    style={[styles.userResultsContainer, { backgroundColor: colors.card }]}
+                >
                     <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>PEOPLE</Text>
                     {searchedUsers.map((user) => (
                         <TouchableOpacity
@@ -151,7 +161,10 @@ const SearchScreen = ({ navigation }) => {
                             onPress={() => {
                                 setSearchQuery('');
                                 setSearchedUsers([]);
-                                navigation.navigate('UserProfile', { userId: user.id });
+                                router.push({
+                                    pathname: '/profile/[id]',
+                                    params: { id: user.id }
+                                });
                             }}
                         >
                             <DefaultAvatar
@@ -174,17 +187,20 @@ const SearchScreen = ({ navigation }) => {
                             )}
                         </TouchableOpacity>
                     ))}
-                </Animatable.View>
+                </MotiView>
             )}
 
             {/* Trip Results */}
-            <FlatList
+            <TypedFlashList
                 data={filteredTrips}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
                     <TripCard
                         trip={item}
-                        onPress={() => navigation.navigate('TripDetails', { tripId: item.id })}
+                        onPress={() => router.push({
+                            pathname: '/trip/[id]',
+                            params: { id: item.id }
+                        })}
                         onReportPress={() => { }}
                         showOptions={false}
                     />
@@ -218,6 +234,7 @@ const SearchScreen = ({ navigation }) => {
                         </View>
                     )
                 }
+                estimatedItemSize={100}
             />
 
             <FilterModal

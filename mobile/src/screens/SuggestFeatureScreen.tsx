@@ -4,14 +4,17 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import { MotiView } from 'moti';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, STATUS, NEUTRAL } from '../styles';
 
+import { useRouter } from 'expo-router';
+
 const TAWKTO_TICKET_EMAIL = 'tickets@tripzi.p.tawk.email';
 
-const SuggestFeatureScreen = ({ navigation }) => {
+const SuggestFeatureScreen = () => {
+  const router = useRouter();
   const MAX_ATTACHMENTS = 3;
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState('suggest');
@@ -90,10 +93,10 @@ const SuggestFeatureScreen = ({ navigation }) => {
       });
 
       Alert.alert('Ticket Received ✅', 'Thank you! Your feature suggestion has been received. Our team will review it shortly. A confirmation has been sent to your email.');
-      navigation.goBack();
+      router.back();
     } catch (error) {
       Alert.alert('Thank You! 🎉', 'Your suggestion has been saved locally.');
-      navigation.goBack();
+      router.back();
     }
   };
 
@@ -115,10 +118,10 @@ const SuggestFeatureScreen = ({ navigation }) => {
       });
 
       Alert.alert('Ticket Received ✅', 'Thank you! Your bug report has been received. Our team will investigate it shortly. A confirmation has been sent to your email.');
-      navigation.goBack();
+      router.back();
     } catch (error) {
       Alert.alert('Thank You! 🎉', 'Your bug report has been saved locally.');
-      navigation.goBack();
+      router.back();
     }
   };
 
@@ -133,7 +136,7 @@ const SuggestFeatureScreen = ({ navigation }) => {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => router.back()}
             activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
@@ -173,7 +176,12 @@ const SuggestFeatureScreen = ({ navigation }) => {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         >
-          <Animatable.View animation="fadeIn" duration={300} key={activeTab}>
+          <MotiView
+            from={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ type: 'timing', duration: 300 }}
+            key={activeTab}
+          >
             {activeTab === 'suggest' ? (
               <>
                 <View style={[styles.iconContainer, { backgroundColor: '#FEF3C7' }]}>
@@ -374,7 +382,7 @@ const SuggestFeatureScreen = ({ navigation }) => {
                 </TouchableOpacity>
               </>
             )}
-          </Animatable.View>
+          </MotiView>
           <View style={{ height: SPACING.xxxl }} />
         </ScrollView>
       </KeyboardAvoidingView>

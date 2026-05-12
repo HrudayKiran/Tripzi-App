@@ -2,22 +2,25 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Animatable from 'react-native-animatable';
+import { MotiView, MotiText } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, BRAND, NEUTRAL } from '../styles';
 import AppLogo from '../components/AppLogo';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { useRouter } from 'expo-router';
+
 const { width, height } = Dimensions.get('window');
 
 // A beautiful image representing friends traveling and having fun.
-const HERO_IMAGE = 'https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=1080&q=80'; 
+const HERO_IMAGE = 'https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=1080&q=80';
 
-const WelcomeScreen = ({ navigation }: any) => {
+const WelcomeScreen = () => {
     const { colors } = useTheme();
+    const router = useRouter();
 
     const handleNext = () => {
-        navigation.navigate('Start');
+        router.push('/(auth)/start');
     };
 
     return (
@@ -29,7 +32,7 @@ const WelcomeScreen = ({ navigation }: any) => {
                 contentFit="cover"
                 transition={500}
             />
-            
+
             {/* Gradient Overlay for Readability */}
             <LinearGradient
                 colors={['rgba(0,0,0,0.2)', 'rgba(0,0,0,0.6)', 'rgba(0,0,0,0.9)']}
@@ -38,30 +41,55 @@ const WelcomeScreen = ({ navigation }: any) => {
 
             <SafeAreaView style={styles.safeArea}>
                 <View style={styles.content}>
-                    
+
                     {/* Top Section - Logo */}
-                    <Animatable.View animation="fadeInDown" duration={1000} style={styles.topSection}>
+                    <MotiView
+                        from={{ opacity: 0, translateY: -20 }}
+                        animate={{ opacity: 1, translateY: 0 }}
+                        transition={{ type: 'timing', duration: 1000 }}
+                        style={styles.topSection}
+                    >
                         <AppLogo size={64} showDot={true} />
                         <Text style={styles.appName}>Tripzi</Text>
-                    </Animatable.View>
+                    </MotiView>
 
                     {/* Middle Section - Value Proposition */}
                     <View style={styles.middleSection}>
-                        <Animatable.Text animation="fadeInUp" delay={400} duration={800} style={styles.tagline}>
+                        <MotiText
+                            from={{ opacity: 0, translateY: 20 }}
+                            animate={{ opacity: 1, translateY: 0 }}
+                            transition={{ type: 'timing', duration: 800, delay: 400 }}
+                            style={styles.tagline}
+                        >
                             THE TRAVEL SOCIAL APP
-                        </Animatable.Text>
-                        
-                        <Animatable.Text animation="fadeInUp" delay={600} duration={800} style={styles.headline}>
+                        </MotiText>
+
+                        <MotiText
+                            from={{ opacity: 0, translateY: 20 }}
+                            animate={{ opacity: 1, translateY: 0 }}
+                            transition={{ type: 'timing', duration: 800, delay: 600 }}
+                            style={styles.headline}
+                        >
                             Connect.{'\n'}Plan.{'\n'}Travel.
-                        </Animatable.Text>
-                        
-                        <Animatable.Text animation="fadeInUp" delay={800} duration={800} style={styles.description}>
+                        </MotiText>
+
+                        <MotiText
+                            from={{ opacity: 0, translateY: 20 }}
+                            animate={{ opacity: 1, translateY: 0 }}
+                            transition={{ type: 'timing', duration: 800, delay: 800 }}
+                            style={styles.description}
+                        >
                             Join trips with amazing people, make new friends, and explore the world together. Your next adventure starts here.
-                        </Animatable.Text>
+                        </MotiText>
                     </View>
 
                     {/* Bottom Section - Button */}
-                    <Animatable.View animation="fadeInUp" delay={1200} duration={800} style={styles.buttonSection}>
+                    <MotiView
+                        from={{ opacity: 0, translateY: 20 }}
+                        animate={{ opacity: 1, translateY: 0 }}
+                        transition={{ type: 'timing', duration: 800, delay: 1000 }}
+                        style={styles.buttonSection}
+                    >
                         <TouchableOpacity
                             style={[styles.button, { backgroundColor: colors.primary }]}
                             onPress={handleNext}
@@ -69,7 +97,7 @@ const WelcomeScreen = ({ navigation }: any) => {
                         >
                             <Text style={styles.buttonText}>Join the Journey</Text>
                         </TouchableOpacity>
-                    </Animatable.View>
+                    </MotiView>
                 </View>
             </SafeAreaView>
         </View>

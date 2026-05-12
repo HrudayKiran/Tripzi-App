@@ -4,8 +4,9 @@ import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
@@ -27,9 +28,11 @@ const CANCEL_REASONS = [
     'Other',
 ];
 
-const UserProfileScreen = ({ route, navigation }) => {
+const UserProfileScreen = () => {
+    const router = useRouter();
+    const params = useLocalSearchParams();
     const [currentUser, setCurrentUser] = useState<any>(null);
-    const userId = route.params?.userId || currentUser?.id;
+    const userId = (params.id as string) || (params.userId as string) || currentUser?.id;
 
     useEffect(() => {
         supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
@@ -136,11 +139,8 @@ const UserProfileScreen = ({ route, navigation }) => {
     }, [userId, isOwnProfile, currentUser]);
 
     useEffect(() => {
-        const unsubscribe = navigation.addListener('focus', () => {
-            loadUserData();
-        });
-        return unsubscribe;
-    }, [navigation, loadUserData]);
+        loadUserData();
+    }, [loadUserData]);
 
     useEffect(() => {
         if (!userId) return;
@@ -203,11 +203,14 @@ const UserProfileScreen = ({ route, navigation }) => {
                 chatId = newChat?.id;
             }
 
-            navigation.navigate('Chat', {
-                chatId,
-                otherUserId: userId,
-                otherUserName: user.displayName || user.name || 'User',
-                otherUserPhoto: user.photoURL || '',
+            router.push({
+                pathname: '/chat/[id]',
+                params: {
+                    id: chatId,
+                    otherUserId: userId,
+                    otherUserName: user.displayName || user.name || 'User',
+                    otherUserPhoto: user.photoURL || '',
+                }
             });
         } catch (error) {
             Alert.alert('Error', 'Could not start chat.');
@@ -227,7 +230,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                             uid: user.id
                         }
                     }}
-                    onPress={() => navigation.navigate('TripDetails', { tripId: trip.id })}
+                    onPress={() => router.push({ pathname: '/trip/[id]', params: { id: trip.id } })}
                     onReportPress={() => {
                         setSelectedTrip(trip);
                         setActiveModal('report');
@@ -251,7 +254,7 @@ const UserProfileScreen = ({ route, navigation }) => {
     if (!user) {
         return (
             <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-                <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+                <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
                     <Ionicons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
                 <View style={styles.loadingContainer}>
@@ -278,7 +281,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                 ]}
             >
                 <View style={styles.headerRow}>
-                    <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={() => navigation.goBack()}>
+                    <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={() => router.back()}>
                         <Ionicons name="arrow-back" size={24} color={colors.text} />
                     </TouchableOpacity>
                     {isOwnProfile && (
@@ -406,9 +409,14 @@ const UserProfileScreen = ({ route, navigation }) => {
 
             <Modal visible={showCreateModal} transparent animationType="fade" onRequestClose={() => setShowCreateModal(false)}>
                 <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowCreateModal(false)}>
-                    <Animatable.View animation="fadeInUp" duration={300} style={[styles.createModalContent, { backgroundColor: colors.background }]}>
+                    <MotiView
+                        from={{ opacity: 0, translateY: 20 }}
+                        animate={{ opacity: 1, translateY: 0 }}
+                        transition={{ type: 'timing', duration: 300 }}
+                        style={[styles.createModalContent, { backgroundColor: colors.background }]}
+                    >
                         <Text style={[styles.createModalTitle, { color: colors.text }]}>Create New Trip ✈️</Text>
-                        <TouchableOpacity style={[styles.createOption, { backgroundColor: colors.card }]} onPress={() => { setShowCreateModal(false); navigation.navigate('CreateTrip'); }}>
+                        <TouchableOpacity style={[styles.createOption, { backgroundColor: colors.card }]} onPress={() => { setShowCreateModal(false); router.push('/trip/create'); }}>
                             <View style={[styles.createOptionIcon, { backgroundColor: '#E0E7FF' }]}><Ionicons name="create-outline" size={24} color="#6366F1" /></View>
                             <View style={styles.createOptionText}>
                                 <Text style={[styles.createOptionTitle, { color: colors.text }]}>Create Manually</Text>
@@ -416,7 +424,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                             </View>
                             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
-                        <TouchableOpacity style={[styles.createOption, { backgroundColor: colors.card }]} onPress={() => { setShowCreateModal(false); navigation.navigate('App', { screen: 'AITripPlanner' }); }}>
+                        <TouchableOpacity style={[styles.createOption, { backgroundColor: colors.card }]} onPress={() => { setShowCreateModal(false); router.push('/trip/ai-planner'); }}>
                             <View style={[styles.createOptionIcon, { backgroundColor: '#EDE9FE' }]}><Ionicons name="sparkles-outline" size={24} color="#8B5CF6" /></View>
                             <View style={styles.createOptionText}>
                                 <Text style={[styles.createOptionTitle, { color: colors.text }]}>Create with AI</Text>
@@ -424,7 +432,7 @@ const UserProfileScreen = ({ route, navigation }) => {
                             </View>
                             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
-                    </Animatable.View>
+                    </MotiView>
                 </TouchableOpacity>
             </Modal>
         </View>

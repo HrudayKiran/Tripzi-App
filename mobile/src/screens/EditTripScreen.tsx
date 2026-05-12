@@ -5,11 +5,12 @@ import { GestureHandlerRootView, TouchableOpacity as GHTouchableOpacity } from '
 import { ScaleDecorator, NestableScrollContainer, NestableDraggableFlatList } from 'react-native-draggable-flatlist';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
@@ -64,10 +65,20 @@ type TripImageItem = {
     objectKey?: string | null;
 };
 
-const EditTripScreen = ({ navigation, route }: any) => {
+const EditTripScreen = () => {
     const { colors } = useTheme();
-    const tripId = route.params?.tripId;
-    const initialData = route.params?.tripData;
+    const router = useRouter();
+    const params = useLocalSearchParams();
+    
+    const tripId = params.tripId as string;
+    let initialData: any = null;
+    if (typeof params.tripData === 'string') {
+        try {
+            initialData = JSON.parse(params.tripData);
+        } catch (e) {}
+    } else if (params.tripData) {
+        initialData = params.tripData;
+    }
 
     // Unified Image & Location state with stable IDs
     const [title, setTitle] = useState(initialData?.title || '');
@@ -385,7 +396,7 @@ const EditTripScreen = ({ navigation, route }: any) => {
 
             setIsPosting(false);
             Alert.alert('Success! 🎉', 'Your trip has been updated!');
-            navigation.goBack();
+            router.back();
         } catch (error: any) {
             if (newObjectKeys.length > 0) {
                 await deleteTripImagesFromR2(newObjectKeys, tripId);
@@ -397,7 +408,7 @@ const EditTripScreen = ({ navigation, route }: any) => {
 
     const renderHeader = () => (
         <View style={styles.header}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                 <Ionicons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: colors.text }]}>Edit Trip</Text>
@@ -440,7 +451,12 @@ const EditTripScreen = ({ navigation, route }: any) => {
                             showsVerticalScrollIndicator={false}
                             keyboardShouldPersistTaps="handled"
                         >
-                            <Animatable.View animation="fadeInUp" style={styles.formSection}>
+                            <MotiView
+                                from={{ opacity: 0, translateY: 20 }}
+                                animate={{ opacity: 1, translateY: 0 }}
+                                transition={{ type: 'timing', duration: 400 }}
+                                style={styles.formSection}
+                            >
 
                                 {/* Section 1: Basic Info */}
                                 <Text style={[styles.sectionHeading, { color: colors.primary }]}>Basic Information</Text>
@@ -775,7 +791,7 @@ const EditTripScreen = ({ navigation, route }: any) => {
                                     )
                                 }
 
-                            </Animatable.View>
+                            </MotiView>
                             <View style={{ height: 150 }} />
                         </NestableScrollContainer>
                     )}

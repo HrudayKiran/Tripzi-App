@@ -2,7 +2,7 @@ import React, { memo, useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert, Linking, ScrollView, Modal, Image as RNImage } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
 import DefaultAvatar from './DefaultAvatar';
@@ -44,7 +44,7 @@ interface TripCardProps {
 const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOptions = true, mode = 'chat', hideProfileInfo = false }: TripCardProps) => {
 
     const { colors } = useTheme();
-    const navigation = useNavigation();
+    const router = useRouter();
     const [isJoining, setIsJoining] = useState(false);
     const [hasJoined, setHasJoined] = useState(false);
     const [showFullDescription, setShowFullDescription] = useState(false);
@@ -138,7 +138,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
 
     const handleUserPress = () => {
         if (trip.userId) {
-            navigation.navigate('UserProfile' as never, { userId: trip.userId } as never);
+            router.push({ pathname: '/profile/[id]', params: { id: trip.userId } });
         }
     };
 
@@ -220,12 +220,16 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                 chatId = newChat?.id;
             }
 
-            navigation.navigate('Chat' as never, {
-                chatId,
-                otherUserId: trip.userId,
-                otherUserName: trip.user?.displayName || trip.user?.name || 'User',
-                otherUserPhoto: trip.user?.photoURL || '',
-            } as never);
+            router.push({
+                pathname: '/chat/[id]',
+                params: {
+                    id: chatId,
+                    chatId,
+                    otherUserId: trip.userId,
+                    otherUserName: trip.user?.displayName || trip.user?.name || 'User',
+                    otherUserPhoto: trip.user?.photoURL || '',
+                },
+            });
         } catch (error: any) {
             // TripCard chat error
             Alert.alert('Error', 'Could not start chat. Please try again.');

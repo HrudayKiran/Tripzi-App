@@ -5,14 +5,17 @@ import {
     StyleSheet,
     TouchableOpacity,
     TextInput,
-    FlatList,
     Image,
     ActivityIndicator,
     Alert,
     KeyboardAvoidingView,
     Platform,
 } from 'react-native';
+import { FlashList } from "@shopify/flash-list";
+
+const TypedFlashList = FlashList as any;
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../contexts/ThemeContext';
@@ -29,7 +32,8 @@ interface User {
     ageVerified?: boolean;
 }
 
-const CreateGroupScreen = ({ navigation }) => {
+const CreateGroupScreen = () => {
+    const router = useRouter();
     const { colors } = useTheme();
 
     // Use state for currentUser to properly handle auth state
@@ -188,7 +192,10 @@ const CreateGroupScreen = ({ navigation }) => {
                 deleted_for: [],
             });
 
-            navigation.replace('Chat', { chatId: chatRow.id });
+            router.replace({
+                pathname: '/chat/[id]',
+                params: { id: chatRow.id, chatId: chatRow.id }
+            });
         } catch (error) {
             Alert.alert('Error', 'Failed to create group. Please try again.');
         } finally {
@@ -257,7 +264,7 @@ const CreateGroupScreen = ({ navigation }) => {
             >
                 {/* Header */}
                 <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                    <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+                    <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
                         <Ionicons name="arrow-back" size={24} color={colors.text} />
                     </TouchableOpacity>
                     <Text style={[styles.headerTitle, { color: colors.text }]}>
@@ -303,7 +310,7 @@ const CreateGroupScreen = ({ navigation }) => {
                         {/* Selected users */}
                         {selectedUsers.length > 0 && (
                             <View style={styles.selectedContainer}>
-                                <FlatList
+                                <TypedFlashList
                                     data={selectedUsers}
                                     renderItem={renderSelectedUser}
                                     keyExtractor={(item) => item.id}
@@ -311,6 +318,7 @@ const CreateGroupScreen = ({ navigation }) => {
                                     showsHorizontalScrollIndicator={false}
                                     contentContainerStyle={styles.selectedList}
                                     keyboardShouldPersistTaps="handled"
+                                    estimatedItemSize={60}
                                 />
                             </View>
                         )}
@@ -321,7 +329,7 @@ const CreateGroupScreen = ({ navigation }) => {
                                 <ActivityIndicator size="small" color={colors.primary} />
                             </View>
                         ) : (
-                            <FlatList
+                            <TypedFlashList
                                 data={searchResults}
                                 renderItem={renderUserItem}
                                 keyExtractor={(item) => item.id}
@@ -346,6 +354,7 @@ const CreateGroupScreen = ({ navigation }) => {
                                         )}
                                     </View>
                                 }
+                                estimatedItemSize={80}
                             />
                         )}
                     </>
@@ -378,7 +387,7 @@ const CreateGroupScreen = ({ navigation }) => {
                             {selectedUsers.length + 1} members (including you)
                         </Text>
 
-                        <FlatList
+                        <TypedFlashList
                             data={selectedUsers}
                             renderItem={({ item }) => (
                                 <View style={[styles.memberItem, { backgroundColor: colors.card }]}>
@@ -396,6 +405,7 @@ const CreateGroupScreen = ({ navigation }) => {
                             contentContainerStyle={styles.membersList}
                             keyboardShouldPersistTaps="handled"
                             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                            estimatedItemSize={72}
                         />
                     </View>
                 )}

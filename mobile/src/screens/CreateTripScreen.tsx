@@ -2,14 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Platform, Modal, ActivityIndicator, KeyboardAvoidingView, Vibration } from 'react-native';
 import { Image } from 'expo-image';
 import { GestureHandlerRootView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
-import { ScaleDecorator, NestableScrollContainer, NestableDraggableFlatList } from 'react-native-draggable-flatlist';
+import { NestableScrollContainer } from 'react-native-draggable-flatlist';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { syncDatabase } from '../database/sync';
 import { useTheme } from '../contexts/ThemeContext';
@@ -59,15 +60,27 @@ type TripImageItem = {
     objectKey?: string | null;
 };
 
+
 const GENDER_PREFERENCES = [
     { id: 'anyone', label: 'Anyone', icon: 'people' },
     { id: 'male', label: 'Male Only', icon: 'male' },
     { id: 'female', label: 'Female Only', icon: 'female' },
 ];
 
-const CreateTripScreen = ({ navigation, route }: any) => {
+const CreateTripScreen = () => {
     const { colors } = useTheme();
-    const initialData = route.params?.initialTripData;
+    const router = useRouter();
+    const params = useLocalSearchParams();
+    
+    // Parse initialData if it comes as a string (common in Expo Router)
+    let initialData: any = null;
+    if (typeof params.initialTripData === 'string') {
+        try {
+            initialData = JSON.parse(params.initialTripData);
+        } catch (e) {}
+    } else if (params.initialTripData) {
+        initialData = params.initialTripData;
+    }
 
     const [step, setStep] = useState(1);
     const totalSteps = 5;
@@ -83,8 +96,6 @@ const CreateTripScreen = ({ navigation, route }: any) => {
             objectKey: initialData?.imageObjectKeys?.[i] || null,
         })) || []
     );
-
-    // ... (existing code) ...
 
 
     // Step 2: Location & Dates
@@ -223,7 +234,7 @@ const CreateTripScreen = ({ navigation, route }: any) => {
         const { data: { user: currentUser } } = await supabase.auth.getUser();
         if (!currentUser) {
             Alert.alert('Error', 'You need to be logged in to create a trip.');
-            navigation.navigate('Start');
+            router.push('/(auth)/start');
             return;
         }
 
@@ -351,7 +362,7 @@ const CreateTripScreen = ({ navigation, route }: any) => {
             // Trigger sync to update local database immediately
             syncDatabase().catch(err => console.error('[CreateTrip] Post-creation sync failed:', err));
             
-            navigation.navigate('UserProfile', { userId: currentUser.id });
+            router.replace({ pathname: '/profile/[id]', params: { id: currentUser.id } });
         } catch (error: any) {
             if (newObjectKeys.length > 0) {
                 await deleteTripImagesFromR2(newObjectKeys);
@@ -364,7 +375,7 @@ const CreateTripScreen = ({ navigation, route }: any) => {
 
     const renderHeader = () => (
         <View style={styles.header}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                 <Ionicons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: colors.text }]}>Create Trip</Text>
@@ -405,7 +416,12 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                             keyboardShouldPersistTaps="handled"
                             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
                         >
-                            <Animatable.View animation="fadeInUp" style={styles.formSection}>
+                            <MotiView
+                                from={{ opacity: 0, translateY: 20 }}
+                                animate={{ opacity: 1, translateY: 0 }}
+                                transition={{ type: 'timing', duration: 400 }}
+                                style={styles.formSection}
+                            >
                                 {/* Section 1: Basic Info */}
                                 <Text style={[styles.sectionHeading, { color: colors.primary }]}>Basic Information</Text>
 
@@ -420,68 +436,37 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                                 {errors.title && <Text style={styles.errorText}>{errors.title}</Text>}
 
                                 <Text style={[styles.label, { color: colors.text }]}>Trip Images (Optional - Max 5)</Text>
-                                <NestableDraggableFlatList
-                                    data={tripImages}
-                                    onDragEnd={({ data }) => setTripImages(data)}
-                                    keyExtractor={(item) => item.id}
-                                    renderItem={({ item, drag, isActive }) => (
-                                        <GHTouchableOpacity
-                                            activeOpacity={0.9}
-                                            onLongPress={drag}
-                                            disabled={isActive}
-                                            delayLongPress={200}
-                                            style={[
-                                                styles.reorderItemVertical,
-                                                isActive && {
-                                                    elevation: 8,
-                                                    shadowColor: '#000',
-                                                    shadowOffset: { width: 0, height: 4 },
-                                                    shadowOpacity: 0.3,
-                                                    shadowRadius: 5,
-                                                    backgroundColor: colors.card,
-                                                    transform: [{ scale: 1.02 }]
-                                                }
-                                            ]}
-                                        >
-                                            <View style={[styles.reorderImageVertical, { overflow: 'hidden' }]}>
-                                                <Image
-                                                    source={{ uri: item.uri }}
-                                                    style={styles.tripImage}
-                                                    contentFit="cover"
-                                                    transition={200}
-                                                />
-                                            </View>
+                                {tripImages.map((item, index) => (
+                                    <View
+                                        key={item.id}
+                                        style={styles.reorderItemVertical}
+                                    >
+                                        <View style={[styles.reorderImageVertical, { overflow: 'hidden' }]}>
+                                            <Image
+                                                source={{ uri: item.uri }}
+                                                style={styles.tripImage}
+                                                contentFit="cover"
+                                                transition={200}
+                                            />
+                                        </View>
 
-                                            <View style={styles.verticalReorderControls}>
-                                                <View style={styles.reorderInfo}>
-                                                    <Text style={[styles.reorderIndexText, { color: colors.text }]} numberOfLines={1}>
-                                                        Long press to move
-                                                    </Text>
-                                                </View>
-                                                <View style={styles.reorderActionArea}>
-                                                    <View style={styles.dragHandleContainer}>
-                                                        <View style={styles.dragHandleColumn}>
-                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                        </View>
-                                                        <View style={styles.dragHandleColumn}>
-                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                        </View>
-                                                    </View>
-                                                    <TouchableOpacity
-                                                        style={[styles.removeImage, { position: 'relative', top: 0, right: 0, marginLeft: 10, elevation: 0, backgroundColor: 'transparent' }]}
-                                                        onPress={() => removeImage(item.id)}
-                                                    >
-                                                        <Ionicons name="close-circle" size={24} color="#EF4444" />
-                                                    </TouchableOpacity>
-                                                </View>
+                                        <View style={styles.verticalReorderControls}>
+                                            <View style={styles.reorderInfo}>
+                                                <Text style={[styles.reorderIndexText, { color: colors.text }]} numberOfLines={1}>
+                                                    Image {index + 1}
+                                                </Text>
                                             </View>
-                                        </GHTouchableOpacity>
-                                    )}
-                                />
+                                            <View style={styles.reorderActionArea}>
+                                                <TouchableOpacity
+                                                    style={[styles.removeImage, { position: 'relative', top: 0, right: 0, marginLeft: 10, elevation: 0, backgroundColor: 'transparent' }]}
+                                                    onPress={() => removeImage(item.id)}
+                                                >
+                                                    <Ionicons name="close-circle" size={24} color="#EF4444" />
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    </View>
+                                ))}
 
                                 {tripImages.length < 5 && (
                                     <TouchableOpacity style={[styles.addImageButton, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10, alignSelf: 'flex-start', width: 'auto', paddingHorizontal: 20, height: 40, borderStyle: 'dashed' }]} onPress={pickImages}>
@@ -705,7 +690,7 @@ const CreateTripScreen = ({ navigation, route }: any) => {
                                     onChangeText={setPlacesToVisit}
                                 />
                                 <Text style={[styles.hint, { color: colors.textSecondary }]}>Separate places with commas</Text>
-                            </Animatable.View>
+                            </MotiView>
 
                             <View style={{ height: 120 }} />
                         </NestableScrollContainer>

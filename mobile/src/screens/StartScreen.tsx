@@ -3,17 +3,20 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, ToastAndroid, Platform
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
-import * as Animatable from 'react-native-animatable';
+import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BRAND, NEUTRAL } from '../styles';
 import TripziAnimatedLogo from '../components/TripziAnimatedLogo';
 import { supabase } from '../lib/supabase';
 
+import { useRouter } from 'expo-router';
+
 const { width } = Dimensions.get('window');
 
-const StartScreen = ({ navigation }) => {
+const StartScreen = () => {
   const { colors } = useTheme();
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
 
   const showToast = (message: string) => {
@@ -95,13 +98,16 @@ const StartScreen = ({ navigation }) => {
           .then(() => {});
 
         showToast('Welcome back! 🎉');
-        navigation.reset({ index: 0, routes: [{ name: 'App' }] });
+        router.replace('/(tabs)');
       } else {
         // New user or incomplete profile → Go to profile completion
-        navigation.navigate('CompleteProfile', {
-          email: googleEmail,
-          displayName: googleDisplayName,
-          photoURL: googlePhotoURL,
+        router.push({
+          pathname: '/(auth)/complete-profile',
+          params: {
+            email: googleEmail,
+            displayName: googleDisplayName,
+            photoURL: googlePhotoURL,
+          }
         });
       }
 
@@ -132,10 +138,10 @@ const StartScreen = ({ navigation }) => {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.content}>
           {/* Animated Logo Section */}
-          <Animatable.View
-            animation="fadeInDown"
-            duration={1000}
-            delay={300}
+          <MotiView
+            from={{ opacity: 0, translateY: -20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 1000, delay: 300 }}
             style={styles.logoSection}
           >
             <TripziAnimatedLogo size={140} showGlow={true} />
@@ -143,13 +149,13 @@ const StartScreen = ({ navigation }) => {
               <Text style={styles.appName}>Tripzi</Text>
               <Text style={styles.tagline}>CONNECT. PLAN. TRAVEL.</Text>
             </View>
-          </Animatable.View>
+          </MotiView>
 
           {/* Login Button Section */}
-          <Animatable.View
-            animation="fadeInUp"
-            duration={1000}
-            delay={600}
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 1000, delay: 600 }}
             style={styles.buttonSection}
           >
             {/* Unified Google Button */}
@@ -177,10 +183,10 @@ const StartScreen = ({ navigation }) => {
 
             <Text style={styles.termsText}>
               By continuing, you agree to our{' '}
-              <Text style={styles.linkText} onPress={() => navigation.navigate('Terms')}>Terms</Text> and{' '}
-              <Text style={styles.linkText} onPress={() => navigation.navigate('PrivacyPolicy')}>Privacy Policy</Text>.
+              <Text style={styles.linkText} onPress={() => router.push('/profile/terms')}>Terms</Text> and{' '}
+              <Text style={styles.linkText} onPress={() => router.push('/profile/privacy')}>Privacy Policy</Text>.
             </Text>
-          </Animatable.View>
+          </MotiView>
         </View>
       </SafeAreaView>
     </View>

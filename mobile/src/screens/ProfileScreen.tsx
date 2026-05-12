@@ -3,18 +3,17 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Alert, Act
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, STATUS, NEUTRAL } from '../styles';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import DefaultAvatar from '../components/DefaultAvatar';
-import { navigationRef } from '../navigation/RootNavigation';
 import { resetDatabase, database } from '../database';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useRouter } from 'expo-router';
 
 
-
-const ProfileScreen = ({ navigation }) => {
+const ProfileScreen = () => {
+  const router = useRouter();
   const { colors } = useTheme();
   const [user, setUser] = useState(null);
   const [showAccountModal, setShowAccountModal] = useState(false);
@@ -145,13 +144,8 @@ const ProfileScreen = ({ navigation }) => {
             // Clear local database on logout
             await resetDatabase();
 
-            // Use root navigationRef to reset to Start
-            if (navigationRef.isReady()) {
-              navigationRef.reset({
-                index: 0,
-                routes: [{ name: 'Start' }],
-              });
-            }
+            // Route to entry point after logout
+            router.replace('/');
           }
         },
       ]
@@ -204,15 +198,22 @@ const ProfileScreen = ({ navigation }) => {
           <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
         </View>
 
+        <View style={{ height: SPACING.lg }} />
+
         {/* User Profile Card - Tappable to view full profile */}
         <TouchableOpacity
           onPress={async () => {
             const { data: { user: authUser } } = await supabase.auth.getUser();
-            if (authUser) navigation.navigate('UserProfile', { userId: authUser.id });
+            if (authUser) router.push({ pathname: '/profile/[id]', params: { id: authUser.id } });
           }}
           activeOpacity={0.8}
         >
-          <Animatable.View animation="fadeInUp" duration={400} style={[styles.profileCard, { backgroundColor: colors.card }, { flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }]}>
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 400 }}
+            style={[styles.profileCard, { backgroundColor: colors.card }, { flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }]}
+          >
             <View style={[styles.avatarContainer, { marginRight: 0 }]}>
               <View style={[styles.avatarBorder, { backgroundColor: colors.background }]}>
                 <DefaultAvatar
@@ -227,11 +228,16 @@ const ProfileScreen = ({ navigation }) => {
             <Text style={[styles.viewProfileText, { color: colors.primary, marginTop: SPACING.sm }]}>
               View profile
             </Text>
-          </Animatable.View>
+          </MotiView>
         </TouchableOpacity>
 
         {/* My Trips Section */}
-        <Animatable.View animation="fadeInUp" delay={100} duration={400} style={styles.menuSection}>
+        <MotiView
+          from={{ opacity: 0, translateY: 20 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 400, delay: 100 }}
+          style={styles.menuSection}
+        >
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>MY TRIPS</Text>
 
           <MenuItem
@@ -239,12 +245,17 @@ const ProfileScreen = ({ navigation }) => {
             iconColor="#6366F1"
             iconBg="#E0E7FF"
             text="My Trips"
-            onPress={() => navigation.navigate('MyTrips')}
+            onPress={() => router.push('/trip/my-trips')}
           />
-        </Animatable.View>
+        </MotiView>
 
         {/* General Section */}
-        <Animatable.View animation="fadeInUp" delay={150} duration={400} style={styles.menuSection}>
+        <MotiView
+          from={{ opacity: 0, translateY: 20 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 400, delay: 150 }}
+          style={styles.menuSection}
+        >
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>GENERAL</Text>
 
           <MenuItem
@@ -252,32 +263,37 @@ const ProfileScreen = ({ navigation }) => {
             iconColor="#F59E0B"
             iconBg="#FEF3C7"
             text="Edit Profile"
-            onPress={() => navigation.navigate('EditProfile')}
+            onPress={() => router.push('/profile/edit')}
           />
           <MenuItem
             icon="settings-outline"
             iconColor="#6B7280"
             iconBg="#F3F4F6"
             text="Settings"
-            onPress={() => navigation.navigate('Settings')}
+            onPress={() => router.push('/profile/settings')}
           />
           <MenuItem
             icon="document-text-outline"
             iconColor="#9d74f7"
             iconBg="#EDE9FE"
             text="Terms of Service"
-            onPress={() => navigation.navigate('Terms')}
+            onPress={() => router.push('/profile/terms')}
           />
           <MenuItem
             icon="lock-closed-outline"
             iconColor="#3B82F6"
             iconBg="#DBEAFE"
             text="Privacy Policy"
-            onPress={() => navigation.navigate('PrivacyPolicy')}
+            onPress={() => router.push('/profile/privacy')}
           />
-        </Animatable.View>
+        </MotiView>
 
-        <Animatable.View animation="fadeInUp" delay={200} duration={400} style={styles.menuSection}>
+        <MotiView
+          from={{ opacity: 0, translateY: 20 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 400, delay: 200 }}
+          style={styles.menuSection}
+        >
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>SUPPORT</Text>
 
           <MenuItem
@@ -285,18 +301,23 @@ const ProfileScreen = ({ navigation }) => {
             iconColor="#F59E0B"
             iconBg="#FEF3C7"
             text="Suggest a Feature"
-            onPress={() => navigation.navigate('SuggestFeature')}
+            onPress={() => router.push('/profile/suggest-feature')}
           />
           <MenuItem
             icon="help-circle-outline"
             iconColor="#06B6D4"
             iconBg="#CFFAFE"
             text="Help & Support"
-            onPress={() => navigation.navigate('HelpSupport')}
+            onPress={() => router.push('/profile/help')}
           />
-        </Animatable.View>
+        </MotiView>
 
-        <Animatable.View animation="fadeInUp" delay={300} duration={400} style={styles.menuSection}>
+        <MotiView
+          from={{ opacity: 0, translateY: 20 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 400, delay: 300 }}
+          style={styles.menuSection}
+        >
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ACCOUNT</Text>
 
           <MenuItem
@@ -311,7 +332,7 @@ const ProfileScreen = ({ navigation }) => {
             largeText
           />
           <Text style={[styles.versionText, { color: colors.textSecondary }]}>Tripzi Version 1.0.0</Text>
-        </Animatable.View>
+        </MotiView>
 
         <View style={{ height: SPACING.sm * 2 }} />
       </ScrollView>

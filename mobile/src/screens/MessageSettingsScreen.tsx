@@ -14,7 +14,10 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { supabase } from '../lib/supabase';
 import { getBooleanPreference, PREFERENCE_KEYS, setBooleanPreference } from '../utils/preferences';
 
-const MessageSettingsScreen = ({ navigation }) => {
+import { useRouter } from 'expo-router';
+
+const MessageSettingsScreen = () => {
+    const router = useRouter();
     const { colors } = useTheme();
 
     // Save to Gallery — enabled by default
@@ -68,7 +71,7 @@ const MessageSettingsScreen = ({ navigation }) => {
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
             <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+                <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
                     <Ionicons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Message Settings</Text>

@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, ActivityIndicator, RefreshControl, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ActivityIndicator, RefreshControl, Alert } from 'react-native';
+import { FlashList } from "@shopify/flash-list";
+
+const TypedFlashList = FlashList as any;
 import { Image } from 'expo-image';
 import { useTheme } from '../contexts/ThemeContext';
-import * as Animatable from 'react-native-animatable';
+import { MotiView } from 'moti';
 import { supabase } from '../lib/supabase';
 import { leaveTrip } from '../utils/tripActions';
 import { database } from '../database';
@@ -12,9 +15,11 @@ import { Q } from '@nozbe/watermelondb';
 import { Ionicons } from '@expo/vector-icons';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, NEUTRAL, TOUCH_TARGET } from '../styles';
 import AppLogo from '../components/AppLogo';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 
-const MyTripsScreen = ({ navigation, route }) => {
+const MyTripsScreen = () => {
+  const router = useRouter();
+  const params = useLocalSearchParams();
   const { colors } = useTheme();
   const [joinedTrips, setJoinedTrips] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,14 +27,14 @@ const MyTripsScreen = ({ navigation, route }) => {
   const [activeTab, setActiveTab] = useState('Upcoming');
 
   useEffect(() => {
-    const requestedTab = route?.params?.initialTab;
+    const requestedTab = params?.initialTab;
     if (!requestedTab) return;
     const tabKey = String(requestedTab).toLowerCase();
     if (tabKey === 'completed') setActiveTab('Completed');
     if (tabKey === 'ongoing') setActiveTab('Ongoing');
     if (tabKey === 'upcoming') setActiveTab('Upcoming');
     if (tabKey === 'cancelled') setActiveTab('Cancelled');
-  }, [route?.params?.initialTab]);
+  }, [params?.initialTab]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -154,9 +159,14 @@ const MyTripsScreen = ({ navigation, route }) => {
   const filteredTrips = filterTrips();
 
   const renderTripCard = ({ item }) => (
-    <Animatable.View animation="fadeInUp" duration={400} style={[styles.tripCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <MotiView
+        from={{ opacity: 0, translateY: 20 }}
+        animate={{ opacity: 1, translateY: 0 }}
+        transition={{ type: 'timing', duration: 400 }}
+        style={[styles.tripCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+    >
       <TouchableOpacity
-        onPress={() => navigation.navigate('TripDetails', { tripId: item.id })}
+        onPress={() => router.push({ pathname: '/trip/[id]', params: { id: item.id } })}
         style={styles.cardContent}
       >
         <Image
@@ -184,7 +194,7 @@ const MyTripsScreen = ({ navigation, route }) => {
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} style={styles.chevron} />
       </TouchableOpacity>
-    </Animatable.View >
+    </MotiView>
   );
 
   const renderEmptyState = () => (
@@ -210,7 +220,7 @@ const MyTripsScreen = ({ navigation, route }) => {
         <View style={[styles.header, { backgroundColor: colors.headerBackground }]}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => router.back()}
             activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
@@ -288,7 +298,7 @@ const MyTripsScreen = ({ navigation, route }) => {
               <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading trips...</Text>
             </View>
           ) : (
-            <FlatList
+            <TypedFlashList
               data={filteredTrips}
               renderItem={renderTripCard}
               keyExtractor={item => item.id}
@@ -302,6 +312,7 @@ const MyTripsScreen = ({ navigation, route }) => {
                   colors={[colors.primary]}
                 />
               }
+              estimatedItemSize={100}
             />
           )}
         </View>

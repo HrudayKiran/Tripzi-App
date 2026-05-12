@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
@@ -44,8 +45,10 @@ const calculateAge = (dob: Date): number => {
     return age;
 };
 
-const CompleteProfileScreen = ({ navigation, route }) => {
+const CompleteProfileScreen = () => {
     const { colors } = useTheme();
+    const router = useRouter();
+    const routeParams = useLocalSearchParams();
     const [fullName, setFullName] = useState('');
     const [username, setUsername] = useState('');
     const [bio, setBio] = useState('');
@@ -59,8 +62,8 @@ const CompleteProfileScreen = ({ navigation, route }) => {
     const [agreedToTerms, setAgreedToTerms] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
-    const pendingEmail = route?.params?.email || '';
-    const pendingDisplayName = route?.params?.displayName || '';
+    const pendingEmail = typeof routeParams?.email === 'string' ? routeParams.email : '';
+    const pendingDisplayName = typeof routeParams?.displayName === 'string' ? routeParams.displayName : '';
 
     useEffect(() => {
         const defaultName = pendingDisplayName || '';
@@ -68,7 +71,7 @@ const CompleteProfileScreen = ({ navigation, route }) => {
 
         setFullName(defaultName);
         setUsername(defaultUsername);
-    }, [navigation, pendingDisplayName, pendingEmail]);
+    }, [pendingDisplayName, pendingEmail]);
 
     useEffect(() => {
         let active = true;
@@ -164,7 +167,7 @@ const CompleteProfileScreen = ({ navigation, route }) => {
         try {
             await supabase.auth.signOut();
         } catch (e) { }
-        navigation.reset({ index: 0, routes: [{ name: 'Start' }] });
+        router.replace('/(auth)/start');
     };
 
     const handleSubmit = async () => {
@@ -250,7 +253,7 @@ const CompleteProfileScreen = ({ navigation, route }) => {
                 // We still proceed as the server has the data
             }
 
-            navigation.reset({ index: 0, routes: [{ name: 'App' }] });
+            router.replace('/(tabs)');
 
         } catch (error: any) {
             Alert.alert('Error', error?.message || 'Failed to complete profile setup.');
@@ -389,9 +392,9 @@ const CompleteProfileScreen = ({ navigation, route }) => {
                             </TouchableOpacity>
                             <Text style={[styles.termsText, { color: colors.textSecondary }]}>
                                 I agree to the{' '}
-                                <Text style={{ color: colors.primary }} onPress={() => navigation.navigate('Terms')}>Terms</Text>
+                                <Text style={{ color: colors.primary }} onPress={() => router.push('/profile/terms')}>Terms</Text>
                                 {' '}and{' '}
-                                <Text style={{ color: colors.primary }} onPress={() => navigation.navigate('PrivacyPolicy')}>Privacy Policy</Text>
+                                <Text style={{ color: colors.primary }} onPress={() => router.push('/profile/privacy')}>Privacy Policy</Text>
                             </Text>
                         </View>
 

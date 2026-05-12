@@ -1,5 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ActivityIndicator, RefreshControl, Modal, Dimensions, Animated, NativeSyntheticEvent, NativeScrollEvent, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, RefreshControl, Modal, Dimensions, Animated, NativeSyntheticEvent, NativeScrollEvent, Platform, ScrollView } from 'react-native';
+import { FlashList } from "@shopify/flash-list";
+
+const TypedFlashList = FlashList as any;
+import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import TripCard from '../components/TripCard';
@@ -7,7 +11,7 @@ import DefaultAvatar from '../components/DefaultAvatar';
 import useTrips from '../hooks/useTrips';
 import usePermissions from '../hooks/usePermissions';
 import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import NotificationsModal from '../components/NotificationsModal';
 import FilterModal, { FilterOptions } from '../components/FilterModal';
@@ -40,11 +44,12 @@ const getActiveFilterCount = (filters: FilterOptions | null) => {
     return count;
 };
 
-const FeedScreen = ({ navigation }) => {
+const FeedScreen = () => {
     const { trips, loading, refetch, currentUserId } = useTrips();
     const { requestNotificationPermission } = usePermissions();
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
+    const router = useRouter();
 
     useEffect(() => {
         if (loading) return; // Wait until feed is completely loaded
@@ -260,12 +265,17 @@ const FeedScreen = ({ navigation }) => {
                     </Text>
                 </View>
             ) : filteredTrips.length === 0 ? (
-                <FlatList
+                <TypedFlashList
                     key="empty-list"
                     data={[]}
                     ListHeaderComponent={ListHeaderSpacer}
                     ListEmptyComponent={
-                        <Animatable.View animation="fadeIn" style={styles.emptyContainer}>
+                        <MotiView
+                            from={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ type: 'timing', duration: 300 }}
+                            style={styles.emptyContainer}
+                        >
                             <View style={[styles.emptyIcon, { backgroundColor: colors.primaryLight }]}>
                                 <Ionicons name="compass-outline" size={48} color={colors.primary} />
                             </View>
@@ -281,7 +291,7 @@ const FeedScreen = ({ navigation }) => {
                                     <Text style={styles.clearButtonText}>Clear Filters</Text>
                                 </TouchableOpacity>
                             )}
-                        </Animatable.View>
+                        </MotiView>
                     }
                     refreshControl={
                         <RefreshControl
@@ -292,9 +302,10 @@ const FeedScreen = ({ navigation }) => {
                         />
                     }
                     renderItem={() => null}
+                    estimatedItemSize={200}
                 />
             ) : (
-                <FlatList
+                <TypedFlashList
                     key="content-list"
                     data={filteredTrips}
                     keyExtractor={(item) => item.id}
@@ -302,7 +313,7 @@ const FeedScreen = ({ navigation }) => {
                     renderItem={({ item }) => (
                         <TripCard
                             trip={item}
-                            onPress={() => navigation.navigate('TripDetails', { tripId: item.id })}
+                            onPress={() => router.push({ pathname: '/trip/[id]', params: { id: item.id } })}
                             isVisible={focusedTripId === item.id}
                             onReportPress={(trip) => {
                                 setSelectedTrip(trip);
@@ -315,10 +326,6 @@ const FeedScreen = ({ navigation }) => {
                     viewabilityConfig={viewabilityConfig}
                     onScroll={handleScroll}
                     scrollEventThrottle={16}
-                    initialNumToRender={4}
-                    maxToRenderPerBatch={4}
-                    windowSize={5}
-                    removeClippedSubviews={Platform.OS === 'android'}
                     refreshControl={
                         <RefreshControl
                             refreshing={refreshing}
@@ -327,6 +334,7 @@ const FeedScreen = ({ navigation }) => {
                             tintColor={colors.primary}
                         />
                     }
+                    estimatedItemSize={100}
                 />
             )}
 
@@ -385,7 +393,12 @@ const FeedScreen = ({ navigation }) => {
 
                             {/* User Search Results */}
                             {searchQuery.length >= 2 && searchedUsers.length > 0 && (
-                                <Animatable.View animation="fadeIn" style={[styles.userResultsContainer, { backgroundColor: colors.card }]}>
+                                <MotiView
+                                    from={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ type: 'timing', duration: 300 }}
+                                    style={[styles.userResultsContainer, { backgroundColor: colors.card }]}
+                                >
                                     <Text style={[styles.userResultsTitle, { color: colors.textSecondary }]}>PEOPLE</Text>
                                     {searchedUsers.map((user) => (
                                         <TouchableOpacity
@@ -395,7 +408,7 @@ const FeedScreen = ({ navigation }) => {
                                                 setSearchQuery('');
                                                 setSearchedUsers([]);
                                                 setSearchVisible(false);
-                                                navigation.navigate('UserProfile', { userId: user.id });
+                                                router.push({ pathname: '/profile/[id]', params: { id: user.id } });
                                             }}
                                         >
                                             <DefaultAvatar
@@ -419,12 +432,17 @@ const FeedScreen = ({ navigation }) => {
                                             )}
                                         </TouchableOpacity>
                                     ))}
-                                </Animatable.View>
+                                </MotiView>
                             )}
 
                             {/* Trip Search Results */}
                             {searchQuery.length >= 2 && filteredTrips.length > 0 && (
-                                <Animatable.View animation="fadeIn" style={[styles.userResultsContainer, { backgroundColor: colors.card }]}>
+                                <MotiView
+                                    from={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ type: 'timing', duration: 300 }}
+                                    style={[styles.userResultsContainer, { backgroundColor: colors.card }]}
+                                >
                                     <Text style={[styles.userResultsTitle, { color: colors.textSecondary }]}>TRIPS</Text>
                                     {filteredTrips.slice(0, 5).map((trip) => (
                                         <TouchableOpacity
@@ -433,7 +451,7 @@ const FeedScreen = ({ navigation }) => {
                                             onPress={() => {
                                                 setSearchQuery('');
                                                 setSearchVisible(false);
-                                                navigation.navigate('TripDetails', { tripId: trip.id });
+                                                router.push({ pathname: '/trip/[id]', params: { id: trip.id } });
                                             }}
                                         >
                                             <Image
@@ -452,7 +470,7 @@ const FeedScreen = ({ navigation }) => {
                                             </View>
                                         </TouchableOpacity>
                                     ))}
-                                </Animatable.View>
+                                </MotiView>
                             )}
                         </ScrollView>
                     </SafeAreaView>

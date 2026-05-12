@@ -34,7 +34,10 @@ const formatGender = (gender?: string | null) => {
     return `${gender.charAt(0).toUpperCase()}${gender.slice(1).toLowerCase()}`;
 };
 
-const EditProfileScreen = ({ navigation }) => {
+import { useRouter } from 'expo-router';
+
+const EditProfileScreen = () => {
+    const router = useRouter();
     const { colors } = useTheme();
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -61,7 +64,7 @@ const EditProfileScreen = ({ navigation }) => {
         const loadUser = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) {
-                navigation.goBack();
+                router.back();
                 return;
             }
             setCurrentUser(user);
@@ -102,7 +105,7 @@ const EditProfileScreen = ({ navigation }) => {
             setLoading(false);
         };
         loadUser();
-    }, [navigation]);
+    }, []);
 
     useEffect(() => {
         let active = true;
@@ -304,7 +307,7 @@ const EditProfileScreen = ({ navigation }) => {
         }).catch(e => console.error('Failed to update auth user:', e));
 
         // 3. Navigate back immediately
-        navigation.goBack();
+        router.back();
 
     };
 
@@ -328,7 +331,7 @@ const EditProfileScreen = ({ navigation }) => {
                 <View style={styles.header}>
                     <TouchableOpacity
                         style={[styles.headerBtn]}
-                        onPress={() => navigation.goBack()}
+                        onPress={() => router.back()}
                         activeOpacity={0.8}
                     >
                         <Ionicons name="chevron-back" size={24} color={colors.text} />

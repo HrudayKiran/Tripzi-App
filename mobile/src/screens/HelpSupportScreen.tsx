@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Modal, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import { MotiView } from 'moti';
 import { WebView } from 'react-native-webview';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
@@ -14,7 +14,10 @@ const TAWKTO_WIDGET_ID = process.env.EXPO_PUBLIC_TAWKTO_WIDGET_ID || '';
 
 const SUPPORT_EMAIL = 'support@tripzi.app';
 
-const HelpSupportScreen = ({ navigation }) => {
+import { useRouter } from 'expo-router';
+
+const HelpSupportScreen = () => {
+  const router = useRouter();
   const { colors } = useTheme();
   const [expandedFAQ, setExpandedFAQ] = useState(null);
   const [chatVisible, setChatVisible] = useState(false);
@@ -67,7 +70,7 @@ const HelpSupportScreen = ({ navigation }) => {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => router.back()}
             activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
@@ -84,7 +87,12 @@ const HelpSupportScreen = ({ navigation }) => {
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         >
           {/* Contact Options */}
-          <Animatable.View animation="fadeInUp" duration={400} style={styles.contactContainer}>
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 400 }}
+            style={styles.contactContainer}
+          >
             <ContactCard
               icon="mail-outline"
               label="Email"
@@ -101,10 +109,15 @@ const HelpSupportScreen = ({ navigation }) => {
               colors={colors}
               onPress={openLiveChat}
             />
-          </Animatable.View>
+          </MotiView>
 
           {/* FAQ Section */}
-          <Animatable.View animation="fadeInUp" delay={100} duration={400} style={[styles.faqSection, { backgroundColor: colors.card }]}>
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 400, delay: 100 }}
+            style={[styles.faqSection, { backgroundColor: colors.card }]}
+          >
             <View style={styles.faqHeader}>
               <Ionicons name="help-circle-outline" size={24} color={colors.primary} />
               <Text style={[styles.faqTitle, { color: colors.text }]}>Frequently Asked Questions</Text>
@@ -125,13 +138,18 @@ const HelpSupportScreen = ({ navigation }) => {
                   />
                 </TouchableOpacity>
                 {expandedFAQ === faq.id && (
-                  <Animatable.View animation="fadeIn" duration={200} style={styles.faqAnswer}>
+                  <MotiView
+                    from={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ type: 'timing', duration: 200 }}
+                    style={styles.faqAnswer}
+                  >
                     <Text style={[styles.faqAnswerText, { color: colors.textSecondary }]}>{faq.answer}</Text>
-                  </Animatable.View>
+                  </MotiView>
                 )}
               </View>
             ))}
-          </Animatable.View>
+          </MotiView>
 
 
           <View style={{ height: SPACING.xxxl }} />

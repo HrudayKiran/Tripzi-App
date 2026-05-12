@@ -1,14 +1,16 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Animated, FlatList, ActivityIndicator, Linking } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Animated, ActivityIndicator, Linking } from 'react-native';
+import { FlashList } from "@shopify/flash-list";
+
+const TypedFlashList = FlashList as any;
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import { MotiView } from 'moti';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles';
 import { useNotifications, AppNotification, NotificationType } from '../hooks/useNotifications';
-import { useNavigation } from '@react-navigation/native';
-import { navigationRef } from '../navigation/RootNavigation';
+import { useRouter } from 'expo-router';
 import { resolveNotificationTarget } from '../utils/notificationNavigation';
 
 const { width } = Dimensions.get('window');
@@ -127,7 +129,7 @@ const NotificationItem = ({
 
 const NotificationsModal = ({ visible, onClose, onNotificationsChange }: NotificationsModalProps) => {
     const { colors } = useTheme();
-    const navigation = useNavigation();
+    const router = useRouter();
     const slideAnim = useRef(new Animated.Value(width)).current;
 
     const {
@@ -190,11 +192,10 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                     return;
                 }
 
-                if (navigationRef.isReady()) {
-                    navigationRef.navigate(target.route as any, target.params as any);
-                } else {
-                    navigation.navigate(target.route as never, target.params as never);
-                }
+                router.push({
+                    pathname: target.route,
+                    params: target.params as any,
+                });
             }, 300);
         }
     };
@@ -264,21 +265,26 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                                     </View>
 
                                     {/* Notifications List */}
-                                    <FlatList
+                                    <TypedFlashList
                                         data={notifications}
                                         keyExtractor={(item) => item.id}
                                         contentContainerStyle={styles.content}
                                         showsVerticalScrollIndicator={false}
                                         renderItem={({ item, index }) => (
-                                            <Animatable.View animation="fadeInRight" delay={index * 30}>
+                                            <MotiView
+                                                from={{ opacity: 0, translateX: 20 }}
+                                                animate={{ opacity: 1, translateX: 0 }}
+                                                transition={{ type: 'timing', duration: 300, delay: index * 30 }}
+                                            >
                                                 <NotificationItem
                                                     notification={item}
                                                     onPress={() => handleNotificationPress(item)}
                                                     onDelete={() => handleDeleteNotification(item.id)}
                                                     colors={colors}
                                                 />
-                                            </Animatable.View>
+                                            </MotiView>
                                         )}
+                                        estimatedItemSize={80}
                                     />
                                 </>
                             ) : (

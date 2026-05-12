@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import { supabase } from '../lib/supabase';
-import * as RootNavigation from '../navigation/RootNavigation';
+import { router } from 'expo-router';
 import { resolveNotificationTarget } from '../utils/notificationNavigation';
 
 interface NotificationData {
@@ -122,15 +122,9 @@ const usePushNotifications = () => {
     };
   }, []);
 
-  const handleNotificationNavigation = async (data: NotificationData) => {
-    const route = data.route;
-    if (!route) return;
-
-    const navigate = (name: string, params?: any) => {
-      try {
-        RootNavigation.navigate(name, params);
-      } catch { /* silent */ }
-    };
+    const handleNotificationNavigation = async (data: NotificationData) => {
+        const route = data.route;
+        if (!route) return;
 
     const target = await resolveNotificationTarget({
       deepLinkRoute: route,
@@ -155,7 +149,10 @@ const usePushNotifications = () => {
       return;
     }
 
-    navigate(target.route, target.params || {});
+        router.push({
+            pathname: target.route,
+            params: (target.params || {}) as any,
+        });
   };
 };
 

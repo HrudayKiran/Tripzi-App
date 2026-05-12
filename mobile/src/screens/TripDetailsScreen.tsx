@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated, Dimensions, FlatList, Linking, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Image as RNImage } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated, Dimensions, Linking, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Image as RNImage } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { database } from '../database';
 import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 
 import DefaultAvatar from '../components/DefaultAvatar';
@@ -42,13 +43,15 @@ const DELETE_REASONS = [
 
 // Unused constants removed
 
-const TripDetailsScreen = ({ route, navigation }) => {
+const TripDetailsScreen = () => {
+  const router = useRouter();
+  const params = useLocalSearchParams();
   const { colors } = useTheme();
   const [trip, setTrip] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isJoined, setIsJoined] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const { tripId } = route.params;
+  const tripId = (params.id as string) || (params.tripId as string);
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
@@ -403,11 +406,14 @@ const TripDetailsScreen = ({ route, navigation }) => {
         chatId = newChat?.id;
       }
 
-      navigation.navigate('Chat', {
-        chatId,
-        otherUserId: trip.userId,
-        otherUserName: trip.user?.displayName || 'User',
-        otherUserPhoto: trip.user?.photoURL || '',
+      router.push({
+        pathname: '/chat/[id]',
+        params: {
+          id: chatId,
+          otherUserId: trip.userId,
+          otherUserName: trip.user?.displayName || 'User',
+          otherUserPhoto: trip.user?.photoURL || '',
+        }
       });
     } catch (error: any) {
       console.warn('DirectChat error:', error?.message || error);
@@ -459,12 +465,15 @@ const TripDetailsScreen = ({ route, navigation }) => {
         groupChat = newChat;
       }
 
-      navigation.navigate('Chat', {
-        chatId: groupChat.id,
-        tripTitle: trip?.title,
-        tripImage: trip?.coverImage || trip?.images?.[0],
-        isGroupChat: true,
-        collectionName: 'group_chats',
+      router.push({
+        pathname: '/chat/[id]',
+        params: {
+          id: groupChat.id,
+          tripTitle: trip?.title,
+          tripImage: trip?.coverImage || trip?.images?.[0],
+          isGroupChat: 'true',
+          collectionName: 'group_chats',
+        }
       });
     } catch (error) {
       Alert.alert('Error', 'Could not open group chat.');
@@ -525,7 +534,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
         <View style={styles.header}>
           <TouchableOpacity
             style={[styles.headerButton, { backgroundColor: colors.card }]}
-            onPress={() => navigation.goBack()}
+            onPress={() => router.back()}
           >
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
@@ -581,7 +590,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
                           style={styles.menuItem}
                           onPress={() => {
                             setShowMenu(false);
-                            navigation.navigate('EditTrip', { tripId });
+                            router.push({ pathname: '/trip/edit', params: { id: tripId } });
                           }}
                         >
                           <Ionicons name="create-outline" size={20} color={colors.text} />
@@ -699,13 +708,17 @@ const TripDetailsScreen = ({ route, navigation }) => {
         {/* Content */}
         <View style={[styles.contentContainer, { backgroundColor: colors.background, borderRadius: 0 }]}>
           {/* Title removed - moved to header */}
-          <Animatable.View animation="fadeInUp" delay={100}>
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 400, delay: 100 }}
+          >
 
             {/* Creator Row with Message Button */}
             <View style={styles.creatorRow}>
               <TouchableOpacity
                 style={styles.creatorInfo}
-                onPress={() => navigation.navigate('UserProfile', { userId: trip.userId })}
+                onPress={() => router.push({ pathname: '/profile/[id]', params: { id: trip.userId } })}
               >
                 <DefaultAvatar
                   uri={trip.user?.photoURL}
@@ -742,7 +755,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
                 </TouchableOpacity>
               )}
             </View>
-          </Animatable.View>
+          </MotiView>
 
           {/* Compact Destination Row */}
           <View style={[styles.destinationCardRow, { backgroundColor: colors.card }]}>
@@ -763,7 +776,12 @@ const TripDetailsScreen = ({ route, navigation }) => {
 
           {/* ... (Stats, Description, Details, Places, Items, Participants - unchanged) ... */}
           {/* Quick Stats */}
-          <Animatable.View animation="fadeInUp" delay={200} style={[styles.statsRow, { backgroundColor: colors.card }]}>
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 400, delay: 200 }}
+            style={[styles.statsRow, { backgroundColor: colors.card }]}
+          >
             <View style={styles.statItem}>
               <Text style={styles.statEmoji}>💰</Text>
               <Text style={[styles.statValue, { color: colors.text }]}>{formatCost(trip.costPerPerson || trip.cost)}</Text>
@@ -781,18 +799,27 @@ const TripDetailsScreen = ({ route, navigation }) => {
               <Text style={[styles.statValue, { color: colors.text }]}>{spotsLeft}</Text>
               <Text style={[styles.statLabel, { color: colors.textSecondary }]}>spots left</Text>
             </View>
-          </Animatable.View>
+          </MotiView>
 
           {/* Description */}
-          <Animatable.View animation="fadeInUp" delay={300}>
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 400, delay: 300 }}
+          >
             <Text style={[styles.sectionTitle, { color: colors.text }]}>About This Trip</Text>
             <Text style={[styles.description, { color: colors.textSecondary }]}>
               {trip.description || 'An amazing adventure awaits! Join this trip and create unforgettable memories.'}
             </Text>
-          </Animatable.View>
+          </MotiView>
 
           {/* Trip Details */}
-          <Animatable.View animation="fadeInUp" delay={400} style={[styles.detailsCard, { backgroundColor: colors.card }]}>
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 400, delay: 400 }}
+            style={[styles.detailsCard, { backgroundColor: colors.card }]}
+          >
             <DetailRow icon="📍" label="From" value={trip.fromLocation || 'TBD'} colors={colors} />
             <DetailRow icon="🎯" label="To" value={trip.toLocation || trip.location || 'TBD'} colors={colors} />
             <DetailRow icon="📅" label="Start Date" value={formatDate(trip.fromDate)} colors={colors} />
@@ -807,12 +834,16 @@ const TripDetailsScreen = ({ route, navigation }) => {
               <DetailRow icon="✅" label="Booking" value={trip.bookingStatus === 'booked' ? 'Already Booked' : trip.bookingStatus === 'to_book' ? 'Yet to Book' : 'Not Needed'} colors={colors} />
             )}
             <DetailRow icon="👥" label="Group" value={`${trip.genderPreference === 'male' ? 'Male only' : trip.genderPreference === 'female' ? 'Female only' : 'Anyone can join'}`} colors={colors} />
-          </Animatable.View>
+          </MotiView>
 
 
           {/* Places to Visit */}
           {trip.placesToVisit?.length > 0 && (
-            <Animatable.View animation="fadeInUp" delay={600}>
+            <MotiView
+              from={{ opacity: 0, translateY: 20 }}
+              animate={{ opacity: 1, translateY: 0 }}
+              transition={{ type: 'timing', duration: 400, delay: 600 }}
+            >
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Places to Visit</Text>
               {trip.placesToVisit.map((place: string, index: number) => (
                 <View key={index} style={[styles.placeItem, { backgroundColor: colors.card }]}>
@@ -822,12 +853,16 @@ const TripDetailsScreen = ({ route, navigation }) => {
                   <Text style={[styles.placeText, { color: colors.text }]}>{place}</Text>
                 </View>
               ))}
-            </Animatable.View>
+            </MotiView>
           )}
 
           {/* Mandatory Items */}
           {trip.mandatoryItems?.length > 0 && (
-            <Animatable.View animation="fadeInUp" delay={700}>
+            <MotiView
+              from={{ opacity: 0, translateY: 20 }}
+              animate={{ opacity: 1, translateY: 0 }}
+              transition={{ type: 'timing', duration: 400, delay: 700 }}
+            >
               <Text style={[styles.sectionTitle, { color: colors.text }]}>What to Bring</Text>
               <View style={styles.itemsGrid}>
                 {trip.mandatoryItems.map((item: string, index: number) => (
@@ -836,11 +871,15 @@ const TripDetailsScreen = ({ route, navigation }) => {
                   </View>
                 ))}
               </View>
-            </Animatable.View>
+            </MotiView>
           )}
 
           {/* Participants */}
-          <Animatable.View animation="fadeInUp" delay={800}>
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 400, delay: 800 }}
+          >
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
               Travelers ({trip.participants?.length || 1}/{trip.maxTravelers || 8})
             </Text>
@@ -849,7 +888,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
                 <TouchableOpacity
                   key={participant.id}
                   style={[styles.participantAvatar, { marginLeft: i > 0 ? -10 : 0 }]}
-                  onPress={() => navigation.navigate('UserProfile', { userId: participant.id })}
+                  onPress={() => router.push({ pathname: '/profile/[id]', params: { id: participant.id } })}
                 >
                   <DefaultAvatar
                     uri={participant.photoURL}
@@ -865,12 +904,16 @@ const TripDetailsScreen = ({ route, navigation }) => {
                 </View>
               )}
             </View>
-          </Animatable.View>
+          </MotiView>
 
           {/* Ratings Section - Moved outside isCompleted check for LIST, kept for submitting */}
           {/* Always show if there are ratings OR if completed */}
           {(existingRatings.length > 0 || isCompleted) && (
-            <Animatable.View animation="fadeInUp" delay={900}>
+            <MotiView
+              from={{ opacity: 0, translateY: 20 }}
+              animate={{ opacity: 1, translateY: 0 }}
+              transition={{ type: 'timing', duration: 400, delay: 900 }}
+            >
               <Text style={[styles.sectionTitle, { color: colors.text }]}>
                 Ratings & Reviews {averageRating && `⭐ ${averageRating}`}
               </Text>
@@ -944,7 +987,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
                   {existingRatings.slice(0, 5).map((review) => (
                     <View key={review.id} style={[styles.reviewItem, { backgroundColor: colors.card }]}>
                       <View style={styles.reviewHeader}>
-                        <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { userId: review.userId })}>
+                        <TouchableOpacity onPress={() => router.push({ pathname: '/profile/[id]', params: { id: review.userId } })}>
                           <DefaultAvatar
                             uri={review.userPhoto}
                             name={review.userName}
@@ -975,7 +1018,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
                   ))}
                 </View>
               )}
-            </Animatable.View>
+            </MotiView>
           )}
 
           {/* Spacer for scroll */}
@@ -1045,7 +1088,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
             await cancelTrip(tripId, reason);
             setPendingAction(null);
             Alert.alert('Cancelled', 'Trip has been marked as cancelled.');
-            navigation.goBack();
+            router.back();
           } catch (error: any) {
             Alert.alert('Error', error?.message || 'Failed to cancel trip.');
           } finally {
@@ -1069,7 +1112,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
             await deleteTrip(tripId, reason);
             setPendingAction(null);
             Alert.alert('Deleted', 'Trip deleted successfully.');
-            navigation.goBack();
+            router.back();
           } catch (error: any) {
             Alert.alert('Error', error?.message || 'Failed to delete trip.');
           } finally {

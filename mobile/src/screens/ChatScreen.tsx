@@ -5,7 +5,6 @@ import {
     StyleSheet,
     TouchableOpacity,
     TextInput,
-    FlatList,
     KeyboardAvoidingView,
     Platform,
     ActivityIndicator,
@@ -15,6 +14,9 @@ import {
     Dimensions,
     Linking,
 } from 'react-native';
+import { FlashList } from "@shopify/flash-list";
+
+const TypedFlashList = FlashList as any;
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,6 +37,7 @@ import LiveLocationMapModal from '../components/LiveLocationMapModal';
 import { supabase } from '../lib/supabase';
 import { uploadChatImageToR2 } from '../utils/imageUpload';
 import { format, isToday, isYesterday, isSameDay, differenceInMinutes, addMinutes } from 'date-fns';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GOOGLE_MAPS_SEARCH_URL = 'https://www.google.com/maps/search/?api=1&query=';
@@ -42,23 +45,16 @@ const GOOGLE_MAPS_SEARCH_URL = 'https://www.google.com/maps/search/?api=1&query=
 const formatLocationCoordinates = (latitude: number, longitude: number) =>
     `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
 
-interface ChatScreenProps {
-    navigation: any;
-    route: {
-        params: {
-            chatId: string;
-            collectionName?: 'chats' | 'group_chats';
-            otherUserId?: string;
-            otherUserName?: string;
-            otherUserPhoto?: string;
-            isGroupChat?: boolean;
-            tripTitle?: string;
-        };
-    };
-}
-
-const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
-    const { chatId, collectionName: routeCollectionName, otherUserId, otherUserName, otherUserPhoto, isGroupChat: isGroupParam } = route.params;
+const ChatScreen = () => {
+    const router = useRouter();
+    const params = useLocalSearchParams();
+    const chatId = (params.id as string) || (params.chatId as string);
+    const routeCollectionName = params.collectionName as 'chats' | 'group_chats' | undefined;
+    const otherUserId = params.otherUserId as string | undefined;
+    const otherUserName = params.otherUserName as string | undefined;
+    const otherUserPhoto = params.otherUserPhoto as string | undefined;
+    const isGroupParam = String(params.isGroupChat) === 'true';
+    const tripTitle = params.tripTitle as string | undefined;
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const { chats } = useChats();
@@ -77,7 +73,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     const [inputText, setInputText] = useState('');
     const [sending, setSending] = useState(false);
     const [uploading, setUploading] = useState(false);
-    const flatListRef = useRef<FlatList>(null);
+    const flatListRef = useRef<any>(null);
     const sendingRef = useRef(false); // Ref-based lock to prevent double-send
 
     // Context menu state
@@ -147,7 +143,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
     const otherParticipant = chat?.participantDetails?.[otherParticipantUid || ''];
 
     const displayName = chat?.type === 'group'
-        ? (chat.groupName || route.params?.tripTitle || 'Group Chat')
+        ? (chat.groupName || tripTitle || 'Group Chat')
         : otherParticipant?.displayName || otherUserName || 'User';
     const displayPhoto = livePhoto || (chat?.type === 'group'
         ? chat.groupIcon
@@ -171,7 +167,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     </TouchableOpacity>
                 ) : null}
 
-                <FlatList
+                <TypedFlashList
                     data={filteredMembers}
                     keyExtractor={(item) => item.uid}
                     keyboardShouldPersistTaps="handled"
@@ -192,6 +188,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                             <Text style={[styles.mentionName, { color: colors.text }]}>{item.displayName}</Text>
                         </TouchableOpacity>
                     )}
+                    estimatedItemSize={40}
                 />
             </View>
         );
@@ -1270,7 +1267,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                                 <TouchableOpacity
                                     onPress={() => {
                                         if ((item as any).tripId) {
-                                            navigation.navigate('TripDetails' as never, { tripId: (item as any).tripId } as never);
+                                            router.push({ pathname: '/trip/[id]', params: { id: (item as any).tripId } });
                                         }
                                     }}
                                     style={styles.tripShareContainer}
@@ -1334,45 +1331,45 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
             {/* Header */}
             <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-                <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+                <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
                     <Ionicons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
 
                 <TouchableOpacity
                     style={styles.headerInfo}
                     onPress={() => {
-                        const isGroup = chat?.type === 'group' || route.params?.isGroupChat;
+                        const isGroup = chat?.type === 'group' || isGroupParam;
                         if (isGroup) {
-                            navigation.navigate('GroupInfo', { chatId, collectionName: chatCollection });
+                            router.push({ pathname: '/group-info', params: { chatId, collectionName: chatCollection } });
                         } else if (otherParticipantUid) {
-                            navigation.navigate('UserProfile', { userId: otherParticipantUid });
+                            router.push({ pathname: '/profile/[id]', params: { id: otherParticipantUid } });
                         }
                     }}
                     activeOpacity={0.7}
                 >
-                    <DefaultAvatar
-                        uri={displayPhoto}
-                        name={displayName}
-                        size={40}
-                        style={styles.headerAvatar}
-                        isGroup={chat?.type === 'group' || route.params?.isGroupChat}
-                    />
-                    <View style={styles.headerTextContainer}>
-                        <Text style={[styles.headerName, { color: colors.text }]} numberOfLines={1}>{displayName}</Text>
-                        <Text style={[styles.headerStatus, { color: otherUserTyping ? colors.primary : colors.textSecondary }]} numberOfLines={1}>
-                            {otherUserTyping ? 'typing...' : (
-                                (chat?.type === 'group' || route.params?.isGroupChat)
-                                    ? `${chat?.memberCount || chat?.participants?.length || 0} members${chat?.groupDescription ? ' · ' + chat.groupDescription.substring(0, 30) : ''}`
-                                    : (lastSeenText || '')
-                            )}
-                        </Text>
+                        <DefaultAvatar
+                            uri={displayPhoto}
+                            name={displayName}
+                            size={40}
+                            style={styles.headerAvatar}
+                            isGroup={chat?.type === 'group' || isGroupParam}
+                        />
+                        <View style={styles.headerTextContainer}>
+                            <Text style={[styles.headerName, { color: colors.text }]} numberOfLines={1}>{displayName}</Text>
+                            <Text style={[styles.headerStatus, { color: otherUserTyping ? colors.primary : colors.textSecondary }]} numberOfLines={1}>
+                                {otherUserTyping ? 'typing...' : (
+                                    (chat?.type === 'group' || isGroupParam)
+                                        ? `${chat?.memberCount || chat?.participants?.length || 0} members${chat?.groupDescription ? ' · ' + chat.groupDescription.substring(0, 30) : ''}`
+                                        : (lastSeenText || '')
+                                )}
+                            </Text>
                     </View>
                 </TouchableOpacity>
 
-                {(chat?.type === 'group' || route.params?.isGroupChat) && (
+                {(chat?.type === 'group' || isGroupParam) && (
                     <TouchableOpacity
                         style={styles.infoButton}
-                        onPress={() => navigation.navigate('GroupInfo', { chatId, collectionName: chatCollection })}
+                        onPress={() => router.push({ pathname: '/group-info', params: { chatId, collectionName: chatCollection } })}
                     >
                         <Ionicons name="information-circle-outline" size={24} color={colors.text} />
                     </TouchableOpacity>
@@ -1425,7 +1422,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
             >
-                <FlatList
+                <TypedFlashList
                     ref={flatListRef}
                     data={messages}
                     renderItem={renderMessage}
@@ -1433,6 +1430,7 @@ const ChatScreen = ({ navigation, route }: ChatScreenProps) => {
                     contentContainerStyle={styles.messagesContent}
                     showsVerticalScrollIndicator={false}
                     onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+                    estimatedItemSize={80}
                 />
 
                 {/* Typing indicator */}

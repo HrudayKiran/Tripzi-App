@@ -1,5 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, KeyboardAvoidingView, FlatList, TextInput, ActivityIndicator, Alert, Animated, Keyboard, Modal, Dimensions, TouchableWithoutFeedback, ScrollView, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, KeyboardAvoidingView, TextInput, ActivityIndicator, Alert, Animated, Keyboard, Modal, Dimensions, TouchableWithoutFeedback, ScrollView, Linking } from 'react-native';
+import { FlashList } from "@shopify/flash-list";
+
+const TypedFlashList = FlashList as any;
 import { Image } from 'expo-image';
 import { supabase } from '../lib/supabase';
 import { syncDatabase } from '../database/sync';
@@ -8,10 +11,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { SPACING, FONT_SIZE, FONT_WEIGHT, BORDER_RADIUS, NEUTRAL } from '../styles';
-import { aiService, AIMessage, AIModel, PlaceImage, Conversation } from '../services/AIService';
-import * as Animatable from 'react-native-animatable';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
+import { aiService, AIMessage, PlaceImage, AIModel, Conversation } from '../services/AIService';
 
 const { width, height } = Dimensions.get('window');
 const DRAWER_WIDTH = width * 0.8;
@@ -118,7 +122,9 @@ const EMPTY_STATE_SUGGESTIONS = [
     { icon: '🎒', title: 'Backpacking', prompt: 'Plan a budget backpacking trip to Rishikesh' },
 ];
 
-export default function AIPlannerScreen({ navigation, route }: any) {
+export default function AIPlannerScreen() {
+    const router = useRouter();
+    const params = useLocalSearchParams();
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
 
@@ -130,12 +136,12 @@ export default function AIPlannerScreen({ navigation, route }: any) {
     const [showModelPicker, setShowModelPicker] = useState(false);
 
     // Conversation State
-    const [conversationId, setConversationId] = useState<string | null>(route?.params?.conversationId || null);
+    const [conversationId, setConversationId] = useState<string | null>((params.conversationId as string) || null);
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const conversationCreated = useRef(false);
 
     // Refs
-    const flatListRef = useRef<FlatList>(null);
+    const flatListRef = useRef<any>(null);
     const inputRef = useRef<TextInput>(null);
 
     // Drawer State
@@ -147,24 +153,22 @@ export default function AIPlannerScreen({ navigation, route }: any) {
     const [renameText, setRenameText] = useState('');
     const [chatToRename, setChatToRename] = useState<Conversation | null>(null);
 
-    const initialPrompt = route?.params?.initialPrompt;
+    const initialPrompt = params.initialPrompt as string | undefined;
 
     useEffect(() => {
         loadConversations();
         initChat();
     }, []);
 
-    // Also load conversations when screen focuses
-    useEffect(() => {
-        const unsubscribe = navigation.addListener('focus', () => {
+    useFocusEffect(
+        useCallback(() => {
             loadConversations();
             setConversationId(null);
             conversationCreated.current = false;
             setInputText('');
             setMessages([]);
-        });
-        return unsubscribe;
-    }, [navigation]);
+        }, [])
+    );
 
     const isLocationQuery = (text: string) => {
         const q = text.toLowerCase();
@@ -520,7 +524,7 @@ export default function AIPlannerScreen({ navigation, route }: any) {
             images: imageUrls.length > 0 ? imageUrls : undefined,
             itinerary: Array.isArray(tripData.itinerary) ? tripData.itinerary.join('\n') : tripData.itinerary,
         };
-        navigation.navigate('CreateTrip', { initialTripData: dataForCreateTrip });
+        router.push({ pathname: '/trip/create', params: { initialTripData: JSON.stringify(dataForCreateTrip) } });
     };
 
     const handleAutoPostTrip = async (trip: any) => {
@@ -620,7 +624,12 @@ export default function AIPlannerScreen({ navigation, route }: any) {
             const itineraryItems: string[] = Array.isArray(trip.itinerary) ? trip.itinerary : (typeof trip.itinerary === 'string' ? trip.itinerary.split('\n').filter((s: any) => s.trim()) : []);
 
             return (
-                <Animatable.View animation="fadeInUp" style={[styles.tripCard, { backgroundColor: colors.card }]}>
+                <MotiView
+                    from={{ opacity: 0, translateY: 20 }}
+                    animate={{ opacity: 1, translateY: 0 }}
+                    transition={{ type: 'timing', duration: 400 }}
+                    style={[styles.tripCard, { backgroundColor: colors.card }]}
+                >
                     <View style={{ height: 140, width: '100%', backgroundColor: colors.border }}>
                         <Image source={{ uri: coverUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
                         <LinearGradient colors={['transparent', 'rgba(0,0,0,0.8)']} style={StyleSheet.absoluteFill} />
@@ -661,13 +670,18 @@ export default function AIPlannerScreen({ navigation, route }: any) {
                             </TouchableOpacity>
                         </View>
                     </View>
-                </Animatable.View>
+                </MotiView>
             );
         } catch { return null; }
     };
 
     const renderLocationRequest = () => (
-        <Animatable.View animation="fadeInUp" style={[styles.locationRequestCard, { backgroundColor: colors.card, borderColor: colors.primary }]}>
+        <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 400 }}
+            style={[styles.locationRequestCard, { backgroundColor: colors.card, borderColor: colors.primary }]}
+        >
             <View style={styles.locationRequestIcon}>
                 <Ionicons name="location" size={32} color={colors.primary} />
             </View>
@@ -701,7 +715,7 @@ export default function AIPlannerScreen({ navigation, route }: any) {
             >
                 <Text style={styles.locationRequestBtnText}>Allow Location Access</Text>
             </TouchableOpacity>
-        </Animatable.View>
+        </MotiView>
     );
 
     const renderMessage = ({ item }: { item: AIMessage }) => {
@@ -711,7 +725,12 @@ export default function AIPlannerScreen({ navigation, route }: any) {
         const showText = !tripCard;
 
         return (
-            <Animatable.View animation={isUser ? "fadeInRight" : "fadeInLeft"} duration={300} style={[styles.messageRow, isUser ? styles.userRow : styles.aiRow]}>
+            <MotiView
+                from={{ opacity: 0, translateX: isUser ? 20 : -20 }}
+                animate={{ opacity: 1, translateX: 0 }}
+                transition={{ type: 'timing', duration: 300 }}
+                style={[styles.messageRow, isUser ? styles.userRow : styles.aiRow]}
+            >
                 {!isUser && (
                     <View style={styles.avatarContainer}>
                         <Image source={require('../../assets/Tripzi AI.png')} style={styles.avatarImage} contentFit="cover" />
@@ -725,7 +744,7 @@ export default function AIPlannerScreen({ navigation, route }: any) {
                     )}
                     {tripCard}
                 </View>
-            </Animatable.View>
+            </MotiView>
         );
     };
 
@@ -782,7 +801,7 @@ export default function AIPlannerScreen({ navigation, route }: any) {
                         {renderEmptyState()}
                     </ScrollView>
                 ) : (
-                    <FlatList
+                    <TypedFlashList
                         ref={flatListRef}
                         data={messages}
                         renderItem={renderMessage}
@@ -792,10 +811,7 @@ export default function AIPlannerScreen({ navigation, route }: any) {
                         contentContainerStyle={[styles.listContent, { paddingBottom: SPACING.sm }]}
                         keyboardShouldPersistTaps="always"
                         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'none'}
-                        initialNumToRender={10}
-                        maxToRenderPerBatch={10}
-                        windowSize={5}
-                        removeClippedSubviews={Platform.OS === 'android'}
+                        estimatedItemSize={200}
                         ListHeaderComponent={
                             isTyping ? (
                                 <View style={styles.typingContainer}>
@@ -810,7 +826,7 @@ export default function AIPlannerScreen({ navigation, route }: any) {
                 {/* Suggestions above input */}
                 {suggestions.length > 0 && (
                     <View style={[styles.suggestionsContainer, { borderTopColor: colors.border }]}>
-                        <FlatList
+                        <TypedFlashList
                             data={suggestions} horizontal showsHorizontalScrollIndicator={false}
                             keyExtractor={(item, index) => `${item}-${index}`}
                             contentContainerStyle={{ paddingHorizontal: SPACING.md, gap: SPACING.sm }}
@@ -819,6 +835,7 @@ export default function AIPlannerScreen({ navigation, route }: any) {
                                     <Text style={[styles.chipText, { color: colors.text }]}>{item}</Text>
                                 </TouchableOpacity>
                             )}
+                            estimatedItemSize={100}
                         />
                     </View>
                 )}
@@ -901,7 +918,12 @@ export default function AIPlannerScreen({ navigation, route }: any) {
             {/* Model Picker */}
             <Modal visible={showModelPicker} transparent animationType="fade" onRequestClose={() => setShowModelPicker(false)}>
                 <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowModelPicker(false)}>
-                    <Animatable.View animation="fadeInDown" duration={200} style={[styles.modelDropdown, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <MotiView
+                        from={{ opacity: 0, translateY: -20 }}
+                        animate={{ opacity: 1, translateY: 0 }}
+                        transition={{ type: 'timing', duration: 200 }}
+                        style={[styles.modelDropdown, { backgroundColor: colors.card, borderColor: colors.border }]}
+                    >
                         <Text style={[styles.modelDropdownTitle, { color: colors.textSecondary }]}>Select AI Model</Text>
                         {MODELS.map((model) => (
                             <TouchableOpacity key={model.id} style={[styles.modelOption, selectedModel === model.id && { backgroundColor: 'rgba(157,116,247,0.1)' }]} onPress={() => { setSelectedModel(model.id); setShowModelPicker(false); }}>
@@ -913,7 +935,7 @@ export default function AIPlannerScreen({ navigation, route }: any) {
                                 {selectedModel === model.id && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
                             </TouchableOpacity>
                         ))}
-                    </Animatable.View>
+                    </MotiView>
                 </TouchableOpacity>
             </Modal>
         </View>

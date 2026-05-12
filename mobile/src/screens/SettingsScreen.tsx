@@ -2,9 +2,9 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Switch, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useRouter } from 'expo-router';
 
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, STATUS, NEUTRAL, CATEGORY, ICONS } from '../styles';
 
@@ -19,7 +19,8 @@ import { resetDatabase, database } from '../database';
 
 
 
-const SettingsScreen = ({ navigation }) => {
+const SettingsScreen = () => {
+    const router = useRouter();
     const { colors, isDarkMode, themeMode, setThemeMode } = useTheme();
 
     const [pushEnabled, setPushEnabled] = useState(false);
@@ -133,7 +134,7 @@ const SettingsScreen = ({ navigation }) => {
                 <View style={styles.header}>
                     <TouchableOpacity
                         style={styles.backButton}
-                        onPress={() => navigation.goBack()}
+                        onPress={() => router.back()}
                         activeOpacity={0.7}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
@@ -145,7 +146,11 @@ const SettingsScreen = ({ navigation }) => {
 
                 <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
                     {/* Notifications Section */}
-                    <Animatable.View animation="fadeInUp" duration={400} delay={0}>
+                    <MotiView
+                        from={{ opacity: 0, translateY: 20 }}
+                        animate={{ opacity: 1, translateY: 0 }}
+                        transition={{ type: 'timing', duration: 400 }}
+                    >
                         <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                             <View style={styles.settingRow}>
                                 <View style={styles.settingInfo}>
@@ -164,10 +169,14 @@ const SettingsScreen = ({ navigation }) => {
                             </View>
                         </View>
 
-                    </Animatable.View>
+                    </MotiView>
 
                     {/* Appearance Section */}
-                    <Animatable.View animation="fadeInUp" duration={400} delay={100}>
+                    <MotiView
+                        from={{ opacity: 0, translateY: 20 }}
+                        animate={{ opacity: 1, translateY: 0 }}
+                        transition={{ type: 'timing', duration: 400, delay: 100 }}
+                    >
                         <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                             <Text style={[styles.sectionTitle, { color: colors.text }]}>Appearance</Text>
 
@@ -209,14 +218,18 @@ const SettingsScreen = ({ navigation }) => {
                                 </TouchableOpacity>
                             </View>
                         </View>
-                    </Animatable.View>
+                    </MotiView>
 
                     {/* Account Section */}
-                    <Animatable.View animation="fadeInUp" duration={400} delay={150}>
+                    <MotiView
+                        from={{ opacity: 0, translateY: 20 }}
+                        animate={{ opacity: 1, translateY: 0 }}
+                        transition={{ type: 'timing', duration: 400, delay: 150 }}
+                    >
                         <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                             <TouchableOpacity
                                 style={styles.dangerRow}
-                                onPress={() => navigation.navigate('DeleteAccount')}
+                                onPress={() => router.push('/profile/delete-account')}
                                 activeOpacity={0.7}
                             >
 
@@ -230,7 +243,7 @@ const SettingsScreen = ({ navigation }) => {
                                 <Ionicons name="chevron-forward" size={20} color={STATUS.error} />
                             </TouchableOpacity>
                         </View>
-                    </Animatable.View>
+                    </MotiView>
                 </ScrollView>
 
             </View>
