@@ -160,29 +160,35 @@ const ProfileScreen = () => {
     showChevron = true,
     hideIcon = false,
     largeText = false,
-  }) => (
-    <TouchableOpacity
-      style={[styles.menuItem, { backgroundColor: colors.card }, centered && styles.menuItemCentered, disabled && { opacity: 0.8 }]}
-      onPress={disabled ? undefined : onPress}
-      activeOpacity={disabled ? 1 : 0.7}
-      disabled={disabled}
-    >
-      {!hideIcon && (
-        <View style={[styles.menuIconBox, { backgroundColor: iconBg }]}>
-          <Icon name={icon} size={22} color={iconColor} />
-        </View>
-      )}
-      <Text style={[styles.menuItemText, centered && styles.menuItemTextCentered, largeText && styles.menuItemTextLarge, { color: isDestructive ? colors.error : colors.text }]}>
-        {text}
-      </Text>
-      {badge && (
-        <View style={[styles.badge, { backgroundColor: '#D1FAE5' }]}>
-          <Text style={styles.badgeText}>{badge}</Text>
+  }) => {
+    const isDark = colors.background !== '#FFFFFF' && colors.background !== '#ffffff';
+    const activeIconColor = isDark ? '#FFFFFF' : '#000000';
+    const activeIconBg = isDark ? '#333333' : '#F3F4F6';
+
+    return (
+      <TouchableOpacity
+        style={[styles.menuItem, { backgroundColor: colors.card }, centered && styles.menuItemCentered, disabled && { opacity: 0.8 }]}
+        onPress={disabled ? undefined : onPress}
+        activeOpacity={disabled ? 1 : 0.7}
+        disabled={disabled}
+      >
+        {!hideIcon && (
+          <View style={[styles.menuIconBox, { backgroundColor: activeIconBg }]}>
+            <Icon name={icon} size={22} color={activeIconColor} />
+          </View>
+        )}
+        <Text style={[styles.menuItemText, centered && styles.menuItemTextCentered, largeText && styles.menuItemTextLarge, { color: colors.text }]}>
+          {text}
+        </Text>
+        {badge && (
+          <View style={[styles.badge, { backgroundColor: isDark ? '#1F2937' : '#E5E7EB' }]}>
+            <Text style={[styles.badgeText, { color: colors.text }]}>{badge}</Text>
         </View>
       )}
       {showChevron && !disabled && <Icon name="CaretRight" size={20} color={colors.textSecondary} />}
     </TouchableOpacity>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top']}>
@@ -219,7 +225,7 @@ const ProfileScreen = () => {
               </View>
             </View>
 
-            <Text style={[styles.viewProfileText, { color: colors.primary, marginTop: SPACING.sm }]}>
+            <Text style={[styles.viewProfileText, { color: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000', marginTop: SPACING.sm }]}>
               View profile
             </Text>
           </MotiView>

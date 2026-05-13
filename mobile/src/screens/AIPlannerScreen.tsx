@@ -842,7 +842,7 @@ export default function AIPlannerScreen() {
                 )}
 
                 {/* Input Area */}
-                <View style={[styles.inputContainer, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom + SPACING.xs, SPACING.md) }]}>
+                <View style={[styles.inputContainer, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: insets.bottom + 84 }]}>
                     <TextInput
                         ref={inputRef} style={[styles.input, { backgroundColor: colors.background, color: colors.text }]}
                         placeholder="Message Tripzi AI..." placeholderTextColor={colors.textSecondary}

@@ -1,7 +1,28 @@
 import { workersApi } from '../lib/workersApi';
+import * as Haptics from 'expo-haptics';
+import { getBooleanPreference, getStringPreference, PREFERENCE_KEYS } from './preferences';
 
 export const joinTrip = async (tripId: string) => {
-    return workersApi('/trips/join', { body: { tripId } });
+    const result = await workersApi('/trips/join', { body: { tripId } });
+    
+    try {
+        const hapticsEnabled = await getBooleanPreference(PREFERENCE_KEYS.hapticsEnabled, true);
+        const joinTripHaptics = await getBooleanPreference(PREFERENCE_KEYS.hapticsJoinTrip, true);
+        
+        if (hapticsEnabled && joinTripHaptics) {
+            const intensity = await getStringPreference(PREFERENCE_KEYS.hapticsIntensity, 'Medium');
+            
+            let style = Haptics.ImpactFeedbackStyle.Medium;
+            if (intensity === 'Light') style = Haptics.ImpactFeedbackStyle.Light;
+            if (intensity === 'Heavy') style = Haptics.ImpactFeedbackStyle.Heavy;
+            
+            await Haptics.impactAsync(style);
+        }
+    } catch (e) {
+        console.error('Failed to trigger haptics:', e);
+    }
+    
+    return result;
 };
 
 export const leaveTrip = async (tripId: string, reason: string) => {

@@ -9,7 +9,7 @@ import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-
+import LottieView from 'lottie-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { syncDatabase } from '../database/sync';
@@ -83,7 +83,13 @@ const CreateTripScreen = () => {
     }
 
     const [step, setStep] = useState(1);
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [currentUser, setCurrentUser] = useState<any>(null);
     const totalSteps = 5;
+
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+    }, []);
 
     // Step 1: Basic Info
     const [title, setTitle] = useState(initialData?.title || '');
@@ -231,7 +237,6 @@ const CreateTripScreen = () => {
     const handlePostTrip = async () => {
         if (!validateForm()) return;
 
-        const { data: { user: currentUser } } = await supabase.auth.getUser();
         if (!currentUser) {
             Alert.alert('Error', 'You need to be logged in to create a trip.');
             router.push('/(auth)/start');
@@ -362,7 +367,7 @@ const CreateTripScreen = () => {
             // Trigger sync to update local database immediately
             syncDatabase().catch(err => console.error('[CreateTrip] Post-creation sync failed:', err));
             
-            router.replace({ pathname: '/profile/[id]', params: { id: currentUser.id } });
+            setShowSuccess(true);
         } catch (error: any) {
             if (newObjectKeys.length > 0) {
                 await deleteTripImagesFromR2(newObjectKeys);
@@ -721,6 +726,26 @@ const CreateTripScreen = () => {
                                 minimumDate={showDateModal === 'to' && fromDate ? fromDate : new Date()}
                             />
                         )}
+
+                        <Modal visible={showSuccess} transparent animationType="fade">
+                            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+                                <View style={{ backgroundColor: colors.card, padding: SPACING.xl, borderRadius: BORDER_RADIUS.md, alignItems: 'center' }}>
+                                    <LottieView
+                                        source={{ uri: 'https://assets9.lottiefiles.com/packages/lf20_s2lryxtd.json' }}
+                                        autoPlay
+                                        loop={false}
+                                        style={{ width: 150, height: 150 }}
+                                        onAnimationFinish={() => {
+                                            setShowSuccess(false);
+                                            router.replace({ pathname: '/profile/[id]', params: { id: currentUser.id } });
+                                        }}
+                                    />
+                                    <Text style={{ color: colors.text, fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, marginTop: SPACING.md }}>
+                                        Trip Posted Successfully!
+                                    </Text>
+                                </View>
+                            </View>
+                        </Modal>
 
                     </KeyboardAvoidingView>
                 </SafeAreaView>

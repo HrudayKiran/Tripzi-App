@@ -5,11 +5,31 @@ import { View, TouchableOpacity, StyleSheet, Modal, Text } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useState } from 'react';
 import { MotiView } from 'moti';
+import * as Haptics from 'expo-haptics';
+import { getBooleanPreference, getStringPreference, PREFERENCE_KEYS } from '../../src/utils/preferences';
 
 export default function TabsLayout() {
   const { colors } = useTheme();
   const router = useRouter();
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  const triggerTabHaptics = async () => {
+    try {
+      const hapticsEnabled = await getBooleanPreference(PREFERENCE_KEYS.hapticsEnabled, true);
+      const navHaptics = await getBooleanPreference(PREFERENCE_KEYS.hapticsNav, true);
+      
+      if (hapticsEnabled && navHaptics) {
+        const intensity = await getStringPreference(PREFERENCE_KEYS.hapticsIntensity, 'Medium');
+        let style = Haptics.ImpactFeedbackStyle.Light;
+        if (intensity === 'Medium') style = Haptics.ImpactFeedbackStyle.Medium;
+        if (intensity === 'Heavy') style = Haptics.ImpactFeedbackStyle.Heavy;
+        
+        await Haptics.impactAsync(style);
+      }
+    } catch (e) {
+      console.error('Failed to trigger haptics:', e);
+    }
+  };
 
   // Determine if we are in dark mode based on background color
   const isDark = colors.background !== '#FFFFFF' && colors.background !== '#ffffff';
@@ -63,12 +83,22 @@ export default function TabsLayout() {
             title: 'Home',
             tabBarIcon: ({ color, size }: { color: string; size: number }) => <Icon name="House" size={size + 2} color={color} />,
           }}
+          listeners={{
+            tabPress: () => {
+              triggerTabHaptics();
+            },
+          }}
         />
         <Tabs.Screen
           name="ai-planner"
           options={{
             title: 'AI Planner',
             tabBarIcon: ({ color, size }: { color: string; size: number }) => <Icon name="Sparkle" size={size + 2} color={color} />,
+          }}
+          listeners={{
+            tabPress: () => {
+              triggerTabHaptics();
+            },
           }}
         />
         <Tabs.Screen
@@ -81,6 +111,7 @@ export default function TabsLayout() {
             tabPress: (e) => {
               e.preventDefault();
               setShowCreateModal(true);
+              triggerTabHaptics();
             },
           }}
         />
@@ -90,12 +121,22 @@ export default function TabsLayout() {
             title: 'Messages',
             tabBarIcon: ({ color, size }: { color: string; size: number }) => <Icon name="ChatTeardropText" size={size + 2} color={color} />,
           }}
+          listeners={{
+            tabPress: () => {
+              triggerTabHaptics();
+            },
+          }}
         />
         <Tabs.Screen
           name="profile"
           options={{
             title: 'Profile',
             tabBarIcon: ({ color, size }: { color: string; size: number }) => <Icon name="User" size={size + 2} color={color} />,
+          }}
+          listeners={{
+            tabPress: () => {
+              triggerTabHaptics();
+            },
           }}
         />
       </Tabs>

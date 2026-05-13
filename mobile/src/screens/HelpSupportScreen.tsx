@@ -96,16 +96,16 @@ const HelpSupportScreen = () => {
             <ContactCard
               icon="Envelope"
               label="Email"
-              iconColor="#9d74f7"
-              bgColor="#EDE9FE"
+              iconColor={colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000'}
+              bgColor={colors.background !== '#FFFFFF' ? '#333333' : '#F3F4F6'}
               colors={colors}
               onPress={openEmail}
             />
             <ContactCard
               icon="ChatDots"
               label="Live Chat"
-              iconColor="#10B981"
-              bgColor="#D1FAE5"
+              iconColor={colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000'}
+              bgColor={colors.background !== '#FFFFFF' ? '#333333' : '#F3F4F6'}
               colors={colors}
               onPress={openLiveChat}
             />
@@ -119,7 +119,7 @@ const HelpSupportScreen = () => {
             style={[styles.faqSection, { backgroundColor: colors.card }]}
           >
             <View style={styles.faqHeader}>
-              <Icon name="Question" size={24} color={colors.primary} />
+              <Icon name="Question" size={24} color={colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000'} />
               <Text style={[styles.faqTitle, { color: colors.text }]}>Frequently Asked Questions</Text>
             </View>
 

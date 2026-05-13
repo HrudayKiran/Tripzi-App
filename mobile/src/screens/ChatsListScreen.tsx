@@ -401,7 +401,7 @@ const ChatsListScreen = () => {
                 contentContainerStyle={[
                     styles.listContent,
                     chats.length === 0 && styles.emptyList,
-                    { paddingBottom: 100 }
+                    { paddingBottom: 120 }
                 ]}
                 ListEmptyComponent={renderEmptyState}
                 refreshControl={

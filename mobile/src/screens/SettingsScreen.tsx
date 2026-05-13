@@ -6,6 +6,8 @@ import Icon from '../components/Icon';
 import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { getBooleanPreference, PREFERENCE_KEYS } from '../utils/preferences';
+import * as Haptics from 'expo-haptics';
 
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, STATUS, NEUTRAL, CATEGORY, ICONS } from '../styles';
 
@@ -118,6 +120,36 @@ const SettingsScreen = () => {
 
 
 
+    const AnimatedSwitch = ({ value, onValueChange }: { value: boolean, onValueChange: (v: boolean) => void }) => (
+        <TouchableOpacity 
+            onPress={async () => { 
+                onValueChange(!value); 
+                try {
+                    const hapticsEnabled = await getBooleanPreference(PREFERENCE_KEYS.hapticsEnabled, true);
+                    if (hapticsEnabled) {
+                        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }
+                } catch {
+                    // Ignore
+                }
+            }} 
+            activeOpacity={0.8}
+        >
+            <MotiView
+                animate={{
+                    scale: value ? 1.1 : 1,
+                }}
+                transition={{ type: 'spring', damping: 12, stiffness: 150 }}
+            >
+                <Icon 
+                    name={value ? "ToggleRight" : "ToggleLeft"} 
+                    size={36} 
+                    color={value ? (colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000') : colors.textSecondary} 
+                />
+            </MotiView>
+        </TouchableOpacity>
+    );
+
     return (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
             <View style={styles.container}>
@@ -153,11 +185,9 @@ const SettingsScreen = () => {
                                 {loadingSettings ? (
                                     <ActivityIndicator size="small" color={colors.primary} />
                                 ) : (
-                                        <Switch
+                                        <AnimatedSwitch
                                             value={pushEnabled}
                                             onValueChange={handlePushToggle}
-                                            trackColor={{ false: NEUTRAL.gray200, true: STATUS.success }}
-                                            thumbColor={NEUTRAL.white}
                                         />
                                 )}
                             </View>
@@ -179,38 +209,61 @@ const SettingsScreen = () => {
                                     style={[
                                         styles.themeOption,
                                         { backgroundColor: colors.inputBackground },
-                                        themeMode === 'light' && [styles.themeOptionActive, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]
+                                        themeMode === 'light' && [styles.themeOptionActive, { backgroundColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000', borderColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]
                                     ]}
                                     onPress={() => setThemeMode('light')}
                                 >
-                                    <Icon name="Sun" size={20} color={themeMode === 'light' ? colors.primary : colors.textSecondary} />
-                                    <Text style={[styles.themeText, { color: themeMode === 'light' ? colors.primary : colors.textSecondary }]}>Light</Text>
+                                    <Icon name="Sun" size={20} color={themeMode === 'light' ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary} />
+                                    <Text style={[styles.themeText, { color: themeMode === 'light' ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary }]}>Light</Text>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
                                     style={[
                                         styles.themeOption,
                                         { backgroundColor: colors.inputBackground },
-                                        themeMode === 'dark' && [styles.themeOptionActive, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]
+                                        themeMode === 'dark' && [styles.themeOptionActive, { backgroundColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000', borderColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]
                                     ]}
                                     onPress={() => setThemeMode('dark')}
                                 >
-                                    <Icon name="Moon" size={20} color={themeMode === 'dark' ? colors.primary : colors.textSecondary} />
-                                    <Text style={[styles.themeText, { color: themeMode === 'dark' ? colors.primary : colors.textSecondary }]}>Dark</Text>
+                                    <Icon name="Moon" size={20} color={themeMode === 'dark' ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary} />
+                                    <Text style={[styles.themeText, { color: themeMode === 'dark' ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary }]}>Dark</Text>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
                                     style={[
                                         styles.themeOption,
                                         { backgroundColor: colors.inputBackground },
-                                        themeMode === 'system' && [styles.themeOptionActive, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]
+                                        themeMode === 'system' && [styles.themeOptionActive, { backgroundColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000', borderColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]
                                     ]}
                                     onPress={() => setThemeMode('system')}
                                 >
-                                    <Icon name="CircleHalf" size={20} color={themeMode === 'system' ? colors.primary : colors.textSecondary} />
-                                    <Text style={[styles.themeText, { color: themeMode === 'system' ? colors.primary : colors.textSecondary }]}>System</Text>
+                                    <Icon name="CircleHalf" size={20} color={themeMode === 'system' ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary} />
+                                    <Text style={[styles.themeText, { color: themeMode === 'system' ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary }]}>System</Text>
                                 </TouchableOpacity>
                             </View>
+                        </View>
+                    </MotiView>
+
+                    {/* Haptics Section */}
+                    <MotiView
+                        from={{ opacity: 0, translateY: 20 }}
+                        animate={{ opacity: 1, translateY: 0 }}
+                        transition={{ type: 'timing', duration: 400, delay: 125 }}
+                    >
+                        <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                            <TouchableOpacity
+                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+                                onPress={() => router.push('/profile/haptics')}
+                                activeOpacity={0.7}
+                            >
+                                <View style={styles.settingInfo}>
+                                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Haptics & Feedback</Text>
+                                    <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
+                                        Customize vibration feedback for actions
+                                    </Text>
+                                </View>
+                                <Icon name="CaretRight" size={20} color={colors.textSecondary} />
+                            </TouchableOpacity>
                         </View>
                     </MotiView>
 

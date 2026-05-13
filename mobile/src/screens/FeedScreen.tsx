@@ -8,6 +8,7 @@ import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import TripCard from '../components/TripCard';
 import DefaultAvatar from '../components/DefaultAvatar';
+import TripCardSkeleton from '../components/TripCardSkeleton';
 import useTripsQuery from '../hooks/useTripsQuery';
 import usePermissions from '../hooks/usePermissions';
 import Icon from '../components/Icon';
@@ -258,12 +259,15 @@ const FeedScreen = () => {
             {/* Sticky Header */}
             {renderStickyHeader()}
             {loading ? (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={colors.primary} />
-                    <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-                        Loading trips...
-                    </Text>
-                </View>
+                <ScrollView 
+                    style={{ flex: 1 }} 
+                    contentContainerStyle={{ padding: SPACING.md, paddingTop: HEADER_HEIGHT + SPACING.md }} 
+                    showsVerticalScrollIndicator={false}
+                >
+                    <TripCardSkeleton />
+                    <TripCardSkeleton />
+                    <TripCardSkeleton />
+                </ScrollView>
             ) : filteredTrips.length === 0 ? (
                 <TypedFlashList
                     key="empty-list"

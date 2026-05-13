@@ -6,6 +6,8 @@ import { router } from 'expo-router';
 import { resolveNotificationTarget } from '../utils/notificationNavigation';
 import { requestNotificationPermission } from '../utils/notificationPermissions';
 import { Alert } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { getBooleanPreference, PREFERENCE_KEYS } from '../utils/preferences';
 
 interface NotificationData {
   route?: string;
@@ -48,6 +50,18 @@ const usePushNotifications = () => {
         // Handle foreground messages — FCM data messages are received here
         unsubscribeMessage = messaging().onMessage(async (remoteMessage) => {
           console.log('Foreground message received:', remoteMessage);
+          
+          try {
+            const hapticsEnabled = await getBooleanPreference(PREFERENCE_KEYS.hapticsEnabled, true);
+            const notifHaptics = await getBooleanPreference(PREFERENCE_KEYS.hapticsNotif, true);
+            
+            if (hapticsEnabled && notifHaptics) {
+              await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+          } catch (e) {
+            console.error('Failed to trigger haptics:', e);
+          }
+
           if (remoteMessage.notification) {
             Alert.alert(
               remoteMessage.notification.title || 'Notification',

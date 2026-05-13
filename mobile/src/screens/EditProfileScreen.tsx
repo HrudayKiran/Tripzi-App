@@ -12,6 +12,8 @@ import {
     Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { getBooleanPreference, PREFERENCE_KEYS } from '../utils/preferences';
+import * as Haptics from 'expo-haptics';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
@@ -251,6 +253,15 @@ const EditProfileScreen = () => {
 
         const sanitized = sanitizeUsername(username.trim());
 
+        try {
+            const hapticsEnabled = await getBooleanPreference(PREFERENCE_KEYS.hapticsEnabled, true);
+            if (hapticsEnabled) {
+                await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+        } catch {
+            // Ignore
+        }
+
         // 1. Write to WatermelonDB immediately (so local UI updates right away)
         try {
             const profilesCollection = database.get('profiles');
@@ -315,7 +326,7 @@ const EditProfileScreen = () => {
         return (
             <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top']}>
                 <View style={styles.loaderWrap}>
-                    <ActivityIndicator size="large" color={colors.primary} />
+                    <ActivityIndicator size="large" color={colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000'} />
                 </View>
             </SafeAreaView>
         );
@@ -354,11 +365,11 @@ const EditProfileScreen = () => {
                             size={100}
                         />
                         <TouchableOpacity
-                            style={[styles.changePhotoButton, { borderColor: colors.primary }]}
+                            style={[styles.changePhotoButton, { borderColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]}
                             onPress={pickProfile}
                             activeOpacity={0.8}
                         >
-                            <Text style={[styles.changePhotoText, { color: colors.primary }]}>Change Photo</Text>
+                            <Text style={[styles.changePhotoText, { color: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]}>Change Photo</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -425,16 +436,20 @@ const EditProfileScreen = () => {
                     />
 
                     <TouchableOpacity onPress={handleSave} disabled={!canSave} style={styles.saveWrap}>
-                        <LinearGradient
-                            colors={canSave ? [...BRAND.gradient] : ['#9CA3AF', '#9CA3AF']}
-                            style={styles.saveButton}
+                        <View
+                            style={[
+                                styles.saveButton,
+                                { 
+                                    backgroundColor: canSave ? (colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000') : (colors.background !== '#FFFFFF' ? '#333333' : '#E5E7EB')
+                                }
+                            ]}
                         >
                             {saving ? (
-                                <ActivityIndicator color="#fff" />
+                                <ActivityIndicator color={colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF'} />
                             ) : (
-                                <Text style={styles.saveText}>Save Changes</Text>
+                                <Text style={[styles.saveText, { color: canSave ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary }]}>Save Changes</Text>
                             )}
-                        </LinearGradient>
+                        </View>
                     </TouchableOpacity>
                 </ScrollView>
             </KeyboardAvoidingView>

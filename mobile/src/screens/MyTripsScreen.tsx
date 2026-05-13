@@ -188,12 +188,12 @@ const MyTripsScreen = () => {
             onPress={() => setActiveTab('Upcoming')}
             style={[
               styles.tab,
-              activeTab === 'Upcoming' && [styles.activeTab, { backgroundColor: colors.primary }]
+              activeTab === 'Upcoming' && [styles.activeTab, { backgroundColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]
             ]}
           >
             <Text style={[
               styles.tabText,
-              { color: activeTab === 'Upcoming' ? '#fff' : colors.textSecondary }
+              { color: activeTab === 'Upcoming' ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary }
             ]}>
               Upcoming
             </Text>
@@ -202,12 +202,12 @@ const MyTripsScreen = () => {
             onPress={() => setActiveTab('Ongoing')}
             style={[
               styles.tab,
-              activeTab === 'Ongoing' && [styles.activeTab, { backgroundColor: colors.primary }]
+              activeTab === 'Ongoing' && [styles.activeTab, { backgroundColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]
             ]}
           >
             <Text style={[
               styles.tabText,
-              { color: activeTab === 'Ongoing' ? '#fff' : colors.textSecondary }
+              { color: activeTab === 'Ongoing' ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary }
             ]}>
               Ongoing
             </Text>
@@ -216,12 +216,12 @@ const MyTripsScreen = () => {
             onPress={() => setActiveTab('Completed')}
             style={[
               styles.tab,
-              activeTab === 'Completed' && [styles.activeTab, { backgroundColor: colors.primary }]
+              activeTab === 'Completed' && [styles.activeTab, { backgroundColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]
             ]}
           >
             <Text style={[
               styles.tabText,
-              { color: activeTab === 'Completed' ? '#fff' : colors.textSecondary }
+              { color: activeTab === 'Completed' ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary }
             ]}>
               Completed
             </Text>
@@ -230,12 +230,12 @@ const MyTripsScreen = () => {
             onPress={() => setActiveTab('Cancelled')}
             style={[
               styles.tab,
-              activeTab === 'Cancelled' && [styles.activeTab, { backgroundColor: colors.primary }]
+              activeTab === 'Cancelled' && [styles.activeTab, { backgroundColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]
             ]}
           >
             <Text style={[
               styles.tabText,
-              { color: activeTab === 'Cancelled' ? '#fff' : colors.textSecondary }
+              { color: activeTab === 'Cancelled' ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary }
             ]}>
               Cancelled
             </Text>
@@ -246,7 +246,7 @@ const MyTripsScreen = () => {
         <View style={styles.contentContainer}>
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={colors.primary} />
+              <ActivityIndicator size="large" color={colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000'} />
               <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading trips...</Text>
             </View>
           ) : (
@@ -261,7 +261,7 @@ const MyTripsScreen = () => {
                 <RefreshControl
                   refreshing={refreshing}
                   onRefresh={() => setRefreshing(true)}
-                  colors={[colors.primary]}
+                  colors={[colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000']}
                 />
               }
               estimatedItemSize={100}

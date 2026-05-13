@@ -31,6 +31,7 @@ import { useChatMessagesQuery, ChatMessage, ReplyTo } from '../hooks/useChatMess
 import { useChatsQuery } from '../hooks/useChatsQuery';
 import { getPublicProfilesByIds } from '../utils/publicProfiles';
 import { getBooleanPreference, PREFERENCE_KEYS } from '../utils/preferences';
+import * as Haptics from 'expo-haptics';
 import DefaultAvatar from '../components/DefaultAvatar';
 import LocationPickerModal from '../components/LocationPickerModal';
 import LiveLocationMapModal from '../components/LiveLocationMapModal';
@@ -443,8 +444,17 @@ const ChatScreen = () => {
     }, [chatId, currentUser, isTyping, chatCollection]);
 
     // Handle text input
-    const handleTextChange = (text: string) => {
+    const handleTextChange = async (text: string) => {
         setInputText(text);
+
+        try {
+            const hapticsEnabled = await getBooleanPreference(PREFERENCE_KEYS.hapticsEnabled, true);
+            if (hapticsEnabled) {
+                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }
+        } catch {
+            // Ignore
+        }
 
         // Mention logic
         if (chat?.type === 'group') {

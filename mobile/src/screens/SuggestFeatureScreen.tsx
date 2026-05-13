@@ -7,6 +7,8 @@ import Icon from '../components/Icon';
 import { MotiView } from 'moti';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../contexts/ThemeContext';
+import { getBooleanPreference, PREFERENCE_KEYS } from '../utils/preferences';
+import * as Haptics from 'expo-haptics';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, STATUS, NEUTRAL } from '../styles';
 
 import { useRouter } from 'expo-router';
@@ -76,6 +78,17 @@ const SuggestFeatureScreen = () => {
 
   const severityLevels = ['Low', 'Medium', 'High', 'Critical'];
 
+  const triggerSuccessHaptics = async () => {
+    try {
+      const hapticsEnabled = await getBooleanPreference(PREFERENCE_KEYS.hapticsEnabled, true);
+      if (hapticsEnabled) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch {
+      // Ignore
+    }
+  };
+
   const handleSubmitFeature = async () => {
     if (!featureTitle || !featureDescription) {
       Alert.alert('Required Fields', 'Please fill in title and description.');
@@ -92,9 +105,11 @@ const SuggestFeatureScreen = () => {
         user_id: currentUser?.id,
       });
 
+      await triggerSuccessHaptics();
       Alert.alert('Ticket Received ✅', 'Thank you! Your feature suggestion has been received. Our team will review it shortly. A confirmation has been sent to your email.');
       router.back();
     } catch (error) {
+      await triggerSuccessHaptics();
       Alert.alert('Thank You! 🎉', 'Your suggestion has been saved locally.');
       router.back();
     }
@@ -117,9 +132,11 @@ const SuggestFeatureScreen = () => {
         user_id: currentUser?.id,
       });
 
+      await triggerSuccessHaptics();
       Alert.alert('Ticket Received ✅', 'Thank you! Your bug report has been received. Our team will investigate it shortly. A confirmation has been sent to your email.');
       router.back();
     } catch (error) {
+      await triggerSuccessHaptics();
       Alert.alert('Thank You! 🎉', 'Your bug report has been saved locally.');
       router.back();
     }
@@ -149,22 +166,22 @@ const SuggestFeatureScreen = () => {
         {/* Tabs */}
         <View style={[styles.tabContainer, { backgroundColor: colors.card }]}>
           <TouchableOpacity
-            style={[styles.tab, activeTab === 'suggest' && { backgroundColor: colors.primary }]}
+            style={[styles.tab, activeTab === 'suggest' && { backgroundColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]}
             onPress={() => setActiveTab('suggest')}
             activeOpacity={0.8}
           >
-            <Icon name="Lightbulb" size={18} color={activeTab === 'suggest' ? '#fff' : colors.textSecondary} />
-            <Text style={[styles.tabText, { color: activeTab === 'suggest' ? '#fff' : colors.textSecondary }]}>
+            <Icon name="Lightbulb" size={18} color={activeTab === 'suggest' ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary} />
+            <Text style={[styles.tabText, { color: activeTab === 'suggest' ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary }]}>
               Suggest
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tab, activeTab === 'bug' && { backgroundColor: colors.primary }]}
+            style={[styles.tab, activeTab === 'bug' && { backgroundColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]}
             onPress={() => setActiveTab('bug')}
             activeOpacity={0.8}
           >
-            <Icon name="Bug" size={18} color={activeTab === 'bug' ? '#fff' : colors.textSecondary} />
-            <Text style={[styles.tabText, { color: activeTab === 'bug' ? '#fff' : colors.textSecondary }]}>
+            <Icon name="Bug" size={18} color={activeTab === 'bug' ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary} />
+            <Text style={[styles.tabText, { color: activeTab === 'bug' ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary }]}>
               Report Bug
             </Text>
           </TouchableOpacity>
@@ -235,7 +252,7 @@ const SuggestFeatureScreen = () => {
                   onPress={() => pickImage(featureImages, setFeatureImages)}
                 >
                   <View style={styles.uploadPlaceholder}>
-                    <Icon name="Image" size={32} color={colors.primary} />
+                    <Icon name="Image" size={32} color={colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000'} />
                     <Text style={[styles.uploadText, { color: colors.textSecondary }]}>
                       Add screenshot ({featureImages.length}/{MAX_ATTACHMENTS})
                     </Text>
@@ -264,12 +281,12 @@ const SuggestFeatureScreen = () => {
                 )}
 
                 <TouchableOpacity
-                  style={[styles.submitButton, { backgroundColor: colors.primary }]}
+                  style={[styles.submitButton, { backgroundColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]}
                   onPress={handleSubmitFeature}
                   activeOpacity={0.8}
                 >
-                  <Icon name="Star" size={20} color="#fff" />
-                  <Text style={styles.submitButtonText}>Submit Suggestion</Text>
+                  <Icon name="Star" size={20} color={colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF'} />
+                  <Text style={[styles.submitButtonText, { color: colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF' }]}>Submit Suggestion</Text>
                 </TouchableOpacity>
               </>
             ) : (
@@ -305,12 +322,12 @@ const SuggestFeatureScreen = () => {
                       key={level}
                       style={[
                         styles.severityButton,
-                        { backgroundColor: bugSeverity === level ? colors.primary : colors.card, borderColor: colors.border },
+                        { backgroundColor: bugSeverity === level ? (colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000') : colors.card, borderColor: colors.border },
                       ]}
                       onPress={() => setBugSeverity(level)}
                       activeOpacity={0.7}
                     >
-                      <Text style={[styles.severityText, { color: bugSeverity === level ? '#fff' : colors.text }]}>
+                      <Text style={[styles.severityText, { color: bugSeverity === level ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.text }]}>
                         {level}
                       </Text>
                     </TouchableOpacity>
@@ -344,7 +361,7 @@ const SuggestFeatureScreen = () => {
                   onPress={() => pickImage(bugImages, setBugImages)}
                 >
                   <View style={styles.uploadPlaceholder}>
-                    <Icon name="Image" size={32} color={colors.primary} />
+                    <Icon name="Image" size={32} color={colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000'} />
                     <Text style={[styles.uploadText, { color: colors.textSecondary }]}>
                       Add screenshot ({bugImages.length}/{MAX_ATTACHMENTS})
                     </Text>
@@ -373,12 +390,12 @@ const SuggestFeatureScreen = () => {
                 )}
 
                 <TouchableOpacity
-                  style={[styles.submitButton, { backgroundColor: colors.primary }]}
+                  style={[styles.submitButton, { backgroundColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]}
                   onPress={handleSubmitBug}
                   activeOpacity={0.8}
                 >
-                  <Icon name="Bug" size={20} color="#fff" />
-                  <Text style={styles.submitButtonText}>Submit Bug Report</Text>
+                  <Icon name="Bug" size={20} color={colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF'} />
+                  <Text style={[styles.submitButtonText, { color: colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF' }]}>Submit Bug Report</Text>
                 </TouchableOpacity>
               </>
             )}
