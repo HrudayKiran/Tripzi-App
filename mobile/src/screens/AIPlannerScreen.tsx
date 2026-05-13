@@ -9,7 +9,7 @@ import { syncDatabase } from '../database/sync';
 import { showUploadNotification, completeUploadNotification, failUploadNotification } from '../utils/notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { SPACING, FONT_SIZE, FONT_WEIGHT, BORDER_RADIUS, NEUTRAL } from '../styles';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MotiView } from 'moti';
@@ -635,20 +635,20 @@ export default function AIPlannerScreen() {
                         <Image source={{ uri: coverUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
                         <LinearGradient colors={['transparent', 'rgba(0,0,0,0.8)']} style={StyleSheet.absoluteFill} />
                         <View style={[styles.tripCardBadge, { position: 'absolute', top: 8, right: 8 }]}>
-                            <Ionicons name="sparkles" size={12} color="#fff" />
+                            <Icon name="Sparkle" size={12} color="#fff" />
                             <Text style={styles.tripCardBadgeText}>AI Plan</Text>
                         </View>
                         <Text style={styles.tripCardOverlayTitle} numberOfLines={2}>{trip.title}</Text>
                     </View>
                     <View style={styles.tripCardBody}>
                         <View style={styles.tripCardRow}>
-                            <Ionicons name="location" size={16} color={colors.primary} />
+                            <Icon name="MapPin" size={16} color={colors.primary} />
                             <Text style={[styles.tripCardText, { color: colors.text }]}>{trip.fromLocation} → {trip.toLocation}</Text>
                         </View>
                         <View style={styles.tripCardDetailsGrid}>
-                            <View style={styles.tripCardDetail}><Ionicons name="time-outline" size={14} color={colors.textSecondary} /><Text style={[styles.tripCardDetailText, { color: colors.textSecondary }]}>{trip.durationDays} days</Text></View>
-                            <View style={styles.tripCardDetail}><Ionicons name="wallet-outline" size={14} color={colors.textSecondary} /><Text style={[styles.tripCardDetailText, { color: colors.textSecondary }]}>₹{trip.cost}</Text></View>
-                            <View style={styles.tripCardDetail}><Ionicons name="bus-outline" size={14} color={colors.textSecondary} /><Text style={[styles.tripCardDetailText, { color: colors.textSecondary }]}>{trip.transportMode}</Text></View>
+                            <View style={styles.tripCardDetail}><Icon name="Clock" size={14} color={colors.textSecondary} /><Text style={[styles.tripCardDetailText, { color: colors.textSecondary }]}>{trip.durationDays} days</Text></View>
+                            <View style={styles.tripCardDetail}><Icon name="Wallet" size={14} color={colors.textSecondary} /><Text style={[styles.tripCardDetailText, { color: colors.textSecondary }]}>₹{trip.cost}</Text></View>
+                            <View style={styles.tripCardDetail}><Icon name="Bus" size={14} color={colors.textSecondary} /><Text style={[styles.tripCardDetailText, { color: colors.textSecondary }]}>{trip.transportMode}</Text></View>
                         </View>
                         <Text style={[styles.tripCardDesc, { color: colors.textSecondary }]} numberOfLines={3}>{trip.description}</Text>
                         {itineraryItems.length > 0 && (
@@ -684,7 +684,7 @@ export default function AIPlannerScreen() {
             style={[styles.locationRequestCard, { backgroundColor: colors.card, borderColor: colors.primary }]}
         >
             <View style={styles.locationRequestIcon}>
-                <Ionicons name="location" size={32} color={colors.primary} />
+                <Icon name="MapPin" size={32} color={colors.primary} />
             </View>
             <Text style={[styles.locationRequestTitle, { color: colors.text }]}>Location Access Required</Text>
             <Text style={[styles.locationRequestDesc, { color: colors.textSecondary }]}>
@@ -781,16 +781,16 @@ export default function AIPlannerScreen() {
             <View style={[styles.header, { paddingTop: insets.top + SPACING.xs, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border }]}>
                 <View style={styles.headerContent}>
                     <TouchableOpacity onPress={toggleDrawer} style={styles.iconBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                        <Ionicons name="menu" size={28} color={colors.text} />
+                        <Icon name="List" size={28} color={colors.text} />
                     </TouchableOpacity>
 
                     <TouchableOpacity style={[styles.modelBadge, { backgroundColor: colors.background, borderColor: colors.border }]} onPress={() => setShowModelPicker(true)} activeOpacity={0.7}>
                         <Text style={[styles.modelBadgeText, { color: colors.text }]}>{MODELS.find(m => m.id === selectedModel)?.label}</Text>
-                        <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
+                        <Icon name="CaretDown" size={14} color={colors.textSecondary} />
                     </TouchableOpacity>
 
                     <TouchableOpacity onPress={handleNewChat} style={styles.iconBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                        <Ionicons name="create-outline" size={26} color={colors.text} />
+                        <Icon name="NotePencil" size={26} color={colors.text} />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -850,7 +850,7 @@ export default function AIPlannerScreen() {
                         blurOnSubmit={false}
                     />
                     <TouchableOpacity style={[styles.sendButton, { backgroundColor: inputText.trim() ? colors.primary : colors.border }]} onPress={handleSend} disabled={!inputText.trim() || isTyping}>
-                        {isTyping ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="arrow-up" size={22} color="#fff" />}
+                        {isTyping ? <ActivityIndicator size="small" color="#fff" /> : <Icon name="ArrowUp" size={22} color="#fff" />}
                     </TouchableOpacity>
                 </View>
             </KeyboardAvoidingView>
@@ -865,27 +865,27 @@ export default function AIPlannerScreen() {
                 <View style={styles.drawerHeader}>
                     <Text style={[styles.drawerTitle, { color: colors.text }]}>Chat History</Text>
                     <TouchableOpacity onPress={toggleDrawer}>
-                        <Ionicons name="close" size={24} color={colors.text} />
+                        <Icon name="X" size={24} color={colors.text} />
                     </TouchableOpacity>
                 </View>
                 <ScrollView contentContainerStyle={{ padding: SPACING.md }}>
                     <TouchableOpacity style={[styles.newChatBtn, { backgroundColor: colors.primary }]} onPress={handleNewChat}>
-                        <Ionicons name="add" size={20} color="#fff" />
+                        <Icon name="Plus" size={20} color="#fff" />
                         <Text style={styles.newChatBtnText}>New Chat</Text>
                     </TouchableOpacity>
                     <Text style={[styles.drawerSectionTitle, { color: colors.textSecondary }]}>Recent</Text>
                     {conversations.map(conv => (
                         <View key={conv.id} style={[styles.drawerItemWrap, conversationId === conv.id && { backgroundColor: 'rgba(157,116,247,0.1)', borderRadius: BORDER_RADIUS.md }]}>
                             <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectChat(conv)}>
-                                <Ionicons name="chatbubble-outline" size={18} color={colors.text} />
+                                <Icon name="ChatTeardropText" size={18} color={colors.text} />
                                 <Text style={[styles.drawerItemText, { color: colors.text }]} numberOfLines={1}>{conv.title}</Text>
                             </TouchableOpacity>
                             <View style={styles.drawerItemActions}>
                                 <TouchableOpacity onPress={() => openRenameModal(conv)} style={styles.drawerActionBtn}>
-                                    <Ionicons name="pencil" size={16} color={colors.textSecondary} />
+                                    <Icon name="Pencil" size={16} color={colors.textSecondary} />
                                 </TouchableOpacity>
                                 <TouchableOpacity onPress={() => handleDeleteChat(conv)} style={styles.drawerActionBtn}>
-                                    <Ionicons name="trash" size={16} color={colors.textSecondary} />
+                                    <Icon name="Trash" size={16} color={colors.textSecondary} />
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -933,7 +933,7 @@ export default function AIPlannerScreen() {
                                     <Text style={[styles.modelOptionLabel, { color: colors.text }]}>{model.label}</Text>
                                     <Text style={[styles.modelOptionDesc, { color: colors.textSecondary }]}>{model.desc}</Text>
                                 </View>
-                                {selectedModel === model.id && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+                                {selectedModel === model.id && <Icon name="CheckCircle" size={20} color={colors.primary} />}
                             </TouchableOpacity>
                         ))}
                     </MotiView>

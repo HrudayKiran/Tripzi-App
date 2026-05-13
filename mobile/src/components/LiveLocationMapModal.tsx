@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions } from 'rea
 import { Image } from 'expo-image';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { supabase } from '../lib/supabase';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { formatDistanceToNow } from 'date-fns';
@@ -102,7 +102,7 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectio
                 {/* Header */}
                 <View style={styles.header}>
                     <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-                        <Ionicons name="close" size={24} color="#000" />
+                        <Icon name="X" size={24} color="#000" />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Live Locations</Text>
                 </View>
@@ -140,7 +140,7 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectio
                                         Last active: {user.updated_at ? formatDistanceToNow(new Date(user.updated_at)) : 'now'} ago
                                     </Text>
                                 </View>
-                                <Ionicons name="navigate-circle-outline" size={24} color={colors.primary} />
+                                <Icon name="NavigationArrow" size={24} color={colors.primary} />
                             </TouchableOpacity>
                         ))
                     )}

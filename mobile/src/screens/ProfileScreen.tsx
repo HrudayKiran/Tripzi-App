@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, STATUS, NEUTRAL } from '../styles';
@@ -169,7 +169,7 @@ const ProfileScreen = () => {
     >
       {!hideIcon && (
         <View style={[styles.menuIconBox, { backgroundColor: iconBg }]}>
-          <Ionicons name={icon} size={22} color={iconColor} />
+          <Icon name={icon} size={22} color={iconColor} />
         </View>
       )}
       <Text style={[styles.menuItemText, centered && styles.menuItemTextCentered, largeText && styles.menuItemTextLarge, { color: isDestructive ? colors.error : colors.text }]}>
@@ -180,13 +180,13 @@ const ProfileScreen = () => {
           <Text style={styles.badgeText}>{badge}</Text>
         </View>
       )}
-      {showChevron && !disabled && <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />}
+      {showChevron && !disabled && <Icon name="CaretRight" size={20} color={colors.textSecondary} />}
     </TouchableOpacity>
   );
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top']}>
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
@@ -235,7 +235,7 @@ const ProfileScreen = () => {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>MY TRIPS</Text>
 
           <MenuItem
-            icon="map-outline"
+            icon="MapTrifold"
             iconColor="#6366F1"
             iconBg="#E0E7FF"
             text="My Trips"
@@ -253,28 +253,28 @@ const ProfileScreen = () => {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>GENERAL</Text>
 
           <MenuItem
-            icon="create-outline"
+            icon="PencilSimple"
             iconColor="#F59E0B"
             iconBg="#FEF3C7"
             text="Edit Profile"
             onPress={() => router.push('/profile/edit')}
           />
           <MenuItem
-            icon="settings-outline"
+            icon="Gear"
             iconColor="#6B7280"
             iconBg="#F3F4F6"
             text="Settings"
             onPress={() => router.push('/profile/settings')}
           />
           <MenuItem
-            icon="document-text-outline"
+            icon="FileText"
             iconColor="#9d74f7"
             iconBg="#EDE9FE"
             text="Terms of Service"
             onPress={() => router.push('/profile/terms')}
           />
           <MenuItem
-            icon="lock-closed-outline"
+            icon="Lock"
             iconColor="#3B82F6"
             iconBg="#DBEAFE"
             text="Privacy Policy"
@@ -291,14 +291,14 @@ const ProfileScreen = () => {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>SUPPORT</Text>
 
           <MenuItem
-            icon="bulb-outline"
+            icon="Lightbulb"
             iconColor="#F59E0B"
             iconBg="#FEF3C7"
             text="Suggest a Feature"
             onPress={() => router.push('/profile/suggest-feature')}
           />
           <MenuItem
-            icon="help-circle-outline"
+            icon="Question"
             iconColor="#06B6D4"
             iconBg="#CFFAFE"
             text="Help & Support"
@@ -315,7 +315,7 @@ const ProfileScreen = () => {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ACCOUNT</Text>
 
           <MenuItem
-            icon="log-out-outline"
+            icon="SignOut"
             iconColor="#EF4444"
             iconBg="#FEE2E2"
             text="Log Out"

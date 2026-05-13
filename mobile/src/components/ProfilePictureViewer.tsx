@@ -11,7 +11,7 @@ import {
     Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
@@ -100,7 +100,7 @@ const ProfilePictureViewer = ({
                         onPress={onClose}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
-                        <Ionicons name="close" size={28} color="#fff" />
+                        <Icon name="X" size={28} color="#fff" />
                     </TouchableOpacity>
 
                     <Text style={styles.headerTitle}>{userName}</Text>
@@ -115,7 +115,7 @@ const ProfilePictureViewer = ({
                             {isDeleting ? (
                                 <ActivityIndicator size="small" color="#fff" />
                             ) : (
-                                <Ionicons name="trash-outline" size={24} color="#EF4444" />
+                                <Icon name="Trash" size={24} color="#EF4444" />
                             )}
                         </TouchableOpacity>
                     ) : (

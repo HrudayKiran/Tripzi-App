@@ -16,7 +16,7 @@ import { FlashList } from "@shopify/flash-list";
 const TypedFlashList = FlashList as any;
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
@@ -223,7 +223,7 @@ const CreateGroupScreen = () => {
                     <View style={styles.userNameRow}>
                         <Text style={[styles.userName, { color: colors.text }]}>{item.displayName}</Text>
                         {item.ageVerified === true && (
-                            <Ionicons name="shield-checkmark" size={14} color="#10B981" style={{ marginLeft: 4 }} />
+                            <Icon name="ShieldCheck" size={14} color="#10B981" style={{ marginLeft: 4 }} />
                         )}
                     </View>
                     {item.username && (
@@ -231,7 +231,7 @@ const CreateGroupScreen = () => {
                     )}
                 </View>
                 <View style={[styles.checkbox, isSelected && styles.checkboxSelected, { borderColor: colors.primary }]}>
-                    {isSelected && <Ionicons name="checkmark" size={16} color="#fff" />}
+                    {isSelected && <Icon name="Check" size={16} color="#fff" />}
                 </View>
             </TouchableOpacity>
         );
@@ -247,7 +247,7 @@ const CreateGroupScreen = () => {
                 </View>
             )}
             <View style={styles.removeSelectedBadge}>
-                <Ionicons name="close" size={12} color="#fff" />
+                <Icon name="X" size={12} color="#fff" />
             </View>
             <Text style={[styles.selectedUserName, { color: colors.text }]} numberOfLines={1}>
                 {item.displayName?.split(' ')[0]}
@@ -265,7 +265,7 @@ const CreateGroupScreen = () => {
                 {/* Header */}
                 <View style={[styles.header, { borderBottomColor: colors.border }]}>
                     <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                        <Ionicons name="arrow-back" size={24} color={colors.text} />
+                        <Icon name="CaretLeft" size={24} color={colors.text} />
                     </TouchableOpacity>
                     <Text style={[styles.headerTitle, { color: colors.text }]}>
                         {step === 'select' ? 'New Group' : 'Group Details'}
@@ -297,7 +297,7 @@ const CreateGroupScreen = () => {
                     <>
                         {/* Search */}
                         <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
-                            <Ionicons name="search" size={20} color={colors.textSecondary} />
+                            <Icon name="MagnifyingGlass" size={20} color={colors.textSecondary} />
                             <TextInput
                                 style={[styles.searchInput, { color: colors.text }]}
                                 placeholder="Search users..."
@@ -343,7 +343,7 @@ const CreateGroupScreen = () => {
                                 }
                                 ListEmptyComponent={
                                     <View style={styles.emptyContainer}>
-                                        <Ionicons name="people-outline" size={48} color={colors.textSecondary} style={{ marginBottom: 12 }} />
+                                        <Icon name="Users" size={48} color={colors.textSecondary} style={{ marginBottom: 12 }} />
                                         <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
                                             {searchQuery.length > 0 ? 'No users found' : 'Start typing to find people'}
                                         </Text>
@@ -366,11 +366,11 @@ const CreateGroupScreen = () => {
                                 <Image source={{ uri: groupIcon }} style={styles.groupIconPreview} />
                             ) : (
                                 <View style={[styles.iconPlaceholder, { backgroundColor: colors.card }]}>
-                                    <Ionicons name="camera" size={32} color={colors.textSecondary} />
+                                    <Icon name="Camera" size={32} color={colors.textSecondary} />
                                 </View>
                             )}
                             <View style={[styles.editIconBadge, { backgroundColor: colors.primary }]}>
-                                <Ionicons name="pencil" size={12} color="#fff" />
+                                <Icon name="Pencil" size={12} color="#fff" />
                             </View>
                         </TouchableOpacity>
 

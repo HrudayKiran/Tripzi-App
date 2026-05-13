@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, STATUS, NEUTRAL } from '../styles';
@@ -77,7 +77,7 @@ const DeleteAccountScreen = () => {
                         activeOpacity={0.7}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
-                        <Ionicons name="chevron-back" size={28} color={colors.text} />
+                        <Icon name="CaretLeft" size={28} color={colors.text} />
                     </TouchableOpacity>
                     <Text style={[styles.title, { color: colors.text }]}>Delete Account</Text>
                     <View style={styles.placeholder} />
@@ -98,7 +98,7 @@ const DeleteAccountScreen = () => {
                     >
                         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                             <View style={styles.warningHeader}>
-                                <Ionicons name="warning" size={24} color={STATUS.errorDark} />
+                                <Icon name="Warning" size={24} color={STATUS.errorDark} />
                                 <Text style={[styles.warningTitle, { color: STATUS.errorDark }]}>Data Deletion & Retention</Text>
                             </View>
                             

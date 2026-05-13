@@ -16,7 +16,7 @@ import { FlashList } from "@shopify/flash-list";
 const TypedFlashList = FlashList as any;
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, NEUTRAL } from '../styles';
@@ -320,20 +320,20 @@ const ChatsListScreen = () => {
                         {item.displayName}
                     </Text>
                     {item.ageVerified === true && (
-                        <Ionicons name="shield-checkmark" size={14} color="#10B981" style={{ marginLeft: 4 }} />
+                        <Icon name="ShieldCheck" size={14} color="#10B981" weight="fill" style={{ marginLeft: 4 }} />
                     )}
                 </View>
                 {item.username && (
                     <Text style={[styles.searchUsername, { color: colors.primary }]}>@{item.username}</Text>
                 )}
             </View>
-            <Ionicons name="chatbubble-outline" size={20} color={colors.primary} />
+            <Icon name="ChatTeardrop" size={20} color={colors.primary} />
         </TouchableOpacity>
     );
 
     const renderEmptyState = () => (
         <View style={styles.emptyContainer}>
-            <Ionicons name="chatbubbles-outline" size={80} color={colors.textSecondary} />
+            <Icon name="ChatTeardropDots" size={80} color={colors.textSecondary} />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>No Chats Yet</Text>
             <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
                 Tap the search icon to find people and start chatting!
@@ -359,14 +359,14 @@ const ChatsListScreen = () => {
                 <View style={[styles.header, { backgroundColor: colors.primary }]}>
                     <View style={styles.headerLeft}>
                         <TouchableOpacity onPress={handleCancelSelection}>
-                            <Ionicons name="arrow-back" size={24} color="white" />
+                            <Icon name="CaretLeft" size={24} color="white" />
                         </TouchableOpacity>
                         <Text style={[styles.headerTitle, { color: 'white', marginLeft: 16 }]}>
                             {selectedChats.size} Selected
                         </Text>
                     </View>
                     <TouchableOpacity onPress={handleDeleteSelected}>
-                        <Ionicons name="trash-outline" size={24} color="white" />
+                        <Icon name="Trash" size={24} color="white" />
                     </TouchableOpacity>
                 </View>
             ) : (
@@ -379,7 +379,7 @@ const ChatsListScreen = () => {
                             activeOpacity={0.7}
                             testID="chats-search-button"
                         >
-                            <Ionicons name="search-outline" size={22} color={colors.text} />
+                            <Icon name="MagnifyingGlass" size={22} color={colors.text} />
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.headerButton, { backgroundColor: colors.card }]}
@@ -387,7 +387,7 @@ const ChatsListScreen = () => {
                             activeOpacity={0.7}
                             testID="chats-menu-button"
                         >
-                            <Ionicons name="ellipsis-vertical" size={22} color={colors.text} />
+                            <Icon name="DotsThreeVertical" size={22} color={colors.text} />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -401,6 +401,7 @@ const ChatsListScreen = () => {
                 contentContainerStyle={[
                     styles.listContent,
                     chats.length === 0 && styles.emptyList,
+                    { paddingBottom: 100 }
                 ]}
                 ListEmptyComponent={renderEmptyState}
                 refreshControl={
@@ -428,7 +429,7 @@ const ChatsListScreen = () => {
                                     setSearchResults([]);
                                 }}
                             >
-                                <Ionicons name="arrow-back" size={24} color={colors.text} />
+                                <Icon name="CaretLeft" size={24} color={colors.text} />
                             </TouchableOpacity>
                             <TextInput
                                 style={[styles.searchInput, { backgroundColor: colors.card, color: colors.text }]}
@@ -449,7 +450,7 @@ const ChatsListScreen = () => {
                             </View>
                         ) : searchQuery.length > 0 && searchResults.length === 0 ? (
                             <View style={styles.noResults}>
-                                <Ionicons name="person-outline" size={48} color={colors.textSecondary} />
+                                <Icon name="User" size={48} color={colors.textSecondary} />
                                 <Text style={[styles.noResultsText, { color: colors.textSecondary }]}>
                                     No users found for "{searchQuery}"
                                 </Text>
@@ -497,7 +498,7 @@ const ChatsListScreen = () => {
                                 router.push('/chat/settings');
                             }}
                         >
-                            <Ionicons name="settings" size={20} color={colors.text} />
+                            <Icon name="Gear" size={20} color={colors.text} />
                             <Text style={[styles.dropdownText, { color: colors.text }]}>Settings</Text>
                         </TouchableOpacity>
                     </View>

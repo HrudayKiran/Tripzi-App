@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { GestureHandlerRootView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
 import { ScaleDecorator, NestableScrollContainer, NestableDraggableFlatList } from 'react-native-draggable-flatlist';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -19,31 +19,31 @@ import { deleteTripImagesFromR2, uploadTripImageToR2 } from '../utils/imageUploa
 const { width } = Dimensions.get('window');
 
 const TRIP_TYPES = [
-    { id: 'adventure', label: 'Adventure', icon: 'compass', color: '#F59E0B' },
-    { id: 'trekking', label: 'Trekking', icon: 'walk', color: '#10B981' },
-    { id: 'bike_ride', label: 'Bike Ride', icon: 'bicycle', color: '#EF4444' },
-    { id: 'road_trip', label: 'Road Trip', icon: 'car-sport', color: '#9d74f7' },
-    { id: 'camping', label: 'Camping', icon: 'bonfire', color: '#F97316' },
-    { id: 'sightseeing', label: 'Sightseeing', icon: 'camera', color: '#3B82F6' },
-    { id: 'beach', label: 'Beach', icon: 'sunny', color: '#06B6D4' },
-    { id: 'pilgrimage', label: 'Pilgrimage', icon: 'heart', color: '#EC4899' },
+    { id: 'adventure', label: 'Adventure', icon: 'Compass', color: '#F59E0B' },
+    { id: 'trekking', label: 'Trekking', icon: 'MapPin', color: '#10B981' },
+    { id: 'bike_ride', label: 'Bike Ride', icon: 'Bicycle', color: '#EF4444' },
+    { id: 'road_trip', label: 'Road Trip', icon: 'Car', color: '#9d74f7' },
+    { id: 'camping', label: 'Camping', icon: 'Tent', color: '#F97316' },
+    { id: 'sightseeing', label: 'Sightseeing', icon: 'Camera', color: '#3B82F6' },
+    { id: 'beach', label: 'Beach', icon: 'Sun', color: '#06B6D4' },
+    { id: 'pilgrimage', label: 'Pilgrimage', icon: 'Heart', color: '#EC4899' },
 ];
 
 const TRANSPORT_MODES = [
-    { id: 'train', label: 'Train', icon: 'train' },
-    { id: 'bus', label: 'Bus', icon: 'bus' },
-    { id: 'car', label: 'Car', icon: 'car' },
-    { id: 'flight', label: 'Flight', icon: 'airplane' },
-    { id: 'bike', label: 'Bike', icon: 'bicycle' },
-    { id: 'mixed', label: 'Mixed', icon: 'shuffle' },
+    { id: 'train', label: 'Train', icon: 'Train' },
+    { id: 'bus', label: 'Bus', icon: 'Bus' },
+    { id: 'car', label: 'Car', icon: 'Car' },
+    { id: 'flight', label: 'Flight', icon: 'Airplane' },
+    { id: 'bike', label: 'Bike', icon: 'Bicycle' },
+    { id: 'mixed', label: 'Mixed', icon: 'Shuffle' },
 ];
 
 const ACCOMMODATION_TYPES = [
-    { id: 'hotel', label: 'Hotel', icon: 'bed' },
-    { id: 'hostel', label: 'Hostel', icon: 'home' },
-    { id: 'camping', label: 'Camping', icon: 'bonfire' },
-    { id: 'homestay', label: 'Homestay', icon: 'people' },
-    { id: 'none', label: 'Not Needed', icon: 'close-circle' },
+    { id: 'hotel', label: 'Hotel', icon: 'Bed' },
+    { id: 'hostel', label: 'Hostel', icon: 'House' },
+    { id: 'camping', label: 'Camping', icon: 'Tent' },
+    { id: 'homestay', label: 'Homestay', icon: 'Users' },
+    { id: 'none', label: 'Not Needed', icon: 'XCircle' },
 ];
 
 const BOOKING_STATUS = [
@@ -53,9 +53,9 @@ const BOOKING_STATUS = [
 ];
 
 const GENDER_PREFERENCES = [
-    { id: 'anyone', label: 'Anyone', icon: 'people' },
-    { id: 'male', label: 'Male Only', icon: 'male' },
-    { id: 'female', label: 'Female Only', icon: 'female' },
+    { id: 'anyone', label: 'Anyone', icon: 'Users' },
+    { id: 'male', label: 'Male Only', icon: 'User' },
+    { id: 'female', label: 'Female Only', icon: 'User' },
 ];
 
 type TripImageItem = {
@@ -409,7 +409,7 @@ const EditTripScreen = () => {
     const renderHeader = () => (
         <View style={styles.header}>
             <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                <Ionicons name="arrow-back" size={24} color={colors.text} />
+                <Icon name="CaretLeft" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: colors.text }]}>Edit Trip</Text>
             <TouchableOpacity
@@ -530,7 +530,7 @@ const EditTripScreen = () => {
                                                         style={[styles.removeImage, { position: 'relative', top: 0, right: 0, marginLeft: 10, elevation: 0, backgroundColor: 'transparent' }]}
                                                         onPress={() => removeImage(item.id)}
                                                     >
-                                                        <Ionicons name="close-circle" size={24} color="#EF4444" />
+                                                        <Icon name="XCircle" size={24} color="#EF4444" />
                                                     </TouchableOpacity>
                                                 </View>
                                             </View>
@@ -541,7 +541,7 @@ const EditTripScreen = () => {
                                 {tripImages.length < 5 && (
                                     <TouchableOpacity style={[styles.addImageButton, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10, alignSelf: 'flex-start', width: 'auto', paddingHorizontal: 20, height: 40, borderStyle: 'dashed' }]} onPress={pickImages}>
                                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                            <Ionicons name="add" size={20} color={colors.primary} />
+                                            <Icon name="Plus" size={20} color={colors.primary} />
                                             <Text style={[styles.addImageText, { color: colors.primary, marginTop: 0, marginLeft: 5 }]}>Add Images</Text>
                                         </View>
                                     </TouchableOpacity>
@@ -582,7 +582,7 @@ const EditTripScreen = () => {
                                             style={[styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
                                             onPress={() => setShowDateModal('from')}
                                         >
-                                            <Ionicons name="calendar" size={20} color={colors.primary} />
+                                            <Icon name="Calendar" size={20} color={colors.primary} />
                                             <Text style={[styles.dateText, { color: colors.text }]}>{formatDate(fromDate)}</Text>
                                         </TouchableOpacity>
                                     </View>
@@ -592,7 +592,7 @@ const EditTripScreen = () => {
                                             style={[styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
                                             onPress={() => setShowDateModal('to')}
                                         >
-                                            <Ionicons name="calendar" size={20} color={colors.primary} />
+                                            <Icon name="Calendar" size={20} color={colors.primary} />
                                             <Text style={[styles.dateText, { color: colors.text }]}>{formatDate(toDate)}</Text>
                                         </TouchableOpacity>
                                     </View>
@@ -612,7 +612,7 @@ const EditTripScreen = () => {
                                             style={[styles.chip, { backgroundColor: tripTypes.includes(type.id) ? type.color : colors.card, borderColor: type.color }]}
                                             onPress={() => toggleSelection(type.id, tripTypes, setTripTypes)}
                                         >
-                                            <Ionicons name={type.icon as any} size={18} color={tripTypes.includes(type.id) ? '#fff' : type.color} />
+                                            <Icon name={type.icon as any} size={18} color={tripTypes.includes(type.id) ? '#fff' : type.color} />
                                             <Text style={[styles.chipText, { color: tripTypes.includes(type.id) ? '#fff' : colors.text }]}>{type.label}</Text>
                                         </TouchableOpacity>
                                     ))}
@@ -627,7 +627,7 @@ const EditTripScreen = () => {
                                             style={[styles.chip, { backgroundColor: transportModes.includes(mode.id) ? colors.primary : colors.card, borderColor: colors.primary }]}
                                             onPress={() => toggleSelection(mode.id, transportModes, setTransportModes)}
                                         >
-                                            <Ionicons name={mode.icon as any} size={18} color={transportModes.includes(mode.id) ? '#fff' : colors.primary} />
+                                            <Icon name={mode.icon as any} size={18} color={transportModes.includes(mode.id) ? '#fff' : colors.primary} />
                                             <Text style={[styles.chipText, { color: transportModes.includes(mode.id) ? '#fff' : colors.text }]}>{mode.label}</Text>
                                         </TouchableOpacity>
                                     ))}
@@ -658,7 +658,7 @@ const EditTripScreen = () => {
                                             style={[styles.chip, { backgroundColor: accommodationType === type.id ? '#10B981' : colors.card, borderColor: '#10B981' }]}
                                             onPress={() => setAccommodationType(type.id)}
                                         >
-                                            <Ionicons name={type.icon as any} size={18} color={accommodationType === type.id ? '#fff' : '#10B981'} />
+                                            <Icon name={type.icon as any} size={18} color={accommodationType === type.id ? '#fff' : '#10B981'} />
                                             <Text style={[styles.chipText, { color: accommodationType === type.id ? '#fff' : colors.text }]}>{type.label}</Text>
                                         </TouchableOpacity>
                                     ))}
@@ -716,7 +716,7 @@ const EditTripScreen = () => {
                                             style={[styles.chip, { backgroundColor: genderPreference === pref.id ? '#9d74f7' : colors.card, borderColor: '#9d74f7' }]}
                                             onPress={() => setGenderPreference(pref.id)}
                                         >
-                                            <Ionicons name={pref.icon as any} size={18} color={genderPreference === pref.id ? '#fff' : '#9d74f7'} />
+                                            <Icon name={pref.icon as any} size={18} color={genderPreference === pref.id ? '#fff' : '#9d74f7'} />
                                             <Text style={[styles.chipText, { color: genderPreference === pref.id ? '#fff' : colors.text }]}>{pref.label}</Text>
                                         </TouchableOpacity>
                                     ))}

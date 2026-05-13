@@ -4,7 +4,7 @@ import { FlashList } from "@shopify/flash-list";
 
 const TypedFlashList = FlashList as any;
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import FilterModal, { FilterOptions } from '../components/FilterModal';
@@ -74,7 +74,7 @@ const SearchScreen = () => {
             {/* Search Bar */}
             <View style={styles.searchContainer}>
                 <View style={[styles.searchBox, { backgroundColor: colors.inputBackground }]}>
-                    <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
+                    <Icon name="MagnifyingGlass" size={20} color={colors.textSecondary} />
                     <TextInput
                         ref={searchInputRef}
                         style={[styles.searchInput, { color: colors.text }]}
@@ -85,7 +85,7 @@ const SearchScreen = () => {
                     />
                     {searchQuery.length > 0 && (
                         <TouchableOpacity onPress={() => setSearchQuery('')}>
-                            <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                            <Icon name="XCircle" size={18} color={colors.textSecondary} weight="fill" />
                         </TouchableOpacity>
                     )}
                 </View>
@@ -93,7 +93,7 @@ const SearchScreen = () => {
                     style={[styles.filterButton, { backgroundColor: activeFilterCount > 0 ? colors.primary : colors.card }]}
                     onPress={() => setFilterVisible(true)}
                 >
-                    <Ionicons name="options-outline" size={20} color={activeFilterCount > 0 ? '#fff' : colors.text} />
+                    <Icon name="Sliders" size={20} color={activeFilterCount > 0 ? '#fff' : colors.text} />
                     {activeFilterCount > 0 && (
                         <View style={[styles.filterBadge, { backgroundColor: '#EF4444' }]}>
                             <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
@@ -109,7 +109,7 @@ const SearchScreen = () => {
                         <Text style={[styles.activeFilterText, { color: colors.primary }]}>
                             {filters ? 'Filters applied' : ''} {searchQuery ? `"${searchQuery}"` : ''}
                         </Text>
-                        <Ionicons name="close" size={14} color={colors.primary} />
+                        <Icon name="X" size={14} color={colors.primary} />
                     </View>
                 </TouchableOpacity>
             )}
@@ -151,7 +151,7 @@ const SearchScreen = () => {
                                 )}
                             </View>
                             {user.ageVerified === true && (
-                                <Ionicons name="shield-checkmark" size={16} color="#10B981" />
+                                <Icon name="ShieldCheck" size={16} color="#10B981" weight="fill" />
                             )}
                         </TouchableOpacity>
                     ))}
@@ -185,14 +185,14 @@ const SearchScreen = () => {
                 ListEmptyComponent={
                     searchQuery.length >= 2 ? (
                         <View style={styles.emptyContainer}>
-                            <Ionicons name="search-outline" size={48} color={colors.textSecondary} />
+                            <Icon name="MagnifyingGlass" size={48} color={colors.textSecondary} />
                             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
                                 No results found for "{searchQuery}"
                             </Text>
                         </View>
                     ) : (
                         <View style={styles.emptyContainer}>
-                            <Ionicons name="compass-outline" size={64} color={colors.textSecondary} />
+                            <Icon name="Compass" size={64} color={colors.textSecondary} />
                             <Text style={[styles.emptyTitle, { color: colors.text }]}>
                                 Discover Adventures
                             </Text>

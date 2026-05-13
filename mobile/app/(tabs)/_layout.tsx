@@ -1,86 +1,183 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { useTheme } from '../../src/contexts/ThemeContext';
-import { Ionicons } from '@expo/vector-icons';
-import { View, Text, TouchableOpacity } from 'react-native';
-import { Image } from 'expo-image';
+import Icon from '../../src/components/Icon';
+import { View, TouchableOpacity, StyleSheet, Modal, Text } from 'react-native';
+import { BlurView } from 'expo-blur';
+import { useState } from 'react';
+import { MotiView } from 'moti';
 
 export default function TabsLayout() {
   const { colors } = useTheme();
+  const router = useRouter();
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Determine if we are in dark mode based on background color
+  const isDark = colors.background !== '#FFFFFF' && colors.background !== '#ffffff';
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarShowLabel: true,
-        tabBarStyle: {
-          backgroundColor: colors.card,
-          borderTopColor: colors.border,
-          borderTopWidth: 1,
-          height: 76,
-          paddingBottom: 10,
-          paddingTop: 8,
-        },
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textSecondary,
-        tabBarLabelStyle: { fontSize: 12, fontWeight: '600', marginBottom: 4 },
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color, size }: { color: string; size: number }) => <Ionicons name="home-outline" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="ai-planner"
-        options={{
-          title: 'AI Planner',
-          tabBarIcon: ({ color, size }: { color: string; size: number }) => (
-            <View className="w-6 h-6 rounded-full overflow-hidden">
-              <Image
-                source={require('../../assets/Tripzi AI.png')}
-                className="w-full h-full"
-                contentFit="cover"
-              />
-            </View>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarShowLabel: false, // Hide labels for a premium look
+          tabBarStyle: {
+            position: 'absolute', // Make it absolute to float OVER content
+            bottom: 20,
+            left: 16,
+            right: 16,
+            backgroundColor: 'transparent',
+            height: 64,
+            borderRadius: 32, // Rounded edges at both ends
+            borderTopWidth: 0,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.1,
+            shadowRadius: 12,
+            marginHorizontal: 16,
+            elevation: 5,
+            paddingTop: 0, // Remove padding to let itemStyle center them
+            paddingBottom: 0,
+          },
+          tabBarItemStyle: {
+            flexDirection: 'row',
+            justifyContent: 'center', // Center icons horizontally
+            alignItems: 'center', // Center icons vertically
+          },
+          tabBarBackground: () => (
+            <View style={{
+              flex: 1,
+              borderRadius: 32, // Match the tabBarStyle border radius
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+              backgroundColor: colors.card, // Solid background instead of glass
+            }} />
           ),
+          // Set colors as requested: black in light theme, white in dark theme
+          tabBarActiveTintColor: isDark ? '#FFFFFF' : '#000000',
+          tabBarInactiveTintColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)',
         }}
-      />
-      <Tabs.Screen
-        name="create"
-        options={{
-          title: '',
-          tabBarButton: (props: any) => (
-            <View className="flex-1 items-center justify-center">
-              <TouchableOpacity
-                className="w-[68px] h-[68px] rounded-full justify-center items-center -mt-[38px] border-4"
-                style={{
-                  backgroundColor: '#9d74f7',
-                  borderColor: colors.card,
-                }}
-                activeOpacity={0.88}
-              >
-                <Text className="text-4xl font-black text-white leading-[42px]">+</Text>
-              </TouchableOpacity>
-            </View>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="messages"
-        options={{
-          title: 'Messages',
-          tabBarIcon: ({ color, size }: { color: string; size: number }) => <Ionicons name="chatbubble-outline" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color, size }: { color: string; size: number }) => <Ionicons name="person-outline" size={size} color={color} />,
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Home',
+            tabBarIcon: ({ color, size }: { color: string; size: number }) => <Icon name="House" size={size + 2} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="ai-planner"
+          options={{
+            title: 'AI Planner',
+            tabBarIcon: ({ color, size }: { color: string; size: number }) => <Icon name="Sparkle" size={size + 2} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="create"
+          options={{
+            title: 'Create',
+            tabBarIcon: ({ color, size }: { color: string; size: number }) => <Icon name="PlusCircle" size={size + 4} color={color} />,
+          }}
+          listeners={{
+            tabPress: (e) => {
+              e.preventDefault();
+              setShowCreateModal(true);
+            },
+          }}
+        />
+        <Tabs.Screen
+          name="messages"
+          options={{
+            title: 'Messages',
+            tabBarIcon: ({ color, size }: { color: string; size: number }) => <Icon name="ChatTeardropText" size={size + 2} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: 'Profile',
+            tabBarIcon: ({ color, size }: { color: string; size: number }) => <Icon name="User" size={size + 2} color={color} />,
+          }}
+        />
+      </Tabs>
+
+      {/* Create Trip Modal */}
+      <Modal visible={showCreateModal} transparent animationType="fade" onRequestClose={() => setShowCreateModal(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowCreateModal(false)}>
+          <MotiView
+            from={{ opacity: 0, translateY: 100 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 300 }}
+            style={[styles.createModalContent, { backgroundColor: colors.background }]}
+          >
+            <Text style={[styles.createModalTitle, { color: colors.text }]}>Create New Trip ✈️</Text>
+
+            <TouchableOpacity style={[styles.createOption, { backgroundColor: colors.card }]} onPress={() => { setShowCreateModal(false); router.push('/trip/create'); }}>
+              <View style={[styles.createOptionIcon, { backgroundColor: '#E0E7FF' }]}><Icon name="PencilSimple" size={24} color="#6366F1" /></View>
+              <View style={styles.createOptionText}>
+                <Text style={[styles.createOptionTitle, { color: colors.text }]}>Create Manually</Text>
+                <Text style={[styles.createOptionDesc, { color: colors.textSecondary }]}>Fill in details and add photos</Text>
+              </View>
+              <Icon name="CaretRight" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.createOption, { backgroundColor: colors.card }]} onPress={() => { setShowCreateModal(false); router.push('/trip/ai-planner'); }}>
+              <View style={[styles.createOptionIcon, { backgroundColor: '#EDE9FE' }]}><Icon name="Sparkle" size={24} color="#8B5CF6" /></View>
+              <View style={styles.createOptionText}>
+                <Text style={[styles.createOptionTitle, { color: colors.text }]}>Create with AI</Text>
+                <Text style={[styles.createOptionDesc, { color: colors.textSecondary }]}>Let AI plan and generate images</Text>
+              </View>
+              <Icon name="CaretRight" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </MotiView>
+        </TouchableOpacity>
+      </Modal>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  createModalContent: {
+    width: '100%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+    gap: 16,
+  },
+  createModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  createOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 16,
+    gap: 16,
+  },
+  createOptionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  createOptionText: {
+    flex: 1,
+  },
+  createOptionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  createOptionDesc: {
+    fontSize: 12,
+  },
+});

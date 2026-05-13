@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, NEUTRAL } from '../styles';
 
@@ -132,7 +132,7 @@ const ReportTripModal: React.FC<ReportTripModalProps> = ({ visible, trip, onClos
                     {/* Header */}
                     <View style={[styles.header, { borderBottomColor: colors.border }]}>
                         <TouchableOpacity onPress={handleClose} style={styles.headerBtn}>
-                            <Ionicons name="close" size={26} color={colors.text} />
+                            <Icon name="X" size={26} color={colors.text} />
                         </TouchableOpacity>
                         <Text style={[styles.headerTitle, { color: colors.text }]}>Report Trip</Text>
                         <View style={styles.headerBtn} />
@@ -145,7 +145,7 @@ const ReportTripModal: React.FC<ReportTripModalProps> = ({ visible, trip, onClos
                     >
                         {/* Trip Info */}
                         <View style={[styles.tripInfo, { backgroundColor: colors.card }]}>
-                            <Ionicons name="flag" size={22} color="#EF4444" />
+                            <Icon name="Flag" size={22} color="#EF4444" />
                             <View style={{ flex: 1, marginLeft: SPACING.md }}>
                                 <Text style={[styles.tripTitle, { color: colors.text }]} numberOfLines={1}>
                                     {trip?.title || 'Trip'}
@@ -206,7 +206,7 @@ const ReportTripModal: React.FC<ReportTripModalProps> = ({ visible, trip, onClos
                                         style={styles.removeBtn}
                                         onPress={() => removeImage(index)}
                                     >
-                                        <Ionicons name="close" size={14} color="#fff" />
+                                        <Icon name="X" size={14} color="#fff" />
                                     </TouchableOpacity>
                                 </View>
                             ))}
@@ -215,7 +215,7 @@ const ReportTripModal: React.FC<ReportTripModalProps> = ({ visible, trip, onClos
                                     style={[styles.addScreenshot, { borderColor: colors.border, backgroundColor: colors.card }]}
                                     onPress={pickImage}
                                 >
-                                    <Ionicons name="camera-outline" size={28} color={colors.primary} />
+                                    <Icon name="Camera" size={28} color={colors.primary} />
                                     <Text style={[styles.addText, { color: colors.textSecondary }]}>Add</Text>
                                 </TouchableOpacity>
                             )}
@@ -235,7 +235,7 @@ const ReportTripModal: React.FC<ReportTripModalProps> = ({ visible, trip, onClos
                                 <ActivityIndicator color="#FFF" size="small" />
                             ) : (
                                 <>
-                                    <Ionicons name="flag" size={18} color="#fff" />
+                                    <Icon name="Flag" size={18} color="#fff" />
                                     <Text style={styles.submitButtonText}>Submit Report</Text>
                                 </>
                             )}

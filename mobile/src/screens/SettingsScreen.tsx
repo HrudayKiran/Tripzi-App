@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Switch, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -129,7 +129,7 @@ const SettingsScreen = () => {
                         activeOpacity={0.7}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
-                        <Ionicons name={ICONS.back} size={28} color={colors.text} />
+                        <Icon name={ICONS.back} size={28} color={colors.text} />
                     </TouchableOpacity>
                     <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
                     <View style={styles.placeholder} />
@@ -183,7 +183,7 @@ const SettingsScreen = () => {
                                     ]}
                                     onPress={() => setThemeMode('light')}
                                 >
-                                    <Ionicons name="sunny-outline" size={20} color={themeMode === 'light' ? colors.primary : colors.textSecondary} />
+                                    <Icon name="Sun" size={20} color={themeMode === 'light' ? colors.primary : colors.textSecondary} />
                                     <Text style={[styles.themeText, { color: themeMode === 'light' ? colors.primary : colors.textSecondary }]}>Light</Text>
                                 </TouchableOpacity>
 
@@ -195,7 +195,7 @@ const SettingsScreen = () => {
                                     ]}
                                     onPress={() => setThemeMode('dark')}
                                 >
-                                    <Ionicons name="moon-outline" size={20} color={themeMode === 'dark' ? colors.primary : colors.textSecondary} />
+                                    <Icon name="Moon" size={20} color={themeMode === 'dark' ? colors.primary : colors.textSecondary} />
                                     <Text style={[styles.themeText, { color: themeMode === 'dark' ? colors.primary : colors.textSecondary }]}>Dark</Text>
                                 </TouchableOpacity>
 
@@ -207,7 +207,7 @@ const SettingsScreen = () => {
                                     ]}
                                     onPress={() => setThemeMode('system')}
                                 >
-                                    <Ionicons name="contrast-outline" size={20} color={themeMode === 'system' ? colors.primary : colors.textSecondary} />
+                                    <Icon name="CircleHalf" size={20} color={themeMode === 'system' ? colors.primary : colors.textSecondary} />
                                     <Text style={[styles.themeText, { color: themeMode === 'system' ? colors.primary : colors.textSecondary }]}>System</Text>
                                 </TouchableOpacity>
                             </View>
@@ -234,7 +234,7 @@ const SettingsScreen = () => {
                                         Permanently remove your account and data
                                     </Text>
                                 </View>
-                                <Ionicons name="chevron-forward" size={20} color={STATUS.error} />
+                                <Icon name="CaretRight" size={20} color={STATUS.error} />
                             </TouchableOpacity>
                         </View>
                     </MotiView>

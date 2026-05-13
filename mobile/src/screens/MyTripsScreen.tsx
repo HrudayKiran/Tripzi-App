@@ -13,7 +13,7 @@ import { database } from '../database';
 import { syncDatabase } from '../database/sync';
 import { Q } from '@nozbe/watermelondb';
 
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, NEUTRAL, TOUCH_TARGET } from '../styles';
 import AppLogo from '../components/AppLogo';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -132,19 +132,19 @@ const MyTripsScreen = () => {
             {item.title || 'Trip'}
           </Text>
           <View style={styles.locationRow}>
-            <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
+            <Icon name="MapPin" size={14} color={colors.textSecondary} />
             <Text style={[styles.tripLocation, { color: colors.textSecondary }]} numberOfLines={1}>
               {item.toLocation || item.location || 'Location TBD'}
             </Text>
           </View>
           <View style={styles.dateRow}>
-            <Ionicons name="calendar-outline" size={14} color={colors.textSecondary} />
+            <Icon name="Calendar" size={14} color={colors.textSecondary} />
             <Text style={[styles.tripDate, { color: colors.textSecondary }]}>
               {item.from_date ? new Date(item.from_date).toLocaleDateString('en-IN') : (item.fromDate ? new Date(item.fromDate).toLocaleDateString('en-IN') : 'Date TBD')}
             </Text>
           </View>
         </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} style={styles.chevron} />
+        <Icon name="CaretRight" size={18} color={colors.textSecondary} style={styles.chevron} />
       </TouchableOpacity>
     </MotiView>
   );
@@ -176,7 +176,7 @@ const MyTripsScreen = () => {
             activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Ionicons name="chevron-back" size={28} color={colors.text} />
+            <Icon name="CaretLeft" size={28} color={colors.text} />
           </TouchableOpacity>
           <Text style={[styles.title, { color: colors.text }]}>My Trips</Text>
           <View style={styles.placeholder} />

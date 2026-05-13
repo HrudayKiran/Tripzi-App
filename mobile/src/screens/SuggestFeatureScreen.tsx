@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert,
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { MotiView } from 'moti';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../contexts/ThemeContext';
@@ -61,17 +61,17 @@ const SuggestFeatureScreen = () => {
   };
 
   const featureCategories = [
-    { id: 'trip', label: 'Trip Planning', icon: 'map', color: '#3B82F6' },
-    { id: 'messaging', label: 'Messaging', icon: 'chatbubble', color: '#9d74f7' },
-    { id: 'profile', label: 'Profile', icon: 'person', color: '#6B7280' },
-    { id: 'other', label: 'Other', icon: 'ellipsis-horizontal', color: '#F59E0B' },
+    { id: 'trip', label: 'Trip Planning', icon: 'MapTrifold', color: '#3B82F6' },
+    { id: 'messaging', label: 'Messaging', icon: 'ChatTeardropDots', color: '#9d74f7' },
+    { id: 'profile', label: 'Profile', icon: 'User', color: '#6B7280' },
+    { id: 'other', label: 'Other', icon: 'DotsThree', color: '#F59E0B' },
   ];
 
   const bugCategories = [
-    { id: 'crash', label: 'Crash', icon: 'warning', color: '#EF4444' },
-    { id: 'ui', label: 'UI/Display', icon: 'cube', color: '#10B981' },
-    { id: 'login', label: 'Login', icon: 'lock-closed', color: '#F97316' },
-    { id: 'other', label: 'Other', icon: 'ellipsis-horizontal', color: '#9CA3AF' },
+    { id: 'crash', label: 'Crash', icon: 'Warning', color: '#EF4444' },
+    { id: 'ui', label: 'UI/Display', icon: 'Cube', color: '#10B981' },
+    { id: 'login', label: 'Login', icon: 'Lock', color: '#F97316' },
+    { id: 'other', label: 'Other', icon: 'DotsThree', color: '#9CA3AF' },
   ];
 
   const severityLevels = ['Low', 'Medium', 'High', 'Critical'];
@@ -140,7 +140,7 @@ const SuggestFeatureScreen = () => {
             activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Ionicons name="chevron-back" size={28} color={colors.text} />
+            <Icon name="CaretLeft" size={28} color={colors.text} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Feedback</Text>
           <View style={styles.placeholder} />
@@ -153,7 +153,7 @@ const SuggestFeatureScreen = () => {
             onPress={() => setActiveTab('suggest')}
             activeOpacity={0.8}
           >
-            <Ionicons name="bulb-outline" size={18} color={activeTab === 'suggest' ? '#fff' : colors.textSecondary} />
+            <Icon name="Lightbulb" size={18} color={activeTab === 'suggest' ? '#fff' : colors.textSecondary} />
             <Text style={[styles.tabText, { color: activeTab === 'suggest' ? '#fff' : colors.textSecondary }]}>
               Suggest
             </Text>
@@ -163,7 +163,7 @@ const SuggestFeatureScreen = () => {
             onPress={() => setActiveTab('bug')}
             activeOpacity={0.8}
           >
-            <Ionicons name="bug-outline" size={18} color={activeTab === 'bug' ? '#fff' : colors.textSecondary} />
+            <Icon name="Bug" size={18} color={activeTab === 'bug' ? '#fff' : colors.textSecondary} />
             <Text style={[styles.tabText, { color: activeTab === 'bug' ? '#fff' : colors.textSecondary }]}>
               Report Bug
             </Text>
@@ -185,7 +185,7 @@ const SuggestFeatureScreen = () => {
             {activeTab === 'suggest' ? (
               <>
                 <View style={[styles.iconContainer, { backgroundColor: '#FEF3C7' }]}>
-                  <Ionicons name="bulb" size={40} color="#F59E0B" />
+                  <Icon name="Lightbulb" size={40} color="#F59E0B" />
                 </View>
                 <Text style={[styles.formTitle, { color: colors.text }]}>Have an idea?</Text>
                 <Text style={[styles.formSubtitle, { color: colors.textSecondary }]}>We'd love to hear your suggestions!</Text>
@@ -202,7 +202,7 @@ const SuggestFeatureScreen = () => {
                       onPress={() => setFeatureCategory(cat.id)}
                       activeOpacity={0.7}
                     >
-                      <Ionicons name={cat.icon as any} size={18} color={cat.color} />
+                      <Icon name={cat.icon as any} size={18} color={cat.color} />
                       <Text style={[styles.categoryText, { color: colors.text }]}>{cat.label}</Text>
                     </TouchableOpacity>
                   ))}
@@ -235,7 +235,7 @@ const SuggestFeatureScreen = () => {
                   onPress={() => pickImage(featureImages, setFeatureImages)}
                 >
                   <View style={styles.uploadPlaceholder}>
-                    <Ionicons name="images-outline" size={32} color={colors.primary} />
+                    <Icon name="Image" size={32} color={colors.primary} />
                     <Text style={[styles.uploadText, { color: colors.textSecondary }]}>
                       Add screenshot ({featureImages.length}/{MAX_ATTACHMENTS})
                     </Text>
@@ -256,7 +256,7 @@ const SuggestFeatureScreen = () => {
                           onPress={() => removeImage(index, setFeatureImages)}
                           activeOpacity={0.8}
                         >
-                          <Ionicons name="close" size={14} color="#fff" />
+                          <Icon name="X" size={14} color="#fff" />
                         </TouchableOpacity>
                       </View>
                     ))}
@@ -268,14 +268,14 @@ const SuggestFeatureScreen = () => {
                   onPress={handleSubmitFeature}
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="star" size={20} color="#fff" />
+                  <Icon name="Star" size={20} color="#fff" />
                   <Text style={styles.submitButtonText}>Submit Suggestion</Text>
                 </TouchableOpacity>
               </>
             ) : (
               <>
                 <View style={[styles.iconContainer, { backgroundColor: '#FEE2E2' }]}>
-                  <Ionicons name="bug" size={40} color="#EF4444" />
+                  <Icon name="Bug" size={40} color="#EF4444" />
                 </View>
                 <Text style={[styles.formTitle, { color: colors.text }]}>Found a bug?</Text>
                 <Text style={[styles.formSubtitle, { color: colors.textSecondary }]}>Help us improve by reporting issues</Text>
@@ -292,7 +292,7 @@ const SuggestFeatureScreen = () => {
                       onPress={() => setBugCategory(cat.id)}
                       activeOpacity={0.7}
                     >
-                      <Ionicons name={cat.icon as any} size={18} color={cat.color} />
+                      <Icon name={cat.icon as any} size={18} color={cat.color} />
                       <Text style={[styles.categoryText, { color: colors.text }]}>{cat.label}</Text>
                     </TouchableOpacity>
                   ))}
@@ -344,7 +344,7 @@ const SuggestFeatureScreen = () => {
                   onPress={() => pickImage(bugImages, setBugImages)}
                 >
                   <View style={styles.uploadPlaceholder}>
-                    <Ionicons name="images-outline" size={32} color={colors.primary} />
+                    <Icon name="Image" size={32} color={colors.primary} />
                     <Text style={[styles.uploadText, { color: colors.textSecondary }]}>
                       Add screenshot ({bugImages.length}/{MAX_ATTACHMENTS})
                     </Text>
@@ -365,7 +365,7 @@ const SuggestFeatureScreen = () => {
                           onPress={() => removeImage(index, setBugImages)}
                           activeOpacity={0.8}
                         >
-                          <Ionicons name="close" size={14} color="#fff" />
+                          <Icon name="X" size={14} color="#fff" />
                         </TouchableOpacity>
                       </View>
                     ))}
@@ -377,7 +377,7 @@ const SuggestFeatureScreen = () => {
                   onPress={handleSubmitBug}
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="bug" size={20} color="#fff" />
+                  <Icon name="Bug" size={20} color="#fff" />
                   <Text style={styles.submitButtonText}>Submit Bug Report</Text>
                 </TouchableOpacity>
               </>

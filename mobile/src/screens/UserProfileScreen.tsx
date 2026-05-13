@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -199,10 +199,10 @@ const UserProfileScreen = () => {
         return (
             <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
                 <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                    <Ionicons name="arrow-back" size={24} color={colors.text} />
+                    <Icon name="CaretLeft" size={24} color={colors.text} />
                 </TouchableOpacity>
                 <View style={styles.loadingContainer}>
-                    <Ionicons name="person-outline" size={64} color={colors.textSecondary} />
+                    <Icon name="User" size={64} color={colors.textSecondary} />
                     <Text style={[styles.notFoundText, { color: colors.text }]}>User not found</Text>
                 </View>
             </SafeAreaView>
@@ -226,11 +226,11 @@ const UserProfileScreen = () => {
             >
                 <View style={styles.headerRow}>
                     <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={() => router.back()}>
-                        <Ionicons name="arrow-back" size={24} color={colors.text} />
+                        <Icon name="CaretLeft" size={24} color={colors.text} />
                     </TouchableOpacity>
                     {isOwnProfile && (
                         <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={handleCreateButtonPress}>
-                            <Ionicons name="add" size={24} color={colors.text} />
+                            <Icon name="Plus" size={24} color={colors.text} />
                         </TouchableOpacity>
                     )}
                 </View>
@@ -257,13 +257,13 @@ const UserProfileScreen = () => {
                             <View style={styles.nameRow}>
                                 <Text style={[styles.displayName, { color: colors.text }]} numberOfLines={1}>{user.displayName}</Text>
                                 {user.ageVerified === true && (
-                                    <Ionicons name="checkmark-circle" size={18} color="#10B981" style={{ marginLeft: 4 }} />
+                                    <Icon name="CheckCircle" size={18} color="#10B981" weight="fill" style={{ marginLeft: 4 }} />
                                 )}
                             </View>
                             {user.username && <Text style={[styles.displayUsername, { color: colors.textSecondary }]}>@{user.username}</Text>}
                             {hostRating && (
                                 <View style={styles.ratingContainer}>
-                                    <Ionicons name="star" size={12} color="#F59E0B" />
+                                    <Icon name="Star" size={12} color="#F59E0B" weight="fill" />
                                     <Text style={styles.ratingScore}>{hostRating.average}</Text>
                                     <Text style={[styles.ratingCount, { color: colors.textSecondary }]}>({hostRating.count})</Text>
                                 </View>
@@ -291,13 +291,13 @@ const UserProfileScreen = () => {
                 <View style={styles.contentSection}>
                     <View style={styles.tabsHeader}>
                         <View style={[styles.activeTab, { borderBottomColor: colors.text }]}>
-                            <Ionicons name="grid-outline" size={20} color={colors.text} />
+                            <Icon name="SquaresFour" size={20} color={colors.text} />
                         </View>
                     </View>
 
                     {trips.length === 0 ? (
                         <View style={styles.emptyState}>
-                            <Ionicons name="camera-outline" size={40} color={colors.textSecondary} />
+                            <Icon name="Camera" size={40} color={colors.textSecondary} />
                             <Text style={[styles.emptyTitle, { color: colors.text }]}>No Posts Yet</Text>
                         </View>
                     ) : (
@@ -361,20 +361,20 @@ const UserProfileScreen = () => {
                     >
                         <Text style={[styles.createModalTitle, { color: colors.text }]}>Create New Trip ✈️</Text>
                         <TouchableOpacity style={[styles.createOption, { backgroundColor: colors.card }]} onPress={() => { setShowCreateModal(false); router.push('/trip/create'); }}>
-                            <View style={[styles.createOptionIcon, { backgroundColor: '#E0E7FF' }]}><Ionicons name="create-outline" size={24} color="#6366F1" /></View>
+                            <View style={[styles.createOptionIcon, { backgroundColor: '#E0E7FF' }]}><Icon name="PencilSimple" size={24} color="#6366F1" /></View>
                             <View style={styles.createOptionText}>
                                 <Text style={[styles.createOptionTitle, { color: colors.text }]}>Create Manually</Text>
                                 <Text style={[styles.createOptionDesc, { color: colors.textSecondary }]}>Fill in details and add photos</Text>
                             </View>
-                            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                            <Icon name="CaretRight" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                         <TouchableOpacity style={[styles.createOption, { backgroundColor: colors.card }]} onPress={() => { setShowCreateModal(false); router.push('/trip/ai-planner'); }}>
-                            <View style={[styles.createOptionIcon, { backgroundColor: '#EDE9FE' }]}><Ionicons name="sparkles-outline" size={24} color="#8B5CF6" /></View>
+                            <View style={[styles.createOptionIcon, { backgroundColor: '#EDE9FE' }]}><Icon name="Sparkle" size={24} color="#8B5CF6" /></View>
                             <View style={styles.createOptionText}>
                                 <Text style={[styles.createOptionTitle, { color: colors.text }]}>Create with AI</Text>
                                 <Text style={[styles.createOptionDesc, { color: colors.textSecondary }]}>Let AI plan and generate images</Text>
                             </View>
-                            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                            <Icon name="CaretRight" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                     </MotiView>
                 </TouchableOpacity>

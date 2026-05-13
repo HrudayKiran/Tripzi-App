@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 
@@ -124,12 +124,12 @@ const LocationPickerModal = ({ visible, onClose, onSelectLocation }: LocationPic
 
                 {/* Header Back Button */}
                 <TouchableOpacity style={styles.backButton} onPress={onClose}>
-                    <Ionicons name="arrow-back" size={24} color="#000" />
+                    <Icon name="ArrowLeft" size={24} color="#000" />
                 </TouchableOpacity>
 
                 {locationPermissionDenied && (
                     <View style={[styles.permissionBanner, { backgroundColor: colors.card }]}>
-                        <Ionicons name="information-circle" size={18} color={colors.primary} />
+                        <Icon name="Info" size={18} color={colors.primary} />
                         <Text style={[styles.permissionText, { color: colors.text }]}>
                             Location permission is off. You can still pick a place manually on the map.
                         </Text>
@@ -140,7 +140,7 @@ const LocationPickerModal = ({ visible, onClose, onSelectLocation }: LocationPic
                 <View style={[styles.bottomCard, { backgroundColor: colors.card }]}>
                     <View style={styles.locationInfo}>
                         <View style={styles.iconContainer}>
-                            <Ionicons name="location" size={24} color={colors.primary} />
+                            <Icon name="MapPin" size={24} color={colors.primary} />
                         </View>
                         <View style={{ flex: 1 }}>
                             <Text style={[styles.label, { color: colors.textSecondary }]}>Selected Location</Text>
@@ -156,7 +156,7 @@ const LocationPickerModal = ({ visible, onClose, onSelectLocation }: LocationPic
                         disabled={!selectedLocation}
                     >
                         <Text style={styles.confirmButtonText}>Share Location</Text>
-                        <Ionicons name="send" size={16} color="#fff" />
+                        <Icon name="PaperPlaneTilt" size={16} color="#fff" />
                     </TouchableOpacity>
                 </View>
             </View>

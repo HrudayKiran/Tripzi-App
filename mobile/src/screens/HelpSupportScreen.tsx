@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Modal, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { MotiView } from 'moti';
 import { WebView } from 'react-native-webview';
 import { useTheme } from '../contexts/ThemeContext';
@@ -74,7 +74,7 @@ const HelpSupportScreen = () => {
             activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Ionicons name="chevron-back" size={28} color={colors.text} />
+            <Icon name="CaretLeft" size={28} color={colors.text} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Help & Support</Text>
           <View style={styles.placeholder} />
@@ -94,7 +94,7 @@ const HelpSupportScreen = () => {
             style={styles.contactContainer}
           >
             <ContactCard
-              icon="mail-outline"
+              icon="Envelope"
               label="Email"
               iconColor="#9d74f7"
               bgColor="#EDE9FE"
@@ -102,7 +102,7 @@ const HelpSupportScreen = () => {
               onPress={openEmail}
             />
             <ContactCard
-              icon="chatbubble-ellipses-outline"
+              icon="ChatDots"
               label="Live Chat"
               iconColor="#10B981"
               bgColor="#D1FAE5"
@@ -119,7 +119,7 @@ const HelpSupportScreen = () => {
             style={[styles.faqSection, { backgroundColor: colors.card }]}
           >
             <View style={styles.faqHeader}>
-              <Ionicons name="help-circle-outline" size={24} color={colors.primary} />
+              <Icon name="Question" size={24} color={colors.primary} />
               <Text style={[styles.faqTitle, { color: colors.text }]}>Frequently Asked Questions</Text>
             </View>
 
@@ -131,8 +131,8 @@ const HelpSupportScreen = () => {
                   activeOpacity={0.7}
                 >
                   <Text style={[styles.faqQuestionText, { color: colors.text }]}>{faq.question}</Text>
-                  <Ionicons
-                    name={expandedFAQ === faq.id ? "chevron-up" : "chevron-down"}
+                  <Icon
+                    name={expandedFAQ === faq.id ? "CaretUp" : "CaretDown"}
                     size={20}
                     color={colors.textSecondary}
                   />
@@ -171,10 +171,10 @@ const HelpSupportScreen = () => {
               style={styles.chatCloseBtn}
               activeOpacity={0.7}
             >
-              <Ionicons name="close" size={26} color={NEUTRAL.white} />
+              <Icon name="X" size={26} color={NEUTRAL.white} />
             </TouchableOpacity>
             <View style={styles.chatHeaderCenter}>
-              <Ionicons name="chatbubbles" size={20} color={NEUTRAL.white} />
+              <Icon name="ChatTeardropDots" size={20} color={NEUTRAL.white} />
               <Text style={styles.chatHeaderTitle}>Live Support</Text>
             </View>
             <TouchableOpacity
@@ -185,7 +185,7 @@ const HelpSupportScreen = () => {
               style={styles.chatCloseBtn}
               activeOpacity={0.7}
             >
-              <Ionicons name="refresh" size={22} color={NEUTRAL.white} />
+              <Icon name="ArrowsClockwise" size={22} color={NEUTRAL.white} />
             </TouchableOpacity>
           </View>
 
@@ -238,7 +238,7 @@ const ContactCard = ({ icon, label, iconColor, bgColor, colors, onPress }) => (
     onPress={onPress}
   >
     <View style={[styles.contactIcon, { backgroundColor: bgColor }]}>
-      <Ionicons name={icon} size={28} color={iconColor} />
+      <Icon name={icon as any} size={28} color={iconColor} />
     </View>
     <Text style={[styles.contactLabel, { color: colors.text }]}>{label}</Text>
   </TouchableOpacity>

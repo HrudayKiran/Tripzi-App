@@ -10,7 +10,7 @@ import TripCard from '../components/TripCard';
 import DefaultAvatar from '../components/DefaultAvatar';
 import useTripsQuery from '../hooks/useTripsQuery';
 import usePermissions from '../hooks/usePermissions';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import NotificationsModal from '../components/NotificationsModal';
@@ -219,7 +219,7 @@ const FeedScreen = () => {
                     onPress={() => setSearchVisible(true)}
                     testID="search-button"
                 >
-                    <Ionicons name="search-outline" size={22} color={colors.text} />
+                    <Icon name="MagnifyingGlass" size={22} color={colors.text} />
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -227,7 +227,7 @@ const FeedScreen = () => {
                     onPress={() => setFilterVisible(true)}
                     testID="filter-button"
                 >
-                    <Ionicons name="options-outline" size={22} color={activeFilterCount > 0 ? colors.primary : colors.text} />
+                    <Icon name="Sliders" size={22} color={activeFilterCount > 0 ? colors.primary : colors.text} />
                     {activeFilterCount > 0 && (
                         <View style={[styles.filterBadge, { backgroundColor: colors.primary }]}>
                             <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
@@ -241,7 +241,7 @@ const FeedScreen = () => {
                     activeOpacity={0.7}
                     testID="notifications-button"
                 >
-                    <Ionicons name="notifications-outline" size={22} color={colors.text} />
+                    <Icon name="Bell" size={22} color={colors.text} />
                     {hasNotifications && <View style={[styles.notificationDot, { backgroundColor: colors.error }]} />}
                 </TouchableOpacity>
             </View>
@@ -269,6 +269,7 @@ const FeedScreen = () => {
                     key="empty-list"
                     data={[]}
                     ListHeaderComponent={ListHeaderSpacer}
+                    contentContainerStyle={{ paddingBottom: 100 }}
                     ListEmptyComponent={
                         <MotiView
                             from={{ opacity: 0 }}
@@ -277,7 +278,7 @@ const FeedScreen = () => {
                             style={styles.emptyContainer}
                         >
                             <View style={[styles.emptyIcon, { backgroundColor: colors.primaryLight }]}>
-                                <Ionicons name="compass-outline" size={48} color={colors.primary} />
+                                <Icon name="Compass" size={48} color={colors.primary} />
                             </View>
                             <Text style={[styles.emptyTitle, { color: colors.text }]}>No trips found</Text>
                             <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
@@ -310,6 +311,7 @@ const FeedScreen = () => {
                     data={filteredTrips}
                     keyExtractor={(item) => item.id}
                     ListHeaderComponent={ListHeaderSpacer}
+                    contentContainerStyle={{ paddingBottom: 100 }}
                     renderItem={({ item }) => (
                         <TripCard
                             trip={item}
@@ -344,7 +346,7 @@ const FeedScreen = () => {
                     <SafeAreaView style={{ flex: 1 }}>
                         <View style={styles.searchModalHeader}>
                             <View style={[styles.searchBox, { backgroundColor: colors.inputBackground }]}>
-                                <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
+                                <Icon name="MagnifyingGlass" size={20} color={colors.textSecondary} />
                                 <TextInput
                                     style={[styles.searchInput, { color: colors.text }]}
                                     placeholder="Search trips, places, people..."
@@ -355,7 +357,7 @@ const FeedScreen = () => {
                                 />
                                 {searchQuery.length > 0 && (
                                     <TouchableOpacity onPress={() => setSearchQuery('')}>
-                                        <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                                        <Icon name="XCircle" size={18} color={colors.textSecondary} weight="fill" />
                                     </TouchableOpacity>
                                 )}
                             </View>
@@ -384,7 +386,7 @@ const FeedScreen = () => {
                             {/* Empty State */}
                             {!searchingUsers && searchQuery.length >= 2 && searchedUsers.length === 0 && filteredTrips.length === 0 && (
                                 <View style={{ padding: 40, alignItems: 'center', marginTop: 20 }}>
-                                    <Ionicons name="search-outline" size={64} color={colors.border} />
+                                    <Icon name="MagnifyingGlass" size={64} color={colors.border} />
                                     <Text style={{ marginTop: 16, fontSize: 16, color: colors.textSecondary, textAlign: 'center' }}>
                                         No results found for "{searchQuery}"
                                     </Text>
@@ -428,7 +430,7 @@ const FeedScreen = () => {
                                                 )}
                                             </View>
                                             {user.ageVerified === true && (
-                                                <Ionicons name="shield-checkmark" size={16} color="#10B981" />
+                                                <Icon name="ShieldCheck" size={16} color="#10B981" weight="fill" />
                                             )}
                                         </TouchableOpacity>
                                     ))}

@@ -4,7 +4,7 @@ import { FlashList } from "@shopify/flash-list";
 
 const TypedFlashList = FlashList as any;
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { MotiView } from 'moti';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '../contexts/ThemeContext';
@@ -25,30 +25,30 @@ type NotificationsModalProps = {
 const getNotificationStyle = (type: NotificationType): { icon: string; color: string } => {
     switch (type) {
         case 'message':
-            return { icon: 'mail', color: '#9d74f7' };
+            return { icon: 'Envelope', color: '#9d74f7' };
         case 'join_trip':
         case 'join_success':
         case 'trip_join':
-            return { icon: 'person-add', color: '#10B981' };
+            return { icon: 'UserPlus', color: '#10B981' };
         case 'leave_trip':
-            return { icon: 'person-remove', color: '#EF4444' };
+            return { icon: 'UserMinus', color: '#EF4444' };
         case 'rating':
-            return { icon: 'star', color: '#F59E0B' };
+            return { icon: 'Star', color: '#F59E0B' };
         case 'trip_update':
-            return { icon: 'create', color: '#3B82F6' };
+            return { icon: 'NotePencil', color: '#3B82F6' };
         case 'trip_cancelled':
-            return { icon: 'close-circle', color: '#EF4444' };
+            return { icon: 'XCircle', color: '#EF4444' };
         case 'trip_full':
-            return { icon: 'people', color: '#9d74f7' };
+            return { icon: 'Users', color: '#9d74f7' };
         case 'report_submitted':
         case 'trip_report':
-            return { icon: 'flag', color: '#F97316' };
+            return { icon: 'Flag', color: '#F97316' };
         case 'system':
-            return { icon: 'megaphone', color: '#0EA5E9' };
+            return { icon: 'Megaphone', color: '#0EA5E9' };
         case 'action_required':
-            return { icon: 'notifications', color: '#F59E0B' };
+            return { icon: 'Bell', color: '#F59E0B' };
         default:
-            return { icon: 'notifications', color: '#6B7280' };
+            return { icon: 'Bell', color: '#6B7280' };
     }
 };
 
@@ -84,7 +84,7 @@ const NotificationItem = ({
                 onDelete();
             }}
         >
-            <Ionicons name="trash-outline" size={24} color="#fff" />
+            <Icon name="Trash" size={24} color="#fff" />
             <Text style={styles.deleteText}>Delete</Text>
         </TouchableOpacity>
     );
@@ -106,7 +106,7 @@ const NotificationItem = ({
                 activeOpacity={0.7}
             >
                 <View style={[styles.notificationIcon, { backgroundColor: `${color}20` }]}>
-                    <Ionicons name={icon as any} size={20} color={color} />
+                    <Icon name={icon as any} size={20} color={color} />
                 </View>
                 <View style={styles.notificationContent}>
                     <Text style={[styles.notificationTitle, { color: colors.text }]}>
@@ -221,7 +221,7 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                             <View style={[styles.header, { borderBottomColor: colors.border }]}>
                                 <View style={styles.headerLeft}>
                                     <View style={[styles.headerIcon, { backgroundColor: colors.primaryLight }]}>
-                                        <Ionicons name="notifications" size={20} color={colors.primary} />
+                                        <Icon name="Bell" size={20} color={colors.primary} />
                                     </View>
                                     <Text style={[styles.title, { color: colors.text }]}>Notifications</Text>
                                     {unreadCount > 0 && (
@@ -235,7 +235,7 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                                     style={styles.closeButton}
                                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                 >
-                                    <Ionicons name="close" size={24} color={colors.text} />
+                                    <Icon name="X" size={24} color={colors.text} />
                                 </TouchableOpacity>
                             </View>
 
@@ -256,7 +256,7 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                                                 onPress={() => markAllAsRead()}
                                                 activeOpacity={0.7}
                                             >
-                                                <Ionicons name="checkmark-done" size={16} color={colors.primary} />
+                                                <Icon name="Checks" size={16} color={colors.primary} />
                                                 <Text style={[styles.markAllText, { color: colors.primary }]}>
                                                     Mark all read
                                                 </Text>
@@ -291,7 +291,7 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                                 /* Empty State */
                                 <View style={styles.emptyState}>
                                     <View style={[styles.emptyIcon, { backgroundColor: colors.primaryLight }]}>
-                                        <Ionicons name="notifications-off-outline" size={48} color={colors.primary} />
+                                        <Icon name="BellSlash" size={48} color={colors.primary} />
                                     </View>
                                     <Text style={[styles.emptyTitle, { color: colors.text }]}>All caught up!</Text>
                                     <Text style={[styles.emptyText, { color: colors.textSecondary }]}>

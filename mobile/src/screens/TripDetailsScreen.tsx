@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { database } from '../database';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -380,7 +380,7 @@ const TripDetailsScreen = () => {
             style={[styles.headerButton, { backgroundColor: colors.card }]}
             onPress={() => router.back()}
           >
-            <Ionicons name="arrow-back" size={24} color={colors.text} />
+            <Icon name="CaretLeft" size={24} color={colors.text} />
           </TouchableOpacity>
 
           <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
@@ -418,7 +418,7 @@ const TripDetailsScreen = () => {
                   onPress={() => setShowMenu(true)}
                   testID="trip-menu-button"
                 >
-                  <Ionicons name="ellipsis-vertical" size={24} color={colors.text} />
+                  <Icon name="DotsThreeVertical" size={24} color={colors.text} />
                 </TouchableOpacity>
 
                 <Modal
@@ -437,7 +437,7 @@ const TripDetailsScreen = () => {
                             router.push({ pathname: '/trip/edit', params: { id: tripId } });
                           }}
                         >
-                          <Ionicons name="create-outline" size={20} color={colors.text} />
+                          <Icon name="PencilSimple" size={20} color={colors.text} />
                           <Text style={[styles.menuText, { color: colors.text }]}>Edit Trip</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -447,7 +447,7 @@ const TripDetailsScreen = () => {
                             handleCancelTrip();
                           }}
                         >
-                          <Ionicons name="close-circle-outline" size={20} color={colors.text} />
+                          <Icon name="XCircle" size={20} color={colors.text} />
                           <Text style={[styles.menuText, { color: colors.text }]}>Cancel Trip</Text>
                         </TouchableOpacity>
                         <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
@@ -458,7 +458,7 @@ const TripDetailsScreen = () => {
                             handleDeleteTrip();
                           }}
                         >
-                          <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                          <Icon name="Trash" size={20} color="#EF4444" />
                           <Text style={[styles.menuText, { color: '#EF4444' }]}>Delete Trip</Text>
                         </TouchableOpacity>
                       </View>
@@ -474,7 +474,7 @@ const TripDetailsScreen = () => {
                 style={[styles.headerButton, { backgroundColor: colors.card, marginLeft: 8 }]}
                 onPress={() => setShowReportModal(true)}
               >
-                <Ionicons name="flag-outline" size={20} color={colors.text} />
+                <Icon name="Flag" size={20} color={colors.text} />
               </TouchableOpacity>
             )}
           </View>
@@ -515,7 +515,7 @@ const TripDetailsScreen = () => {
                   {(imageLocations[index] || trip?.toLocation || trip?.location) ? (
                     <View style={styles.imageOverlay}>
                       <View style={styles.overlayLocationRow}>
-                        <Ionicons name="location" size={14} color="#fff" />
+                        <Icon name="MapPin" size={14} color="#fff" weight="fill" />
                         <Text style={styles.overlayLocation}>{imageLocations[index] || trip?.toLocation || trip?.location}</Text>
                       </View>
                     </View>
@@ -584,7 +584,7 @@ const TripDetailsScreen = () => {
                   style={[styles.smallMessageBtn, { backgroundColor: colors.primary }]}
                   onPress={handleMessage}
                 >
-                  <Ionicons name="chatbubble-ellipses-outline" size={20} color="#fff" />
+                  <Icon name="ChatTeardropDots" size={20} color="#fff" />
                   <Text style={styles.smallMessageBtnText}>Group Chat</Text>
                 </TouchableOpacity>
               )}
@@ -613,7 +613,7 @@ const TripDetailsScreen = () => {
               style={[styles.compactMapBtn, { backgroundColor: colors.primary + '20' }]}
               onPress={handleOpenMaps}
             >
-              <Ionicons name="map" size={18} color={colors.primary} />
+              <Icon name="MapTrifold" size={18} color={colors.primary} />
               <Text style={[styles.compactMapBtnText, { color: colors.primary }]}>Google Maps</Text>
             </TouchableOpacity>
           </View>
@@ -778,10 +778,11 @@ const TripDetailsScreen = () => {
                             onPress={() => setUserRating(star)}
                             style={styles.starButton}
                           >
-                            <Ionicons
-                              name={star <= userRating ? 'star' : 'star-outline'}
+                            <Icon
+                              name="Star"
                               size={36}
                               color={star <= userRating ? '#F59E0B' : colors.textSecondary}
+                              weight={star <= userRating ? 'fill' : 'regular'}
                             />
                           </TouchableOpacity>
                         ))}
@@ -813,7 +814,7 @@ const TripDetailsScreen = () => {
                     </>
                   ) : (
                     <View style={{ alignItems: 'center', padding: SPACING.lg }}>
-                      <Ionicons name="lock-closed-outline" size={48} color={colors.textSecondary} />
+                      <Icon name="Lock" size={48} color={colors.textSecondary} />
                       <Text style={[styles.ratingCardTitle, { color: colors.text, marginTop: SPACING.md }]}>
                         Join Trip to Rate
                       </Text>
@@ -843,11 +844,12 @@ const TripDetailsScreen = () => {
                           <Text style={[styles.reviewName, { color: colors.text }]}>{review.userName}</Text>
                           <View style={styles.reviewStars}>
                             {[1, 2, 3, 4, 5].map((star) => (
-                              <Ionicons
+                              <Icon
                                 key={star}
-                                name={star <= review.rating ? 'star' : 'star-outline'}
+                                name="Star"
                                 size={14}
                                 color={star <= review.rating ? '#F59E0B' : colors.textSecondary}
+                                weight={star <= review.rating ? 'fill' : 'regular'}
                               />
                             ))}
                           </View>

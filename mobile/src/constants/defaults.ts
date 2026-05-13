@@ -5,7 +5,7 @@
  */
 
 // Default avatar - using a simple gradient color or initials is preferable
-// For now, using null to trigger the Ionicons person icon fallback
+// For now, using null to trigger the Phosphor User icon fallback
 export const DEFAULT_AVATAR_URL: string | null = null;
 
 // Default trip cover image - keep one high-quality travel image as fallback

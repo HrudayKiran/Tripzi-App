@@ -1,7 +1,7 @@
 import React, { memo, useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert, Linking, ScrollView, Modal, Image as RNImage } from 'react-native';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from './Icon';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
@@ -263,7 +263,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                                     </Text>
                                     {userRating && (
                                         <View style={styles.ratingBadge}>
-                                            <Ionicons name="star" size={10} color="#F59E0B" />
+                                            <Icon name="Star" size={10} color="#F59E0B" weight="fill" />
                                             <Text style={styles.ratingText}>{userRating.avg}</Text>
                                         </View>
                                     )}
@@ -317,7 +317,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
 
                             {isCompleted && (
                                 <View style={styles.completedBadge}>
-                                    <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                                    <Icon name="CheckCircle" size={14} color="#10B981" weight="fill" />
                                     <Text style={styles.completedText}>Done</Text>
                                 </View>
                             )}
@@ -359,7 +359,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                                                 {(trip.imageLocations?.[index] || trip?.toLocation || trip?.location) ? (
                                                     <View style={styles.imageOverlay}>
                                                         <View style={styles.overlayLocationRow}>
-                                                            <Ionicons name="location" size={12} color="#fff" />
+                                                            <Icon name="MapPin" size={12} color="#fff" weight="fill" />
                                                             <Text style={styles.overlayLocation} numberOfLines={1}>
                                                                 {trip.imageLocations?.[index] || trip?.toLocation || trip?.location}
                                                             </Text>
@@ -428,7 +428,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                             }}
                             activeOpacity={0.7}
                         >
-                            <Ionicons name="location" size={16} color={colors.primary} />
+                            <Icon name="MapPin" size={16} color={colors.primary} />
                             <Text style={[styles.locationText, { color: colors.primary }]} numberOfLines={1}>
                                 {trip.location || trip.toLocation || 'TBD'}
                             </Text>
@@ -446,7 +446,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                             activeOpacity={0.7}
                         >
                             <Text style={[styles.viewDetailsText, { color: colors.primary, fontSize: 12 }]}>View Details</Text>
-                            <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+                            <Icon name="CaretRight" size={14} color={colors.primary} />
                         </TouchableOpacity>
                     </View>
 

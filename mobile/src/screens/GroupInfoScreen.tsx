@@ -15,7 +15,7 @@ import { FlashList } from "@shopify/flash-list";
 
 const TypedFlashList = FlashList as any;
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, STATUS, NEUTRAL } from '../styles';
@@ -334,7 +334,7 @@ const GroupInfoScreen = () => {
                         {item.role === 'admin' ? 'Admin' : 'Member'}
                     </Text>
                 </View>
-                {!isMe && <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />}
+                {!isMe && <Icon name="CaretRight" size={20} color={colors.textSecondary} />}
             </TouchableOpacity>
         );
     };
@@ -354,7 +354,7 @@ const GroupInfoScreen = () => {
             {/* Header */}
             <View style={[styles.header, { borderBottomColor: colors.border }]}>
                 <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                    <Ionicons name="arrow-back" size={24} color={colors.text} />
+                    <Icon name="CaretLeft" size={24} color={colors.text} />
                 </TouchableOpacity>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Group Info</Text>
             </View>
@@ -371,7 +371,7 @@ const GroupInfoScreen = () => {
                         />
                         {isAdmin && (
                             <View style={[styles.editIconBadge, { backgroundColor: colors.primary }]}>
-                                <Ionicons name="camera" size={14} color="#fff" />
+                                <Icon name="Camera" size={14} color="#fff" />
                             </View>
                         )}
                     </TouchableOpacity>
@@ -385,16 +385,16 @@ const GroupInfoScreen = () => {
                                 autoFocus
                             />
                             <TouchableOpacity onPress={updateGroupName}>
-                                <Ionicons name="checkmark" size={24} color={colors.primary} />
+                                <Icon name="Check" size={24} color={colors.primary} />
                             </TouchableOpacity>
                             <TouchableOpacity onPress={() => setEditing(false)}>
-                                <Ionicons name="close" size={24} color={colors.textSecondary} />
+                                <Icon name="X" size={24} color={colors.textSecondary} />
                             </TouchableOpacity>
                         </View>
                     ) : (
                         <TouchableOpacity style={styles.nameRow} onPress={isAdmin ? () => setEditing(true) : undefined}>
                             <Text style={[styles.groupName, { color: colors.text }]}>{group?.groupName}</Text>
-                            {isAdmin && <Ionicons name="pencil" size={16} color={colors.textSecondary} style={{ marginLeft: 8 }} />}
+                            {isAdmin && <Icon name="PencilSimple" size={16} color={colors.textSecondary} style={{ marginLeft: 8 }} />}
                         </TouchableOpacity>
                     )}
 
@@ -410,7 +410,7 @@ const GroupInfoScreen = () => {
                             style={[styles.actionButton, { backgroundColor: colors.card }]}
                             onPress={() => setShowAddMember(true)}
                         >
-                            <Ionicons name="person-add" size={20} color={colors.primary} />
+                            <Icon name="UserPlus" size={20} color={colors.primary} />
                             <Text style={[styles.actionText, { color: colors.text }]}>Add Members</Text>
                         </TouchableOpacity>
                     )}
@@ -419,7 +419,7 @@ const GroupInfoScreen = () => {
                         style={[styles.actionButton, { backgroundColor: colors.card }]}
                         onPress={leaveGroup}
                     >
-                        <Ionicons name="exit-outline" size={20} color="#EF4444" />
+                        <Icon name="SignOut" size={20} color="#EF4444" />
                         <Text style={[styles.actionText, { color: '#EF4444' }]}>Leave Group</Text>
                     </TouchableOpacity>
                 </View>
@@ -444,12 +444,12 @@ const GroupInfoScreen = () => {
                         <View style={styles.modalHeader}>
                             <Text style={[styles.modalTitle, { color: colors.text }]}>Add Members</Text>
                             <TouchableOpacity onPress={() => { setShowAddMember(false); setSearchQuery(''); setSearchResults([]); }}>
-                                <Ionicons name="close" size={24} color={colors.text} />
+                                <Icon name="X" size={24} color={colors.text} />
                             </TouchableOpacity>
                         </View>
 
                         <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
-                            <Ionicons name="search" size={20} color={colors.textSecondary} />
+                            <Icon name="MagnifyingGlass" size={20} color={colors.textSecondary} />
                             <TextInput
                                 style={[styles.searchInput, { color: colors.text }]}
                                 placeholder="Search users..."
@@ -477,7 +477,7 @@ const GroupInfoScreen = () => {
                                             size={40}
                                         />
                                         <Text style={[styles.searchName, { color: colors.text }]}>{item.displayName}</Text>
-                                        <Ionicons name="add-circle" size={24} color={colors.primary} />
+                                        <Icon name="PlusCircle" size={24} color={colors.primary} />
                                     </TouchableOpacity>
                                 )}
                                 ListEmptyComponent={

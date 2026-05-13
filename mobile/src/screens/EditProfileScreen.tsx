@@ -14,7 +14,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { supabase } from '../lib/supabase';
 import { workersApi } from '../lib/workersApi';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -334,7 +334,7 @@ const EditProfileScreen = () => {
                         onPress={() => router.back()}
                         activeOpacity={0.8}
                     >
-                        <Ionicons name="chevron-back" size={24} color={colors.text} />
+                        <Icon name="CaretLeft" size={24} color={colors.text} />
                     </TouchableOpacity>
 
 

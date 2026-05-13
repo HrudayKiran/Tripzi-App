@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { MotiView, AnimatePresence } from 'moti';
 import { useNotificationStore } from '../store/notificationStore';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { useTheme } from '../contexts/ThemeContext';
 import { STATUS, BORDER_RADIUS, SPACING, FONT_SIZE, FONT_WEIGHT } from '../styles';
 
@@ -30,14 +30,14 @@ export const NotificationToast = () => {
                     style={[styles.container, { backgroundColor: colors.card, borderColor: colors.border }]}
                 >
                     <View style={styles.iconContainer}>
-                        <Ionicons name="notifications" size={24} color={STATUS.success} />
+                        <Icon name="Bell" size={24} color={STATUS.success} />
                     </View>
                     <View style={styles.textContainer}>
                         <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>{currentToast.title}</Text>
                         <Text style={[styles.message, { color: colors.textSecondary }]} numberOfLines={2}>{currentToast.message}</Text>
                     </View>
                     <TouchableOpacity onPress={hideToast} style={styles.closeButton}>
-                        <Ionicons name="close" size={20} color={colors.textSecondary} />
+                        <Icon name="X" size={20} color={colors.textSecondary} />
                     </TouchableOpacity>
                 </MotiView>
             )}

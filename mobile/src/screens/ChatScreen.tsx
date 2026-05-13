@@ -19,7 +19,7 @@ import { FlashList } from "@shopify/flash-list";
 const TypedFlashList = FlashList as any;
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as MediaLibrary from 'expo-media-library';
@@ -161,7 +161,7 @@ const ChatScreen = () => {
                 {mentionQuery.toLowerCase() === 'everyone'.substring(0, mentionQuery.length) || 'everyone'.includes(mentionQuery.toLowerCase()) ? (
                     <TouchableOpacity style={[styles.mentionItem, { borderBottomColor: colors.border }]} onPress={handleSelectTagEveryone}>
                         <View style={[styles.mentionAvatarPlaceholder, { backgroundColor: colors.primary }]}>
-                            <Ionicons name="people" size={16} color="#fff" />
+                            <Icon name="Users" size={16} color="#fff" />
                         </View>
                         <Text style={[styles.mentionName, { color: colors.text }]}>Everyone</Text>
                     </TouchableOpacity>
@@ -1110,13 +1110,13 @@ const ChatScreen = () => {
 
         switch (status) {
             case 'pending':
-                return <Ionicons name="time-outline" size={14} color="rgba(255,255,255,0.7)" />;
+                return <Icon name="Clock" size={14} color="rgba(255,255,255,0.7)" />;
             case 'sent':
-                return <Ionicons name="checkmark" size={14} color="rgba(255,255,255,0.7)" />;
+                return <Icon name="Check" size={14} color="rgba(255,255,255,0.7)" />;
             case 'delivered':
-                return <Ionicons name="checkmark-done" size={14} color="rgba(255,255,255,0.7)" />;
+                return <Icon name="Checks" size={14} color="rgba(255,255,255,0.7)" />;
             case 'read':
-                return <Ionicons name="checkmark-done" size={14} color="#60A5FA" />;
+                return <Icon name="Checks" size={14} color="#60A5FA" />;
             default:
                 return null;
         }
@@ -1138,7 +1138,7 @@ const ChatScreen = () => {
                         </View>
                     )}
                     <View style={[styles.deletedBubble, { backgroundColor: colors.card }]}>
-                        <Ionicons name="ban-outline" size={14} color={colors.textSecondary} />
+                        <Icon name="Prohibit" size={14} color={colors.textSecondary} />
                         <Text style={[styles.deletedText, { color: colors.textSecondary }]}>
                             This message was deleted
                         </Text>
@@ -1239,7 +1239,7 @@ const ChatScreen = () => {
                                     style={styles.locationContainer}
                                 >
                                     <View style={styles.locationMapPreview}>
-                                        <Ionicons name="location" size={40} color={colors.primary} />
+                                        <Icon name="MapPin" size={40} color={colors.primary} />
                                     </View>
                                     <View style={styles.locationInfo}>
                                         <Text style={[styles.locationLabel, { color: isOwn ? '#fff' : colors.text }]}>
@@ -1332,7 +1332,7 @@ const ChatScreen = () => {
             {/* Header */}
             <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
                 <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
-                    <Ionicons name="arrow-back" size={24} color={colors.text} />
+                    <Icon name="CaretLeft" size={24} color={colors.text} />
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -1371,12 +1371,12 @@ const ChatScreen = () => {
                         style={styles.infoButton}
                         onPress={() => router.push({ pathname: '/chat/info', params: { id: chatId } })}
                     >
-                        <Ionicons name="information-circle-outline" size={24} color={colors.text} />
+                        <Icon name="Info" size={24} color={colors.text} />
                     </TouchableOpacity>
                 )}
 
                 <TouchableOpacity style={styles.moreButton} activeOpacity={0.7} onPress={() => setShowChatMenu(true)}>
-                    <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
+                    <Icon name="DotsThreeVertical" size={20} color={colors.text} />
                 </TouchableOpacity>
             </View>
 
@@ -1386,11 +1386,11 @@ const ChatScreen = () => {
                     style={[styles.liveBanner, { backgroundColor: colors.primary }]}
                     onPress={() => setShowLiveMap(true)}
                 >
-                    <Ionicons name="navigate-circle" size={20} color="#fff" />
+                    <Icon name="NavigationArrow" size={20} color="#fff" />
                     <Text style={styles.liveBannerText}>
                         {activeSharersCount} {activeSharersCount === 1 ? 'person is' : 'people are'} sharing live location
                     </Text>
-                    <Ionicons name="chevron-forward" size={16} color="#fff" />
+                    <Icon name="CaretRight" size={16} color="#fff" />
                 </TouchableOpacity>
             )}
 
@@ -1457,7 +1457,7 @@ const ChatScreen = () => {
                             </View>
                         </View>
                         <TouchableOpacity onPress={() => setReplyingTo(null)}>
-                            <Ionicons name="close" size={20} color={colors.textSecondary} />
+                            <Icon name="X" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
                 )}
@@ -1478,7 +1478,7 @@ const ChatScreen = () => {
                         onPress={() => setShowAttachmentPicker(true)}
                         activeOpacity={0.7}
                     >
-                        <Ionicons name="add-circle-outline" size={28} color={colors.primary} />
+                        <Icon name="PlusCircle" size={28} color={colors.primary} />
                     </TouchableOpacity>
 
                     <TextInput
@@ -1501,7 +1501,7 @@ const ChatScreen = () => {
                             {sending ? (
                                 <ActivityIndicator size="small" color="#fff" />
                             ) : (
-                                <Ionicons name="send" size={18} color="#fff" />
+                                <Icon name="PaperPlaneRight" size={18} color="#fff" />
                             )}
                         </TouchableOpacity>
                     ) : null}
@@ -1516,25 +1516,25 @@ const ChatScreen = () => {
                 >
                     <View style={[styles.contextMenu, { backgroundColor: colors.card }]}>
                         <TouchableOpacity style={styles.contextMenuItem} onPress={handleReply}>
-                            <Ionicons name="arrow-undo-outline" size={20} color={colors.text} />
+                            <Icon name="ArrowUUpLeft" size={20} color={colors.text} />
                             <Text style={[styles.contextMenuText, { color: colors.text }]}>Reply</Text>
                         </TouchableOpacity>
 
                         {selectedMessage?.senderId === currentUser?.id && selectedMessage?.type === 'text' && (
                             <TouchableOpacity style={styles.contextMenuItem} onPress={handleEdit}>
-                                <Ionicons name="create-outline" size={20} color={colors.text} />
+                                <Icon name="PencilSimple" size={20} color={colors.text} />
                                 <Text style={[styles.contextMenuText, { color: colors.text }]}>Edit</Text>
                             </TouchableOpacity>
                         )}
 
                         <TouchableOpacity style={styles.contextMenuItem} onPress={() => handleDelete(false)}>
-                            <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                            <Icon name="Trash" size={20} color="#EF4444" />
                             <Text style={[styles.contextMenuText, { color: '#EF4444' }]}>Delete for Me</Text>
                         </TouchableOpacity>
 
                         {selectedMessage?.senderId === currentUser?.id && (
                             <TouchableOpacity style={styles.contextMenuItem} onPress={() => handleDelete(true)}>
-                                <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                                <Icon name="Trash" size={20} color="#EF4444" />
                                 <Text style={[styles.contextMenuText, { color: '#EF4444' }]}>Delete for Everyone</Text>
                             </TouchableOpacity>
                         )}
@@ -1554,7 +1554,7 @@ const ChatScreen = () => {
                             style={styles.dropdownItem}
                             onPress={handleClearChat}
                         >
-                            <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                            <Icon name="Trash" size={20} color="#EF4444" />
                             <Text style={[styles.dropdownText, { color: '#EF4444' }]}>Clear chat</Text>
                         </TouchableOpacity>
                     </View>
@@ -1570,7 +1570,7 @@ const ChatScreen = () => {
                         <View style={styles.attachmentOptions}>
                             <TouchableOpacity style={styles.attachmentOption} onPress={() => pickImage(true)}>
                                 <View style={[styles.attachmentIcon, { backgroundColor: '#9d74f7' }]}>
-                                    <Ionicons name="camera" size={28} color="#fff" />
+                                    <Icon name="Camera" size={28} color="#fff" />
                                 </View>
                                 <Text style={[styles.attachmentLabel, { color: colors.text }]}>Camera</Text>
                             </TouchableOpacity>
@@ -1579,7 +1579,7 @@ const ChatScreen = () => {
 
                             <TouchableOpacity style={styles.attachmentOption} onPress={() => pickImage(false)}>
                                 <View style={[styles.attachmentIcon, { backgroundColor: '#EC4899' }]}>
-                                    <Ionicons name="images" size={28} color="#fff" />
+                                    <Icon name="Image" size={28} color="#fff" />
                                 </View>
                                 <Text style={[styles.attachmentLabel, { color: colors.text }]}>Gallery</Text>
                             </TouchableOpacity>
@@ -1589,7 +1589,7 @@ const ChatScreen = () => {
                                 setShowLocationOptions(true);
                             }}>
                                 <View style={[styles.attachmentIcon, { backgroundColor: '#10B981' }]}>
-                                    <Ionicons name="location" size={28} color="#fff" />
+                                    <Icon name="MapPin" size={28} color="#fff" />
                                 </View>
                                 <Text style={[styles.attachmentLabel, { color: colors.text }]}>Location</Text>
                             </TouchableOpacity>
@@ -1609,13 +1609,13 @@ const ChatScreen = () => {
                             sendLocation();
                         }}>
                             <View style={[styles.locationOptionIcon, { backgroundColor: '#3B82F6' }]}>
-                                <Ionicons name="navigate" size={24} color="#fff" />
+                                <Icon name="NavigationArrow" size={24} color="#fff" />
                             </View>
                             <View style={styles.locationOptionInfo}>
                                 <Text style={[styles.locationOptionTitle, { color: colors.text }]}>Current Location</Text>
                                 <Text style={[styles.locationOptionSubtitle, { color: colors.textSecondary }]}>Share your accurate position</Text>
                             </View>
-                            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                            <Icon name="CaretRight" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
 
                         <TouchableOpacity style={styles.locationOption} onPress={() => {
@@ -1623,13 +1623,13 @@ const ChatScreen = () => {
                             setShowMapPicker(true);
                         }}>
                             <View style={[styles.locationOptionIcon, { backgroundColor: '#F59E0B' }]}>
-                                <Ionicons name="map" size={24} color="#fff" />
+                                <Icon name="MapTrifold" size={24} color="#fff" />
                             </View>
                             <View style={styles.locationOptionInfo}>
                                 <Text style={[styles.locationOptionTitle, { color: colors.text }]}>Pick on Map</Text>
                                 <Text style={[styles.locationOptionSubtitle, { color: colors.textSecondary }]}>Select a location on map</Text>
                             </View>
-                            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                            <Icon name="CaretRight" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
 
                         <TouchableOpacity style={styles.locationOption} onPress={() => {
@@ -1642,13 +1642,13 @@ const ChatScreen = () => {
                             ]);
                         }}>
                             <View style={[styles.locationOptionIcon, { backgroundColor: '#10B981' }]}>
-                                <Ionicons name="radio" size={24} color="#fff" />
+                                <Icon name="Radio" size={24} color="#fff" />
                             </View>
                             <View style={styles.locationOptionInfo}>
                                 <Text style={[styles.locationOptionTitle, { color: colors.text }]}>Live Location</Text>
                                 <Text style={[styles.locationOptionSubtitle, { color: colors.textSecondary }]}>Share real-time movement</Text>
                             </View>
-                            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                            <Icon name="CaretRight" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
                 </Pressable>
@@ -1704,7 +1704,7 @@ const ChatScreen = () => {
             <Modal visible={!!viewingImage} transparent animationType="fade">
                 <Pressable style={styles.imageViewerModal} onPress={() => setViewingImage(null)}>
                     <TouchableOpacity style={styles.imageViewerClose} onPress={() => setViewingImage(null)}>
-                        <Ionicons name="close" size={28} color="#fff" />
+                        <Icon name="X" size={28} color="#fff" />
                     </TouchableOpacity>
                     {viewingImage && (
                         <Image
@@ -1748,7 +1748,7 @@ const ChatScreen = () => {
                             }}
                         >
                             <Text style={[styles.previewButtonText, { fontWeight: 'bold' }]}>Send</Text>
-                            <Ionicons name="send" size={16} color="#fff" style={{ marginLeft: 6 }} />
+                            <Icon name="PaperPlaneRight" size={16} color="#fff" style={{ marginLeft: 6 }} />
                         </TouchableOpacity>
                     </View>
                 </View>

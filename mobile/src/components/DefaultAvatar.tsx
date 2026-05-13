@@ -1,6 +1,6 @@
 import { View, StyleSheet, ViewStyle, ImageStyle } from 'react-native';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from './Icon';
 
 interface DefaultAvatarProps {
     uri?: string | null;
@@ -27,8 +27,8 @@ const DefaultAvatar: React.FC<DefaultAvatarProps> = ({ uri, size = 40, style, is
             style as ViewStyle
         ]}>
             {!isValidUrl ? (
-                <Ionicons
-                    name={isGroup ? "people" : "person"}
+                <Icon
+                    name={isGroup ? "Users" : "User"}
                     size={size * 0.6}
                     color="#9ca3af"
                 />

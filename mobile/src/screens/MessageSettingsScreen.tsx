@@ -8,7 +8,7 @@ import {
     ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { supabase } from '../lib/supabase';
@@ -51,7 +51,7 @@ const MessageSettingsScreen = () => {
     const SettingItem = ({ icon, title, subtitle, value, onValueChange }) => (
         <View style={[styles.settingItem, { backgroundColor: colors.card }]}>
             <View style={styles.settingInfo}>
-                <Ionicons name={icon} size={22} color={colors.primary} />
+                <Icon name={icon as any} size={22} color={colors.primary} />
                 <View style={styles.settingText}>
                     <Text style={[styles.settingTitle, { color: colors.text }]}>{title}</Text>
                     {subtitle && (
@@ -72,7 +72,7 @@ const MessageSettingsScreen = () => {
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
             <View style={[styles.header, { borderBottomColor: colors.border }]}>
                 <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                    <Ionicons name="arrow-back" size={24} color={colors.text} />
+                    <Icon name="CaretLeft" size={24} color={colors.text} />
                 </TouchableOpacity>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Message Settings</Text>
             </View>
@@ -81,7 +81,7 @@ const MessageSettingsScreen = () => {
                 <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>MEDIA</Text>
 
                 <SettingItem
-                    icon="save"
+                    icon="Download"
                     title="Save to Gallery"
                     subtitle="Save received images and documents to your device gallery"
                     value={saveMedia}

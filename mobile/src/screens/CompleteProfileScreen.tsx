@@ -14,7 +14,7 @@ import {
     Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -309,10 +309,10 @@ const CompleteProfileScreen = () => {
                                     <ActivityIndicator size="small" color={colors.primary} style={styles.inputIcon} />
                                 )}
                                 {!checkingUsername && usernameOk && (
-                                    <Ionicons name="checkmark-circle" size={20} color={STATUS.success} style={styles.inputIcon} />
+                                    <Icon name="CheckCircle" size={20} color={STATUS.success} style={styles.inputIcon} />
                                 )}
                                 {!checkingUsername && usernameError && (
-                                    <Ionicons name="close-circle" size={20} color={STATUS.error} style={styles.inputIcon} />
+                                    <Icon name="XCircle" size={20} color={STATUS.error} style={styles.inputIcon} />
                                 )}
                             </View>
                             {usernameError ? (
@@ -359,7 +359,7 @@ const CompleteProfileScreen = () => {
                                 <Text style={[styles.dateText, { color: dob ? colors.text : colors.textSecondary }]}>
                                     {dob ? dob.toLocaleDateString('en-IN') : 'Select date'}
                                 </Text>
-                                <Ionicons name="calendar-outline" size={20} color={colors.textSecondary} />
+                                <Icon name="Calendar" size={20} color={colors.textSecondary} />
                             </TouchableOpacity>
                         </View>
 
@@ -384,8 +384,8 @@ const CompleteProfileScreen = () => {
                                 onPress={() => setAgreedToTerms(!agreedToTerms)}
                                 activeOpacity={0.7}
                             >
-                                <Ionicons
-                                    name={agreedToTerms ? 'checkbox' : 'square-outline'}
+                                <Icon
+                                    name={agreedToTerms ? 'CheckSquare' : 'Square'}
                                     size={22}
                                     color={agreedToTerms ? colors.primary : colors.textSecondary}
                                 />

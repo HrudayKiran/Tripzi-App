@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ScrollView, Dimensions, Animated, Platform, KeyboardAvoidingView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useTheme } from '../contexts/ThemeContext';
@@ -35,10 +35,10 @@ export type FilterOptions = {
 };
 
 const SORT_OPTIONS = [
-    { id: 'newest', label: 'Newest First', icon: 'time-outline', color: '#9d74f7' },
-    { id: 'oldest', label: 'Oldest First', icon: 'hourglass-outline', color: '#6B7280' },
-    { id: 'lowestCost', label: 'Budget (Low)', icon: 'wallet-outline', color: '#10B981' },
-    { id: 'highestCost', label: 'Budget (High)', icon: 'trending-up-outline', color: '#F59E0B' },
+    { id: 'newest', label: 'Newest First', icon: 'Clock', color: '#9d74f7' },
+    { id: 'oldest', label: 'Oldest First', icon: 'Hourglass', color: '#6B7280' },
+    { id: 'lowestCost', label: 'Budget (Low)', icon: 'Wallet', color: '#10B981' },
+    { id: 'highestCost', label: 'Budget (High)', icon: 'TrendUp', color: '#F59E0B' },
 ];
 
 const BUDGET_OPTIONS = [
@@ -50,43 +50,43 @@ const BUDGET_OPTIONS = [
 ];
 
 const TRIP_TYPES = [
-    { id: 'adventure', label: 'Adventure', icon: 'compass-outline' },
-    { id: 'trekking', label: 'Trekking', icon: 'footsteps-outline' },
-    { id: 'bike_ride', label: 'Bike Ride', icon: 'bicycle-outline' },
-    { id: 'road_trip', label: 'Road Trip', icon: 'car-outline' },
-    { id: 'camping', label: 'Camping', icon: 'bonfire-outline' },
-    { id: 'sightseeing', label: 'Sightseeing', icon: 'camera-outline' },
-    { id: 'beach', label: 'Beach', icon: 'water-outline' },
-    { id: 'pilgrimage', label: 'Pilgrimage', icon: 'rose-outline' },
+    { id: 'adventure', label: 'Adventure', icon: 'Compass' },
+    { id: 'trekking', label: 'Trekking', icon: 'Footprints' },
+    { id: 'bike_ride', label: 'Bike Ride', icon: 'Bicycle' },
+    { id: 'road_trip', label: 'Road Trip', icon: 'Car' },
+    { id: 'camping', label: 'Camping', icon: 'Campfire' },
+    { id: 'sightseeing', label: 'Sightseeing', icon: 'Camera' },
+    { id: 'beach', label: 'Beach', icon: 'Waves' },
+    { id: 'pilgrimage', label: 'Pilgrimage', icon: 'Flower' },
 ];
 
 const TRANSPORT_MODES = [
-    { id: 'train', label: 'Train', icon: 'train-outline' },
-    { id: 'bus', label: 'Bus', icon: 'bus-outline' },
-    { id: 'car', label: 'Car', icon: 'car-sport-outline' },
-    { id: 'flight', label: 'Flight', icon: 'airplane-outline' },
-    { id: 'bike', label: 'Bike', icon: 'bicycle-outline' },
+    { id: 'train', label: 'Train', icon: 'Train' },
+    { id: 'bus', label: 'Bus', icon: 'Bus' },
+    { id: 'car', label: 'Car', icon: 'Car' },
+    { id: 'flight', label: 'Flight', icon: 'Airplane' },
+    { id: 'bike', label: 'Bike', icon: 'Bicycle' },
 ];
 
 const GENDER_PREFERENCES = [
-    { id: 'anyone', label: 'Anyone', icon: 'people-outline' },
-    { id: 'male', label: 'Male Only', icon: 'man-outline' },
-    { id: 'female', label: 'Female Only', icon: 'woman-outline' },
+    { id: 'anyone', label: 'Anyone', icon: 'Users' },
+    { id: 'male', label: 'Male Only', icon: 'GenderMale' },
+    { id: 'female', label: 'Female Only', icon: 'GenderFemale' },
 ];
 
 const ACCOMMODATION_TYPES = [
-    { id: 'hotel', label: 'Hotel', icon: 'bed-outline' },
-    { id: 'hostel', label: 'Hostel', icon: 'business-outline' },
-    { id: 'homestay', label: 'Homestay', icon: 'home-outline' },
-    { id: 'camping', label: 'Camping', icon: 'bonfire-outline' },
-    { id: 'resort', label: 'Resort', icon: 'sunny-outline' },
-    { id: 'none', label: 'Not Needed', icon: 'close-circle-outline' },
+    { id: 'hotel', label: 'Hotel', icon: 'Bed' },
+    { id: 'hostel', label: 'Hostel', icon: 'Buildings' },
+    { id: 'homestay', label: 'Homestay', icon: 'House' },
+    { id: 'camping', label: 'Camping', icon: 'Campfire' },
+    { id: 'resort', label: 'Resort', icon: 'Sun' },
+    { id: 'none', label: 'Not Needed', icon: 'XCircle' },
 ];
 
 const BOOKING_STATUSES = [
-    { id: 'booked', label: 'Booked', icon: 'checkmark-circle-outline', color: '#10B981' },
-    { id: 'to_book', label: 'To Book', icon: 'time-outline', color: '#F59E0B' },
-    { id: 'not_needed', label: 'Not Needed', icon: 'close-circle-outline', color: '#6B7280' },
+    { id: 'booked', label: 'Booked', icon: 'CheckCircle', color: '#10B981' },
+    { id: 'to_book', label: 'To Book', icon: 'Clock', color: '#F59E0B' },
+    { id: 'not_needed', label: 'Not Needed', icon: 'XCircle', color: '#6B7280' },
 ];
 
 const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalProps) => {
@@ -267,7 +267,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                             <View style={[styles.header, { borderBottomColor: colors.border }]}>
                                 <View style={styles.headerLeft}>
                                     <View style={[styles.headerIcon, { backgroundColor: colors.primaryLight }]}>
-                                        <Ionicons name="options" size={20} color={colors.primary} />
+                                        <Icon name="Sliders" size={20} color={colors.primary} />
                                     </View>
                                     <Text style={[styles.title, { color: colors.text }]}>Filters</Text>
                                     {activeCount > 0 && (
@@ -281,7 +281,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                     style={styles.closeButton}
                                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                 >
-                                    <Ionicons name="close" size={24} color={colors.text} />
+                                    <Icon name="X" size={24} color={colors.text} />
                                 </TouchableOpacity>
                             </View>
 
@@ -289,7 +289,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                 {/* Sort By */}
                                 <View style={styles.section}>
                                     <View style={styles.sectionHeader}>
-                                        <Ionicons name="swap-vertical" size={20} color={colors.primary} />
+                                        <Icon name="ArrowsDownUp" size={20} color={colors.primary} />
                                         <Text style={[styles.sectionTitle, { color: colors.text }]}>Sort By</Text>
                                     </View>
                                     <View style={styles.sortGrid}>
@@ -306,7 +306,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                                 onPress={() => setSortBy(option.id)}
                                                 activeOpacity={0.7}
                                             >
-                                                <Ionicons name={option.icon as any} size={18} color={sortBy === option.id ? '#fff' : option.color} />
+                                                <Icon name={option.icon as any} size={18} color={sortBy === option.id ? '#fff' : option.color} />
                                                 <Text style={[styles.sortOptionText, { color: sortBy === option.id ? '#fff' : colors.text }]}>
                                                     {option.label}
                                                 </Text>
@@ -318,11 +318,11 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                 {/* Destination */}
                                 <View style={styles.section}>
                                     <View style={styles.sectionHeader}>
-                                        <Ionicons name="location-outline" size={20} color="#EF4444" />
+                                        <Icon name="MapPin" size={20} color="#EF4444" />
                                         <Text style={[styles.sectionTitle, { color: colors.text }]}>Destination</Text>
                                     </View>
                                     <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
-                                        <Ionicons name="search-outline" size={16} color={colors.textSecondary} />
+                                        <Icon name="MagnifyingGlass" size={16} color={colors.textSecondary} />
                                         <TextInput
                                             style={[styles.input, { color: colors.text }]}
                                             placeholder="Search destination..."
@@ -332,7 +332,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                         />
                                         {destination !== '' && (
                                             <TouchableOpacity onPress={() => setDestination('')}>
-                                                <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                                                <Icon name="XCircle" size={18} color={colors.textSecondary} />
                                             </TouchableOpacity>
                                         )}
                                     </View>
@@ -341,11 +341,11 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                 {/* Starting From */}
                                 <View style={styles.section}>
                                     <View style={styles.sectionHeader}>
-                                        <Ionicons name="navigate-outline" size={20} color="#6366F1" />
+                                        <Icon name="NavigationArrow" size={20} color="#6366F1" />
                                         <Text style={[styles.sectionTitle, { color: colors.text }]}>Starting From</Text>
                                     </View>
                                     <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
-                                        <Ionicons name="flag-outline" size={16} color={colors.textSecondary} />
+                                        <Icon name="Flag" size={16} color={colors.textSecondary} />
                                         <TextInput
                                             style={[styles.input, { color: colors.text }]}
                                             placeholder="Origin city..."
@@ -355,7 +355,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                         />
                                         {startingFrom !== '' && (
                                             <TouchableOpacity onPress={() => setStartingFrom('')}>
-                                                <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                                                <Icon name="XCircle" size={18} color={colors.textSecondary} />
                                             </TouchableOpacity>
                                         )}
                                     </View>
@@ -364,7 +364,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                 {/* Max Budget */}
                                 <View style={styles.section}>
                                     <View style={styles.sectionHeader}>
-                                        <Ionicons name="wallet-outline" size={20} color="#10B981" />
+                                        <Icon name="Wallet" size={20} color="#10B981" />
                                         <Text style={[styles.sectionTitle, { color: colors.text }]}>Max Budget</Text>
                                     </View>
                                     <View style={styles.optionsRow}>
@@ -406,11 +406,11 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                 {/* Group Size */}
                                 <View style={styles.section}>
                                     <View style={styles.sectionHeader}>
-                                        <Ionicons name="people-outline" size={20} color="#F59E0B" />
+                                        <Icon name="Users" size={20} color="#F59E0B" />
                                         <Text style={[styles.sectionTitle, { color: colors.text }]}>Group Size (max)</Text>
                                     </View>
                                     <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
-                                        <Ionicons name="person-outline" size={16} color={colors.textSecondary} />
+                                        <Icon name="User" size={16} color={colors.textSecondary} />
                                         <TextInput
                                             style={[styles.input, { color: colors.text }]}
                                             placeholder="Enter max travelers..."
@@ -422,7 +422,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                         />
                                         {groupSize !== '' && (
                                             <TouchableOpacity onPress={() => setGroupSize('')}>
-                                                <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                                                <Icon name="XCircle" size={18} color={colors.textSecondary} />
                                             </TouchableOpacity>
                                         )}
                                     </View>
@@ -431,7 +431,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                 {/* Date Range — Calendar Picker */}
                                 <View style={styles.section}>
                                     <View style={styles.sectionHeader}>
-                                        <Ionicons name="calendar-outline" size={20} color="#EC4899" />
+                                        <Icon name="Calendar" size={20} color="#EC4899" />
                                         <Text style={[styles.sectionTitle, { color: colors.text }]}>Date Range</Text>
                                     </View>
                                     <View style={styles.dateRow}>
@@ -439,7 +439,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                             style={[styles.datePickerBtn, { backgroundColor: colors.inputBackground, borderColor: startDateObj ? '#EC4899' : colors.border }]}
                                             onPress={() => setShowStartPicker(true)}
                                         >
-                                            <Ionicons name="calendar-outline" size={16} color={startDateObj ? '#EC4899' : colors.textSecondary} />
+                                            <Icon name="Calendar" size={16} color={startDateObj ? '#EC4899' : colors.textSecondary} />
                                             <Text style={[styles.datePickerText, { color: startDateObj ? colors.text : colors.textSecondary }]}>
                                                 {formatPickedDate(startDateObj) || 'Start Date'}
                                             </Text>
@@ -449,7 +449,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                             style={[styles.datePickerBtn, { backgroundColor: colors.inputBackground, borderColor: endDateObj ? '#EC4899' : colors.border }]}
                                             onPress={() => setShowEndPicker(true)}
                                         >
-                                            <Ionicons name="calendar-outline" size={16} color={endDateObj ? '#EC4899' : colors.textSecondary} />
+                                            <Icon name="Calendar" size={16} color={endDateObj ? '#EC4899' : colors.textSecondary} />
                                             <Text style={[styles.datePickerText, { color: endDateObj ? colors.text : colors.textSecondary }]}>
                                                 {formatPickedDate(endDateObj) || 'End Date'}
                                             </Text>
@@ -468,7 +468,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                 {/* Trip Type — Multi-select */}
                                 <View style={styles.section}>
                                     <View style={styles.sectionHeader}>
-                                        <Ionicons name="compass-outline" size={20} color={colors.primary} />
+                                        <Icon name="Compass" size={20} color={colors.primary} />
                                         <Text style={[styles.sectionTitle, { color: colors.text }]}>Trip Type</Text>
                                         {tripTypes.length > 0 && (
                                             <Text style={[styles.selectionCount, { color: colors.primary }]}>{tripTypes.length} selected</Text>
@@ -484,7 +484,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                                     onPress={() => toggleMultiSelect(tripTypes, setTripTypes, option.id)}
                                                     activeOpacity={0.7}
                                                 >
-                                                    <Ionicons name={option.icon as any} size={16} color={selected ? '#fff' : colors.text} style={{ marginRight: 4 }} />
+                                                    <Icon name={option.icon as any} size={16} color={selected ? '#fff' : colors.text} style={{ marginRight: 4 }} />
                                                     <Text style={[styles.optionChipText, { color: selected ? '#fff' : colors.text }]}>{option.label}</Text>
                                                 </TouchableOpacity>
                                             );
@@ -495,7 +495,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                 {/* Transport Mode — Multi-select */}
                                 <View style={styles.section}>
                                     <View style={styles.sectionHeader}>
-                                        <Ionicons name="train-outline" size={20} color="#9d74f7" />
+                                        <Icon name="Train" size={20} color="#9d74f7" />
                                         <Text style={[styles.sectionTitle, { color: colors.text }]}>Transport Mode</Text>
                                         {transportModes.length > 0 && (
                                             <Text style={[styles.selectionCount, { color: '#9d74f7' }]}>{transportModes.length} selected</Text>
@@ -511,7 +511,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                                     onPress={() => toggleMultiSelect(transportModes, setTransportModes, option.id)}
                                                     activeOpacity={0.7}
                                                 >
-                                                    <Ionicons name={option.icon as any} size={16} color={selected ? '#fff' : colors.text} style={{ marginRight: 4 }} />
+                                                    <Icon name={option.icon as any} size={16} color={selected ? '#fff' : colors.text} style={{ marginRight: 4 }} />
                                                     <Text style={[styles.optionChipText, { color: selected ? '#fff' : colors.text }]}>{option.label}</Text>
                                                 </TouchableOpacity>
                                             );
@@ -522,7 +522,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                 {/* Accommodation Type */}
                                 <View style={styles.section}>
                                     <View style={styles.sectionHeader}>
-                                        <Ionicons name="bed-outline" size={20} color="#0EA5E9" />
+                                        <Icon name="Bed" size={20} color="#0EA5E9" />
                                         <Text style={[styles.sectionTitle, { color: colors.text }]}>Accommodation</Text>
                                     </View>
                                     <View style={styles.optionsRow}>
@@ -535,7 +535,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                                     onPress={() => setAccommodationType(selected ? undefined : option.id)}
                                                     activeOpacity={0.7}
                                                 >
-                                                    <Ionicons name={option.icon as any} size={16} color={selected ? '#fff' : colors.text} style={{ marginRight: 4 }} />
+                                                    <Icon name={option.icon as any} size={16} color={selected ? '#fff' : colors.text} style={{ marginRight: 4 }} />
                                                     <Text style={[styles.optionChipText, { color: selected ? '#fff' : colors.text }]}>{option.label}</Text>
                                                 </TouchableOpacity>
                                             );
@@ -546,7 +546,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                 {/* Booking Status */}
                                 <View style={styles.section}>
                                     <View style={styles.sectionHeader}>
-                                        <Ionicons name="bookmark-outline" size={20} color="#F59E0B" />
+                                        <Icon name="Bookmark" size={20} color="#F59E0B" />
                                         <Text style={[styles.sectionTitle, { color: colors.text }]}>Booking Status</Text>
                                     </View>
                                     <View style={styles.optionsRow}>
@@ -559,7 +559,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                                     onPress={() => setBookingStatus(selected ? undefined : option.id)}
                                                     activeOpacity={0.7}
                                                 >
-                                                    <Ionicons name={option.icon as any} size={16} color={selected ? '#fff' : colors.text} style={{ marginRight: 4 }} />
+                                                    <Icon name={option.icon as any} size={16} color={selected ? '#fff' : colors.text} style={{ marginRight: 4 }} />
                                                     <Text style={[styles.optionChipText, { color: selected ? '#fff' : colors.text }]}>{option.label}</Text>
                                                 </TouchableOpacity>
                                             );
@@ -570,7 +570,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                 {/* Gender Preference */}
                                 <View style={styles.section}>
                                     <View style={styles.sectionHeader}>
-                                        <Ionicons name="people-circle-outline" size={20} color="#EF4444" />
+                                        <Icon name="Users" size={20} color="#EF4444" />
                                         <Text style={[styles.sectionTitle, { color: colors.text }]}>Who can join?</Text>
                                     </View>
                                     <View style={styles.optionsRow}>
@@ -581,7 +581,7 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                                                 onPress={() => setGenderPreference(genderPreference === option.id ? undefined : option.id)}
                                                 activeOpacity={0.7}
                                             >
-                                                <Ionicons name={option.icon as any} size={16} color={genderPreference === option.id ? '#fff' : colors.text} style={{ marginRight: 4 }} />
+                                                <Icon name={option.icon as any} size={16} color={genderPreference === option.id ? '#fff' : colors.text} style={{ marginRight: 4 }} />
                                                 <Text style={[styles.optionChipText, { color: genderPreference === option.id ? '#fff' : colors.text }]}>{option.label}</Text>
                                             </TouchableOpacity>
                                         ))}
@@ -594,11 +594,11 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                             {/* Buttons */}
                             <View style={[styles.buttonContainer, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
                                 <TouchableOpacity style={[styles.resetButton, { borderColor: colors.border }]} onPress={handleReset} activeOpacity={0.7}>
-                                    <Ionicons name="refresh-outline" size={18} color={colors.textSecondary} />
+                                    <Icon name="ArrowClockwise" size={18} color={colors.textSecondary} />
                                     <Text style={[styles.resetButtonText, { color: colors.textSecondary }]}>Reset</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity style={[styles.applyButton, { backgroundColor: colors.primary }]} onPress={handleApply} activeOpacity={0.8}>
-                                    <Ionicons name="checkmark" size={18} color="#fff" />
+                                    <Icon name="Check" size={18} color="#fff" />
                                     <Text style={styles.applyButtonText}>Apply Filters</Text>
                                 </TouchableOpacity>
                             </View>
