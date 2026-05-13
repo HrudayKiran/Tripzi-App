@@ -62,8 +62,8 @@ const PrivacyPolicyScreen = () => {
             </Section>
 
             <Section title="5. Storage, Analytics, and Vendors" colors={colors}>
-              Tripzi uses Firebase services for authentication, database, messaging, remote config,
-              performance, crash reporting, and related backend operations. Tripzi may also use Cloudflare R2
+              Tripzi uses Firebase services for messaging, remote config,
+              app check, performance, crash reporting, and related analytics. Tripzi may also use Cloudflare R2
               for media storage and other service providers needed to deliver app functionality.
             </Section>
 
