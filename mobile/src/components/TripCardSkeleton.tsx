@@ -1,34 +1,10 @@
 import React from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
-import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS } from '../styles';
+import { TextSkeleton, AvatarSkeleton, ImageSkeleton } from './Skeletons';
 
 const { width } = Dimensions.get('window');
-
-const SkeletonItem = ({ width, height, borderRadius = 4, style = {} }: any) => {
-  const { colors } = useTheme();
-  return (
-    <MotiView
-      from={{ opacity: 0.3 }}
-      animate={{ opacity: 0.7 }}
-      transition={{
-        type: 'timing',
-        duration: 1000,
-        loop: true,
-      }}
-      style={[
-        {
-          width,
-          height,
-          borderRadius,
-          backgroundColor: colors.background !== '#FFFFFF' ? '#2A2A2A' : '#E0E0E0',
-        },
-        style,
-      ]}
-    />
-  );
-};
 
 export const TripCardSkeleton = () => {
   const { colors } = useTheme();
@@ -37,38 +13,38 @@ export const TripCardSkeleton = () => {
     <View style={[styles.card, { backgroundColor: colors.card }]}>
       {/* Header */}
       <View style={styles.header}>
-        <SkeletonItem width={38} height={38} borderRadius={19} />
+        <AvatarSkeleton size={38} />
         <View style={styles.headerText}>
-          <SkeletonItem width={120} height={14} borderRadius={4} />
+          <TextSkeleton width={120} height={14} />
           <View style={{ height: 4 }} />
-          <SkeletonItem width={60} height={10} borderRadius={3} />
+          <TextSkeleton width={60} height={10} />
         </View>
-        <SkeletonItem width={60} height={30} borderRadius={15} style={styles.headerButton} />
+        <TextSkeleton width={60} height={30} borderRadius={15} style={styles.headerButton} />
       </View>
 
       {/* Image */}
-      <SkeletonItem width={width} height={width * (4 / 5)} borderRadius={0} />
+      <ImageSkeleton width={width} height={width * (4 / 5)} />
 
       {/* Content */}
       <View style={styles.content}>
-        <SkeletonItem width={200} height={18} borderRadius={4} style={styles.mb8} />
+        <TextSkeleton width={200} height={18} style={styles.mb8} />
         <View style={styles.row}>
-          <SkeletonItem width={16} height={16} borderRadius={8} />
+          <AvatarSkeleton size={16} />
           <View style={{ width: 4 }} />
-          <SkeletonItem width={150} height={14} borderRadius={4} />
+          <TextSkeleton width={150} height={14} />
         </View>
         <View style={{ height: 12 }} />
-        <SkeletonItem width={width - 40} height={14} borderRadius={4} style={styles.mb4} />
-        <SkeletonItem width={width - 80} height={14} borderRadius={4} />
+        <TextSkeleton width={width - 40} height={14} style={styles.mb4} />
+        <TextSkeleton width={width - 80} height={14} />
       </View>
 
       {/* Details Row */}
       <View style={[styles.detailsRow, { borderTopColor: colors.border }]}>
         {[1, 2, 3, 4, 5].map((i) => (
           <View key={i} style={styles.detailItem}>
-            <SkeletonItem width={24} height={24} borderRadius={12} />
+            <AvatarSkeleton size={24} />
             <View style={{ height: 4 }} />
-            <SkeletonItem width={40} height={10} borderRadius={3} />
+            <TextSkeleton width={40} height={10} />
           </View>
         ))}
       </View>

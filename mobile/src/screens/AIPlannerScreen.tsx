@@ -869,13 +869,13 @@ export default function AIPlannerScreen() {
                     </TouchableOpacity>
                 </View>
                 <ScrollView contentContainerStyle={{ padding: SPACING.md }}>
-                    <TouchableOpacity style={[styles.newChatBtn, { backgroundColor: colors.primary }]} onPress={handleNewChat}>
-                        <Icon name="Plus" size={20} color="#fff" />
-                        <Text style={styles.newChatBtnText}>New Chat</Text>
+                    <TouchableOpacity style={[styles.newChatBtn, { backgroundColor: colors.text }]} onPress={handleNewChat}>
+                        <Icon name="Plus" size={20} color={colors.background} />
+                        <Text style={[styles.newChatBtnText, { color: colors.background }]}>New Chat</Text>
                     </TouchableOpacity>
                     <Text style={[styles.drawerSectionTitle, { color: colors.textSecondary }]}>Recent</Text>
                     {conversations.map(conv => (
-                        <View key={conv.id} style={[styles.drawerItemWrap, conversationId === conv.id && { backgroundColor: 'rgba(157,116,247,0.1)', borderRadius: BORDER_RADIUS.md }]}>
+                        <View key={conv.id} style={[styles.drawerItemWrap, conversationId === conv.id && { backgroundColor: colors.border, borderRadius: BORDER_RADIUS.md }]}>
                             <TouchableOpacity style={styles.drawerItem} onPress={() => handleSelectChat(conv)}>
                                 <Icon name="ChatTeardropText" size={18} color={colors.text} />
                                 <Text style={[styles.drawerItemText, { color: colors.text }]} numberOfLines={1}>{conv.title}</Text>

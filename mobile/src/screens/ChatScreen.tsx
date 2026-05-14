@@ -24,7 +24,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
-
+import { ChatSkeleton } from '../components/Skeletons';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
 import { useChatMessagesQuery, ChatMessage, ReplyTo } from '../hooks/useChatMessagesQuery';
@@ -1330,9 +1330,7 @@ const ChatScreen = () => {
     if (loading) {
         return (
             <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={colors.primary} />
-                </View>
+                <ChatSkeleton />
             </SafeAreaView>
         );
     }

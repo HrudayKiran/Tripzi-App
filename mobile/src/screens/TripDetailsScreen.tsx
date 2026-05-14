@@ -16,6 +16,7 @@ import ActionReasonModal from '../components/ActionReasonModal';
 import { cancelTrip, deleteTrip, joinTrip, leaveTrip, rateTrip } from '../utils/tripActions';
 import useTripDetailsQuery from '../hooks/useTripDetailsQuery';
 import { useQueryClient } from '@tanstack/react-query';
+import CustomTimeline from '../components/CustomTimeline';
 
 const { width } = Dimensions.get('window');
 
@@ -697,6 +698,18 @@ const TripDetailsScreen = () => {
                   <Text style={[styles.placeText, { color: colors.text }]}>{place}</Text>
                 </View>
               ))}
+            </MotiView>
+          )}
+
+          {/* Itinerary Timeline */}
+          {trip.itinerary?.length > 0 && (
+            <MotiView
+              from={{ opacity: 0, translateY: 20 }}
+              animate={{ opacity: 1, translateY: 0 }}
+              transition={{ type: 'timing', duration: 400, delay: 650 }}
+            >
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Itinerary</Text>
+              <CustomTimeline items={trip.itinerary} />
             </MotiView>
           )}
 

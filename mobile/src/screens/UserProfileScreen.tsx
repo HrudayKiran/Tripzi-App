@@ -363,7 +363,7 @@ const UserProfileScreen = () => {
                         <TouchableOpacity style={[styles.createOption, { backgroundColor: colors.card }]} onPress={() => { setShowCreateModal(false); router.push('/trip/create'); }}>
                             <View style={[styles.createOptionIcon, { backgroundColor: '#E0E7FF' }]}><Icon name="PencilSimple" size={24} color="#6366F1" /></View>
                             <View style={styles.createOptionText}>
-                                <Text style={[styles.createOptionTitle, { color: colors.text }]}>Create Manually</Text>
+                                <Text style={[styles.createOptionTitle, { color: colors.text }]}>Manual Trip Planning</Text>
                                 <Text style={[styles.createOptionDesc, { color: colors.textSecondary }]}>Fill in details and add photos</Text>
                             </View>
                             <Icon name="CaretRight" size={20} color={colors.textSecondary} />
@@ -371,7 +371,7 @@ const UserProfileScreen = () => {
                         <TouchableOpacity style={[styles.createOption, { backgroundColor: colors.card }]} onPress={() => { setShowCreateModal(false); router.push('/trip/ai-planner'); }}>
                             <View style={[styles.createOptionIcon, { backgroundColor: '#EDE9FE' }]}><Icon name="Sparkle" size={24} color="#8B5CF6" /></View>
                             <View style={styles.createOptionText}>
-                                <Text style={[styles.createOptionTitle, { color: colors.text }]}>Create with AI</Text>
+                                <Text style={[styles.createOptionTitle, { color: colors.text }]}>AI Trip Planning</Text>
                                 <Text style={[styles.createOptionDesc, { color: colors.textSecondary }]}>Let AI plan and generate images</Text>
                             </View>
                             <Icon name="CaretRight" size={20} color={colors.textSecondary} />

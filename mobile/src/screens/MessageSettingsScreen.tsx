@@ -4,7 +4,6 @@ import {
     Text,
     StyleSheet,
     TouchableOpacity,
-    Switch,
     ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,7 +12,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { supabase } from '../lib/supabase';
 import { getBooleanPreference, PREFERENCE_KEYS, setBooleanPreference } from '../utils/preferences';
-
+import { MotiView } from 'moti';
 import { useRouter } from 'expo-router';
 
 const MessageSettingsScreen = () => {
@@ -22,6 +21,9 @@ const MessageSettingsScreen = () => {
 
     // Save to Gallery — enabled by default
     const [saveMedia, setSaveMedia] = useState(true);
+
+    const isDark = colors.background !== '#FFFFFF' && colors.background !== '#ffffff';
+    const activeColor = isDark ? '#FFFFFF' : '#000000';
 
     useEffect(() => {
         const loadPreference = async () => {
@@ -48,10 +50,27 @@ const MessageSettingsScreen = () => {
         }
     };
 
+    const AnimatedSwitch = ({ value, onValueChange }: { value: boolean, onValueChange: (v: boolean) => void }) => (
+        <TouchableOpacity onPress={() => onValueChange(!value)} activeOpacity={0.8}>
+            <MotiView
+                animate={{
+                    scale: value ? 1.1 : 1,
+                }}
+                transition={{ type: 'spring', damping: 12, stiffness: 150 }}
+            >
+                <Icon 
+                    name={value ? "ToggleRight" : "ToggleLeft"} 
+                    size={36} 
+                    color={value ? activeColor : colors.textSecondary} 
+                />
+            </MotiView>
+        </TouchableOpacity>
+    );
+
     const SettingItem = ({ icon, title, subtitle, value, onValueChange }) => (
         <View style={[styles.settingItem, { backgroundColor: colors.card }]}>
             <View style={styles.settingInfo}>
-                <Icon name={icon as any} size={22} color={colors.primary} />
+                <Icon name={icon as any} size={22} color={colors.text} />
                 <View style={styles.settingText}>
                     <Text style={[styles.settingTitle, { color: colors.text }]}>{title}</Text>
                     {subtitle && (
@@ -59,11 +78,9 @@ const MessageSettingsScreen = () => {
                     )}
                 </View>
             </View>
-            <Switch
+            <AnimatedSwitch
                 value={value}
                 onValueChange={onValueChange}
-                trackColor={{ false: '#767577', true: colors.primary }}
-                thumbColor="#fff"
             />
         </View>
     );

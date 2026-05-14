@@ -10,6 +10,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import FilterModal, { FilterOptions } from '../components/FilterModal';
 import DefaultAvatar from '../components/DefaultAvatar';
 import TripCard from '../components/TripCard';
+import { TripCardSkeleton } from '../components/TripCardSkeleton';
+import { AvatarSkeleton, TextSkeleton } from '../components/Skeletons';
 import useTripsQuery from '../hooks/useTripsQuery';
 import useUserSearchQuery from '../hooks/useUserSearchQuery';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
@@ -23,7 +25,7 @@ const { width } = Dimensions.get('window');
 const SearchScreen = () => {
     const router = useRouter();
     const { colors } = useTheme();
-    const { allTrips } = useTripsQuery();
+    const { allTrips, loading: loadingTrips } = useTripsQuery();
     const [searchQuery, setSearchQuery] = useState('');
     const [filterVisible, setFilterVisible] = useState(false);
     const [filters, setFilters] = useState<FilterOptions | null>(null);
@@ -159,8 +161,14 @@ const SearchScreen = () => {
             )}
 
             {/* Trip Results */}
-            <TypedFlashList
-                data={filteredTrips}
+            {loadingTrips ? (
+                <View style={{ paddingHorizontal: SPACING.lg, paddingTop: SPACING.md }}>
+                    <TripCardSkeleton />
+                    <TripCardSkeleton />
+                </View>
+            ) : (
+                <TypedFlashList
+                    data={filteredTrips}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
                     <TripCard
@@ -204,6 +212,7 @@ const SearchScreen = () => {
                 }
                 estimatedItemSize={100}
             />
+            )}
 
             <FilterModal
                 visible={filterVisible}

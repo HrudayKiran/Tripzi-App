@@ -13,6 +13,7 @@ import useTripsQuery from '../hooks/useTripsQuery';
 import usePermissions from '../hooks/usePermissions';
 import Icon from '../components/Icon';
 import { MotiView } from 'moti';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../contexts/ThemeContext';
 import NotificationsModal from '../components/NotificationsModal';
 import FilterModal, { FilterOptions } from '../components/FilterModal';
@@ -191,7 +192,10 @@ const FeedScreen = () => {
     const onRefresh = useCallback(() => {
         setRefreshing(true);
         refetch();
-        setTimeout(() => setRefreshing(false), 1500);
+        setTimeout(() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setRefreshing(false);
+        }, 1500);
     }, [refetch]);
 
     const activeFilterCount = useMemo(() => getActiveFilterCount(filters), [filters]);

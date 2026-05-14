@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Vibration } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import { useTheme } from '../contexts/ThemeContext';
@@ -77,18 +77,34 @@ const HapticsSettingsScreen = () => {
     const triggerHaptic = (inst: string) => {
         if (!hapticsEnabled) return;
         
-        switch (inst) {
-            case 'light':
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                break;
-            case 'medium':
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                break;
-            case 'heavy':
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-                break;
-            default:
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        if (Platform.OS === 'android') {
+            switch (inst) {
+                case 'light':
+                    Vibration.vibrate(15);
+                    break;
+                case 'medium':
+                    Vibration.vibrate(40);
+                    break;
+                case 'heavy':
+                    Vibration.vibrate(80);
+                    break;
+                default:
+                    Vibration.vibrate(40);
+            }
+        } else {
+            switch (inst) {
+                case 'light':
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    break;
+                case 'medium':
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    break;
+                case 'heavy':
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                    break;
+                default:
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            }
         }
     };
 

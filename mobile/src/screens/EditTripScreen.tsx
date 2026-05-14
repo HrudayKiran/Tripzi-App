@@ -9,7 +9,7 @@ import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-
+import * as Haptics from 'expo-haptics';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
@@ -477,7 +477,10 @@ const EditTripScreen = () => {
 
                                 <NestableDraggableFlatList
                                     data={tripImages}
-                                    onDragEnd={({ data }) => setTripImages(data)}
+                                    onDragEnd={({ data }) => {
+                                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                        setTripImages(data);
+                                    }}
                                     keyExtractor={(item) => item.id}
                                     renderItem={({ item, drag, isActive }) => (
                                         <GHTouchableOpacity

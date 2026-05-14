@@ -21,7 +21,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.tripzi.mobile",
       "config": {
-        "googleMapsApiKey": "USE_EXPO_PUBLIC_GOOGLE_MAPS_API_KEY"
+        "googleMapsApiKey": "AIzaSyBURfArYP_txIxAGEPYhNKm-FCtY4gQ7oQ"
       }
     },
     "android": {
@@ -33,7 +33,7 @@
       "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
-          "apiKey": "USE_EXPO_PUBLIC_GOOGLE_MAPS_API_KEY"
+          "apiKey": "AIzaSyBURfArYP_txIxAGEPYhNKm-FCtY4gQ7oQ"
         }
       },
       "intentFilters": [
