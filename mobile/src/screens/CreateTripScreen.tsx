@@ -245,7 +245,7 @@ const CreateTripScreen = () => {
         const fromDate = watch('fromDate');
         const toDate = watch('toDate');
         if (!fromDate || !toDate) return '0 days';
-        const diff = Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24));
+        const diff = Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
         return diff > 0 ? `${diff} day${diff > 1 ? 's' : ''}` : '1 day';
     };
 

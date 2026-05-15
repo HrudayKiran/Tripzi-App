@@ -52,6 +52,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
     const [selectedTab, setSelectedTab] = useState('All');
     const [places, setPlaces] = useState<StructuredPlace[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
+    const latestQueryRef = useRef('');
     const [searchResults, setSearchResults] = useState([]);
     const [isSearchVisible, setIsSearchVisible] = useState(false);
     const [currentUser, setCurrentUser] = useState<any>(null);
@@ -59,6 +60,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
     const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
     const [passedImages, setPassedImages] = useState<any[]>([]);
     const [startingCoords, setStartingCoords] = useState<{ lat: number, lng: number } | null>(null);
+    const [destinationCoords, setDestinationCoords] = useState<{ lat: number, lng: number } | null>(null);
     const mapRef = useRef<MapView>(null);
     const [mapRegion, setMapRegion] = useState({
         latitude: 20.5937,
@@ -79,6 +81,33 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
         return diffDays;
     };
 
+    const geocodeLocation = async (address: string, type: 'starting' | 'destination') => {
+        try {
+            const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyBURfArYP_txIxAGEPYhNKm-FCtY4gQ7oQ';
+            const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`);
+            const data = await response.json();
+            if (data.results && data.results.length > 0) {
+                const loc = data.results[0].geometry.location;
+                if (type === 'starting') {
+                    setStartingCoords({ lat: loc.lat, lng: loc.lng });
+                } else {
+                    setDestinationCoords({ lat: loc.lat, lng: loc.lng });
+                }
+
+                if (mapRef.current && type === 'starting') { // Only pan to starting loc initially
+                    mapRef.current.animateToRegion({
+                        latitude: loc.lat,
+                        longitude: loc.lng,
+                        latitudeDelta: 0.1,
+                        longitudeDelta: 0.1,
+                    }, 1000);
+                }
+            }
+        } catch (error) {
+            console.error('Geocoding error:', error);
+        }
+    };
+
     useEffect(() => {
         if (!propItems) {
             if (tripDataParam) {
@@ -87,7 +116,10 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                     setTrip(parsedData);
 
                     if (parsedData.fromLocation) {
-                        setTimeout(() => geocodeLocation(parsedData.fromLocation), 1000);
+                        setTimeout(() => geocodeLocation(parsedData.fromLocation, 'starting'), 1000);
+                    }
+                    if (parsedData.toLocation) {
+                        setTimeout(() => geocodeLocation(parsedData.toLocation, 'destination'), 1500);
                     }
 
                     if (tripImagesParam) {
@@ -154,9 +186,89 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
     };
 
     const searchPlaces = async (query: string) => {
+        latestQueryRef.current = query;
         if (!query.trim()) {
             setSearchResults([]);
             return;
+        }
+
+        // Check if query is a maps link
+        if (query.includes('maps.google.com') || query.includes('google.com/maps') || query.includes('maps.app.goo.gl')) {
+            let targetUrl = query;
+            if (query.includes('maps.app.goo.gl')) {
+                const resolved = await resolveShortLink(query);
+                if (resolved) targetUrl = resolved;
+            }
+
+            const regex = /@(-?\d+\.\d+),(-?\d+\.\d+)/;
+            const match = targetUrl.match(regex);
+            if (match) {
+                const lat = parseFloat(match[1]);
+                const lng = parseFloat(match[2]);
+
+                // Auto add to itinerary
+                const currentDay = selectedTab === 'All' ? 1 : parseInt(selectedTab.replace('Day ', ''));
+                const dayPlaces = places.filter(p => p.day === currentDay);
+
+                const newPlace: StructuredPlace = {
+                    id: `link-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                    name: 'Location from Link',
+                    address: query,
+                    day: currentDay,
+                    order: dayPlaces.length,
+                    latitude: lat,
+                    longitude: lng,
+                    time: null,
+                    title: '',
+                };
+
+                setPlaces([...places, newPlace]);
+                setSearchResults([]);
+                setSearchQuery('');
+                return;
+            } else {
+                // Fallback: Try to extract place name or just search for the URL!
+                const regexPlace = /\/place\/([^\/]+)/;
+                const matchPlace = targetUrl.match(regexPlace);
+                let searchTerm = query;
+                if (matchPlace) {
+                    searchTerm = decodeURIComponent(matchPlace[1].replace(/\+/g, ' '));
+                } else {
+                    const regexQ = /[?&](q|query)=([^&]+)/;
+                    const matchQ = targetUrl.match(regexQ);
+                    if (matchQ) {
+                        searchTerm = decodeURIComponent(matchQ[2].replace(/\+/g, ' '));
+                    }
+                }
+
+                const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+                const res = await fetch(`https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=${encodeURIComponent(searchTerm)}&inputtype=textquery&fields=geometry,formatted_address,name&key=${apiKey}`);
+                const data = await res.json();
+                if (data.candidates && data.candidates.length > 0) {
+                    const candidate = data.candidates[0];
+                    const loc = candidate.geometry.location;
+
+                    const currentDay = selectedTab === 'All' ? 1 : parseInt(selectedTab.replace('Day ', ''));
+                    const dayPlaces = places.filter(p => p.day === currentDay);
+
+                    const newPlace: StructuredPlace = {
+                        id: `link-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                        name: candidate.name || 'Location from Link',
+                        address: candidate.formatted_address || query,
+                        day: currentDay,
+                        order: dayPlaces.length,
+                        latitude: loc.lat,
+                        longitude: loc.lng,
+                        time: null,
+                        title: '',
+                    };
+
+                    setPlaces([...places, newPlace]);
+                    setSearchResults([]);
+                    setSearchQuery('');
+                    return;
+                }
+            }
         }
 
         const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -165,7 +277,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
         try {
             const response = await fetch(`https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${apiKey}`);
             const data = await response.json();
-            if (data.predictions) {
+            if (data.predictions && latestQueryRef.current === query) {
                 setSearchResults(data.predictions);
             }
         } catch (error) {
@@ -190,21 +302,26 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
     };
 
     const handleAddPlace = async (item: any) => {
-        const location = await fetchPlaceDetails(item.place_id);
+        let location;
+        if (item.isLink) {
+            location = { lat: item.latitude, lng: item.longitude };
+        } else {
+            location = await fetchPlaceDetails(item.place_id);
+        }
 
         const currentDay = selectedTab === 'All' ? 1 : parseInt(selectedTab.replace('Day ', ''));
         const dayPlaces = places.filter(p => p.day === currentDay);
 
         const newPlace: StructuredPlace = {
-            id: item.place_id,
+            id: `${item.place_id}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
             name: item.structured_formatting.main_text,
             address: item.structured_formatting.secondary_text,
             day: currentDay,
             order: dayPlaces.length,
             latitude: location?.lat,
             longitude: location?.lng,
-            time: '09:00 AM', // Default time
-            title: 'Visit', // Default title
+            time: 'Pick a time', // Default time
+            title: 'Enter a title', // Default title
         };
 
         setPlaces([...places, newPlace]);
@@ -454,7 +571,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
 
     const duration = trip?.duration || 1;
     const fromDate = trip?.fromDate ? new Date(trip.fromDate) : null;
-    
+
     const tabs = [
         { label: 'All', date: null },
         ...Array.from({ length: duration }, (_, i) => {
@@ -471,6 +588,27 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
         ? places.sort((a, b) => a.day === b.day ? a.order - b.order : a.day - b.day)
         : places.filter(p => p.day === parseInt(selectedTab.replace('Day ', ''))).sort((a, b) => a.order - b.order);
 
+    const getAllData = () => {
+        const data = [];
+        const duration = trip?.duration || 1;
+        const fromDate = trip?.fromDate ? new Date(trip.fromDate) : null;
+
+        for (let day = 1; day <= duration; day++) {
+            const dayPlaces = places.filter(p => p.day === day).sort((a, b) => a.order - b.order);
+            if (dayPlaces.length > 0) {
+                let dateStr = '';
+                if (fromDate) {
+                    const currentDate = new Date(fromDate);
+                    currentDate.setDate(fromDate.getDate() + day - 1);
+                    dateStr = currentDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                }
+                data.push({ id: `day-${day}-header`, isHeader: true, day, dateStr });
+                data.push(...dayPlaces);
+            }
+        }
+        return data;
+    };
+
     const handlePlacePress = (item: StructuredPlace) => {
         if (item.latitude && item.longitude && mapRef.current) {
             mapRef.current.animateToRegion({
@@ -482,104 +620,148 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
         }
     };
 
-    const geocodeLocation = async (address: string) => {
+    const reverseGeocode = async (lat: number, lng: number) => {
         try {
             const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyBURfArYP_txIxAGEPYhNKm-FCtY4gQ7oQ';
-            const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`);
+            const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`);
             const data = await response.json();
             if (data.results && data.results.length > 0) {
-                const loc = data.results[0].geometry.location;
-                setStartingCoords({ lat: loc.lat, lng: loc.lng });
-                
-                if (mapRef.current) {
-                    mapRef.current.animateToRegion({
-                        latitude: loc.lat,
-                        longitude: loc.lng,
-                        latitudeDelta: 0.1,
-                        longitudeDelta: 0.1,
-                    }, 1000);
-                }
+                return data.results[0].formatted_address;
             }
         } catch (error) {
-            console.error('Geocoding error:', error);
+            console.error('Reverse geocoding error:', error);
+        }
+        return 'Dropped Pin Location';
+    };
+
+    const resolveShortLink = async (url: string) => {
+        try {
+            const res = await fetch(url, { 
+                method: 'GET',
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
+                }
+            });
+            return res.url;
+        } catch (e) {
+            console.error('Failed to resolve short link:', e);
+            return null;
         }
     };
 
     const onTimeChange = (event: any, selectedDate?: Date) => {
         setShowTimePicker(Platform.OS === 'ios');
-        
+
         if (selectedDate && editingPlaceId) {
             const timeStr = selectedDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
             setPlaces(places.map(p => p.id === editingPlaceId ? { ...p, time: timeStr } : p));
         }
-        
+
         if (Platform.OS === 'android') {
             setShowTimePicker(false);
         }
     };
 
-    const renderDraggableItem = ({ item, drag, isActive }: RenderItemParams<StructuredPlace>) => {
+    const renderDraggableItem = ({ item, drag, isActive }: RenderItemParams<any>) => {
+        if (item.isHeader) {
+            return (
+                <View style={{ paddingHorizontal: 15, paddingVertical: 5, marginTop: 10 }}>
+                    <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 16 }}>{item.dateStr || `Day ${item.day}`}</Text>
+                </View>
+            );
+        }
+
+        const getColorForTitle = (title?: string) => {
+            if (!title) return '#6C5CE7';
+            if (title.toLowerCase().includes('hotel') || title.toLowerCase().includes('check-in')) return '#6C5CE7';
+            if (title.toLowerCase().includes('check-out')) return '#74B9FF';
+            if (title.toLowerCase().includes('beach') || title.toLowerCase().includes('boardwalk')) return '#FF7675';
+            if (title.toLowerCase().includes('bar') || title.toLowerCase().includes('bistro') || title.toLowerCase().includes('food')) return '#FDCB6E';
+            return '#6C5CE7';
+        };
+
+        const getIconForTitle = (title?: string) => {
+            return 'MapPin';
+        };
+
         return (
             <ScaleDecorator>
-                <View style={{ flexDirection: 'row', paddingHorizontal: 15, marginVertical: 5, alignItems: 'center' }}>
+                <View style={{ flexDirection: 'row', paddingHorizontal: 15, marginVertical: 10, alignItems: 'center' }}>
+                    {/* Drag Handle */}
+                    <TouchableOpacity onLongPress={drag} style={{ padding: 5, marginRight: 5 }}>
+                        <Icon name="DotsSixVertical" size={20} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                    
                     {/* Left: Time and Timeline Line */}
-                    <View style={{ width: 70, alignItems: 'center' }}>
+                    <View style={{ width: 80, alignItems: 'center' }}>
+                        <View style={{
+                            width: 30,
+                            height: 30,
+                            borderRadius: 15,
+                            backgroundColor: getColorForTitle(item.title),
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            marginBottom: 5
+                        }}>
+                            <Icon name={getIconForTitle(item.title) as any} size={16} color="#fff" weight="fill" />
+                        </View>
                         <TouchableOpacity
                             onPress={() => {
                                 setEditingPlaceId(item.id);
                                 setShowTimePicker(true);
                             }}
+                            style={{ zIndex: 10 }}
                         >
-                            <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 12 }}>{item.time || '09:00 PM'}</Text>
+                            <Text style={{ color: colors.textSecondary, fontSize: 10 }}>{item.time || 'Pick a time'}</Text>
                         </TouchableOpacity>
-                        <View style={{ width: 2, height: 30, backgroundColor: colors.border, marginVertical: 5 }} />
+                        <View style={{ width: 2, height: 40, backgroundColor: colors.border, marginVertical: 5 }} />
                     </View>
-                    
-                    {/* Right: Card */}
-                    <TouchableOpacity
-                        onLongPress={drag}
-                        onPress={() => handlePlacePress(item)}
+
+                    {/* Right: Card (Styled like image) */}
+                    <View
                         style={[
                             styles.draggableItem,
-                            { 
-                                flex: 1, 
-                                backgroundColor: isActive ? colors.border : colors.card, 
+                            {
+                                flex: 1,
+                                backgroundColor: colors.card,
                                 borderColor: colors.border,
-                                borderRadius: 12,
-                                padding: 12,
+                                borderRadius: 16,
+                                padding: 16,
                                 shadowColor: '#000',
-                                shadowOffset: { width: 0, height: 1 },
+                                shadowOffset: { width: 0, height: 2 },
                                 shadowOpacity: 0.1,
-                                shadowRadius: 1,
-                                elevation: 1,
+                                shadowRadius: 4,
+                                elevation: 3,
                                 borderWidth: 1,
                             }
                         ]}
                     >
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            {selectedTab !== 'All' && (
-                                <Icon name="DotsSixVertical" size={20} color={colors.textSecondary} style={{ marginRight: 5 }} />
-                            )}
                             <View style={{ flex: 1 }}>
                                 <TextInput
-                                    style={{ color: colors.primary, fontWeight: 'bold', fontSize: 11, marginBottom: 2 }}
-                                    value={item.title || 'Visit'}
+                                    style={{ color: colors.textSecondary, fontWeight: 'bold', fontSize: 14, marginBottom: 4, padding: 0 }}
+                                    value={item.title}
+                                    placeholder="Enter a title"
+                                    placeholderTextColor={colors.textSecondary}
                                     onChangeText={(text) => {
                                         setPlaces(places.map(p => p.id === item.id ? { ...p, title: text } : p));
                                     }}
                                 />
-                                <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 14 }}>{item.name}</Text>
-                                {item.address && (
-                                    <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>{item.address}</Text>
-                                )}
-                            </View>
-                            {selectedTab !== 'All' && (
-                                <TouchableOpacity onPress={() => handleDeletePlace(item.id)}>
-                                    <Icon name="X" size={18} color={colors.textSecondary} />
+                                <TouchableOpacity onPress={() => handlePlacePress(item)}>
+                                    <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 15 }}>{item.name}</Text>
+                                    {item.address && (
+                                        <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4 }}>{item.address}</Text>
+                                    )}
                                 </TouchableOpacity>
-                            )}
+                            </View>
+                            <TouchableOpacity onPress={() => handleDeletePlace(item.id)}>
+                                <Icon name="Trash" size={18} color={colors.textSecondary} style={{ marginRight: 10 }} />
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => handlePlacePress(item)}>
+                                <Icon name="CaretRight" size={18} color={colors.textSecondary} />
+                            </TouchableOpacity>
                         </View>
-                    </TouchableOpacity>
+                    </View>
                 </View>
             </ScaleDecorator>
         );
@@ -596,6 +778,44 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                     ref={mapRef}
                     style={StyleSheet.absoluteFill}
                     initialRegion={mapRegion}
+                    onPoiClick={async (e) => {
+                        const poi = e.nativeEvent;
+                        const address = await reverseGeocode(poi.coordinate.latitude, poi.coordinate.longitude);
+                        const currentDay = selectedTab === 'All' ? 1 : parseInt(selectedTab.replace('Day ', ''));
+                        const dayPlaces = places.filter(p => p.day === currentDay);
+
+                        const newPlace: StructuredPlace = {
+                            id: `poi-${poi.placeId || Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                            name: poi.name,
+                            address: address,
+                            day: currentDay,
+                            order: dayPlaces.length,
+                            latitude: poi.coordinate.latitude,
+                            longitude: poi.coordinate.longitude,
+                            time: null,
+                            title: '',
+                        };
+                        setPlaces([...places, newPlace]);
+                    }}
+                    onPress={async (e) => {
+                        const coord = e.nativeEvent.coordinate;
+                        const address = await reverseGeocode(coord.latitude, coord.longitude);
+                        const currentDay = selectedTab === 'All' ? 1 : parseInt(selectedTab.replace('Day ', ''));
+                        const dayPlaces = places.filter(p => p.day === currentDay);
+
+                        const newPlace: StructuredPlace = {
+                            id: `map-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                            name: 'Dropped Pin',
+                            address: address,
+                            day: currentDay,
+                            order: dayPlaces.length,
+                            latitude: coord.latitude,
+                            longitude: coord.longitude,
+                            time: null,
+                            title: '',
+                        };
+                        setPlaces([...places, newPlace]);
+                    }}
                 >
                     {startingCoords && (
                         <Marker
@@ -605,10 +825,18 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                             pinColor="green"
                         />
                     )}
-                    {places.map(place => (
+                    {destinationCoords && (
+                        <Marker
+                            coordinate={{ latitude: destinationCoords.lat, longitude: destinationCoords.lng }}
+                            title={`Destination`}
+                            description={trip?.toLocation}
+                            pinColor="blue"
+                        />
+                    )}
+                    {places.map((place, index) => (
                         place.latitude && place.longitude ? (
                             <Marker
-                                key={place.id}
+                                key={`${place.id}-${index}`}
                                 coordinate={{ latitude: place.latitude, longitude: place.longitude }}
                                 title={place.name}
                             />
@@ -650,7 +878,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                     {isSearchVisible && (
                         <MotiView
                             from={{ width: 0, opacity: 0 }}
-                            animate={{ width: 200, opacity: 1 }}
+                            animate={{ width: Dimensions.get('window').width - 135, opacity: 1 }}
                             transition={{ type: 'timing', duration: 300 }}
                             style={{
                                 backgroundColor: colors.card,
@@ -673,7 +901,12 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                                 value={searchQuery}
                                 onChangeText={(text) => {
                                     setSearchQuery(text);
-                                    searchPlaces(text);
+                                    latestQueryRef.current = text;
+                                    if (!text.trim()) {
+                                        setSearchResults([]);
+                                    } else {
+                                        searchPlaces(text);
+                                    }
                                 }}
                                 autoFocus
                             />
@@ -704,9 +937,9 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                 {isSearchVisible && searchResults.length > 0 && (
                     <View style={{
                         position: 'absolute',
-                        top: 70,
-                        right: 20,
-                        width: 250,
+                        top: 50,
+                        left: 65,
+                        width: Dimensions.get('window').width - 135,
                         backgroundColor: colors.card,
                         borderRadius: 8,
                         padding: 10,
@@ -717,9 +950,9 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                         elevation: 5,
                         zIndex: 1000,
                     }}>
-                        {searchResults.map((item: any) => (
+                        {searchResults.map((item: any, index: number) => (
                             <TouchableOpacity
-                                key={item.place_id}
+                                key={`${item.place_id || 'result'}-${index}`}
                                 style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}
                                 onPress={() => handleAddPlace(item)}
                             >
@@ -731,32 +964,29 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
             </View>
 
             {/* Tabs (Now below the map) */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 15, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-                <TouchableOpacity style={{ marginRight: 15 }}>
-                    <Icon name="Funnel" size={20} color={colors.text} />
-                </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 5, paddingHorizontal: 10, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border }}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     {tabs.map(tab => (
                         <TouchableOpacity
                             key={tab.label}
                             onPress={() => setSelectedTab(tab.label)}
                             style={{
-                                paddingVertical: 8,
-                                paddingHorizontal: 15,
+                                paddingVertical: 4,
+                                paddingHorizontal: 10,
                                 backgroundColor: selectedTab === tab.label ? colors.primary : colors.background,
-                                borderRadius: 20,
-                                marginRight: 10,
+                                borderRadius: 15,
+                                marginRight: 8,
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 borderWidth: 1,
                                 borderColor: selectedTab === tab.label ? colors.primary : colors.border,
-                                minWidth: 60,
+                                minWidth: 50,
                             }}
                         >
                             {tab.date && (
-                                <Text style={{ color: selectedTab === tab.label ? '#fff' : colors.textSecondary, fontSize: 10, marginBottom: 2 }}>{tab.date}</Text>
+                                <Text style={{ color: selectedTab === tab.label ? '#fff' : colors.textSecondary, fontSize: 9, marginBottom: 1 }}>{tab.date}</Text>
                             )}
-                            <Text style={{ color: selectedTab === tab.label ? '#fff' : colors.text, fontWeight: 'bold', fontSize: 12 }}>{tab.label}</Text>
+                            <Text style={{ color: selectedTab === tab.label ? '#fff' : colors.text, fontWeight: 'bold', fontSize: 11 }}>{tab.label}</Text>
                         </TouchableOpacity>
                     ))}
                 </ScrollView>
@@ -765,74 +995,34 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
             {/* Content List */}
             <View style={{ flex: 1 }}>
                 {selectedTab === 'All' ? (
-                    <ScrollView style={{ flex: 1 }}>
-                        {Array.from({ length: duration }, (_, i) => i + 1).map(day => {
-                            const dayPlaces = places.filter(p => p.day === day).sort((a, b) => a.order - b.order);
-                            if (dayPlaces.length === 0) return null;
+                    <DraggableFlatList
+                        data={getAllData()}
+                        renderItem={renderDraggableItem}
+                        keyExtractor={item => item.id}
+                        onDragEnd={({ data }) => {
+                            let currentDay = 1;
+                            const updatedPlaces = [];
+                            data.forEach((item) => {
+                                if (item.isHeader) {
+                                    currentDay = item.day;
+                                } else {
+                                    updatedPlaces.push({ ...item, day: currentDay });
+                                }
+                            });
 
-                            let dateStr = '';
-                            if (fromDate) {
-                                const currentDate = new Date(fromDate);
-                                currentDate.setDate(fromDate.getDate() + day - 1);
-                                dateStr = currentDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                            // Recalculate order for each day
+                            const finalPlaces = [];
+                            const duration = trip?.duration || 1;
+                            for (let day = 1; day <= duration; day++) {
+                                const dayPlaces = updatedPlaces.filter(p => p.day === day);
+                                dayPlaces.forEach((p, index) => {
+                                    finalPlaces.push({ ...p, order: index });
+                                });
                             }
 
-                            return (
-                                <View key={day} style={{ marginVertical: 10 }}>
-                                    {/* Date Header */}
-                                    <View style={{ paddingHorizontal: 15, paddingVertical: 5 }}>
-                                        <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 16 }}>{dateStr || `Day ${day}`}</Text>
-                                    </View>
-                                    
-                                    {/* Timeline Line (Continuous) */}
-                                    <View style={{ position: 'absolute', left: 49, top: 30, bottom: 0, width: 2, backgroundColor: colors.border }} />
-
-                                    {dayPlaces.map(place => (
-                                        <View key={place.id} style={{ flexDirection: 'row', paddingHorizontal: 15, marginVertical: 5, alignItems: 'center' }}>
-                                            {/* Left: Time */}
-                                            <View style={{ width: 70, alignItems: 'center' }}>
-                                                <TouchableOpacity
-                                                    onPress={() => {
-                                                        setEditingPlaceId(place.id);
-                                                        setShowTimePicker(true);
-                                                    }}
-                                                >
-                                                    <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 12 }}>{place.time || '09:00 PM'}</Text>
-                                                </TouchableOpacity>
-                                                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary, marginTop: 5 }} />
-                                            </View>
-                                            
-                                            {/* Right: Card */}
-                                            <TouchableOpacity
-                                                onPress={() => handlePlacePress(place)}
-                                                style={[
-                                                    styles.draggableItem,
-                                                    { 
-                                                        flex: 1, 
-                                                        backgroundColor: colors.card, 
-                                                        borderColor: colors.border,
-                                                        borderRadius: 12,
-                                                        padding: 12,
-                                                        borderWidth: 1,
-                                                    }
-                                                ]}
-                                            >
-                                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                                    <View style={{ flex: 1 }}>
-                                                        <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 11, marginBottom: 2 }}>{place.title || 'Visit'}</Text>
-                                                        <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 14 }}>{place.name}</Text>
-                                                        {place.address && (
-                                                            <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>{place.address}</Text>
-                                                        )}
-                                                    </View>
-                                                </View>
-                                            </TouchableOpacity>
-                                        </View>
-                                    ))}
-                                </View>
-                            );
-                        })}
-                    </ScrollView>
+                            setPlaces(finalPlaces);
+                        }}
+                    />
                 ) : (
                     <DraggableFlatList
                         data={activePlaces}
