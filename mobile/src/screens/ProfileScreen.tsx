@@ -247,6 +247,13 @@ const ProfileScreen = () => {
             text="My Trips"
             onPress={() => router.push('/trip/my-trips')}
           />
+          <MenuItem
+            icon="Notebook"
+            iconColor="#10B981"
+            iconBg="#D1FAE5"
+            text="Itineraries"
+            onPress={() => router.push('/trip/itineraries')}
+          />
         </MotiView>
 
         {/* General Section */}

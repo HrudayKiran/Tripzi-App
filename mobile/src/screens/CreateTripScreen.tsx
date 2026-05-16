@@ -14,6 +14,7 @@ import * as Haptics from 'expo-haptics';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { syncDatabase } from '../database/sync';
+import { useTripStore } from '../store/tripStore';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
 import { deleteTripImagesFromR2, uploadTripImageToR2 } from '../utils/imageUpload';
@@ -97,6 +98,14 @@ const CreateTripScreen = () => {
     const { colors, isDarkMode } = useTheme();
     const router = useRouter();
     const params = useLocalSearchParams();
+    const { tripDraft, setTripDraft } = useTripStore();
+
+    useEffect(() => {
+        if (tripDraft) {
+            if (tripDraft.fromDate) setValue('fromDate', new Date(tripDraft.fromDate));
+            if (tripDraft.toDate) setValue('toDate', new Date(tripDraft.toDate));
+        }
+    }, [tripDraft?.fromDate, tripDraft?.toDate]);
 
     // Parse initialData if it comes as a string (common in Expo Router)
     let initialData: any = null;
@@ -621,9 +630,7 @@ const CreateTripScreen = () => {
                                         )}
                                     />
                                     {formErrors.toLocation && <Text style={styles.errorText}>{formErrors.toLocation.message}</Text>}
-                                    {watch('toLocation')?.length > 3 && (
-                                        <Text style={[styles.mapsLink, { color: colors.primary }]}>📍 Maps link will be auto-generated</Text>
-                                    )}
+
 
                                     <View style={styles.dateRow}>
                                         <View style={styles.dateField}>
@@ -935,6 +942,7 @@ const CreateTripScreen = () => {
                                         style={[styles.stepButton, styles.neumorphicButton, { backgroundColor: isDarkMode ? '#fff' : '#000', width: '48%' }]}
                                         onPress={handleSubmit((data) => {
                                             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                            setTripDraft(data); // Persist draft
                                             router.push({
                                                 pathname: '/trip/timeline',
                                                 params: { 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput, Platform, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput, Platform, ActivityIndicator, Alert, ScrollView, KeyboardAvoidingView } from 'react-native';
 import Svg, { Line, Circle } from 'react-native-svg';
 import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
@@ -14,6 +14,7 @@ import { deleteTripImagesFromR2, uploadTripImageToR2 } from '../utils/imageUploa
 import { showUploadNotification, completeUploadNotification, failUploadNotification } from '../utils/notifications';
 import { syncDatabase } from '../database/sync';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useTripStore } from '../store/tripStore';
 
 type TimelineItem = {
     title: string;
@@ -46,11 +47,18 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
     const tripDataParam = params.tripData as string;
     const tripImagesParam = params.tripImages as string;
 
+    // Store
+    const { places, setPlaces, tripDraft, setTripDraft } = useTripStore();
+
     // State for Screen mode
     const [trip, setTrip] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [selectedTab, setSelectedTab] = useState('All');
-    const [places, setPlaces] = useState<StructuredPlace[]>([]);
+    const [isFABVisible, setIsFABVisible] = useState(true);
+    const [mapHeight, setMapHeight] = useState(Dimensions.get('window').height * 0.4);
+    const isDraggingMap = useRef(false);
+    const startY = useRef(0);
+    const startHeight = useRef(0);
     const [searchQuery, setSearchQuery] = useState('');
     const latestQueryRef = useRef('');
     const [searchResults, setSearchResults] = useState([]);
@@ -113,7 +121,10 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
             if (tripDataParam) {
                 try {
                     const parsedData = JSON.parse(tripDataParam);
+                    
+                    // Only update if data is different to avoid unnecessary renders
                     setTrip(parsedData);
+                    setTripDraft(parsedData);
 
                     if (parsedData.fromLocation) {
                         setTimeout(() => geocodeLocation(parsedData.fromLocation, 'starting'), 1000);
@@ -135,9 +146,16 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                 }
             } else if (tripId) {
                 fetchTripDetails();
+            } else if (tripDraft && !trip) {
+                // Only recover from store if we don't have local trip state yet
+                setTrip(tripDraft);
+                if (tripDraft.fromLocation) geocodeLocation(tripDraft.fromLocation, 'starting');
+                if (tripDraft.toLocation) geocodeLocation(tripDraft.toLocation, 'destination');
+                const dur = getDuration(tripDraft.fromDate, tripDraft.toDate);
+                setTrip((prev: any) => ({ ...prev, duration: dur }));
             }
         }
-    }, [tripId, propItems, tripDataParam, tripImagesParam]);
+    }, [tripId, propItems, tripDataParam, tripImagesParam]); // Removed tripDraft from here
 
     const fetchTripDetails = async () => {
         setLoading(true);
@@ -150,6 +168,15 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
 
             if (error) throw error;
             setTrip(data);
+            
+            // Update store draft for ItineraryViewScreen
+            setTripDraft({
+                ...data,
+                fromLocation: data.from_location,
+                toLocation: data.to_location,
+                fromDate: data.from_date,
+                toDate: data.to_date,
+            });
 
             // Parse places_to_visit if it's JSON
             if (data.places_to_visit) {
@@ -193,15 +220,23 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
         }
 
         // Check if query is a maps link
-        if (query.includes('maps.google.com') || query.includes('google.com/maps') || query.includes('maps.app.goo.gl')) {
+        if (query.includes('maps.google.com') || query.includes('google.com/maps') || query.includes('maps.app.goo.gl') || query.includes('share.google')) {
             let targetUrl = query;
-            if (query.includes('maps.app.goo.gl')) {
+            if (query.includes('maps.app.goo.gl') || query.includes('share.google')) {
                 const resolved = await resolveShortLink(query);
                 if (resolved) targetUrl = resolved;
             }
 
-            const regex = /@(-?\d+\.\d+),(-?\d+\.\d+)/;
-            const match = targetUrl.match(regex);
+            const regexAt = /@(-?\d+\.\d+),(-?\d+\.\d+)/;
+            const regexEx = /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/;
+            const regexLL = /ll=(-?\d+\.\d+),(-?\d+\.\d+)/;
+            
+            const matchAt = targetUrl.match(regexAt);
+            const matchEx = targetUrl.match(regexEx);
+            const matchLL = targetUrl.match(regexLL);
+            
+            const match = matchAt || matchEx || matchLL;
+
             if (match) {
                 const lat = parseFloat(match[1]);
                 const lng = parseFloat(match[2]);
@@ -210,10 +245,14 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                 const currentDay = selectedTab === 'All' ? 1 : parseInt(selectedTab.replace('Day ', ''));
                 const dayPlaces = places.filter(p => p.day === currentDay);
 
+                const fullAddress = await reverseGeocode(lat, lng);
+                const namePart = fullAddress.split(',')[0];
+                const addrPart = fullAddress.split(',').slice(1).join(',').trim() || fullAddress;
+
                 const newPlace: StructuredPlace = {
                     id: `link-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-                    name: 'Location from Link',
-                    address: query,
+                    name: namePart,
+                    address: addrPart,
                     day: currentDay,
                     order: dayPlaces.length,
                     latitude: lat,
@@ -242,7 +281,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                 }
 
                 const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-                const res = await fetch(`https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=${encodeURIComponent(searchTerm)}&inputtype=textquery&fields=geometry,formatted_address,name&key=${apiKey}`);
+                const res = await fetch(`https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=${encodeURIComponent(searchTerm)}&inputtype=textquery&fields=geometry,formatted_address,name&key=${apiKey}&language=en`);
                 const data = await res.json();
                 if (data.candidates && data.candidates.length > 0) {
                     const candidate = data.candidates[0];
@@ -275,7 +314,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
         if (!apiKey) return;
 
         try {
-            const response = await fetch(`https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${apiKey}`);
+            const response = await fetch(`https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${apiKey}&language=en`);
             const data = await response.json();
             if (data.predictions && latestQueryRef.current === query) {
                 setSearchResults(data.predictions);
@@ -290,10 +329,14 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
         if (!apiKey) return null;
 
         try {
-            const response = await fetch(`https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=geometry&key=${apiKey}`);
+            const response = await fetch(`https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=geometry,name,formatted_address&key=${apiKey}&language=en`);
             const data = await response.json();
-            if (data.result && data.result.geometry) {
-                return data.result.geometry.location;
+            if (data.result) {
+                return {
+                    location: data.result.geometry?.location,
+                    name: data.result.name,
+                    address: data.result.formatted_address
+                };
             }
         } catch (error) {
             console.error('Details error:', error);
@@ -303,10 +346,18 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
 
     const handleAddPlace = async (item: any) => {
         let location;
+        let name = item.structured_formatting.main_text;
+        let address = item.structured_formatting.secondary_text;
+
         if (item.isLink) {
             location = { lat: item.latitude, lng: item.longitude };
         } else {
-            location = await fetchPlaceDetails(item.place_id);
+            const details = await fetchPlaceDetails(item.place_id);
+            if (details) {
+                location = details.location;
+                name = details.name || name;
+                address = details.address || address;
+            }
         }
 
         const currentDay = selectedTab === 'All' ? 1 : parseInt(selectedTab.replace('Day ', ''));
@@ -314,14 +365,14 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
 
         const newPlace: StructuredPlace = {
             id: `${item.place_id}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-            name: item.structured_formatting.main_text,
-            address: item.structured_formatting.secondary_text,
+            name: name,
+            address: address,
             day: currentDay,
             order: dayPlaces.length,
             latitude: location?.lat,
             longitude: location?.lng,
-            time: 'Pick a time', // Default time
-            title: 'Enter a title', // Default title
+            time: null,
+            title: '',
         };
 
         setPlaces([...places, newPlace]);
@@ -344,157 +395,13 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
     };
 
     const handleSaveItinerary = async () => {
-        if (!currentUser) {
-            Alert.alert('Error', 'You need to be logged in to save the trip.');
-            return;
-        }
+        // First save to Supabase if it's an existing trip or we want to persist it now
+        // But the user specifically asked to go to ItineraryViewScreen.tsx
+        
+        // Let's ensure the current places are in the store
+        // setPlaces(places); // Already happening via state in CustomTimeline if we use store directly
 
-        setLoading(true);
-        const newObjectKeys: string[] = [];
-
-        try {
-            if (tripDataParam && trip) {
-                // Creation Mode: Save trip first
-                await showUploadNotification(0, 'Preparing trip post...');
-
-                const { data: currentUserData } = await supabase
-                    .from('profiles')
-                    .select('name, display_name, photo_url, username')
-                    .eq('id', currentUser.id)
-                    .maybeSingle();
-                const userData: { name?: string; display_name?: string; photo_url?: string; username?: string } = currentUserData || {};
-
-                let uploadedImageData: Array<{ uri: string, location: string, objectKey: string | null }> = [];
-                if (passedImages.length > 0) {
-                    for (let i = 0; i < passedImages.length; i++) {
-                        const img = passedImages[i];
-                        const imageUri = img.uri;
-
-                        if (imageUri.startsWith('http') || imageUri.startsWith('https')) {
-                            uploadedImageData.push({
-                                uri: imageUri,
-                                location: img.location,
-                                objectKey: img.objectKey || null,
-                            });
-                            continue;
-                        }
-
-                        try {
-                            const progress = (i / passedImages.length) * 0.7;
-                            await showUploadNotification(progress, `Uploading image ${i + 1}/${passedImages.length}...`);
-                            const uploadResult = await uploadTripImageToR2(imageUri, currentUser.id);
-                            if (uploadResult.success && uploadResult.url && uploadResult.objectKey) {
-                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                uploadedImageData.push({
-                                    uri: uploadResult.url,
-                                    location: img.location,
-                                    objectKey: uploadResult.objectKey,
-                                });
-                                newObjectKeys.push(uploadResult.objectKey);
-                            }
-                        } catch (uploadError) {
-                            // Image upload failed
-                        }
-                    }
-                }
-
-                const finalImages = uploadedImageData.map(d => d.uri);
-                const finalLocations = uploadedImageData.map(d => d.location);
-                const finalObjectKeys = uploadedImageData.map(d => d.objectKey || null);
-
-                if (finalImages.length === 0) {
-                    finalImages.push('https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800');
-                    finalLocations.push('');
-                    finalObjectKeys.push(null);
-                }
-
-                const generateMapsLink = (destination: string) => {
-                    const encoded = encodeURIComponent(destination);
-                    return `https://www.google.com/maps/search/?api=1&query=${encoded}`;
-                };
-
-                const tripDataToSave = {
-                    title: trip.title,
-                    images: finalImages,
-                    image_locations: finalLocations,
-                    from_location: trip.fromLocation,
-                    to_location: trip.toLocation,
-                    maps_link: generateMapsLink(trip.toLocation),
-                    from_date: trip.fromDate,
-                    to_date: trip.toDate,
-                    duration: trip.duration,
-                    trip_types: trip.tripTypes,
-                    transport_modes: trip.transportModes,
-                    cost_per_person: parseFloat(trip.costPerPerson) || 0,
-                    total_cost: parseFloat(trip.costPerPerson) || 0,
-                    cost: parseFloat(trip.costPerPerson) || 0,
-                    accommodation_type: trip.accommodationType,
-                    booking_status: trip.bookingStatus,
-                    accommodation_days: trip.accommodationDays ? parseInt(trip.accommodationDays) : null,
-                    max_travelers: parseInt(trip.maxTravelers) || 5,
-                    current_travelers: 1,
-                    places_to_visit: JSON.stringify(places),
-                    user_id: currentUser.id,
-                    owner_display_name: userData.name || userData.display_name || currentUser.user_metadata?.full_name || 'Traveler',
-                    owner_photo_url: userData.photo_url || currentUser.user_metadata?.avatar_url || null,
-                    owner_username: userData.username || null,
-                    participants: [currentUser.id],
-                    image_object_keys: finalObjectKeys,
-                    location: trip.toLocation,
-                    trip_type: trip.tripType,
-                    cover_image: finalImages[0],
-                };
-
-                const { data: tripRow, error: tripErr } = await supabase.from('trips').insert(tripDataToSave).select('id').single();
-                if (tripErr || !tripRow) throw tripErr || new Error('Failed to create trip');
-
-                await showUploadNotification(0.8, 'Creating trip group...');
-
-                try {
-                    await supabase.from('group_chats').insert({
-                        trip_id: tripRow.id,
-                        group_name: trip.title,
-                        trip_image: finalImages[0] || null,
-                        participants: [currentUser.id],
-                        participant_details: {
-                            [currentUser.id]: {
-                                displayName: tripDataToSave.owner_display_name,
-                                photoURL: tripDataToSave.owner_photo_url || '',
-                            },
-                        },
-                        member_count: 1,
-                        created_by: currentUser.id,
-                        last_message: { text: 'Trip group created!', sender_id: null, created_at: new Date().toISOString() },
-                    });
-                } catch {
-                    // Group chat creation is non-critical
-                }
-
-                await completeUploadNotification('Trip Posted! 🎉', 'Your trip has been posted successfully.');
-                syncDatabase().catch(err => console.error('[CustomTimeline] Post-creation sync failed:', err));
-
-                Alert.alert('Success', 'Trip created successfully!', [
-                    { text: 'OK', onPress: () => router.replace({ pathname: '/profile/[id]', params: { id: currentUser.id } }) }
-                ]);
-            } else if (tripId) {
-                // Update Mode: Just update places
-                const { error } = await supabase
-                    .from('trips')
-                    .update({ places_to_visit: JSON.stringify(places) })
-                    .eq('id', tripId);
-
-                if (error) throw error;
-                Alert.alert('Success', 'Itinerary saved successfully!');
-            }
-        } catch (error: any) {
-            if (newObjectKeys.length > 0) {
-                await deleteTripImagesFromR2(newObjectKeys);
-            }
-            await failUploadNotification(error?.message || 'Failed to save trip');
-            Alert.alert('Error', `Failed to save: ${error.message}`);
-        } finally {
-            setLoading(false);
-        }
+        router.push('/trip/view');
     };
 
     // Component Mode logic
@@ -569,19 +476,101 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
         );
     }
 
+    const handleAddDay = () => {
+        if (!trip) return;
+        const newDuration = (trip.duration || 1) + 1;
+        const updatedTrip = { ...trip, duration: newDuration };
+        
+        // Update toDate
+        if (updatedTrip.fromDate) {
+            const newToDate = new Date(new Date(updatedTrip.fromDate).getTime() + (newDuration - 1) * 24 * 60 * 60 * 1000);
+            updatedTrip.toDate = newToDate.toISOString();
+        }
+        
+        setTrip(updatedTrip);
+        setTripDraft(updatedTrip);
+    };
+
+    const handleRemoveDay = (dayNum: number) => {
+        if (!trip || (trip.duration || 1) <= 1) return;
+        
+        Alert.alert(
+            "Remove Day",
+            `Are you sure you want to remove Day ${dayNum}? All places on this day will be deleted.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                { 
+                    text: "Remove", 
+                    style: "destructive",
+                    onPress: () => {
+                        const filteredPlaces = places.filter(p => p.day !== dayNum);
+                        const updatedPlaces = filteredPlaces.map(p => {
+                            if (p.day > dayNum) return { ...p, day: p.day - 1 };
+                            return p;
+                        });
+                        const newDuration = (trip.duration || 1) - 1;
+                        const updatedTrip = { ...trip, duration: newDuration };
+                        
+                        // Update toDate
+                        if (updatedTrip.fromDate) {
+                            const newToDate = new Date(new Date(updatedTrip.fromDate).getTime() + (newDuration - 1) * 24 * 60 * 60 * 1000);
+                            updatedTrip.toDate = newToDate.toISOString();
+                        }
+
+                        setPlaces(updatedPlaces);
+                        setTrip(updatedTrip);
+                        setTripDraft(updatedTrip);
+                        
+                        if (selectedTab === `Day ${dayNum}`) setSelectedTab('All');
+                    }
+                }
+            ]
+        );
+    };
+
+    const compactDays = () => {
+        if (!trip) return;
+        const usedDays = Array.from(new Set(places.map(p => p.day))).sort((a, b) => a - b);
+        
+        // If there are no places at all, we keep at least Day 1
+        const finalDuration = usedDays.length > 0 ? usedDays.length : 1;
+        
+        const dayMapping: { [key: number]: number } = {};
+        usedDays.forEach((day, index) => {
+            dayMapping[day] = index + 1;
+        });
+
+        const updatedPlaces = places.map(p => ({
+            ...p,
+            day: dayMapping[p.day]
+        }));
+
+        const updatedTrip = { ...trip, duration: finalDuration };
+        
+        // Update toDate
+        if (updatedTrip.fromDate) {
+            const newToDate = new Date(new Date(updatedTrip.fromDate).getTime() + (finalDuration - 1) * 24 * 60 * 60 * 1000);
+            updatedTrip.toDate = newToDate.toISOString();
+        }
+
+        setPlaces(updatedPlaces);
+        setTrip(updatedTrip);
+        setTripDraft(updatedTrip);
+    };
+
     const duration = trip?.duration || 1;
     const fromDate = trip?.fromDate ? new Date(trip.fromDate) : null;
 
     const tabs = [
-        { label: 'All', date: null },
+        { label: 'All', date: null, dayNum: 0 },
         ...Array.from({ length: duration }, (_, i) => {
             let dateStr = '';
             if (fromDate) {
                 const currentDate = new Date(fromDate);
                 currentDate.setDate(fromDate.getDate() + i);
-                dateStr = currentDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                dateStr = currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             }
-            return { label: `Day ${i + 1}`, date: dateStr };
+            return { label: `Day ${i + 1}`, date: dateStr, dayNum: i + 1 };
         })
     ];
     const activePlaces = selectedTab === 'All'
@@ -623,7 +612,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
     const reverseGeocode = async (lat: number, lng: number) => {
         try {
             const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyBURfArYP_txIxAGEPYhNKm-FCtY4gQ7oQ';
-            const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`);
+            const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}&language=en`);
             const data = await response.json();
             if (data.results && data.results.length > 0) {
                 return data.results[0].formatted_address;
@@ -650,15 +639,17 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
     };
 
     const onTimeChange = (event: any, selectedDate?: Date) => {
-        setShowTimePicker(Platform.OS === 'ios');
+        if (Platform.OS === 'android') {
+            setShowTimePicker(false);
+        }
 
-        if (selectedDate && editingPlaceId) {
+        if (event.type === 'set' && selectedDate && editingPlaceId) {
             const timeStr = selectedDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
             setPlaces(places.map(p => p.id === editingPlaceId ? { ...p, time: timeStr } : p));
         }
 
-        if (Platform.OS === 'android') {
-            setShowTimePicker(false);
+        if (Platform.OS === 'ios') {
+            setShowTimePicker(true);
         }
     };
 
@@ -666,7 +657,9 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
         if (item.isHeader) {
             return (
                 <View style={{ paddingHorizontal: 15, paddingVertical: 5, marginTop: 10 }}>
-                    <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 16 }}>{item.dateStr || `Day ${item.day}`}</Text>
+                    <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 16 }}>
+                        Day {item.day}{item.dateStr ? ` - ${item.dateStr}` : ''}
+                    </Text>
                 </View>
             );
         }
@@ -687,12 +680,10 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
         return (
             <ScaleDecorator>
                 <View style={{ flexDirection: 'row', paddingHorizontal: 15, marginVertical: 10, alignItems: 'center' }}>
-                    {/* Drag Handle */}
                     <TouchableOpacity onLongPress={drag} style={{ padding: 5, marginRight: 5 }}>
                         <Icon name="DotsSixVertical" size={20} color={colors.textSecondary} />
                     </TouchableOpacity>
                     
-                    {/* Left: Time and Timeline Line */}
                     <View style={{ width: 80, alignItems: 'center' }}>
                         <View style={{
                             width: 30,
@@ -710,14 +701,24 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                                 setEditingPlaceId(item.id);
                                 setShowTimePicker(true);
                             }}
-                            style={{ zIndex: 10 }}
+                            style={{ 
+                                zIndex: 10,
+                                borderWidth: 1,
+                                borderColor: colors.border,
+                                borderRadius: 12,
+                                paddingHorizontal: 10,
+                                paddingVertical: 5,
+                                backgroundColor: colors.background,
+                                minWidth: 85,
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}
                         >
-                            <Text style={{ color: colors.textSecondary, fontSize: 10 }}>{item.time || 'Pick a time'}</Text>
+                            <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: '600' }}>{item.time || 'Pick a time'}</Text>
                         </TouchableOpacity>
                         <View style={{ width: 2, height: 40, backgroundColor: colors.border, marginVertical: 5 }} />
                     </View>
 
-                    {/* Right: Card (Styled like image) */}
                     <View
                         style={[
                             styles.draggableItem,
@@ -743,6 +744,10 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                                     value={item.title}
                                     placeholder="Enter a title"
                                     placeholderTextColor={colors.textSecondary}
+                                    cursorColor={colors.primary}
+                                    selectionColor={colors.primary + '40'}
+                                    returnKeyType="done"
+                                    blurOnSubmit={true}
                                     onChangeText={(text) => {
                                         setPlaces(places.map(p => p.id === item.id ? { ...p, title: text } : p));
                                     }}
@@ -755,10 +760,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                                 </TouchableOpacity>
                             </View>
                             <TouchableOpacity onPress={() => handleDeletePlace(item.id)}>
-                                <Icon name="Trash" size={18} color={colors.textSecondary} style={{ marginRight: 10 }} />
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => handlePlacePress(item)}>
-                                <Icon name="CaretRight" size={18} color={colors.textSecondary} />
+                                <Icon name="Trash" size={18} color={colors.textSecondary} />
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -769,24 +771,37 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
 
     return (
         <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
-            {/* Spacing above map */}
-            <View style={{ height: 40 }} />
+            <KeyboardAvoidingView 
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={{ flex: 1 }}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+            >
+                <View style={{ height: 40 }} />
 
-            {/* Map and Search */}
-            <View style={{ height: Dimensions.get('window').height * 0.4, position: 'relative' }}>
+            <View style={{ height: mapHeight, position: 'relative' }}>
                 <MapView
                     ref={mapRef}
                     style={StyleSheet.absoluteFill}
                     initialRegion={mapRegion}
                     onPoiClick={async (e) => {
                         const poi = e.nativeEvent;
-                        const address = await reverseGeocode(poi.coordinate.latitude, poi.coordinate.longitude);
+                        let name = poi.name;
+                        let address = await reverseGeocode(poi.coordinate.latitude, poi.coordinate.longitude);
+
+                        if (poi.placeId) {
+                            const details = await fetchPlaceDetails(poi.placeId);
+                            if (details) {
+                                name = details.name || name;
+                                address = details.address || address;
+                            }
+                        }
+
                         const currentDay = selectedTab === 'All' ? 1 : parseInt(selectedTab.replace('Day ', ''));
                         const dayPlaces = places.filter(p => p.day === currentDay);
 
                         const newPlace: StructuredPlace = {
                             id: `poi-${poi.placeId || Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-                            name: poi.name,
+                            name: name,
                             address: address,
                             day: currentDay,
                             order: dayPlaces.length,
@@ -844,7 +859,6 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                     ))}
                 </MapView>
 
-                {/* Back Button Floating on Map */}
                 <TouchableOpacity
                     onPress={() => router.back()}
                     style={{
@@ -867,7 +881,6 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                     <Icon name="CaretLeft" size={24} color={colors.text} />
                 </TouchableOpacity>
 
-                {/* Search Box & Magnifying Glass */}
                 <View style={{
                     position: 'absolute',
                     top: 2,
@@ -933,7 +946,6 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                     </TouchableOpacity>
                 </View>
 
-                {/* Search Results Dropdown (Floating on Map) */}
                 {isSearchVisible && searchResults.length > 0 && (
                     <View style={{
                         position: 'absolute',
@@ -963,7 +975,39 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                 )}
             </View>
 
-            {/* Tabs (Now below the map) */}
+            {/* Resizable Divider */}
+            <View 
+                style={{
+                    height: 15,
+                    backgroundColor: colors.card,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    borderTopWidth: 1,
+                    borderBottomWidth: 1,
+                    borderColor: colors.border,
+                }}
+                {...{
+                    onStartShouldSetResponder: () => true,
+                    onResponderGrant: (e) => { 
+                        isDraggingMap.current = true; 
+                        startY.current = e.nativeEvent.pageY;
+                        startHeight.current = mapHeight;
+                    },
+                    onResponderMove: (e) => {
+                        if (isDraggingMap.current) {
+                            const delta = e.nativeEvent.pageY - startY.current;
+                            const newHeight = startHeight.current + delta;
+                            if (newHeight > 120 && newHeight < Dimensions.get('window').height * 0.7) {
+                                setMapHeight(newHeight);
+                            }
+                        }
+                    },
+                    onResponderRelease: () => { isDraggingMap.current = false; }
+                }}
+            >
+                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.textSecondary + '40' }} />
+            </View>
+
             <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 5, paddingHorizontal: 10, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border }}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     {tabs.map(tab => (
@@ -971,28 +1015,42 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                             key={tab.label}
                             onPress={() => setSelectedTab(tab.label)}
                             style={{
-                                paddingVertical: 4,
-                                paddingHorizontal: 10,
-                                backgroundColor: selectedTab === tab.label ? colors.primary : colors.background,
+                                backgroundColor: selectedTab === tab.label ? colors.primary : colors.card,
+                                paddingHorizontal: 15,
+                                paddingVertical: 8,
                                 borderRadius: 15,
-                                marginRight: 8,
-                                alignItems: 'center',
-                                justifyContent: 'center',
+                                marginRight: 10,
                                 borderWidth: 1,
                                 borderColor: selectedTab === tab.label ? colors.primary : colors.border,
-                                minWidth: 50,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                minWidth: 70,
                             }}
                         >
-                            {tab.date && (
-                                <Text style={{ color: selectedTab === tab.label ? '#fff' : colors.textSecondary, fontSize: 9, marginBottom: 1 }}>{tab.date}</Text>
+                            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                                {tab.date && <Text style={{ color: selectedTab === tab.label ? '#fff' : colors.textSecondary, fontSize: 8, marginBottom: 1 }}>{tab.date}</Text>}
+                                <Text style={{ color: selectedTab === tab.label ? '#fff' : colors.text, fontWeight: 'bold', fontSize: 11 }}>{tab.label}</Text>
+                            </View>
+                            {tab.label !== 'All' && (
+                                <TouchableOpacity 
+                                    onPress={() => handleRemoveDay(tab.dayNum!)}
+                                    style={{ 
+                                        marginLeft: 10, 
+                                        width: 20, 
+                                        height: 20, 
+                                        justifyContent: 'center', 
+                                        alignItems: 'center' 
+                                    }}
+                                >
+                                    <Icon name="Trash" size={14} color={selectedTab === tab.label ? '#fff' : colors.textSecondary} />
+                                </TouchableOpacity>
                             )}
-                            <Text style={{ color: selectedTab === tab.label ? '#fff' : colors.text, fontWeight: 'bold', fontSize: 11 }}>{tab.label}</Text>
                         </TouchableOpacity>
                     ))}
                 </ScrollView>
             </View>
 
-            {/* Content List */}
             <View style={{ flex: 1 }}>
                 {selectedTab === 'All' ? (
                     <DraggableFlatList
@@ -1010,7 +1068,6 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                                 }
                             });
 
-                            // Recalculate order for each day
                             const finalPlaces = [];
                             const duration = trip?.duration || 1;
                             for (let day = 1; day <= duration; day++) {
@@ -1022,6 +1079,9 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
 
                             setPlaces(finalPlaces);
                         }}
+                        onScrollBeginDrag={() => setIsFABVisible(false)}
+                        onScrollEndDrag={() => setIsFABVisible(true)}
+                        onMomentumScrollEnd={() => setIsFABVisible(true)}
                     />
                 ) : (
                     <DraggableFlatList
@@ -1034,25 +1094,61 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                             const updatedDayPlaces = data.map((item, index) => ({ ...item, order: index }));
                             setPlaces([...otherDayPlaces, ...updatedDayPlaces]);
                         }}
+                        onScrollBeginDrag={() => setIsFABVisible(false)}
+                        onScrollEndDrag={() => setIsFABVisible(true)}
+                        onMomentumScrollEnd={() => setIsFABVisible(true)}
                     />
                 )}
             </View>
 
-            {/* Save Button */}
-            <View style={{ padding: 20, backgroundColor: colors.card }}>
+            </KeyboardAvoidingView>
+
+            {isFABVisible && (
                 <TouchableOpacity
-                    onPress={handleSaveItinerary}
-                    style={{ backgroundColor: colors.primary, padding: 15, borderRadius: 8, alignItems: 'center' }}
+                    onPress={handleAddDay}
+                    style={[
+                        styles.floatingAddButton,
+                        { 
+                            backgroundColor: colors.card,
+                            bottom: 100,
+                            shadowColor: '#000'
+                        }
+                    ]}
                 >
-                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Save Itinerary</Text>
+                    <Icon name="Plus" size={24} color={colors.primary} weight="bold" />
+                </TouchableOpacity>
+            )}
+
+            <View style={{ padding: 20, backgroundColor: colors.card, borderTopWidth: 1, borderTopColor: colors.border }}>
+                <TouchableOpacity
+                    onPress={() => {
+                        compactDays();
+                        router.push('/trip/view');
+                    }}
+                    style={{ 
+                        backgroundColor: colors.primary, 
+                        padding: 15, 
+                        borderRadius: 25,
+                        alignItems: 'center',
+                        width: 250,
+                        alignSelf: 'center',
+                        shadowColor: colors.primary,
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.3,
+                        shadowRadius: 5,
+                        elevation: 5
+                    }}
+                >
+                    <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Save Itinerary</Text>
                 </TouchableOpacity>
             </View>
+
             {showTimePicker && (
                 <DateTimePicker
                     value={new Date()}
                     mode="time"
                     is24Hour={false}
-                    display="default"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                     onChange={onTimeChange}
                 />
             )}
@@ -1115,5 +1211,18 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         marginBottom: 10,
         marginHorizontal: 10,
+    },
+    floatingAddButton: {
+        position: 'absolute',
+        right: 20,
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 8,
+        shadowOffset: { width: 4, height: 4 },
+        shadowOpacity: 0.8,
+        shadowRadius: 10,
     },
 });
