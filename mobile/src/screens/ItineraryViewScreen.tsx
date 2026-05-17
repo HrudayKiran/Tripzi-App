@@ -13,6 +13,202 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 
 const { width } = Dimensions.get('window');
 
+interface CategoryCardProps {
+    categoryName: string;
+    drag: () => void;
+    isActive: boolean;
+    checklist: any[];
+    colors: any;
+    isDarkMode: boolean;
+    toggleItem: (id: string) => void;
+    deleteItem: (id: string) => void;
+    deleteCategory: (catName: string) => void;
+    setChecklistModalMode: (mode: 'add_category' | 'add_item' | 'edit_category') => void;
+    setChecklistModalTargetCategory: (cat: string) => void;
+    setChecklistModalInputValue: (val: string) => void;
+    setChecklistModalVisible: (visible: boolean) => void;
+    setChecklist: (list: any[]) => void;
+}
+
+const CategoryCard = React.memo(({
+    categoryName,
+    drag,
+    isActive,
+    checklist,
+    colors,
+    isDarkMode,
+    toggleItem,
+    deleteItem,
+    deleteCategory,
+    setChecklistModalMode,
+    setChecklistModalTargetCategory,
+    setChecklistModalInputValue,
+    setChecklistModalVisible,
+    setChecklist
+}: CategoryCardProps) => {
+    const catItems = checklist.filter(item => item.category === categoryName);
+
+    return (
+        <ScaleDecorator>
+            <View
+                style={{
+                    backgroundColor: colors.card,
+                    borderRadius: 20,
+                    padding: 16,
+                    marginVertical: 10,
+                    borderWidth: 1.5,
+                    borderColor: isActive ? colors.primary : colors.border,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: isActive ? 6 : 2 },
+                    shadowOpacity: isActive ? 0.15 : 0.04,
+                    shadowRadius: isActive ? 8 : 4,
+                    elevation: isActive ? 6 : 2,
+                }}
+            >
+                {/* Category Header */}
+                <TouchableOpacity
+                    onLongPress={drag}
+                    delayLongPress={150}
+                    activeOpacity={0.9}
+                    style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        borderBottomWidth: 1,
+                        borderBottomColor: colors.border,
+                        paddingBottom: 12,
+                        marginBottom: 10
+                    }}
+                >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text }}>{categoryName}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <TouchableOpacity
+                            onPress={() => {
+                                setChecklistModalMode('add_item');
+                                setChecklistModalTargetCategory(categoryName);
+                                setChecklistModalInputValue('');
+                                setChecklistModalVisible(true);
+                            }}
+                            style={{ padding: 6, marginLeft: 8 }}
+                        >
+                            <Icon name="Plus" size={20} color={colors.text} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => {
+                                setChecklistModalMode('edit_category');
+                                setChecklistModalTargetCategory(categoryName);
+                                setChecklistModalInputValue(categoryName);
+                                setChecklistModalVisible(true);
+                            }}
+                            style={{ padding: 6, marginLeft: 8 }}
+                        >
+                            <Icon name="PencilSimple" size={20} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => deleteCategory(categoryName)}
+                            style={{ padding: 6, marginLeft: 8 }}
+                        >
+                            <Icon name="Trash" size={20} color="#D63031" />
+                        </TouchableOpacity>
+                        <View style={{ padding: 6, marginLeft: 8, opacity: 0.6 }}>
+                            <Icon name="Equals" size={20} color={colors.textSecondary} />
+                        </View>
+                    </View>
+                </TouchableOpacity>
+
+                {/* Category Tasks List */}
+                {catItems.length === 0 ? (
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, fontStyle: 'italic', textAlign: 'center', paddingVertical: 15 }}>
+                        No tasks in this category. Tap + to add!
+                    </Text>
+                ) : (
+                    <DraggableFlatList
+                        data={catItems}
+                        keyExtractor={item => item.id}
+                        scrollEnabled={false}
+                        onDragEnd={({ data }) => {
+                            const otherItems = checklist.filter(x => x.category !== categoryName);
+                            setChecklist([...otherItems, ...data]);
+                        }}
+                        renderItem={({ item, drag: dragTask, isActive: isTaskActive }) => {
+                            return (
+                                <ScaleDecorator>
+                                    <View style={{
+                                        backgroundColor: isTaskActive ? colors.card : colors.background,
+                                        borderRadius: 12,
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 12,
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        marginVertical: 4,
+                                        borderWidth: 1,
+                                        borderColor: isTaskActive ? colors.primary : colors.border,
+                                        opacity: isTaskActive ? 0.9 : 1,
+                                    }}>
+                                        <TouchableOpacity
+                                            onPress={() => toggleItem(item.id)}
+                                            style={{ padding: 2 }}
+                                        >
+                                            <Icon
+                                                name={item.checked ? "CheckSquare" : "Square"}
+                                                size={20}
+                                                color={item.checked ? colors.primary : colors.textSecondary}
+                                                weight={item.checked ? "fill" : "regular"}
+                                            />
+                                        </TouchableOpacity>
+
+                                        <View style={{ flex: 1, marginLeft: 12, alignSelf: 'stretch', justifyContent: 'center' }}>
+                                            <View style={{ alignSelf: 'flex-start', justifyContent: 'center' }}>
+                                                <Text style={{
+                                                    fontSize: 14,
+                                                    color: item.checked ? colors.textSecondary : colors.text,
+                                                    opacity: item.checked ? 0.6 : 1,
+                                                }}>
+                                                    {item.text}
+                                                </Text>
+                                                {item.checked && (
+                                                    <View style={{
+                                                        position: 'absolute',
+                                                        left: 0,
+                                                        right: 0,
+                                                        height: 2.5,
+                                                        backgroundColor: isDarkMode ? '#2ECC71' : '#27AE60',
+                                                        opacity: 0.9
+                                                    }} />
+                                                )}
+                                            </View>
+                                        </View>
+
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <TouchableOpacity
+                                                onPress={() => deleteItem(item.id)}
+                                                style={{ padding: 4, opacity: 0.6 }}
+                                            >
+                                                <Icon name="Trash" size={16} color={colors.textSecondary} />
+                                            </TouchableOpacity>
+
+                                            <TouchableOpacity
+                                                onLongPress={dragTask}
+                                                delayLongPress={100}
+                                                style={{ padding: 4, marginLeft: 6, opacity: 0.6 }}
+                                            >
+                                                <Icon name="Equals" size={18} color={colors.textSecondary} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                </ScaleDecorator>
+                            );
+                        }}
+                    />
+                )}
+            </View>
+        </ScaleDecorator>
+    );
+});
+
 type TabType = 'Full Itinerary' | 'checklist' | 'notes' | 'itinerary mapview';
 
 export default function ItineraryViewScreen() {
@@ -429,148 +625,23 @@ export default function ItineraryViewScreen() {
         }
 
         const renderCategoryCard = ({ item: categoryName, drag, isActive }: RenderItemParams<string>) => {
-            const catItems = checklist.filter(item => item.category === categoryName);
-
             return (
-                <ScaleDecorator>
-                    <TouchableOpacity
-                        onLongPress={drag}
-                        delayLongPress={200}
-                        activeOpacity={0.9}
-                        style={{
-                            backgroundColor: colors.card,
-                            borderRadius: 20,
-                            padding: 16,
-                            marginVertical: 10,
-                            borderWidth: 1.5,
-                            borderColor: isActive ? colors.primary : colors.border,
-                            shadowColor: '#000',
-                            shadowOffset: { width: 0, height: isActive ? 6 : 2 },
-                            shadowOpacity: isActive ? 0.15 : 0.04,
-                            shadowRadius: isActive ? 8 : 4,
-                            elevation: isActive ? 6 : 2,
-                        }}
-                    >
-                        {/* Category Header */}
-                        <View style={{
-                            flexDirection: 'row',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            borderBottomWidth: 1,
-                            borderBottomColor: colors.border,
-                            paddingBottom: 12,
-                            marginBottom: 10
-                        }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                                <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text }}>{categoryName}</Text>
-                            </View>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <TouchableOpacity 
-                                    onPress={() => {
-                                        setChecklistModalMode('add_item');
-                                        setChecklistModalTargetCategory(categoryName);
-                                        setChecklistModalInputValue('');
-                                        setChecklistModalVisible(true);
-                                    }}
-                                    style={{ padding: 6, marginLeft: 8 }}
-                                >
-                                    <Icon name="Plus" size={20} color={colors.text} />
-                                </TouchableOpacity>
-                                <TouchableOpacity 
-                                    onPress={() => {
-                                        setChecklistModalMode('edit_category');
-                                        setChecklistModalTargetCategory(categoryName);
-                                        setChecklistModalInputValue(categoryName);
-                                        setChecklistModalVisible(true);
-                                    }}
-                                    style={{ padding: 6, marginLeft: 8 }}
-                                >
-                                    <Icon name="PencilSimple" size={20} color={colors.textSecondary} />
-                                </TouchableOpacity>
-                                <TouchableOpacity 
-                                    onPress={() => deleteCategory(categoryName)}
-                                    style={{ padding: 6, marginLeft: 8 }}
-                                >
-                                    <Icon name="Trash" size={20} color="#D63031" />
-                                </TouchableOpacity>
-                                <View style={{ padding: 6, marginLeft: 8, opacity: 0.6 }}>
-                                    <Icon name="Equals" size={20} color={colors.textSecondary} />
-                                </View>
-                            </View>
-                        </View>
-
-                        {/* Category Tasks List */}
-                        {catItems.length === 0 ? (
-                            <Text style={{ fontSize: 13, color: colors.textSecondary, fontStyle: 'italic', textAlign: 'center', paddingVertical: 15 }}>
-                                No tasks in this category. Tap + to add!
-                            </Text>
-                        ) : (
-                            catItems.map((item) => {
-                                return (
-                                    <View key={item.id} style={{
-                                        backgroundColor: colors.background,
-                                        borderRadius: 12,
-                                        paddingHorizontal: 14,
-                                        paddingVertical: 12,
-                                        flexDirection: 'row',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        marginVertical: 4,
-                                        borderWidth: 1,
-                                        borderColor: colors.border,
-                                    }}>
-                                        <TouchableOpacity 
-                                            onPress={() => toggleItem(item.id)}
-                                            style={{ padding: 2 }}
-                                        >
-                                            <Icon 
-                                                name={item.checked ? "CheckSquare" : "Square"} 
-                                                size={20} 
-                                                color={item.checked ? colors.primary : colors.textSecondary} 
-                                                weight={item.checked ? "fill" : "regular"}
-                                            />
-                                        </TouchableOpacity>
-
-                                        <View style={{ flex: 1, marginLeft: 12, alignSelf: 'stretch', justifyContent: 'center' }}>
-                                            <View style={{ alignSelf: 'flex-start', justifyContent: 'center' }}>
-                                                <Text style={{ 
-                                                    fontSize: 14, 
-                                                    color: item.checked ? colors.textSecondary : colors.text,
-                                                    opacity: item.checked ? 0.6 : 1,
-                                                }}>
-                                                    {item.text}
-                                                </Text>
-                                                {item.checked && (
-                                                    <View style={{
-                                                        position: 'absolute',
-                                                        left: 0,
-                                                        right: 0,
-                                                        height: 2,
-                                                        backgroundColor: colors.primary,
-                                                        opacity: 0.8
-                                                    }} />
-                                                )}
-                                            </View>
-                                        </View>
-
-                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                            <TouchableOpacity 
-                                                onPress={() => deleteItem(item.id)}
-                                                style={{ padding: 4, opacity: 0.6 }}
-                                            >
-                                                <Icon name="Trash" size={16} color={colors.textSecondary} />
-                                            </TouchableOpacity>
-                                            
-                                            <View style={{ padding: 4, marginLeft: 6, opacity: 0.6 }}>
-                                                <Icon name="Equals" size={18} color={colors.textSecondary} />
-                                            </View>
-                                        </View>
-                                    </View>
-                                );
-                            })
-                        )}
-                    </TouchableOpacity>
-                </ScaleDecorator>
+                <CategoryCard
+                    categoryName={categoryName}
+                    drag={drag}
+                    isActive={isActive}
+                    checklist={checklist}
+                    colors={colors}
+                    isDarkMode={isDarkMode}
+                    toggleItem={toggleItem}
+                    deleteItem={deleteItem}
+                    deleteCategory={deleteCategory}
+                    setChecklistModalMode={setChecklistModalMode}
+                    setChecklistModalTargetCategory={setChecklistModalTargetCategory}
+                    setChecklistModalInputValue={setChecklistModalInputValue}
+                    setChecklistModalVisible={setChecklistModalVisible}
+                    setChecklist={setChecklist}
+                />
             );
         };
 
@@ -1187,7 +1258,7 @@ const styles = StyleSheet.create({
     },
     floatingActionButton: {
         position: 'absolute',
-        bottom: 84,
+        bottom: 10,
         right: 20,
         width: 56,
         height: 56,
