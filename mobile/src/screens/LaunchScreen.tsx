@@ -68,9 +68,7 @@ const LaunchScreen = () => {
         {/* Abstract Map Overlay */}
 
 
-        {/* Decorative Blurs (Simulated with absolute views) */}
-        <View style={[styles.blurCircle, styles.blurTopLeft]} />
-        <View style={[styles.blurCircle, styles.blurBottomRight]} />
+
 
         {/* Top Spacer */}
         <View style={{ height: RNStatusBar.currentHeight || 48 }} />
@@ -130,25 +128,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     opacity: 0.1, // opacity-10
   },
-  blurCircle: {
-    position: 'absolute',
-    width: 256, // w-64
-    height: 256, // h-64
-    borderRadius: 128,
-    opacity: 0.3,
-  },
-  blurTopLeft: {
-    top: '25%',
-    left: '25%',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    transform: [{ translateX: -128 }, { translateY: -128 }],
-  },
-  blurBottomRight: {
-    bottom: '25%',
-    right: '25%',
-    backgroundColor: 'rgba(76, 29, 149, 0.3)', // #4c1d95/30
-    transform: [{ translateX: 128 }, { translateY: 128 }],
-  },
+
   centerContent: {
     flex: 1,
     justifyContent: 'center',

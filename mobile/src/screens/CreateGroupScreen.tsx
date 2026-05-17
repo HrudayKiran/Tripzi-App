@@ -29,7 +29,6 @@ interface User {
     displayName: string;
     username?: string;
     photoURL?: string;
-    ageVerified?: boolean;
 }
 
 const CreateGroupScreen = () => {
@@ -76,7 +75,6 @@ const CreateGroupScreen = () => {
                     displayName: u.displayName || 'User',
                     username: u.username,
                     photoURL: u.photoURL,
-                    ageVerified: u.ageVerified,
                 }));
 
             setSearchResults(results);
@@ -222,9 +220,6 @@ const CreateGroupScreen = () => {
                 <View style={styles.userInfo}>
                     <View style={styles.userNameRow}>
                         <Text style={[styles.userName, { color: colors.text }]}>{item.displayName}</Text>
-                        {item.ageVerified === true && (
-                            <Icon name="ShieldCheck" size={14} color="#10B981" style={{ marginLeft: 4 }} />
-                        )}
                     </View>
                     {item.username && (
                         <Text style={[styles.userUsername, { color: colors.primary }]}>@{item.username}</Text>

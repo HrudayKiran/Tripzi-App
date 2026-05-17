@@ -6,7 +6,6 @@ export interface SearchUserResult {
     username?: string;
     email?: string;
     photoURL?: string;
-    ageVerified?: boolean;
     [key: string]: any;
 }
 
@@ -35,12 +34,12 @@ export const searchUsersByPrefix = async (
     const [nameResult, usernameResult] = await Promise.all([
         supabase
             .from('public_profiles')
-            .select('id, display_name, username, photo_url, age_verified')
+            .select('id, display_name, username, photo_url')
             .ilike('display_name', pattern)
             .limit(limit),
         supabase
             .from('public_profiles')
-            .select('id, display_name, username, photo_url, age_verified')
+            .select('id, display_name, username, photo_url')
             .ilike('username', pattern)
             .limit(limit),
     ]);
@@ -51,14 +50,12 @@ export const searchUsersByPrefix = async (
             displayName: p.display_name,
             username: p.username,
             photoURL: p.photo_url,
-            ageVerified: p.age_verified,
         })),
         ...(usernameResult.data || []).map((p) => ({
             id: p.id,
             displayName: p.display_name,
             username: p.username,
             photoURL: p.photo_url,
-            ageVerified: p.age_verified,
         })),
     ];
 

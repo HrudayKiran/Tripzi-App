@@ -64,9 +64,11 @@ const StartScreen = () => {
       const googlePhotoURL = googleUser?.photo || googleUser?.photoURL || null;
 
       // If no idToken or email, user likely cancelled — just return silently
-      if (!idToken || !googleEmail) return;
+      if (!idToken || !googleEmail) {
+        setLoading(false);
+        return;
+      }
 
-      // Sign in to Supabase with the Google ID token
       const { data: authData, error: authError } = await supabase.auth.signInWithIdToken({
         provider: 'google',
         token: idToken,
@@ -165,20 +167,14 @@ const StartScreen = () => {
               activeOpacity={0.9}
               disabled={loading}
             >
-              {loading ? (
-                <ActivityIndicator color={NEUTRAL.dark} />
-              ) : (
-                <>
-                    <View style={styles.iconContainer}>
-                      <Image
-                        source={{ uri: 'https://www.google.com/images/branding/googleg/1x/googleg_standard_color_128dp.png' }}
-                        style={styles.googleLogo}
-                        contentFit="contain"
-                      />
-                    </View>
-                  <Text style={styles.googleButtonText}>Continue with Google</Text>
-                </>
-              )}
+              <View style={styles.iconContainer}>
+                <Image
+                  source={{ uri: 'https://www.google.com/images/branding/googleg/1x/googleg_standard_color_128dp.png' }}
+                  style={styles.googleLogo}
+                  contentFit="contain"
+                />
+              </View>
+              <Text style={styles.googleButtonText}>Continue with Google</Text>
             </TouchableOpacity>
 
             <Text style={styles.termsText}>

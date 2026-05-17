@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput, Platform, ActivityIndicator, Alert, ScrollView, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput, Platform, ActivityIndicator, Alert, ScrollView, KeyboardAvoidingView, Keyboard } from 'react-native';
 import Svg, { Line, Circle } from 'react-native-svg';
 import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
@@ -77,8 +77,18 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
         longitudeDelta: 10,
     });
 
+    const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+
     useEffect(() => {
         supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+        
+        const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+        const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+
+        return () => {
+            keyboardDidShowListener.remove();
+            keyboardDidHideListener.remove();
+        };
     }, []);
 
     const getDuration = (fromStr: string, toStr: string) => {
@@ -121,7 +131,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
             if (tripDataParam) {
                 try {
                     const parsedData = JSON.parse(tripDataParam);
-                    
+
                     // Only update if data is different to avoid unnecessary renders
                     setTrip(parsedData);
                     setTripDraft(parsedData);
@@ -168,7 +178,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
 
             if (error) throw error;
             setTrip(data);
-            
+
             // Update store draft for ItineraryViewScreen
             setTripDraft({
                 ...data,
@@ -230,11 +240,11 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
             const regexAt = /@(-?\d+\.\d+),(-?\d+\.\d+)/;
             const regexEx = /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/;
             const regexLL = /ll=(-?\d+\.\d+),(-?\d+\.\d+)/;
-            
+
             const matchAt = targetUrl.match(regexAt);
             const matchEx = targetUrl.match(regexEx);
             const matchLL = targetUrl.match(regexLL);
-            
+
             const match = matchAt || matchEx || matchLL;
 
             if (match) {
@@ -397,7 +407,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
     const handleSaveItinerary = async () => {
         // First save to Supabase if it's an existing trip or we want to persist it now
         // But the user specifically asked to go to ItineraryViewScreen.tsx
-        
+
         // Let's ensure the current places are in the store
         // setPlaces(places); // Already happening via state in CustomTimeline if we use store directly
 
@@ -480,27 +490,27 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
         if (!trip) return;
         const newDuration = (trip.duration || 1) + 1;
         const updatedTrip = { ...trip, duration: newDuration };
-        
+
         // Update toDate
         if (updatedTrip.fromDate) {
             const newToDate = new Date(new Date(updatedTrip.fromDate).getTime() + (newDuration - 1) * 24 * 60 * 60 * 1000);
             updatedTrip.toDate = newToDate.toISOString();
         }
-        
+
         setTrip(updatedTrip);
         setTripDraft(updatedTrip);
     };
 
     const handleRemoveDay = (dayNum: number) => {
         if (!trip || (trip.duration || 1) <= 1) return;
-        
+
         Alert.alert(
             "Remove Day",
             `Are you sure you want to remove Day ${dayNum}? All places on this day will be deleted.`,
             [
                 { text: "Cancel", style: "cancel" },
-                { 
-                    text: "Remove", 
+                {
+                    text: "Remove",
                     style: "destructive",
                     onPress: () => {
                         const filteredPlaces = places.filter(p => p.day !== dayNum);
@@ -510,7 +520,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                         });
                         const newDuration = (trip.duration || 1) - 1;
                         const updatedTrip = { ...trip, duration: newDuration };
-                        
+
                         // Update toDate
                         if (updatedTrip.fromDate) {
                             const newToDate = new Date(new Date(updatedTrip.fromDate).getTime() + (newDuration - 1) * 24 * 60 * 60 * 1000);
@@ -520,7 +530,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                         setPlaces(updatedPlaces);
                         setTrip(updatedTrip);
                         setTripDraft(updatedTrip);
-                        
+
                         if (selectedTab === `Day ${dayNum}`) setSelectedTab('All');
                     }
                 }
@@ -531,10 +541,10 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
     const compactDays = () => {
         if (!trip) return;
         const usedDays = Array.from(new Set(places.map(p => p.day))).sort((a, b) => a - b);
-        
+
         // If there are no places at all, we keep at least Day 1
         const finalDuration = usedDays.length > 0 ? usedDays.length : 1;
-        
+
         const dayMapping: { [key: number]: number } = {};
         usedDays.forEach((day, index) => {
             dayMapping[day] = index + 1;
@@ -546,7 +556,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
         }));
 
         const updatedTrip = { ...trip, duration: finalDuration };
-        
+
         // Update toDate
         if (updatedTrip.fromDate) {
             const newToDate = new Date(new Date(updatedTrip.fromDate).getTime() + (finalDuration - 1) * 24 * 60 * 60 * 1000);
@@ -625,7 +635,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
 
     const resolveShortLink = async (url: string) => {
         try {
-            const res = await fetch(url, { 
+            const res = await fetch(url, {
                 method: 'GET',
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
@@ -683,7 +693,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                     <TouchableOpacity onLongPress={drag} style={{ padding: 5, marginRight: 5 }}>
                         <Icon name="DotsSixVertical" size={20} color={colors.textSecondary} />
                     </TouchableOpacity>
-                    
+
                     <View style={{ width: 80, alignItems: 'center' }}>
                         <View style={{
                             width: 30,
@@ -701,7 +711,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                                 setEditingPlaceId(item.id);
                                 setShowTimePicker(true);
                             }}
-                            style={{ 
+                            style={{
                                 zIndex: 10,
                                 borderWidth: 1,
                                 borderColor: colors.border,
@@ -771,164 +781,100 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
 
     return (
         <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
-            <KeyboardAvoidingView 
+            <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
             >
                 <View style={{ height: 40 }} />
 
-            <View style={{ height: mapHeight, position: 'relative' }}>
-                <MapView
-                    ref={mapRef}
-                    style={StyleSheet.absoluteFill}
-                    initialRegion={mapRegion}
-                    onPoiClick={async (e) => {
-                        const poi = e.nativeEvent;
-                        let name = poi.name;
-                        let address = await reverseGeocode(poi.coordinate.latitude, poi.coordinate.longitude);
+                <View style={{ height: mapHeight, position: 'relative' }}>
+                    <MapView
+                        ref={mapRef}
+                        style={StyleSheet.absoluteFill}
+                        initialRegion={mapRegion}
+                        onPoiClick={async (e) => {
+                            const poi = e.nativeEvent;
+                            let name = poi.name;
+                            let address = await reverseGeocode(poi.coordinate.latitude, poi.coordinate.longitude);
 
-                        if (poi.placeId) {
-                            const details = await fetchPlaceDetails(poi.placeId);
-                            if (details) {
-                                name = details.name || name;
-                                address = details.address || address;
+                            if (poi.placeId) {
+                                const details = await fetchPlaceDetails(poi.placeId);
+                                if (details) {
+                                    name = details.name || name;
+                                    address = details.address || address;
+                                }
                             }
-                        }
 
-                        const currentDay = selectedTab === 'All' ? 1 : parseInt(selectedTab.replace('Day ', ''));
-                        const dayPlaces = places.filter(p => p.day === currentDay);
+                            const currentDay = selectedTab === 'All' ? 1 : parseInt(selectedTab.replace('Day ', ''));
+                            const dayPlaces = places.filter(p => p.day === currentDay);
 
-                        const newPlace: StructuredPlace = {
-                            id: `poi-${poi.placeId || Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-                            name: name,
-                            address: address,
-                            day: currentDay,
-                            order: dayPlaces.length,
-                            latitude: poi.coordinate.latitude,
-                            longitude: poi.coordinate.longitude,
-                            time: null,
-                            title: '',
-                        };
-                        setPlaces([...places, newPlace]);
-                    }}
-                    onPress={async (e) => {
-                        const coord = e.nativeEvent.coordinate;
-                        const address = await reverseGeocode(coord.latitude, coord.longitude);
-                        const currentDay = selectedTab === 'All' ? 1 : parseInt(selectedTab.replace('Day ', ''));
-                        const dayPlaces = places.filter(p => p.day === currentDay);
+                            const newPlace: StructuredPlace = {
+                                id: `poi-${poi.placeId || Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                                name: name,
+                                address: address,
+                                day: currentDay,
+                                order: dayPlaces.length,
+                                latitude: poi.coordinate.latitude,
+                                longitude: poi.coordinate.longitude,
+                                time: null,
+                                title: '',
+                            };
+                            setPlaces([...places, newPlace]);
+                        }}
+                        onPress={async (e) => {
+                            const coord = e.nativeEvent.coordinate;
+                            const address = await reverseGeocode(coord.latitude, coord.longitude);
+                            const currentDay = selectedTab === 'All' ? 1 : parseInt(selectedTab.replace('Day ', ''));
+                            const dayPlaces = places.filter(p => p.day === currentDay);
 
-                        const newPlace: StructuredPlace = {
-                            id: `map-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-                            name: 'Dropped Pin',
-                            address: address,
-                            day: currentDay,
-                            order: dayPlaces.length,
-                            latitude: coord.latitude,
-                            longitude: coord.longitude,
-                            time: null,
-                            title: '',
-                        };
-                        setPlaces([...places, newPlace]);
-                    }}
-                >
-                    {startingCoords && (
-                        <Marker
-                            coordinate={{ latitude: startingCoords.lat, longitude: startingCoords.lng }}
-                            title={`Starting Point`}
-                            description={trip?.fromLocation}
-                            pinColor="green"
-                        />
-                    )}
-                    {destinationCoords && (
-                        <Marker
-                            coordinate={{ latitude: destinationCoords.lat, longitude: destinationCoords.lng }}
-                            title={`Destination`}
-                            description={trip?.toLocation}
-                            pinColor="blue"
-                        />
-                    )}
-                    {places.map((place, index) => (
-                        place.latitude && place.longitude ? (
+                            const newPlace: StructuredPlace = {
+                                id: `map-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                                name: 'Dropped Pin',
+                                address: address,
+                                day: currentDay,
+                                order: dayPlaces.length,
+                                latitude: coord.latitude,
+                                longitude: coord.longitude,
+                                time: null,
+                                title: '',
+                            };
+                            setPlaces([...places, newPlace]);
+                        }}
+                    >
+                        {startingCoords && (
                             <Marker
-                                key={`${place.id}-${index}`}
-                                coordinate={{ latitude: place.latitude, longitude: place.longitude }}
-                                title={place.name}
+                                coordinate={{ latitude: startingCoords.lat, longitude: startingCoords.lng }}
+                                title={`Starting Point`}
+                                description={trip?.fromLocation}
+                                pinColor="green"
                             />
-                        ) : null
-                    ))}
-                </MapView>
-
-                <TouchableOpacity
-                    onPress={() => router.back()}
-                    style={{
-                        position: 'absolute',
-                        top: 2,
-                        left: 16,
-                        backgroundColor: colors.card,
-                        borderRadius: 20,
-                        width: 40,
-                        height: 40,
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 2 },
-                        shadowOpacity: 0.25,
-                        shadowRadius: 3.84,
-                        elevation: 5,
-                    }}
-                >
-                    <Icon name="CaretLeft" size={24} color={colors.text} />
-                </TouchableOpacity>
-
-                <View style={{
-                    position: 'absolute',
-                    top: 2,
-                    right: 20,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                }}>
-                    {isSearchVisible && (
-                        <MotiView
-                            from={{ width: 0, opacity: 0 }}
-                            animate={{ width: Dimensions.get('window').width - 135, opacity: 1 }}
-                            transition={{ type: 'timing', duration: 300 }}
-                            style={{
-                                backgroundColor: colors.card,
-                                borderRadius: 20,
-                                height: 40,
-                                marginRight: 10,
-                                paddingHorizontal: 15,
-                                justifyContent: 'center',
-                                shadowColor: '#000',
-                                shadowOffset: { width: 0, height: 2 },
-                                shadowOpacity: 0.25,
-                                shadowRadius: 3.84,
-                                elevation: 5,
-                            }}
-                        >
-                            <TextInput
-                                style={{ color: colors.text, flex: 1 }}
-                                placeholder="Search places..."
-                                placeholderTextColor={colors.textSecondary}
-                                value={searchQuery}
-                                onChangeText={(text) => {
-                                    setSearchQuery(text);
-                                    latestQueryRef.current = text;
-                                    if (!text.trim()) {
-                                        setSearchResults([]);
-                                    } else {
-                                        searchPlaces(text);
-                                    }
-                                }}
-                                autoFocus
+                        )}
+                        {destinationCoords && (
+                            <Marker
+                                coordinate={{ latitude: destinationCoords.lat, longitude: destinationCoords.lng }}
+                                title={`Destination`}
+                                description={trip?.toLocation}
+                                pinColor="blue"
                             />
-                        </MotiView>
-                    )}
+                        )}
+                        {places.map((place, index) => (
+                            place.latitude && place.longitude ? (
+                                <Marker
+                                    key={`${place.id}-${index}`}
+                                    coordinate={{ latitude: place.latitude, longitude: place.longitude }}
+                                    title={place.name}
+                                />
+                            ) : null
+                        ))}
+                    </MapView>
 
                     <TouchableOpacity
-                        onPress={() => setIsSearchVisible(!isSearchVisible)}
+                        onPress={() => router.back()}
                         style={{
+                            position: 'absolute',
+                            top: 2,
+                            left: 16,
                             backgroundColor: colors.card,
                             borderRadius: 20,
                             width: 40,
@@ -942,164 +888,228 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                             elevation: 5,
                         }}
                     >
-                        <Icon name="MagnifyingGlass" size={20} color={colors.text} />
+                        <Icon name="CaretLeft" size={24} color={colors.text} />
                     </TouchableOpacity>
-                </View>
 
-                {isSearchVisible && searchResults.length > 0 && (
                     <View style={{
                         position: 'absolute',
-                        top: 50,
-                        left: 65,
-                        width: Dimensions.get('window').width - 135,
-                        backgroundColor: colors.card,
-                        borderRadius: 8,
-                        padding: 10,
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 2 },
-                        shadowOpacity: 0.25,
-                        shadowRadius: 3.84,
-                        elevation: 5,
-                        zIndex: 1000,
+                        top: 2,
+                        right: 20,
+                        flexDirection: 'row',
+                        alignItems: 'center',
                     }}>
-                        {searchResults.map((item: any, index: number) => (
-                            <TouchableOpacity
-                                key={`${item.place_id || 'result'}-${index}`}
-                                style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}
-                                onPress={() => handleAddPlace(item)}
+                        {isSearchVisible && (
+                            <MotiView
+                                from={{ width: 0, opacity: 0 }}
+                                animate={{ width: Dimensions.get('window').width - 135, opacity: 1 }}
+                                transition={{ type: 'timing', duration: 300 }}
+                                style={{
+                                    backgroundColor: colors.card,
+                                    borderRadius: 20,
+                                    height: 40,
+                                    marginRight: 10,
+                                    paddingHorizontal: 15,
+                                    justifyContent: 'center',
+                                    shadowColor: '#000',
+                                    shadowOffset: { width: 0, height: 2 },
+                                    shadowOpacity: 0.25,
+                                    shadowRadius: 3.84,
+                                    elevation: 5,
+                                }}
                             >
-                                <Text style={{ color: colors.text }}>{item.description}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                )}
-            </View>
+                                <TextInput
+                                    style={{ color: colors.text, flex: 1 }}
+                                    placeholder="Search places..."
+                                    placeholderTextColor={colors.textSecondary}
+                                    value={searchQuery}
+                                    onChangeText={(text) => {
+                                        setSearchQuery(text);
+                                        latestQueryRef.current = text;
+                                        if (!text.trim()) {
+                                            setSearchResults([]);
+                                        } else {
+                                            searchPlaces(text);
+                                        }
+                                    }}
+                                    autoFocus
+                                />
+                            </MotiView>
+                        )}
 
-            {/* Resizable Divider */}
-            <View 
-                style={{
-                    height: 15,
-                    backgroundColor: colors.card,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    borderTopWidth: 1,
-                    borderBottomWidth: 1,
-                    borderColor: colors.border,
-                }}
-                {...{
-                    onStartShouldSetResponder: () => true,
-                    onResponderGrant: (e) => { 
-                        isDraggingMap.current = true; 
-                        startY.current = e.nativeEvent.pageY;
-                        startHeight.current = mapHeight;
-                    },
-                    onResponderMove: (e) => {
-                        if (isDraggingMap.current) {
-                            const delta = e.nativeEvent.pageY - startY.current;
-                            const newHeight = startHeight.current + delta;
-                            if (newHeight > 120 && newHeight < Dimensions.get('window').height * 0.7) {
-                                setMapHeight(newHeight);
-                            }
-                        }
-                    },
-                    onResponderRelease: () => { isDraggingMap.current = false; }
-                }}
-            >
-                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.textSecondary + '40' }} />
-            </View>
-
-            <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 5, paddingHorizontal: 10, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    {tabs.map(tab => (
                         <TouchableOpacity
-                            key={tab.label}
-                            onPress={() => setSelectedTab(tab.label)}
+                            onPress={() => setIsSearchVisible(!isSearchVisible)}
                             style={{
-                                backgroundColor: selectedTab === tab.label ? colors.primary : colors.card,
-                                paddingHorizontal: 15,
-                                paddingVertical: 8,
-                                borderRadius: 15,
-                                marginRight: 10,
-                                borderWidth: 1,
-                                borderColor: selectedTab === tab.label ? colors.primary : colors.border,
-                                flexDirection: 'row',
-                                alignItems: 'center',
+                                backgroundColor: colors.card,
+                                borderRadius: 20,
+                                width: 40,
+                                height: 40,
                                 justifyContent: 'center',
-                                minWidth: 70,
+                                alignItems: 'center',
+                                shadowColor: '#000',
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: 0.25,
+                                shadowRadius: 3.84,
+                                elevation: 5,
                             }}
                         >
-                            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                                {tab.date && <Text style={{ color: selectedTab === tab.label ? '#fff' : colors.textSecondary, fontSize: 8, marginBottom: 1 }}>{tab.date}</Text>}
-                                <Text style={{ color: selectedTab === tab.label ? '#fff' : colors.text, fontWeight: 'bold', fontSize: 11 }}>{tab.label}</Text>
-                            </View>
-                            {tab.label !== 'All' && (
-                                <TouchableOpacity 
-                                    onPress={() => handleRemoveDay(tab.dayNum!)}
-                                    style={{ 
-                                        marginLeft: 10, 
-                                        width: 20, 
-                                        height: 20, 
-                                        justifyContent: 'center', 
-                                        alignItems: 'center' 
-                                    }}
-                                >
-                                    <Icon name="Trash" size={14} color={selectedTab === tab.label ? '#fff' : colors.textSecondary} />
-                                </TouchableOpacity>
-                            )}
+                            <Icon name="MagnifyingGlass" size={20} color={colors.text} />
                         </TouchableOpacity>
-                    ))}
-                </ScrollView>
-            </View>
+                    </View>
 
-            <View style={{ flex: 1 }}>
-                {selectedTab === 'All' ? (
-                    <DraggableFlatList
-                        data={getAllData()}
-                        renderItem={renderDraggableItem}
-                        keyExtractor={item => item.id}
-                        onDragEnd={({ data }) => {
-                            let currentDay = 1;
-                            const updatedPlaces = [];
-                            data.forEach((item) => {
-                                if (item.isHeader) {
-                                    currentDay = item.day;
-                                } else {
-                                    updatedPlaces.push({ ...item, day: currentDay });
+                    {isSearchVisible && searchResults.length > 0 && (
+                        <View style={{
+                            position: 'absolute',
+                            top: 50,
+                            left: 65,
+                            width: Dimensions.get('window').width - 135,
+                            backgroundColor: colors.card,
+                            borderRadius: 8,
+                            padding: 10,
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.25,
+                            shadowRadius: 3.84,
+                            elevation: 5,
+                            zIndex: 1000,
+                        }}>
+                            {searchResults.map((item: any, index: number) => (
+                                <TouchableOpacity
+                                    key={`${item.place_id || 'result'}-${index}`}
+                                    style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}
+                                    onPress={() => handleAddPlace(item)}
+                                >
+                                    <Text style={{ color: colors.text }}>{item.description}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
+                </View>
+
+                {/* Resizable Divider */}
+                <View
+                    style={{
+                        height: 15,
+                        backgroundColor: colors.card,
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        borderTopWidth: 1,
+                        borderBottomWidth: 1,
+                        borderColor: colors.border,
+                    }}
+                    {...{
+                        onStartShouldSetResponder: () => true,
+                        onResponderGrant: (e) => {
+                            isDraggingMap.current = true;
+                            startY.current = e.nativeEvent.pageY;
+                            startHeight.current = mapHeight;
+                        },
+                        onResponderMove: (e) => {
+                            if (isDraggingMap.current) {
+                                const delta = e.nativeEvent.pageY - startY.current;
+                                const newHeight = startHeight.current + delta;
+                                if (newHeight > 120 && newHeight < Dimensions.get('window').height * 0.7) {
+                                    setMapHeight(newHeight);
                                 }
-                            });
-
-                            const finalPlaces = [];
-                            const duration = trip?.duration || 1;
-                            for (let day = 1; day <= duration; day++) {
-                                const dayPlaces = updatedPlaces.filter(p => p.day === day);
-                                dayPlaces.forEach((p, index) => {
-                                    finalPlaces.push({ ...p, order: index });
-                                });
                             }
+                        },
+                        onResponderRelease: () => { isDraggingMap.current = false; }
+                    }}
+                >
+                    <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.textSecondary + '40' }} />
+                </View>
 
-                            setPlaces(finalPlaces);
-                        }}
-                        onScrollBeginDrag={() => setIsFABVisible(false)}
-                        onScrollEndDrag={() => setIsFABVisible(true)}
-                        onMomentumScrollEnd={() => setIsFABVisible(true)}
-                    />
-                ) : (
-                    <DraggableFlatList
-                        data={activePlaces}
-                        renderItem={renderDraggableItem}
-                        keyExtractor={item => item.id}
-                        onDragEnd={({ data }) => {
-                            const currentDay = parseInt(selectedTab.replace('Day ', ''));
-                            const otherDayPlaces = places.filter(p => p.day !== currentDay);
-                            const updatedDayPlaces = data.map((item, index) => ({ ...item, order: index }));
-                            setPlaces([...otherDayPlaces, ...updatedDayPlaces]);
-                        }}
-                        onScrollBeginDrag={() => setIsFABVisible(false)}
-                        onScrollEndDrag={() => setIsFABVisible(true)}
-                        onMomentumScrollEnd={() => setIsFABVisible(true)}
-                    />
-                )}
-            </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 5, paddingHorizontal: 10, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        {tabs.map(tab => (
+                            <TouchableOpacity
+                                key={tab.label}
+                                onPress={() => setSelectedTab(tab.label)}
+                                style={{
+                                    backgroundColor: selectedTab === tab.label ? colors.primary : colors.card,
+                                    paddingHorizontal: 15,
+                                    paddingVertical: 8,
+                                    borderRadius: 15,
+                                    marginRight: 10,
+                                    borderWidth: 1,
+                                    borderColor: selectedTab === tab.label ? colors.primary : colors.border,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    minWidth: 70,
+                                }}
+                            >
+                                <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                                    {tab.date && <Text style={{ color: selectedTab === tab.label ? '#fff' : colors.textSecondary, fontSize: 8, marginBottom: 1 }}>{tab.date}</Text>}
+                                    <Text style={{ color: selectedTab === tab.label ? '#fff' : colors.text, fontWeight: 'bold', fontSize: 11 }}>{tab.label}</Text>
+                                </View>
+                                {tab.label !== 'All' && (
+                                    <TouchableOpacity
+                                        onPress={() => handleRemoveDay(tab.dayNum!)}
+                                        style={{
+                                            marginLeft: 15,
+                                            width: 20,
+                                            height: 20,
+                                            justifyContent: 'center',
+                                            alignItems: 'center'
+                                        }}
+                                    >
+                                        <Icon name="Trash" size={14} color={selectedTab === tab.label ? '#fff' : colors.textSecondary} />
+                                    </TouchableOpacity>
+                                )}
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                </View>
+
+                <View style={{ flex: 1 }}>
+                    {selectedTab === 'All' ? (
+                        <DraggableFlatList
+                            data={getAllData()}
+                            renderItem={renderDraggableItem}
+                            keyExtractor={item => item.id}
+                            onDragEnd={({ data }) => {
+                                let currentDay = 1;
+                                const updatedPlaces = [];
+                                data.forEach((item) => {
+                                    if (item.isHeader) {
+                                        currentDay = item.day;
+                                    } else {
+                                        updatedPlaces.push({ ...item, day: currentDay });
+                                    }
+                                });
+
+                                const finalPlaces = [];
+                                const duration = trip?.duration || 1;
+                                for (let day = 1; day <= duration; day++) {
+                                    const dayPlaces = updatedPlaces.filter(p => p.day === day);
+                                    dayPlaces.forEach((p, index) => {
+                                        finalPlaces.push({ ...p, order: index });
+                                    });
+                                }
+
+                                setPlaces(finalPlaces);
+                            }}
+                            onScrollBeginDrag={() => setIsFABVisible(false)}
+                            onScrollEndDrag={() => setIsFABVisible(true)}
+                            onMomentumScrollEnd={() => setIsFABVisible(true)}
+                        />
+                    ) : (
+                        <DraggableFlatList
+                            data={activePlaces}
+                            renderItem={renderDraggableItem}
+                            keyExtractor={item => item.id}
+                            onDragEnd={({ data }) => {
+                                const currentDay = parseInt(selectedTab.replace('Day ', ''));
+                                const otherDayPlaces = places.filter(p => p.day !== currentDay);
+                                const updatedDayPlaces = data.map((item, index) => ({ ...item, order: index }));
+                                setPlaces([...otherDayPlaces, ...updatedDayPlaces]);
+                            }}
+                            onScrollBeginDrag={() => setIsFABVisible(false)}
+                            onScrollEndDrag={() => setIsFABVisible(true)}
+                            onMomentumScrollEnd={() => setIsFABVisible(true)}
+                        />
+                    )}
+                </View>
 
             </KeyboardAvoidingView>
 
@@ -1108,7 +1118,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                     onPress={handleAddDay}
                     style={[
                         styles.floatingAddButton,
-                        { 
+                        {
                             backgroundColor: colors.card,
                             bottom: 100,
                             shadowColor: '#000'
@@ -1119,29 +1129,31 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                 </TouchableOpacity>
             )}
 
-            <View style={{ padding: 20, backgroundColor: colors.card, borderTopWidth: 1, borderTopColor: colors.border }}>
-                <TouchableOpacity
-                    onPress={() => {
-                        compactDays();
-                        router.push('/trip/view');
-                    }}
-                    style={{ 
-                        backgroundColor: colors.primary, 
-                        padding: 15, 
-                        borderRadius: 25,
-                        alignItems: 'center',
-                        width: 250,
-                        alignSelf: 'center',
-                        shadowColor: colors.primary,
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.3,
-                        shadowRadius: 5,
-                        elevation: 5
-                    }}
-                >
-                    <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Save Itinerary</Text>
-                </TouchableOpacity>
-            </View>
+            {!isKeyboardVisible && (
+                <View style={{ padding: 20, backgroundColor: colors.card, borderTopWidth: 1, borderTopColor: colors.border }}>
+                    <TouchableOpacity
+                        onPress={() => {
+                            compactDays();
+                            router.push('/trip/view');
+                        }}
+                        style={{
+                            backgroundColor: colors.primary,
+                            padding: 15,
+                            borderRadius: 25,
+                            alignItems: 'center',
+                            width: 250,
+                            alignSelf: 'center',
+                            shadowColor: colors.primary,
+                            shadowOffset: { width: 0, height: 4 },
+                            shadowOpacity: 0.3,
+                            shadowRadius: 5,
+                            elevation: 5
+                        }}
+                    >
+                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Save Itinerary</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
 
             {showTimePicker && (
                 <DateTimePicker

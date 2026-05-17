@@ -63,7 +63,7 @@ export const KNOWLEDGE_BASE: KnowledgeChunk[] = [
   },
   {
     id: 'feat-user-profile',
-    content: 'Every NxtVibes user has a profile showing their display name, profile picture, bio, and a grid of their created trips. Users can edit their profile, change their avatar, and update their bio. Other users can view profiles and see trip cards created by that user. Profiles also show verification status and follower/following counts.',
+    content: 'Every NxtVibes user has a profile showing their display name, profile picture, bio, and a grid of their created trips. Users can edit their profile, change their avatar, and update their bio. Other users can view profiles and see trip cards created by that user. Profiles also show follower/following counts.',
     category: 'feature',
     title: 'User Profile',
     source: 'nxtvibes-features',

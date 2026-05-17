@@ -170,14 +170,9 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
             await markAsRead(notification.id);
         }
 
-        const fallbackTarget = notification.type === 'age_verified' ? {
-            route: 'EditProfile',
-            params: {},
-        } : null;
-
         const target = notification.deepLinkRoute
             ? await resolveNotificationTarget(notification)
-            : fallbackTarget;
+            : null;
 
         if (target) {
             onClose();

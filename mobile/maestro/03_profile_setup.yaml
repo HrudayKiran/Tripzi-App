@@ -8,9 +8,6 @@ appId: com.nxtvibes.mobile
 - eraseText: 20
 - inputText: "maestro_test123"
 - tapOn: "Male"
-- tapOn: "Select your date of birth"
-# Handing datetime picker in emulators:
-- tapOn: "OK" # Android default date picker acceptance
 - scroll
 - tapOn: "Tell people about yourself..."
 - inputText: "I am an automated tester navigating the world."

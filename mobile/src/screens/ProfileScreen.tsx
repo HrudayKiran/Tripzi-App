@@ -138,8 +138,8 @@ const ProfileScreen = () => {
             // Clear local database on logout in background
             resetDatabase().catch(() => {});
 
-            // Route to welcome screen after logout
-            router.replace('/(auth)/welcome');
+            // Route to start screen after logout
+            router.replace('/(auth)/start');
           }
         },
       ]

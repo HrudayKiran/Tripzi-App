@@ -11,7 +11,6 @@ export type NotificationType =
     | 'trip_update'
     | 'trip_cancelled'
     | 'trip_join'
-    | 'age_verified'
     | 'rating'
     | 'report_submitted'
     | 'trip_report'

@@ -32,7 +32,6 @@ interface SearchUser {
     displayName: string;
     username?: string;
     photoURL?: string;
-    ageVerified?: boolean;
 }
 
 const ChatsListScreen = () => {
@@ -165,7 +164,6 @@ const ChatsListScreen = () => {
                     displayName: u.displayName || 'User',
                     username: u.username,
                     photoURL: u.photoURL,
-                    ageVerified: u.ageVerified,
                 }))
             );
         } catch (error) {
@@ -319,9 +317,6 @@ const ChatsListScreen = () => {
                     <Text style={[styles.searchUserName, { color: colors.text }]}>
                         {item.displayName}
                     </Text>
-                    {item.ageVerified === true && (
-                        <Icon name="ShieldCheck" size={14} color="#10B981" weight="fill" style={{ marginLeft: 4 }} />
-                    )}
                 </View>
                 {item.username && (
                     <Text style={[styles.searchUsername, { color: colors.primary }]}>@{item.username}</Text>

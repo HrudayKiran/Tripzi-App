@@ -12,7 +12,7 @@ import DefaultAvatar from '../components/DefaultAvatar';
 import TripCard from '../components/TripCard';
 import { TripCardSkeleton } from '../components/TripCardSkeleton';
 import { AvatarSkeleton, TextSkeleton } from '../components/Skeletons';
-import useTripsQuery from '../hooks/useTripsQuery';
+import useTrips from '../hooks/useTrips';
 import useUserSearchQuery from '../hooks/useUserSearchQuery';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { useRouter } from 'expo-router';
@@ -25,7 +25,7 @@ const { width } = Dimensions.get('window');
 const SearchScreen = () => {
     const router = useRouter();
     const { colors } = useTheme();
-    const { allTrips, loading: loadingTrips } = useTripsQuery();
+    const { allTrips, loading: loadingTrips } = useTrips();
     const [searchQuery, setSearchQuery] = useState('');
     const [filterVisible, setFilterVisible] = useState(false);
     const [filters, setFilters] = useState<FilterOptions | null>(null);
@@ -152,9 +152,6 @@ const SearchScreen = () => {
                                     </Text>
                                 )}
                             </View>
-                            {user.ageVerified === true && (
-                                <Icon name="ShieldCheck" size={16} color="#10B981" weight="fill" />
-                            )}
                         </TouchableOpacity>
                     ))}
                 </MotiView>

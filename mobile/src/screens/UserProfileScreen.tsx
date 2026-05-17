@@ -256,9 +256,6 @@ const UserProfileScreen = () => {
                         <View style={styles.userInfoColumn}>
                             <View style={styles.nameRow}>
                                 <Text style={[styles.displayName, { color: colors.text }]} numberOfLines={1}>{user.displayName}</Text>
-                                {user.ageVerified === true && (
-                                    <Icon name="CheckCircle" size={18} color="#10B981" weight="fill" style={{ marginLeft: 4 }} />
-                                )}
                             </View>
                             {user.username && <Text style={[styles.displayUsername, { color: colors.textSecondary }]}>@{user.username}</Text>}
                             {hostRating && (

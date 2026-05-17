@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, TextInput, FlatList, Alert, Modal, ActivityIndicator, Platform, KeyboardAvoidingView, Keyboard, Share } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
@@ -13,7 +13,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 
 const { width } = Dimensions.get('window');
 
-type TabType = 'Full Itinerary' | 'checklist' | 'notes' | 'itinerary mapview' | 'essentials packing';
+type TabType = 'Full Itinerary' | 'checklist' | 'notes' | 'itinerary mapview';
 
 export default function ItineraryViewScreen() {
     const { colors, isDarkMode } = useTheme();
@@ -32,6 +32,14 @@ export default function ItineraryViewScreen() {
     const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
     const [isKeyboardVisible, setKeyboardVisible] = useState(false);
 
+    const [customCategories, setCustomCategories] = useState<string[]>([]);
+    const [checklistModalVisible, setChecklistModalVisible] = useState(false);
+    const [checklistModalMode, setChecklistModalMode] = useState<'add_category' | 'add_item' | 'edit_category'>('add_category');
+    const [checklistModalTargetCategory, setChecklistModalTargetCategory] = useState('');
+    const [checklistModalInputValue, setChecklistModalInputValue] = useState('');
+    const [showFloatingButton, setShowFloatingButton] = useState(true);
+    const scrollOffsetRef = useRef(0);
+
     useEffect(() => {
         const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
         const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
@@ -42,7 +50,25 @@ export default function ItineraryViewScreen() {
         };
     }, []);
 
-    const tabs: TabType[] = ['Full Itinerary', 'checklist', 'notes', 'itinerary mapview', 'essentials packing'];
+    const handleScroll = (event: any) => {
+        const currentOffset = event.nativeEvent.contentOffset.y;
+        if (currentOffset < 0) return;
+
+        const diff = currentOffset - scrollOffsetRef.current;
+        if (Math.abs(diff) < 5) return;
+
+        if (currentOffset <= 20) {
+            setShowFloatingButton(true);
+        } else if (diff > 0) {
+            setShowFloatingButton(false);
+        } else {
+            setShowFloatingButton(true);
+        }
+
+        scrollOffsetRef.current = currentOffset;
+    };
+
+    const tabs: TabType[] = ['Full Itinerary', 'checklist', 'notes', 'itinerary mapview'];
 
     const renderTabContent = () => {
         switch (activeTab) {
@@ -54,8 +80,6 @@ export default function ItineraryViewScreen() {
                 return renderNotes();
             case 'itinerary mapview':
                 return renderMap();
-            case 'essentials packing':
-                return renderEssentials();
             default:
                 return null;
         }
@@ -73,7 +97,7 @@ export default function ItineraryViewScreen() {
                 .select('id, name, username, photo_url')
                 .or(`username.ilike.%${query}%,name.ilike.%${query}%`)
                 .limit(10);
-            
+
             if (error) throw error;
             setSearchResults(data || []);
         } catch (error) {
@@ -89,7 +113,7 @@ export default function ItineraryViewScreen() {
             const tripId = tripDraft?.id || 'new-trip';
             const shareUrl = `https://nxtvibes.app/trip/${tripId}`;
             const message = `Check out my trip itinerary on NxtVibes: ${tripDraft?.title || 'Trip'}\n\nJoin me here: ${shareUrl}`;
-            
+
             const result = await Share.share({
                 message,
                 url: shareUrl, // iOS only
@@ -181,7 +205,7 @@ export default function ItineraryViewScreen() {
                     <TouchableOpacity onLongPress={drag} style={{ padding: 5, marginRight: 5 }}>
                         <Icon name="DotsSixVertical" size={20} color={colors.textSecondary} />
                     </TouchableOpacity>
-                    
+
                     <View style={{ width: 60, alignItems: 'center' }}>
                         <View style={{
                             width: 30,
@@ -199,7 +223,7 @@ export default function ItineraryViewScreen() {
                                 setEditingPlaceId(item.id);
                                 setShowTimePicker(true);
                             }}
-                            style={{ 
+                            style={{
                                 zIndex: 10,
                                 borderWidth: 1,
                                 borderColor: colors.border,
@@ -273,6 +297,7 @@ export default function ItineraryViewScreen() {
                                     borderRadius: 12,
                                     marginRight: 6,
                                     alignItems: 'center',
+                                    justifyContent: 'center',
                                     borderWidth: 1,
                                     borderColor: colors.border
                                 }}
@@ -321,14 +346,32 @@ export default function ItineraryViewScreen() {
         );
     };
 
-    const renderChecklist = () => {
-        const addItem = () => {
-            if (newChecklistItem.trim()) {
-                setChecklist([...checklist, { id: Date.now().toString(), text: newChecklistItem, checked: false }]);
-                setNewChecklistItem('');
-            }
-        };
+    const addItemToCategory = (catName: string, text: string) => {
+        if (!text.trim()) return;
+        setChecklist([...checklist, {
+            id: `item-${Date.now()}`,
+            text: text.trim(),
+            checked: false,
+            category: catName
+        }]);
+    };
 
+    const addNewCategory = (catName: string) => {
+        if (!catName.trim()) return;
+        const trimmed = catName.trim();
+        if (!customCategories.includes(trimmed)) {
+            setCustomCategories([...customCategories, trimmed]);
+        }
+    };
+
+    const renameCategory = (oldName: string, newName: string) => {
+        if (!newName.trim() || oldName === newName) return;
+        const trimmed = newName.trim();
+        setCustomCategories(customCategories.map(c => c === oldName ? trimmed : c));
+        setChecklist(checklist.map(item => item.category === oldName ? { ...item, category: trimmed } : item));
+    };
+
+    const renderChecklist = () => {
         const toggleItem = (id: string) => {
             setChecklist(checklist.map(item => item.id === id ? { ...item, checked: !item.checked } : item));
         };
@@ -337,42 +380,231 @@ export default function ItineraryViewScreen() {
             setChecklist(checklist.filter(item => item.id !== id));
         };
 
-        return (
-            <View style={styles.tabPane}>
-                <View style={styles.inputContainer}>
-                    <TextInput
-                        style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
-                        placeholder="Add checklist item..."
-                        placeholderTextColor={colors.textSecondary}
-                        value={newChecklistItem}
-                        onChangeText={setNewChecklistItem}
-                        onSubmitEditing={addItem}
-                    />
-                    <TouchableOpacity onPress={addItem} style={[styles.addButton, { backgroundColor: colors.primary }]}>
-                        <Icon name="Plus" size={20} color="#fff" />
-                    </TouchableOpacity>
+        const deleteCategory = (catName: string) => {
+            Alert.alert(
+                'Delete Category',
+                `Are you sure you want to delete "${catName}" and all its tasks?`,
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Delete',
+                        style: 'destructive',
+                        onPress: () => {
+                            setCustomCategories(customCategories.filter(c => c !== catName));
+                            setChecklist(checklist.filter(item => item.category !== catName));
+                        }
+                    }
+                ]
+            );
+        };
+
+        // Dynamically compute the set of categories
+        const categories = Array.from(new Set([
+            ...customCategories,
+            ...checklist.map(item => item.category)
+        ])).filter(Boolean);
+
+        if (categories.length === 0) {
+            return (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30, paddingTop: 60 }}>
+                    <View style={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: 40,
+                        backgroundColor: colors.primary + '15',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        marginBottom: 20
+                    }}>
+                        <Icon name="CheckSquare" size={40} color={colors.primary} weight="duotone" />
+                    </View>
+                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: 8, textAlign: 'center' }}>
+                        Your checklist is empty
+                    </Text>
+                    <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginBottom: 30, paddingHorizontal: 20, lineHeight: 20 }}>
+                        Organize your trip by creating custom categories like "Documents", "Packing", or "Medicines" and add tasks inside them.
+                    </Text>
                 </View>
-                <FlatList
-                    data={checklist}
-                    keyExtractor={item => item.id}
-                    renderItem={({ item }) => (
-                        <MotiView style={styles.listItem}>
-                            <TouchableOpacity onPress={() => toggleItem(item.id)} style={styles.checkRow}>
-                                <Icon 
-                                    name={(item.checked ? "CheckCircle" : "Circle") as any} 
-                                    size={24} 
-                                    color={item.checked ? colors.primary : colors.textSecondary} 
-                                    weight={item.checked ? "fill" : "regular"}
-                                />
-                                <Text style={[styles.listText, { color: colors.text, textDecorationLine: item.checked ? 'line-through' : 'none' }]}>
-                                    {item.text}
-                                </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => deleteItem(item.id)}>
-                                <Icon name="Trash" size={20} color={colors.textSecondary} />
-                            </TouchableOpacity>
-                        </MotiView>
-                    )}
+            );
+        }
+
+        const renderCategoryCard = ({ item: categoryName, drag, isActive }: RenderItemParams<string>) => {
+            const catItems = checklist.filter(item => item.category === categoryName);
+
+            return (
+                <ScaleDecorator>
+                    <TouchableOpacity
+                        onLongPress={drag}
+                        delayLongPress={200}
+                        activeOpacity={0.9}
+                        style={{
+                            backgroundColor: colors.card,
+                            borderRadius: 20,
+                            padding: 16,
+                            marginVertical: 10,
+                            borderWidth: 1.5,
+                            borderColor: isActive ? colors.primary : colors.border,
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: isActive ? 6 : 2 },
+                            shadowOpacity: isActive ? 0.15 : 0.04,
+                            shadowRadius: isActive ? 8 : 4,
+                            elevation: isActive ? 6 : 2,
+                        }}
+                    >
+                        {/* Category Header */}
+                        <View style={{
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            borderBottomWidth: 1,
+                            borderBottomColor: colors.border,
+                            paddingBottom: 12,
+                            marginBottom: 10
+                        }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text }}>{categoryName}</Text>
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <TouchableOpacity 
+                                    onPress={() => {
+                                        setChecklistModalMode('add_item');
+                                        setChecklistModalTargetCategory(categoryName);
+                                        setChecklistModalInputValue('');
+                                        setChecklistModalVisible(true);
+                                    }}
+                                    style={{ padding: 6, marginLeft: 8 }}
+                                >
+                                    <Icon name="Plus" size={20} color={colors.text} />
+                                </TouchableOpacity>
+                                <TouchableOpacity 
+                                    onPress={() => {
+                                        setChecklistModalMode('edit_category');
+                                        setChecklistModalTargetCategory(categoryName);
+                                        setChecklistModalInputValue(categoryName);
+                                        setChecklistModalVisible(true);
+                                    }}
+                                    style={{ padding: 6, marginLeft: 8 }}
+                                >
+                                    <Icon name="PencilSimple" size={20} color={colors.textSecondary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity 
+                                    onPress={() => deleteCategory(categoryName)}
+                                    style={{ padding: 6, marginLeft: 8 }}
+                                >
+                                    <Icon name="Trash" size={20} color="#D63031" />
+                                </TouchableOpacity>
+                                <View style={{ padding: 6, marginLeft: 8, opacity: 0.6 }}>
+                                    <Icon name="Equals" size={20} color={colors.textSecondary} />
+                                </View>
+                            </View>
+                        </View>
+
+                        {/* Category Tasks List */}
+                        {catItems.length === 0 ? (
+                            <Text style={{ fontSize: 13, color: colors.textSecondary, fontStyle: 'italic', textAlign: 'center', paddingVertical: 15 }}>
+                                No tasks in this category. Tap + to add!
+                            </Text>
+                        ) : (
+                            catItems.map((item) => {
+                                return (
+                                    <View key={item.id} style={{
+                                        backgroundColor: colors.background,
+                                        borderRadius: 12,
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 12,
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        marginVertical: 4,
+                                        borderWidth: 1,
+                                        borderColor: colors.border,
+                                    }}>
+                                        <TouchableOpacity 
+                                            onPress={() => toggleItem(item.id)}
+                                            style={{ padding: 2 }}
+                                        >
+                                            <Icon 
+                                                name={item.checked ? "CheckSquare" : "Square"} 
+                                                size={20} 
+                                                color={item.checked ? colors.primary : colors.textSecondary} 
+                                                weight={item.checked ? "fill" : "regular"}
+                                            />
+                                        </TouchableOpacity>
+
+                                        <View style={{ flex: 1, marginLeft: 12, alignSelf: 'stretch', justifyContent: 'center' }}>
+                                            <View style={{ alignSelf: 'flex-start', justifyContent: 'center' }}>
+                                                <Text style={{ 
+                                                    fontSize: 14, 
+                                                    color: item.checked ? colors.textSecondary : colors.text,
+                                                    opacity: item.checked ? 0.6 : 1,
+                                                }}>
+                                                    {item.text}
+                                                </Text>
+                                                {item.checked && (
+                                                    <View style={{
+                                                        position: 'absolute',
+                                                        left: 0,
+                                                        right: 0,
+                                                        height: 2,
+                                                        backgroundColor: colors.primary,
+                                                        opacity: 0.8
+                                                    }} />
+                                                )}
+                                            </View>
+                                        </View>
+
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <TouchableOpacity 
+                                                onPress={() => deleteItem(item.id)}
+                                                style={{ padding: 4, opacity: 0.6 }}
+                                            >
+                                                <Icon name="Trash" size={16} color={colors.textSecondary} />
+                                            </TouchableOpacity>
+                                            
+                                            <View style={{ padding: 4, marginLeft: 6, opacity: 0.6 }}>
+                                                <Icon name="Equals" size={18} color={colors.textSecondary} />
+                                            </View>
+                                        </View>
+                                    </View>
+                                );
+                            })
+                        )}
+                    </TouchableOpacity>
+                </ScaleDecorator>
+            );
+        };
+
+        const handleCategoryDragEnd = ({ data }: { data: string[] }) => {
+            setCustomCategories(data);
+        };
+
+        return (
+            <View style={{ flex: 1 }}>
+                <DraggableFlatList
+                    data={categories}
+                    renderItem={renderCategoryCard}
+                    keyExtractor={item => item}
+                    contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 150 }}
+                    onDragEnd={handleCategoryDragEnd}
+                    onScroll={handleScroll}
+                    onScrollOffsetChange={(offset) => {
+                        const currentOffset = offset;
+                        if (currentOffset < 0) return;
+
+                        const diff = currentOffset - scrollOffsetRef.current;
+                        if (Math.abs(diff) < 5) return;
+
+                        if (currentOffset <= 20) {
+                            setShowFloatingButton(true);
+                        } else if (diff > 0) {
+                            setShowFloatingButton(false);
+                        } else {
+                            setShowFloatingButton(true);
+                        }
+
+                        scrollOffsetRef.current = currentOffset;
+                    }}
+                    scrollEventThrottle={16}
                 />
             </View>
         );
@@ -459,10 +691,10 @@ export default function ItineraryViewScreen() {
                     renderItem={({ item }) => (
                         <View style={styles.listItem}>
                             <TouchableOpacity onPress={() => toggleItem(item.id)} style={styles.checkRow}>
-                                <Icon 
-                                    name={(item.packed ? "Package" : "Cube") as any} 
-                                    size={24} 
-                                    color={item.packed ? colors.primary : colors.textSecondary} 
+                                <Icon
+                                    name={(item.packed ? "Package" : "Cube") as any}
+                                    size={24}
+                                    color={item.packed ? colors.primary : colors.textSecondary}
                                     weight={item.packed ? "fill" : "regular"}
                                 />
                                 <Text style={[styles.listText, { color: colors.text, opacity: item.packed ? 0.6 : 1 }]}>
@@ -478,132 +710,154 @@ export default function ItineraryViewScreen() {
 
     return (
         <GestureHandlerRootView style={[styles.container, { backgroundColor: colors.background }]}>
-            <KeyboardAvoidingView 
+            <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
             >
-            {/* Header */}
-            <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-                <TouchableOpacity 
-                    onPress={() => router.back()} 
-                    style={[
-                        styles.backButton, 
-                        styles.neumorphicButton,
-                        { 
-                            backgroundColor: colors.card, 
-                            shadowColor: isDarkMode ? '#000' : '#d1d9e6',
-                            width: 45,
-                            height: 45,
-                            borderRadius: 22.5,
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }
-                    ]}
-                >
-                    <Icon name="CaretLeft" size={24} color={colors.text} />
-                </TouchableOpacity>
-                <View style={styles.headerTitleContainer}>
-                    <Text style={[styles.headerTitle, { color: colors.text }]}>{tripDraft?.title || 'Trip Itinerary'}</Text>
-                    <Text style={[styles.headerSubtitle, { color: colors.textSecondary, fontSize: 10 }]} numberOfLines={1}>
-                        {tripDraft?.fromLocation ? `${tripDraft.fromLocation.split(',')[0]} → ` : ''}{tripDraft?.toLocation?.split(',')[0] || 'Ready for adventure'}
-                    </Text>
-                </View>
-                {tripDraft?.tripType !== 'solo' && (
-                    <TouchableOpacity 
-                        onPress={() => setShowUserSearch(true)}
+                {/* Header */}
+                <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+                    <TouchableOpacity
+                        onPress={() => router.back()}
                         style={[
-                            styles.shareButton, 
+                            styles.backButton,
                             styles.neumorphicButton,
-                            { 
-                                backgroundColor: colors.card, 
+                            {
+                                backgroundColor: colors.card,
                                 shadowColor: isDarkMode ? '#000' : '#d1d9e6',
                                 width: 45,
                                 height: 45,
                                 borderRadius: 22.5,
                                 justifyContent: 'center',
-                                alignItems: 'center',
-                                marginRight: 10 
+                                alignItems: 'center'
                             }
                         ]}
                     >
-                        <Icon name="UserPlus" size={22} color={colors.primary} />
+                        <Icon name="CaretLeft" size={24} color={colors.text} />
                     </TouchableOpacity>
-                )}
-                <TouchableOpacity 
-                    onPress={handleShareTrip}
-                    style={[
-                        styles.shareButton, 
-                        styles.neumorphicButton, 
-                        { 
-                            backgroundColor: colors.card, 
-                            shadowColor: isDarkMode ? '#000' : '#d1d9e6',
-                            width: 45,
-                            height: 45,
-                            borderRadius: 22.5,
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }
-                    ]}
-                >
-                    <Icon name="ShareNetwork" size={22} color={colors.text} />
-                </TouchableOpacity>
-            </View>
+                    <View style={styles.headerTitleContainer}>
+                        <Text style={[styles.headerTitle, { color: colors.text }]}>{tripDraft?.title || 'Trip Itinerary'}</Text>
+                        <Text style={[styles.headerSubtitle, { color: colors.textSecondary, fontSize: 10 }]} numberOfLines={1}>
+                            {tripDraft?.fromLocation ? `${tripDraft.fromLocation.split(',')[0]} → ` : ''}{tripDraft?.toLocation?.split(',')[0] || 'Ready for adventure'}
+                        </Text>
+                    </View>
+                    {tripDraft?.tripType !== 'solo' && (
+                        <TouchableOpacity
+                            onPress={() => setShowUserSearch(true)}
+                            style={[
+                                styles.shareButton,
+                                styles.neumorphicButton,
+                                {
+                                    backgroundColor: colors.card,
+                                    shadowColor: isDarkMode ? '#000' : '#d1d9e6',
+                                    width: 45,
+                                    height: 45,
+                                    borderRadius: 22.5,
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                    marginRight: 10
+                                }
+                            ]}
+                        >
+                            <Icon name="UserPlus" size={22} color={colors.primary} />
+                        </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                        onPress={handleShareTrip}
+                        style={[
+                            styles.shareButton,
+                            styles.neumorphicButton,
+                            {
+                                backgroundColor: colors.card,
+                                shadowColor: isDarkMode ? '#000' : '#d1d9e6',
+                                width: 45,
+                                height: 45,
+                                borderRadius: 22.5,
+                                justifyContent: 'center',
+                                alignItems: 'center'
+                            }
+                        ]}
+                    >
+                        <Icon name="ShareNetwork" size={22} color={colors.text} />
+                    </TouchableOpacity>
+                </View>
 
-            {/* Collaborators Row */}
-            {collaborators.length > 0 && (
-                <View style={{ paddingHorizontal: 20, paddingVertical: 10, flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={{ color: colors.textSecondary, fontSize: 12, marginRight: 10 }}>With:</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                        {collaborators.map(user => (
-                            <View key={user.id} style={{ marginRight: 8, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 15, backgroundColor: colors.primary + '20', borderWidth: 1, borderColor: colors.primary + '40' }}>
-                                <Text style={{ color: colors.primary, fontSize: 11, fontWeight: 'bold' }}>@{user.username}</Text>
-                            </View>
+                {/* Collaborators Row */}
+                {collaborators.length > 0 && (
+                    <View style={{ paddingHorizontal: 20, paddingVertical: 10, flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={{ color: colors.textSecondary, fontSize: 12, marginRight: 10 }}>With:</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                            {collaborators.map(user => (
+                                <View key={user.id} style={{ marginRight: 8, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 15, backgroundColor: colors.primary + '20', borderWidth: 1, borderColor: colors.primary + '40' }}>
+                                    <Text style={{ color: colors.primary, fontSize: 11, fontWeight: 'bold' }}>@{user.username}</Text>
+                                </View>
+                            ))}
+                        </ScrollView>
+                    </View>
+                )}
+
+                {/* Premium Tab Bar */}
+                <View style={{ backgroundColor: colors.card }}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabBar}>
+                        {tabs.map(tab => (
+                            <TouchableOpacity
+                                key={tab}
+                                onPress={() => setActiveTab(tab)}
+                                style={[
+                                    styles.tabItem,
+                                    activeTab === tab && { borderBottomColor: colors.primary }
+                                ]}
+                            >
+                                <Text style={[
+                                    styles.tabText,
+                                    { color: activeTab === tab ? colors.primary : colors.textSecondary },
+                                    activeTab === tab && { fontWeight: 'bold' }
+                                ]}>
+                                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                </Text>
+                            </TouchableOpacity>
                         ))}
                     </ScrollView>
                 </View>
-            )}
 
-            {/* Premium Tab Bar */}
-            <View style={{ backgroundColor: colors.card }}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabBar}>
-                    {tabs.map(tab => (
-                        <TouchableOpacity
-                            key={tab}
-                            onPress={() => setActiveTab(tab)}
-                            style={[
-                                styles.tabItem,
-                                activeTab === tab && { borderBottomColor: colors.primary }
-                            ]}
-                        >
-                            <Text style={[
-                                styles.tabText,
-                                { color: activeTab === tab ? colors.primary : colors.textSecondary },
-                                activeTab === tab && { fontWeight: 'bold' }
-                            ]}>
-                                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                </ScrollView>
-            </View>
+                {/* Main Content */}
+                <View style={{ flex: 1 }}>
+                    {renderTabContent()}
+                </View>
 
-            {/* Main Content */}
-            <View style={{ flex: 1 }}>
-                {renderTabContent()}
-            </View>
+                {activeTab === 'checklist' && showFloatingButton && !isKeyboardVisible && (
+                    <TouchableOpacity
+                        onPress={() => {
+                            setChecklistModalMode('add_category');
+                            setChecklistModalInputValue('');
+                            setChecklistModalVisible(true);
+                        }}
+                        style={[
+                            styles.floatingActionButton,
+                            styles.neumorphicButton,
+                            {
+                                backgroundColor: colors.card,
+                                shadowColor: isDarkMode ? '#000' : '#b8c4d9',
+                            }
+                        ]}
+                    >
+                        <Icon name="Plus" size={26} color={colors.primary} weight="bold" />
+                    </TouchableOpacity>
+                )}
 
             </KeyboardAvoidingView>
 
             {/* Bottom Actions - Outside KeyboardAvoidingView to stay fixed */}
-            <View style={[styles.bottomBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: Platform.OS === 'ios' ? 30 : 20 }]}>
-                <TouchableOpacity 
-                    style={[styles.primaryButton, { backgroundColor: colors.primary }]}
-                    onPress={() => Alert.alert('Trip Saved!', 'Your itinerary has been finalized.')}
-                >
-                    <Text style={styles.buttonText}>Finalize Trip</Text>
-                </TouchableOpacity>
-            </View>
+            {!isKeyboardVisible && (
+                <View style={[styles.bottomBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: Platform.OS === 'ios' ? 30 : 20 }]}>
+                    <TouchableOpacity
+                        style={[styles.primaryButton, { backgroundColor: colors.primary }]}
+                        onPress={() => Alert.alert('Trip Saved!', 'Your itinerary has been finalized.')}
+                    >
+                        <Text style={styles.buttonText}>Finalize Trip</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
             {showTimePicker && (
                 <DateTimePicker
                     value={new Date()}
@@ -623,7 +877,7 @@ export default function ItineraryViewScreen() {
                                 <Icon name="X" size={24} color={colors.text} />
                             </TouchableOpacity>
                         </View>
-                        
+
                         <View style={[styles.inputContainer, { marginBottom: 15 }]}>
                             <TextInput
                                 style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
@@ -645,7 +899,7 @@ export default function ItineraryViewScreen() {
                             data={searchResults}
                             keyExtractor={item => item.id}
                             renderItem={({ item }) => (
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     onPress={() => addCollaborator(item)}
                                     style={{ flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: colors.border }}
                                 >
@@ -665,6 +919,107 @@ export default function ItineraryViewScreen() {
                             ) : null}
                         />
                     </View>
+                </View>
+            </Modal>
+
+            {/* Checklist Operations Modal */}
+            <Modal
+                visible={checklistModalVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setChecklistModalVisible(false)}
+            >
+                <View style={{
+                    flex: 1,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    padding: 20,
+                }}>
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                        style={{ width: '100%', alignItems: 'center' }}
+                    >
+                        <View style={{
+                            backgroundColor: colors.card,
+                            borderRadius: 20,
+                            padding: 20,
+                            width: '100%',
+                            maxWidth: 400,
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 4 },
+                            shadowOpacity: 0.3,
+                            shadowRadius: 5,
+                            elevation: 10,
+                        }}>
+                            <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: 15 }}>
+                                {checklistModalMode === 'add_category' && 'Add New Category'}
+                                {checklistModalMode === 'add_item' && `Add Task to ${checklistModalTargetCategory}`}
+                                {checklistModalMode === 'edit_category' && 'Rename Category'}
+                            </Text>
+
+                            <TextInput
+                                style={{
+                                    backgroundColor: colors.background,
+                                    color: colors.text,
+                                    borderColor: colors.border,
+                                    borderWidth: 1,
+                                    borderRadius: 12,
+                                    paddingHorizontal: 15,
+                                    paddingVertical: 12,
+                                    fontSize: 15,
+                                    marginBottom: 20,
+                                    width: '100%',
+                                }}
+                                placeholder={
+                                    checklistModalMode === 'add_category' ? 'Enter category name (e.g. Packing)' : 'Enter task/item name'
+                                }
+                                placeholderTextColor={colors.textSecondary}
+                                value={checklistModalInputValue}
+                                onChangeText={setChecklistModalInputValue}
+                                autoFocus
+                            />
+
+                            <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+                                <TouchableOpacity
+                                    onPress={() => setChecklistModalVisible(false)}
+                                    style={{
+                                        paddingHorizontal: 18,
+                                        paddingVertical: 10,
+                                        borderRadius: 10,
+                                        marginRight: 10,
+                                    }}
+                                >
+                                    <Text style={{ color: colors.textSecondary, fontWeight: '600' }}>Cancel</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        if (checklistModalInputValue.trim()) {
+                                            if (checklistModalMode === 'add_category') {
+                                                addNewCategory(checklistModalInputValue);
+                                            } else if (checklistModalMode === 'add_item') {
+                                                addItemToCategory(checklistModalTargetCategory, checklistModalInputValue);
+                                            } else if (checklistModalMode === 'edit_category') {
+                                                renameCategory(checklistModalTargetCategory, checklistModalInputValue);
+                                            }
+                                        }
+                                        setChecklistModalVisible(false);
+                                    }}
+                                    style={{
+                                        backgroundColor: colors.primary,
+                                        paddingHorizontal: 20,
+                                        paddingVertical: 10,
+                                        borderRadius: 10,
+                                    }}
+                                >
+                                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Save</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </KeyboardAvoidingView>
                 </View>
             </Modal>
         </GestureHandlerRootView>
@@ -829,6 +1184,17 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 16,
         fontWeight: 'bold',
+    },
+    floatingActionButton: {
+        position: 'absolute',
+        bottom: 84,
+        right: 20,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 999,
     },
     emptyContainer: {
         alignItems: 'center',

@@ -15,7 +15,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -35,16 +34,6 @@ const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/;
 
 const sanitizeUsername = (value: string): string => value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
 
-const calculateAge = (dob: Date): number => {
-    const today = new Date();
-    let age = today.getFullYear() - dob.getFullYear();
-    const monthDiff = today.getMonth() - dob.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
-        age--;
-    }
-    return age;
-};
-
 const CompleteProfileScreen = () => {
     const { colors } = useTheme();
     const router = useRouter();
@@ -53,9 +42,6 @@ const CompleteProfileScreen = () => {
     const [username, setUsername] = useState('');
     const [bio, setBio] = useState('');
     const [gender, setGender] = useState<'male' | 'female' | null>(null);
-    const [dob, setDob] = useState<Date | null>(null);
-    const [showDatePicker, setShowDatePicker] = useState(false);
-    const [draftDob, setDraftDob] = useState<Date>(new Date(2000, 0, 1));
     const [checkingUsername, setCheckingUsername] = useState(false);
     const [usernameError, setUsernameError] = useState('');
     const [usernameOk, setUsernameOk] = useState(false);
@@ -126,36 +112,8 @@ const CompleteProfileScreen = () => {
     }, [username]);
 
     const canSubmit = useMemo(() => {
-        return !!fullName.trim() && !!gender && !!dob && usernameOk && agreedToTerms && !checkingUsername && !submitting;
-    }, [fullName, gender, dob, usernameOk, agreedToTerms, checkingUsername, submitting]);
-
-    const openDatePicker = () => {
-        setDraftDob(dob || new Date(2000, 0, 1));
-        setShowDatePicker(true);
-    };
-
-    const closeDatePicker = () => {
-        setShowDatePicker(false);
-    };
-
-    const confirmDatePicker = () => {
-        setDob(draftDob);
-        closeDatePicker();
-    };
-
-    const handleDateChange = (event: any, selectedDate?: Date) => {
-        if (Platform.OS === 'android') {
-            setShowDatePicker(false);
-            if (event.type === 'set' && selectedDate) {
-                setDob(selectedDate);
-            }
-            return;
-        }
-
-        if (selectedDate) {
-            setDraftDob(selectedDate);
-        }
-    };
+        return !!fullName.trim() && !!gender && usernameOk && agreedToTerms && !checkingUsername && !submitting;
+    }, [fullName, gender, usernameOk, agreedToTerms, checkingUsername, submitting]);
 
     const resetToStart = async () => {
         try {
@@ -183,19 +141,8 @@ const CompleteProfileScreen = () => {
             Alert.alert('Missing Field', 'Please select gender.');
             return;
         }
-        if (!dob) {
-            Alert.alert('Missing Field', 'Please select your date of birth.');
-            return;
-        }
         if (!agreedToTerms) {
             Alert.alert('Required', 'You must agree to the Terms and Privacy Policy to continue.');
-            return;
-        }
-
-        const age = calculateAge(dob);
-        if (age < 18) {
-            Alert.alert('Not Eligible', `You are not eligible to use NxtVibes because your age is ${age}. You must be at least 18 years old.`);
-            await resetToStart();
             return;
         }
 
@@ -216,11 +163,8 @@ const CompleteProfileScreen = () => {
                     name: fullName.trim(),
                     username: sanitizeUsername(username.trim()),
                     gender,
-                    date_of_birth: dob.toISOString().split('T')[0],
                     bio: bio.trim(),
                     photo_url: user.user_metadata?.avatar_url || null,
-                    age_verified: true,
-                    age_verified_at: new Date().toISOString(),
                     last_login_at: new Date().toISOString(),
                 });
 
@@ -349,20 +293,6 @@ const CompleteProfileScreen = () => {
                             </View>
                         </View>
 
-                        {/* Date of Birth */}
-                        <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: colors.textSecondary }]}>Date of Birth</Text>
-                            <TouchableOpacity
-                                style={[styles.input, styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
-                                onPress={openDatePicker}
-                            >
-                                <Text style={[styles.dateText, { color: dob ? colors.text : colors.textSecondary }]}>
-                                    {dob ? dob.toLocaleDateString('en-IN') : 'Select date'}
-                                </Text>
-                                <Icon name="Calendar" size={20} color={colors.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
-
                         {/* Bio */}
                         <View style={styles.inputGroup}>
                             <Text style={[styles.label, { color: colors.textSecondary }]}>Bio (Optional)</Text>
@@ -418,43 +348,6 @@ const CompleteProfileScreen = () => {
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>
-
-            {showDatePicker && Platform.OS === 'android' && (
-                <DateTimePicker
-                    value={dob || new Date(2000, 0, 1)}
-                    mode="date"
-                    display="default"
-                    onChange={handleDateChange}
-                    maximumDate={new Date()}
-                    minimumDate={new Date(1920, 0, 1)}
-                />
-            )}
-
-            {showDatePicker && Platform.OS === 'ios' && (
-                <Modal transparent animationType="fade" visible={showDatePicker} onRequestClose={closeDatePicker}>
-                    <Pressable style={styles.datePickerOverlay} onPress={closeDatePicker}>
-                        <Pressable style={[styles.datePickerCard, { backgroundColor: colors.card }]} onPress={() => { }}>
-                            <View style={[styles.datePickerHeader, { borderBottomColor: colors.border }]}>
-                                <TouchableOpacity onPress={closeDatePicker}>
-                                    <Text style={[styles.datePickerAction, { color: colors.textSecondary }]}>Cancel</Text>
-                                </TouchableOpacity>
-                                <Text style={[styles.datePickerTitle, { color: colors.text }]}>Select Date of Birth</Text>
-                                <TouchableOpacity onPress={confirmDatePicker}>
-                                    <Text style={[styles.datePickerAction, { color: colors.primary }]}>Done</Text>
-                                </TouchableOpacity>
-                            </View>
-                            <DateTimePicker
-                                value={draftDob}
-                                mode="date"
-                                display="spinner"
-                                onChange={handleDateChange}
-                                maximumDate={new Date()}
-                                minimumDate={new Date(1920, 0, 1)}
-                            />
-                        </Pressable>
-                    </Pressable>
-                </Modal>
-            )}
         </SafeAreaView>
     );
 
@@ -534,14 +427,6 @@ const styles = StyleSheet.create({
         fontSize: FONT_SIZE.md,
         fontWeight: FONT_WEIGHT.semibold,
     },
-    dateButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    dateText: {
-        fontSize: FONT_SIZE.md,
-    },
     termsContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -569,32 +454,6 @@ const styles = StyleSheet.create({
         color: NEUTRAL.white,
         fontSize: FONT_SIZE.md,
         fontWeight: FONT_WEIGHT.bold,
-    },
-    datePickerOverlay: {
-        flex: 1,
-        justifyContent: 'flex-end',
-        backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    },
-    datePickerCard: {
-        borderTopLeftRadius: BORDER_RADIUS.xl,
-        borderTopRightRadius: BORDER_RADIUS.xl,
-        paddingBottom: SPACING.xl,
-    },
-    datePickerHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: SPACING.lg,
-        paddingVertical: SPACING.md,
-        borderBottomWidth: 1,
-    },
-    datePickerTitle: {
-        fontSize: FONT_SIZE.md,
-        fontWeight: FONT_WEIGHT.semibold,
-    },
-    datePickerAction: {
-        fontSize: FONT_SIZE.sm,
-        fontWeight: FONT_WEIGHT.semibold,
     },
 });
 

@@ -8,7 +8,6 @@ import kbRoutes from './routes/kb';
 import mediaRoutes from './routes/media';
 import tripsRoutes from './routes/trips';
 import groupsRoutes from './routes/groups';
-import verificationRoutes from './routes/verification';
 import { handleDailyTripLifecycle } from './scheduled/daily';
 
 const app = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
@@ -29,7 +28,6 @@ app.use('/ai/*', requireAuth);
 app.use('/media/*', requireAuth);
 app.use('/trips/*', requireAuth);
 app.use('/groups/*', requireAuth);
-app.use('/verify-age', requireAuth);
 
 // Mount routes
 app.route('/account', accountRoutes);
@@ -38,7 +36,6 @@ app.route('/ai/kb', kbRoutes);
 app.route('/media', mediaRoutes);
 app.route('/trips', tripsRoutes);
 app.route('/groups', groupsRoutes);
-app.route('/verify-age', verificationRoutes);
 
 // Export for Cloudflare Workers
 export default {

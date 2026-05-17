@@ -7,7 +7,6 @@ export interface PublicProfile {
     username?: string;
     photoURL?: string;
     bio?: string;
-    ageVerified?: boolean;
     [key: string]: any;
 }
 
@@ -18,7 +17,6 @@ const mapRow = (row: any): PublicProfile => ({
     username: row.username,
     photoURL: row.photo_url,
     bio: row.bio,
-    ageVerified: row.age_verified,
 });
 
 export const getPublicProfile = async (uid: string): Promise<PublicProfile | null> => {

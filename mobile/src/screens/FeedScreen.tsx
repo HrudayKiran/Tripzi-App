@@ -9,7 +9,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import TripCard from '../components/TripCard';
 import DefaultAvatar from '../components/DefaultAvatar';
 import TripCardSkeleton from '../components/TripCardSkeleton';
-import useTripsQuery from '../hooks/useTripsQuery';
+import useTrips from '../hooks/useTrips';
 import usePermissions from '../hooks/usePermissions';
 import Icon from '../components/Icon';
 import { MotiView } from 'moti';
@@ -47,7 +47,7 @@ const getActiveFilterCount = (filters: FilterOptions | null) => {
 };
 
 const FeedScreen = () => {
-    const { trips, loading, refetch, currentUserId } = useTripsQuery();
+    const { trips, loading, refetch, currentUserId } = useTrips();
     const { requestNotificationPermission } = usePermissions();
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
@@ -437,9 +437,6 @@ const FeedScreen = () => {
                                                     </Text>
                                                 )}
                                             </View>
-                                            {user.ageVerified === true && (
-                                                <Icon name="ShieldCheck" size={16} color="#10B981" weight="fill" />
-                                            )}
                                         </TouchableOpacity>
                                     ))}
                                 </MotiView>

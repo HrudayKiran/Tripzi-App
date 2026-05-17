@@ -15,12 +15,12 @@ type StructuredPlace = {
 interface TripState {
     places: StructuredPlace[];
     tripDraft: any | null;
-    checklist: { id: string; text: string; checked: boolean }[];
+    checklist: { id: string; text: string; checked: boolean; category: string }[];
     notes: string;
     essentials: { id: string; text: string; packed: boolean }[];
     setPlaces: (places: StructuredPlace[]) => void;
     setTripDraft: (draft: any) => void;
-    setChecklist: (checklist: { id: string; text: string; checked: boolean }[]) => void;
+    setChecklist: (checklist: { id: string; text: string; checked: boolean; category: string }[]) => void;
     setNotes: (notes: string) => void;
     setEssentials: (essentials: { id: string; text: string; packed: boolean }[]) => void;
     clearDraft: () => void;

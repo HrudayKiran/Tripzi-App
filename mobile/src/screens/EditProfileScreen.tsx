@@ -389,14 +389,6 @@ const EditProfileScreen = () => {
                         selectTextOnFocus={false}
                     />
 
-                    <Text style={[styles.label, { color: colors.textSecondary }]}>Age Verification</Text>
-                    <TextInput
-                        style={[styles.input, styles.readOnlyInput, { backgroundColor: colors.inputBackground, color: colors.textSecondary, borderColor: colors.border }]}
-                        value={user?.age_verified === true ? 'Verified' : 'Not verified'}
-                        editable={false}
-                        selectTextOnFocus={false}
-                    />
-
                     <Text style={[styles.label, { color: colors.textSecondary }]}>Name *</Text>
                     <TextInput
                         style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}

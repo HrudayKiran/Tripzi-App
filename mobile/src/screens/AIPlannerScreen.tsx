@@ -734,7 +734,7 @@ export default function AIPlannerScreen() {
             >
                 {!isUser && (
                     <View style={styles.avatarContainer}>
-                        <Image source={require('../../assets/NxtVibes AI.png')} style={styles.avatarImage} contentFit="cover" />
+                        <Image source={require('../../assets/nxtvibes_ai.png')} style={styles.avatarImage} contentFit="cover" />
                     </View>
                 )}
                 <View style={{ maxWidth: '100%' }}>
@@ -752,7 +752,7 @@ export default function AIPlannerScreen() {
     const renderEmptyState = () => (
         <View style={styles.emptyStateContainer}>
             <View style={styles.emptyStateHero}>
-                <Image source={require('../../assets/NxtVibes AI.png')} style={styles.emptyStateLogo} contentFit="cover" />
+                <Image source={require('../../assets/nxtvibes_ai.png')} style={styles.emptyStateLogo} contentFit="cover" />
                 <Text style={[styles.emptyStateTitle, { color: colors.text }]}>NxtVibes AI</Text>
                 <Text style={[styles.emptyStateSubtitle, { color: colors.textSecondary }]}>Your personal travel planner. What are we exploring next?</Text>
             </View>
@@ -816,7 +816,7 @@ export default function AIPlannerScreen() {
                         ListHeaderComponent={
                             isTyping ? (
                                 <View style={styles.typingContainer}>
-                                    <View style={styles.avatarContainer}><Image source={require('../../assets/NxtVibes AI.png')} style={styles.avatarImage} contentFit="cover" /></View>
+                                    <View style={styles.avatarContainer}><Image source={require('../../assets/nxtvibes_ai.png')} style={styles.avatarImage} contentFit="cover" /></View>
                                     <View style={[styles.bubble, styles.aiBubble, { backgroundColor: colors.card }]}><TypingDots color={colors.primary} /></View>
                                 </View>
                             ) : null

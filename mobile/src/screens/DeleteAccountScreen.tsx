@@ -50,7 +50,7 @@ const DeleteAccountScreen = () => {
                             // Sign out locally
                             await supabase.auth.signOut();
                             await resetDatabase();
-                            router.replace('/(auth)/welcome');
+                            router.replace('/(auth)/start');
                         } catch (error: any) {
                             Alert.alert('Error', error.message || 'Failed to delete account');
                         } finally {
