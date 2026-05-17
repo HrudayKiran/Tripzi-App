@@ -40,47 +40,47 @@ const TermsScreen = () => {
             </Text>
 
             <Section title="1. Acceptance of Terms" colors={colors}>
-              By using Tripzi, you agree to these Terms. If you do not agree, do not use the app.
+              By using NxtVibes, you agree to these Terms. If you do not agree, do not use the app.
             </Section>
 
             <Section title="2. India-Only and 18+" colors={colors}>
-              Tripzi is designed for users in India and is intended only for adults who are at least 18 years old.
+              NxtVibes is designed for users in India and is intended only for adults who are at least 18 years old.
               You must provide accurate profile information, including your age and gender where required for trip participation rules.
             </Section>
 
             <Section title="3. Accounts and Google Sign-In" colors={colors}>
-              Tripzi uses Google Sign-In for account access. You are responsible for keeping your Google account secure
-              and for any activity that happens through your Tripzi account.
+              NxtVibes uses Google Sign-In for account access. You are responsible for keeping your Google account secure
+              and for any activity that happens through your NxtVibes account.
             </Section>
 
             <Section title="4. Platform Use" colors={colors}>
-              Tripzi lets users create trips, join trips, chat with other travelers, share profile content,
+              NxtVibes lets users create trips, join trips, chat with other travelers, share profile content,
               upload images, and report abusive or unsafe behavior. You must use the app lawfully and respectfully.
             </Section>
 
             <Section title="5. Content and Conduct" colors={colors}>
               You must not post illegal, abusive, misleading, sexual, hateful, violent, fraudulent, or unsafe content.
-              Tripzi may remove content, restrict accounts, cancel trips, or suspend users to protect the community.
+              NxtVibes may remove content, restrict accounts, cancel trips, or suspend users to protect the community.
             </Section>
 
             <Section title="6. Trip Participation and Safety" colors={colors}>
-              Tripzi is a platform for connecting travelers. Tripzi does not guarantee the conduct, identity, safety,
+              NxtVibes is a platform for connecting travelers. NxtVibes does not guarantee the conduct, identity, safety,
               legality, or reliability of any user, trip, destination, or off-platform arrangement. Users remain
               responsible for their own safety, spending, bookings, transportation, and decisions.
             </Section>
 
             <Section title="7. Notifications, Media, and Features" colors={colors}>
-              Certain Tripzi features depend on optional permissions such as notifications, photos, camera, and location.
+              Certain NxtVibes features depend on optional permissions such as notifications, photos, camera, and location.
               If you deny a permission, related features may be limited or unavailable.
             </Section>
 
             <Section title="8. Termination and Deletion" colors={colors}>
-              You can request account deletion from Settings. Tripzi may retain limited records required for security,
+              You can request account deletion from Settings. NxtVibes may retain limited records required for security,
               fraud prevention, abuse handling, legal compliance, and service administration, including deletion reasons.
             </Section>
 
             <Section title="9. Changes to Terms" colors={colors}>
-              Tripzi may update these Terms from time to time. Continued use of the app after an update means you accept the revised Terms.
+              NxtVibes may update these Terms from time to time. Continued use of the app after an update means you accept the revised Terms.
             </Section>
 
             <Section title="10. Contact" colors={colors}>

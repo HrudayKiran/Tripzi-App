@@ -146,7 +146,7 @@ const StartScreen = () => {
           >
             <AppLogo size={140} showGlow={true} />
             <View style={styles.textContainer}>
-              <Text style={styles.appName}>Tripzi</Text>
+              <Text style={styles.appName}>NxtVibes</Text>
               <Text style={styles.tagline}>CONNECT. PLAN. TRAVEL.</Text>
             </View>
           </MotiView>

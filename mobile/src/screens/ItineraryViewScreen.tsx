@@ -87,8 +87,8 @@ export default function ItineraryViewScreen() {
     const handleShareTrip = async () => {
         try {
             const tripId = tripDraft?.id || 'new-trip';
-            const shareUrl = `https://tripzi.app/trip/${tripId}`;
-            const message = `Check out my trip itinerary on Tripzi: ${tripDraft?.title || 'Trip'}\n\nJoin me here: ${shareUrl}`;
+            const shareUrl = `https://nxtvibes.app/trip/${tripId}`;
+            const message = `Check out my trip itinerary on NxtVibes: ${tripDraft?.title || 'Trip'}\n\nJoin me here: ${shareUrl}`;
             
             const result = await Share.share({
                 message,

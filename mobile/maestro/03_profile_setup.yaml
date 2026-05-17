@@ -1,4 +1,4 @@
-appId: com.tripzi.mobile
+appId: com.nxtvibes.mobile
 ---
 - assertVisible: "Complete your profile"
 - tapOn: "Your full name"
@@ -15,4 +15,4 @@ appId: com.tripzi.mobile
 - tapOn: "Tell people about yourself..."
 - inputText: "I am an automated tester navigating the world."
 - tapOn: "Submit"
-- assertVisible: "Tripzi" # Verifying successful redirection to Feed
+- assertVisible: "NxtVibes" # Verifying successful redirection to Feed

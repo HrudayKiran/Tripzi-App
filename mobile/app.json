@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "Tripzi",
+    "name": "NxtVibes",
     "slug": "mobile",
     "version": "1.0.0",
-    "scheme": "tripzi",
+    "scheme": "nxtvibes",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -19,7 +19,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tripzi.mobile",
+      "bundleIdentifier": "com.nxtvibes.mobile",
       "config": {
         "googleMapsApiKey": "AIzaSyBURfArYP_txIxAGEPYhNKm-FCtY4gQ7oQ"
       }
@@ -29,7 +29,7 @@
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#9d74f7"
       },
-      "package": "com.tripzi.mobile",
+      "package": "com.nxtvibes.mobile",
       "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
@@ -43,12 +43,12 @@
           "data": [
             {
               "scheme": "https",
-              "host": "tripzi.com",
+              "host": "nxtvibes.app",
               "pathPrefix": "/trip"
             },
             {
               "scheme": "https",
-              "host": "tripzi.com",
+              "host": "nxtvibes.app",
               "pathPrefix": "/user"
             }
           ],
@@ -96,14 +96,14 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Tripzi to use your location for sharing and maps."
+          "locationAlwaysAndWhenInUsePermission": "Allow NxtVibes to use your location for sharing and maps."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Tripzi to access your photos for sharing.",
-          "cameraPermission": "Allow Tripzi to use your camera to take photos."
+          "photosPermission": "Allow NxtVibes to access your photos for sharing.",
+          "cameraPermission": "Allow NxtVibes to use your camera to take photos."
         }
       ],
       "@react-native-community/datetimepicker",

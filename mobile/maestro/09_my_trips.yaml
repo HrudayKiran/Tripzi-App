@@ -1,4 +1,4 @@
-appId: com.tripzi.mobile
+appId: com.nxtvibes.mobile
 ---
 # We should start from the bottom tabs, ideally Home/Feed or Profile
 - tapOn: "Profile"

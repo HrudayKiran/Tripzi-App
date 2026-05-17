@@ -4,10 +4,10 @@ const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
 module.exports = {
   expo: {
-    name: 'Tripzi',
+    name: 'NxtVibes',
     slug: 'mobile',
     version: '1.0.0',
-    scheme: 'tripzi',
+    scheme: 'nxtvibes',
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'automatic',
@@ -23,7 +23,7 @@ module.exports = {
     },
     ios: {
       supportsTablet: true,
-      bundleIdentifier: 'com.tripzi.mobile',
+      bundleIdentifier: 'com.nxtvibes.mobile',
       config: {
         googleMapsApiKey,
       },
@@ -33,7 +33,7 @@ module.exports = {
         foregroundImage: './assets/icon.png',
         backgroundColor: '#9d74f7',
       },
-      package: 'com.tripzi.mobile',
+      package: 'com.nxtvibes.mobile',
       googleServicesFile: './google-services.json',
       config: {
         googleMaps: {
@@ -47,17 +47,17 @@ module.exports = {
           data: [
             {
               scheme: 'https',
-              host: 'tripzi.com',
+              host: 'nxtvibes.app',
               pathPrefix: '/trip',
             },
             {
               scheme: 'https',
-              host: 'tripzi.com',
+              host: 'nxtvibes.app',
               pathPrefix: '/user',
             },
           ],
           category: ['BROWSABLE', 'DEFAULT'],
-        },
+         },
       ],
       permissions: [
         'android.permission.INTERNET',
@@ -97,25 +97,30 @@ module.exports = {
       [
         'expo-location',
         {
-          locationAlwaysAndWhenInUsePermission: 'Allow Tripzi to use your location for sharing and maps.',
+          locationAlwaysAndWhenInUsePermission: 'Allow NxtVibes to use your location for sharing and maps.',
         },
       ],
       [
         'expo-image-picker',
         {
-          photosPermission: 'Allow Tripzi to access your photos for sharing.',
-          cameraPermission: 'Allow Tripzi to use your camera to take photos.',
+          photosPermission: 'Allow NxtVibes to access your photos for sharing.',
+          cameraPermission: 'Allow NxtVibes to use your camera to take photos.',
         },
       ],
       [
         'expo-media-library',
         {
-          photosPermission: 'Allow Tripzi to save photos and videos to your gallery.',
-          savePhotosPermission: 'Allow Tripzi to save photos to your gallery.',
+          photosPermission: 'Allow NxtVibes to save photos and videos to your gallery.',
+          savePhotosPermission: 'Allow NxtVibes to save photos to your gallery.',
           isAccessMediaLocationEnabled: true,
         },
       ],
-      '@morrowdigital/watermelondb-expo-plugin',
+      [
+        '@morrowdigital/watermelondb-expo-plugin',
+        {
+          disableJsi: true,
+        },
+      ],
       'expo-sqlite',
       '@react-native-community/datetimepicker',
       'expo-font',

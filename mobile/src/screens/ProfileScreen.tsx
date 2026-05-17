@@ -338,7 +338,7 @@ const ProfileScreen = () => {
             showChevron={false}
             largeText
           />
-          <Text style={[styles.versionText, { color: colors.textSecondary }]}>Tripzi Version 1.0.0</Text>
+          <Text style={[styles.versionText, { color: colors.textSecondary }]}>NxtVibes Version 1.0.0</Text>
         </MotiView>
 
         <View style={{ height: SPACING.sm * 2 }} />

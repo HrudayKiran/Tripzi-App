@@ -50,7 +50,7 @@ const WelcomeScreen = () => {
                         style={styles.topSection}
                     >
                         <AppLogo size={96} showDot={true} />
-                        <Text style={styles.appName}>Tripzi</Text>
+                        <Text style={styles.appName}>NxtVibes</Text>
                     </MotiView>
 
                     {/* Middle Section - Value Proposition */}

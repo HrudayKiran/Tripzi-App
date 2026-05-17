@@ -50,7 +50,7 @@ const toHistoryMessages = (incoming: IncomingMessage[]): ChatMessage[] => {
     .slice(0, 20)
     .reverse()
     .map((item) => ({
-      role: (item.user?._id === 'tripzi-ai' ? 'assistant' : 'user') as Role,
+      role: (item.user?._id === 'nxtvibes-ai' ? 'assistant' : 'user') as Role,
       content: (item.text as string).trim(),
     }));
 };

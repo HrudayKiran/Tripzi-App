@@ -216,7 +216,7 @@ const FeedScreen = () => {
         >
             <View style={styles.headerRow}>
                 <AppLogo size={28} showDot={false} />
-                <Text style={[styles.headerTitle, { color: colors.text }]}>Tripzi</Text>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>NxtVibes</Text>
             </View>
             <View style={styles.headerActions}>
                 <TouchableOpacity

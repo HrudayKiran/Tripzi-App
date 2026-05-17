@@ -55,8 +55,8 @@ export interface ConversationMessage {
 // ─── Constants ───────────────────────────────────────────────────────
 
 const AI_USER = {
-    _id: 'tripzi-ai' as const,
-    name: 'Tripzi AI',
+    _id: 'nxtvibes-ai' as const,
+    name: 'NxtVibes AI',
 };
 
 // ─── AI Service ──────────────────────────────────────────────────────
@@ -95,7 +95,7 @@ class AIService {
             }];
         } catch (error: any) {
             const errorMsg = error?.message?.includes('Not authenticated')
-                ? 'Please log in to use Tripzi AI.'
+                ? 'Please log in to use NxtVibes AI.'
                 : 'Sorry, I couldn\'t connect to the AI. Please check your internet and try again.';
 
             return [{

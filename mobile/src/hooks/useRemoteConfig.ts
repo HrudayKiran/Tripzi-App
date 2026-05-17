@@ -11,7 +11,7 @@ export const useRemoteConfig = (currentVersion: string) => {
                 await remoteConfig().setDefaults({
                     min_version: '1.0.0',
                     latest_version: '1.0.0',
-                    store_url: 'market://details?id=com.tripzi.mobile',
+                    store_url: 'market://details?id=com.nxtvibes.mobile',
                 });
 
                 // Fetch and activate config
@@ -46,7 +46,7 @@ export const useRemoteConfig = (currentVersion: string) => {
                 if (isUpdateAvailable) {
                     Alert.alert(
                         'Update Available 🚀',
-                        'A new version of Tripzi is available! Please update for the best experience.',
+                        'A new version of NxtVibes is available! Please update for the best experience.',
                         [
                             { text: 'Later', style: 'cancel' },
                             {

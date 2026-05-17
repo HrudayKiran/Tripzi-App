@@ -28,7 +28,7 @@ export function useAIPlannerQuery(conversationId: string | null) {
                 text: m.content,
                 createdAt: new Date(m.created_at),
                 user: m.role === 'assistant'
-                    ? { _id: 'tripzi-ai', name: 'Tripzi AI' }
+                    ? { _id: 'nxtvibes-ai', name: 'NxtVibes AI' }
                     : { _id: 'user', name: 'User' },
                 suggestions: m.suggestions,
             }));

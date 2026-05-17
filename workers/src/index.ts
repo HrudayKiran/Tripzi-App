@@ -21,7 +21,7 @@ app.use('*', cors({
 }));
 
 // Health check (no auth)
-app.get('/', (c) => c.json({ status: 'ok', service: 'tripzi-workers' }));
+app.get('/', (c) => c.json({ status: 'ok', service: 'nxtvibes-workers' }));
 
 // All authenticated routes
 app.use('/account/*', requireAuth);

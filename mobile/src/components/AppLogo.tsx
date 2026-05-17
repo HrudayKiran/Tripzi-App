@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, ViewStyle, Platform } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface AppLogoProps {
@@ -13,7 +13,7 @@ interface AppLogoProps {
 const AppLogo = ({ size = 80, style, showDot = true, showGlow = false }: AppLogoProps) => {
     // HTML uses rounded-3xl for 112px (h-28). 1.5rem = 24px. 24/112 ~= 0.21
     const borderRadius = size * 0.22;
-    const iconSize = size * 0.57; // 64px icon in 112px box -> 0.57
+    const iconSize = size * 0.85; // slightly larger for the visual image logo
 
     return (
         <View style={[styles.container, { width: size, height: size }, style]}>
@@ -48,10 +48,10 @@ const AppLogo = ({ size = 80, style, showDot = true, showGlow = false }: AppLogo
                     }
                 ]}
             >
-                <MaterialIcons
-                    name="flight-takeoff"
-                    size={iconSize}
-                    color="#895af6"
+                <Image
+                    source={require('../../assets/icon.png')}
+                    style={{ width: iconSize, height: iconSize, borderRadius: borderRadius * 0.8 }}
+                    contentFit="contain"
                 />
             </LinearGradient>
 

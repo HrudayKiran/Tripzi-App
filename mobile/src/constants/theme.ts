@@ -1,5 +1,5 @@
 /**
- * Theme tokens for the Tripzi app.
+ * Theme tokens for the NxtVibes app.
  * Includes fonts and color palettes.
  */
 

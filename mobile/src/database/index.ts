@@ -23,7 +23,7 @@ setGenerator(uuidv4);
 const adapter = new SQLiteAdapter({
   schema,
   // (Optional) Database name
-  dbName: 'tripzi_offline',
+  dbName: 'nxtvibes_offline',
   // (Recommended) If you want to use the high-performance JSI adapter on Android
   jsi: true,
   onSetUpError: error => {

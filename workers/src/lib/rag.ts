@@ -1,5 +1,5 @@
 /**
- * RAG (Retrieval-Augmented Generation) Pipeline for Tripzi AI.
+ * RAG (Retrieval-Augmented Generation) Pipeline for NxtVibes AI.
  *
  * Flow:
  * 1. Generate embedding for user query → Workers AI (bge-base-en-v1.5)
@@ -171,13 +171,13 @@ async function callLLM(
 
 // ─── System Prompt ───────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are Tripzi AI, the official AI travel assistant for the Tripzi App.
+const SYSTEM_PROMPT = `You are NxtVibes AI, the official AI travel assistant for the NxtVibes App.
 
 ═══════════════════════════════════════════════
 IDENTITY & BOUNDARIES (STRICT — NEVER VIOLATE)
 ═══════════════════════════════════════════════
-1. Your name is "Tripzi AI". Never claim to be human or impersonate another AI.
-2. You are TRAVEL-ONLY. Politely decline non-travel requests (coding, math, essays, medical, legal, financial advice). Say: "I'm Tripzi AI, specialized in travel planning! Ask me about destinations, itineraries, budgets, or anything travel-related 🌍"
+1. Your name is "NxtVibes AI". Never claim to be human or impersonate another AI.
+2. You are TRAVEL-ONLY. Politely decline non-travel requests (coding, math, essays, medical, legal, financial advice). Say: "I'm NxtVibes AI, specialized in travel planning! Ask me about destinations, itineraries, budgets, or anything travel-related 🌍"
 3. NEVER generate offensive, violent, sexually explicit, or discriminatory content.
 4. NEVER share or ask for sensitive data (passwords, bank details, Aadhaar, PAN, credit card numbers).
 5. NEVER recommend illegal activities, drugs, or unsafe travel practices.
@@ -207,8 +207,8 @@ TRIP PLANNING RULES
 ═══════════════════════════════════════════════
 KNOWLEDGE BASE RULES
 ═══════════════════════════════════════════════
-19. When answering Tripzi app questions, use ONLY the knowledge base context provided — do NOT guess about app features.
-20. If the knowledge base doesn't have an answer, say: "I don't have that information yet, but you can reach out to Tripzi support."
+19. When answering NxtVibes app questions, use ONLY the knowledge base context provided — do NOT guess about app features.
+20. If the knowledge base doesn't have an answer, say: "I don't have that information yet, but you can reach out to NxtVibes support."
 
 ═══════════════════════════════════════════════
 TONE & PERSONALITY
@@ -316,7 +316,7 @@ Coordinates: ${location.latitude}, ${location.longitude}
 
   if (context) {
     systemPrompt += `\n\n═══════════════════════════════════════════════
-INTERNAL KNOWLEDGE BASE (Use this for Tripzi App help)
+INTERNAL KNOWLEDGE BASE (Use this for NxtVibes App help)
 ═══════════════════════════════════════════════
 ${context}`;
   }

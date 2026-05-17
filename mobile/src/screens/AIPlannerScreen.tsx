@@ -70,7 +70,7 @@ const MODELS: { id: AIModel; label: string; icon: string; desc: string }[] = [
 const getContextSuggestions = (messages: AIMessage[]): string[] => {
     if (messages.length === 0) return [];
 
-    const lastAiMsg = messages.find(m => m.user._id === 'tripzi-ai');
+    const lastAiMsg = messages.find(m => m.user._id === 'nxtvibes-ai');
 
     // 1. If the AI provided explicit suggestions in the response, use them (Perfect accuracy)
     if (lastAiMsg?.suggestions && lastAiMsg.suggestions.length > 0) {
@@ -120,7 +120,7 @@ const getContextSuggestions = (messages: AIMessage[]): string[] => {
 const EMPTY_STATE_SUGGESTIONS = [
     { icon: '🏖️', title: 'Plan a Beach Trip', prompt: 'Plan a relaxing 3-day beach trip to Goa' },
     { icon: '🏔️', title: 'Mountain Escape', prompt: 'Plan an adventure trip to Manali for a group of 4' },
-    { icon: '💡', title: 'Tripzi Features', prompt: 'How do I use Tripzi features like joining trips or finding travel buddies?' },
+    { icon: '💡', title: 'NxtVibes Features', prompt: 'How do I use NxtVibes features like joining trips or finding travel buddies?' },
     { icon: '🎒', title: 'Backpacking', prompt: 'Plan a budget backpacking trip to Rishikesh' },
 ];
 
@@ -251,7 +251,7 @@ export default function AIPlannerScreen() {
                         text: m.content,
                         createdAt: new Date(m.created_at),
                         user: m.role === 'assistant'
-                            ? { _id: 'tripzi-ai', name: 'Tripzi AI' }
+                            ? { _id: 'nxtvibes-ai', name: 'NxtVibes AI' }
                             : { _id: 'user', name: 'User' },
                         suggestions: m.suggestions,
                     }));
@@ -306,7 +306,7 @@ export default function AIPlannerScreen() {
                     text: m.content,
                     createdAt: new Date(m.created_at),
                     user: m.role === 'assistant'
-                        ? { _id: 'tripzi-ai', name: 'Tripzi AI' }
+                        ? { _id: 'nxtvibes-ai', name: 'NxtVibes AI' }
                         : { _id: 'user', name: 'User' },
                 }));
                 setMessages(loadedMsgs.reverse());
@@ -387,9 +387,9 @@ export default function AIPlannerScreen() {
             if (isLoc && !location) {
                 const reqMsg: AIMessage = {
                     _id: 'loc-req-' + Date.now(),
-                    text: 'TRIPZI_LOCATION_REQUIRED',
+                    text: 'NXTVIBES_LOCATION_REQUIRED',
                     createdAt: new Date(),
-                    user: { _id: 'tripzi-ai', name: 'Tripzi AI' },
+                    user: { _id: 'nxtvibes-ai', name: 'NxtVibes AI' },
                 };
                 setMessages(prev => [reqMsg, ...prev]);
                 setIsTyping(false);
@@ -406,7 +406,7 @@ export default function AIPlannerScreen() {
                         _id: result.aiMessage.id,
                         text: result.aiMessage.content,
                         createdAt: new Date(result.aiMessage.created_at),
-                        user: { _id: 'tripzi-ai', name: 'Tripzi AI' },
+                        user: { _id: 'nxtvibes-ai', name: 'NxtVibes AI' },
                         suggestions: result.aiMessage.suggestions,
                     }];
                 } else {
@@ -456,9 +456,9 @@ export default function AIPlannerScreen() {
             if (isLoc && !location) {
                 const reqMsg: AIMessage = {
                     _id: 'loc-req-' + Date.now(),
-                    text: 'TRIPZI_LOCATION_REQUIRED',
+                    text: 'NXTVIBES_LOCATION_REQUIRED',
                     createdAt: new Date(),
-                    user: { _id: 'tripzi-ai', name: 'Tripzi AI' },
+                    user: { _id: 'nxtvibes-ai', name: 'NxtVibes AI' },
                 };
                 setMessages(prev => [reqMsg, ...prev]);
                 setIsTyping(false);
@@ -475,7 +475,7 @@ export default function AIPlannerScreen() {
                         _id: result.aiMessage.id,
                         text: result.aiMessage.content,
                         createdAt: new Date(result.aiMessage.created_at),
-                        user: { _id: 'tripzi-ai', name: 'Tripzi AI' },
+                        user: { _id: 'nxtvibes-ai', name: 'NxtVibes AI' },
                         suggestions: result.aiMessage.suggestions,
                     }];
                 } else {
@@ -583,14 +583,14 @@ export default function AIPlannerScreen() {
                             },
                             member_count: 1,
                             created_by: currentUser.id, 
-                            last_message: { text: 'Trip created by Tripzi AI!', sender_id: null, created_at: new Date().toISOString() },
+                            last_message: { text: 'Trip created by NxtVibes AI!', sender_id: null, created_at: new Date().toISOString() },
                         });
 
                         const successMsg: AIMessage = {
                             _id: Date.now() + Math.random(),
                             text: `Done! 🎉 "${trip.title}" has been posted to your profile!`,
                             createdAt: new Date(),
-                            user: { _id: 'tripzi-ai', name: 'Tripzi AI' },
+                            user: { _id: 'nxtvibes-ai', name: 'NxtVibes AI' },
                         };
                         await completeUploadNotification('Trip Posted!', `"${trip.title}" has been posted.`);
                         
@@ -688,7 +688,7 @@ export default function AIPlannerScreen() {
             </View>
             <Text style={[styles.locationRequestTitle, { color: colors.text }]}>Location Access Required</Text>
             <Text style={[styles.locationRequestDesc, { color: colors.textSecondary }]}>
-                To find nearby petrol bunks, EV stations, and rentals, Tripzi AI needs to know your location.
+                To find nearby petrol bunks, EV stations, and rentals, NxtVibes AI needs to know your location.
             </Text>
             <TouchableOpacity
                 style={[styles.locationRequestBtn, { backgroundColor: colors.primary }]}
@@ -700,13 +700,13 @@ export default function AIPlannerScreen() {
                     if (loc) {
                         setMessages(prev => {
                             // Filter out the request card and any previous confirmation messages
-                            const filtered = prev.filter(m => m.text !== 'TRIPZI_LOCATION_REQUIRED' && !m.text.includes("I have your location now"));
+                            const filtered = prev.filter(m => m.text !== 'NXTVIBES_LOCATION_REQUIRED' && !m.text.includes("I have your location now"));
                             return [
                                 {
                                     _id: 'loc-confirmed-' + Date.now(),
                                     text: "Great! I have your location now. Please ask your question again and I'll find the best nearby options for you! 📍",
                                     createdAt: new Date(),
-                                    user: { _id: 'tripzi-ai', name: 'Tripzi AI' }
+                                    user: { _id: 'nxtvibes-ai', name: 'NxtVibes AI' }
                                 },
                                 ...filtered
                             ];
@@ -721,7 +721,7 @@ export default function AIPlannerScreen() {
 
     const renderMessage = ({ item }: { item: AIMessage }) => {
         const isUser = item.user._id === 'user';
-        if (item.text === 'TRIPZI_LOCATION_REQUIRED') return renderLocationRequest();
+        if (item.text === 'NXTVIBES_LOCATION_REQUIRED') return renderLocationRequest();
         const tripCard = !isUser && (item.text.includes('trip_plan') && item.text.includes('"type"')) ? renderTripCard(item.text) : null;
         const showText = !tripCard;
 
@@ -734,7 +734,7 @@ export default function AIPlannerScreen() {
             >
                 {!isUser && (
                     <View style={styles.avatarContainer}>
-                        <Image source={require('../../assets/Tripzi AI.png')} style={styles.avatarImage} contentFit="cover" />
+                        <Image source={require('../../assets/NxtVibes AI.png')} style={styles.avatarImage} contentFit="cover" />
                     </View>
                 )}
                 <View style={{ maxWidth: '100%' }}>
@@ -752,8 +752,8 @@ export default function AIPlannerScreen() {
     const renderEmptyState = () => (
         <View style={styles.emptyStateContainer}>
             <View style={styles.emptyStateHero}>
-                <Image source={require('../../assets/Tripzi AI.png')} style={styles.emptyStateLogo} contentFit="cover" />
-                <Text style={[styles.emptyStateTitle, { color: colors.text }]}>Tripzi AI</Text>
+                <Image source={require('../../assets/NxtVibes AI.png')} style={styles.emptyStateLogo} contentFit="cover" />
+                <Text style={[styles.emptyStateTitle, { color: colors.text }]}>NxtVibes AI</Text>
                 <Text style={[styles.emptyStateSubtitle, { color: colors.textSecondary }]}>Your personal travel planner. What are we exploring next?</Text>
             </View>
             <View style={styles.emptySuggestionsGrid}>
@@ -816,7 +816,7 @@ export default function AIPlannerScreen() {
                         ListHeaderComponent={
                             isTyping ? (
                                 <View style={styles.typingContainer}>
-                                    <View style={styles.avatarContainer}><Image source={require('../../assets/Tripzi AI.png')} style={styles.avatarImage} contentFit="cover" /></View>
+                                    <View style={styles.avatarContainer}><Image source={require('../../assets/NxtVibes AI.png')} style={styles.avatarImage} contentFit="cover" /></View>
                                     <View style={[styles.bubble, styles.aiBubble, { backgroundColor: colors.card }]}><TypingDots color={colors.primary} /></View>
                                 </View>
                             ) : null
@@ -845,7 +845,7 @@ export default function AIPlannerScreen() {
                 <View style={[styles.inputContainer, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: insets.bottom + 84 }]}>
                     <TextInput
                         ref={inputRef} style={[styles.input, { backgroundColor: colors.background, color: colors.text }]}
-                        placeholder="Message Tripzi AI..." placeholderTextColor={colors.textSecondary}
+                        placeholder="Message NxtVibes AI..." placeholderTextColor={colors.textSecondary}
                         value={inputText} onChangeText={setInputText} multiline maxLength={500}
                         blurOnSubmit={false}
                     />

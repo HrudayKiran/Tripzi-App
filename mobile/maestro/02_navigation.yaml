@@ -1,4 +1,4 @@
-appId: com.tripzi.mobile
+appId: com.nxtvibes.mobile
 ---
 # This test assumes the user is already logged in
 - launchApp
@@ -12,7 +12,7 @@ appId: com.tripzi.mobile
 
 # Test Navigation
 - tapOn: "AI Planner"
-- assertVisible: "Tripzi AI Planner" # Assuming there's a title
+- assertVisible: "NxtVibes AI Planner" # Assuming there's a title
 - tapOn: "Messages"
 - assertVisible: "Chats" # Assuming chats title
 - tapOn: "Profile"

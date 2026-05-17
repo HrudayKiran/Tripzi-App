@@ -13,7 +13,7 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, ST
 
 import { useRouter } from 'expo-router';
 
-const TAWKTO_TICKET_EMAIL = 'tickets@tripzi.p.tawk.email';
+const TAWKTO_TICKET_EMAIL = 'tickets@nxtvibes.p.tawk.email';
 
 const SuggestFeatureScreen = () => {
   const router = useRouter();

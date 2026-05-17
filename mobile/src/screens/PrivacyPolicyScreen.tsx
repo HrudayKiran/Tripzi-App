@@ -40,7 +40,7 @@ const PrivacyPolicyScreen = () => {
             </Text>
 
             <Section title="1. Information We Collect" colors={colors}>
-              Tripzi may collect your Google account email, profile details you submit during onboarding,
+              NxtVibes may collect your Google account email, profile details you submit during onboarding,
               trip content, chat content, ratings, reports, bug submissions, device tokens for notifications,
               and technical diagnostics needed to operate the app.
             </Section>
@@ -51,40 +51,40 @@ const PrivacyPolicyScreen = () => {
             </Section>
 
             <Section title="3. What Other Users Can See" colors={colors}>
-              Other signed-in users may see your public Tripzi profile information, public trip posts,
+              Other signed-in users may see your public NxtVibes profile information, public trip posts,
               ratings you leave where applicable, and content you share inside chats or group chats.
             </Section>
 
             <Section title="4. Permissions and Device Access" colors={colors}>
-              Tripzi asks for permissions only for features that need them, such as notifications,
+              NxtVibes asks for permissions only for features that need them, such as notifications,
               camera, media access, location, and saving media to the device gallery. If you do not grant
               a permission, the related feature may not work.
             </Section>
 
             <Section title="5. Storage, Analytics, and Vendors" colors={colors}>
-              Tripzi uses Firebase services for messaging, remote config,
-              app check, performance, crash reporting, and related analytics. Tripzi may also use Cloudflare R2
+              NxtVibes uses Firebase services for messaging, remote config,
+              app check, performance, crash reporting, and related analytics. NxtVibes may also use Cloudflare R2
               for media storage and other service providers needed to deliver app functionality.
             </Section>
 
             <Section title="6. Security and Retention" colors={colors}>
               We take reasonable measures to protect user data, but no system is perfectly secure.
-              Tripzi may retain limited records after account deletion for fraud prevention, abuse review,
+              NxtVibes may retain limited records after account deletion for fraud prevention, abuse review,
               moderation history, legal compliance, and operational security.
             </Section>
 
             <Section title="7. Your Choices" colors={colors}>
               You can update your profile, manage selected settings, control optional permissions,
               and request account deletion from within the app. If notification permission is denied,
-              Tripzi may disable both push and in-app notifications for your account on that device.
+              NxtVibes may disable both push and in-app notifications for your account on that device.
             </Section>
 
             <Section title="8. Age and Region" colors={colors}>
-              Tripzi is intended for users in India who are at least 18 years old. Users under 18 are not permitted to create or use accounts.
+              NxtVibes is intended for users in India who are at least 18 years old. Users under 18 are not permitted to create or use accounts.
             </Section>
 
             <Section title="9. Changes to this Policy" colors={colors}>
-              Tripzi may update this Privacy Policy from time to time. The latest version will be available in the app and the production listing.
+              NxtVibes may update this Privacy Policy from time to time. The latest version will be available in the app and the production listing.
             </Section>
 
             <Section title="10. Contact" colors={colors}>

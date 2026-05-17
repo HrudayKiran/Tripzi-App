@@ -194,7 +194,7 @@ const CompleteProfileScreen = () => {
 
         const age = calculateAge(dob);
         if (age < 18) {
-            Alert.alert('Not Eligible', `You are not eligible to use Tripzi because your age is ${age}. You must be at least 18 years old.`);
+            Alert.alert('Not Eligible', `You are not eligible to use NxtVibes because your age is ${age}. You must be at least 18 years old.`);
             await resetToStart();
             return;
         }

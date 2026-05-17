@@ -1,6 +1,6 @@
-appId: com.tripzi.mobile
+appId: com.nxtvibes.mobile
 ---
-- assertVisible: "Tripzi"
+- assertVisible: "NxtVibes"
 - swipe:
     direction: RIGHT
 - swipe:

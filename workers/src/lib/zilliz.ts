@@ -22,7 +22,7 @@ export interface SearchResult {
   score: number;
 }
 
-const COLLECTION_NAME = 'tripzi_knowledge';
+const COLLECTION_NAME = 'nxtvibes_knowledge';
 
 export class ZillizClient {
   private endpoint: string;
@@ -70,7 +70,7 @@ export class ZillizClient {
   }
 
   /**
-   * Create the tripzi_knowledge collection with the required schema.
+   * Create the nxtvibes_knowledge collection with the required schema.
    * Dimension 768 matches Workers AI bge-base-en-v1.5 output.
    */
   async createCollection(): Promise<void> {

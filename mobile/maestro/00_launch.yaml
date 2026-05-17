@@ -1,4 +1,4 @@
-appId: com.tripzi.mobile
+appId: com.nxtvibes.mobile
 ---
 - launchApp:
     clearState: true

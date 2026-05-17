@@ -1,9 +1,9 @@
-appId: com.tripzi.mobile
+appId: com.nxtvibes.mobile
 ---
 - tapOn: '+'
 - assertVisible: "Create New Trip"
 - assertVisible: "Create a Trip Manually"
-- assertVisible: "Create with Tripzi AI"
+- assertVisible: "Create with NxtVibes AI"
 - tapOn: "Create a Trip Manually"
 - assertVisible: "Let's Start! 🚀"
 - tapOn:

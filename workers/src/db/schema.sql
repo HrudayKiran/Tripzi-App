@@ -1,4 +1,4 @@
--- Tripzi AI Chat History Schema (Cloudflare D1 / SQLite)
+-- NxtVibes AI Chat History Schema (Cloudflare D1 / SQLite)
 -- Retention: 30 days (enforced by scheduled cleanup)
 
 CREATE TABLE IF NOT EXISTS ai_conversations (
