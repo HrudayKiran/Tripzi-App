@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Dimensions, BackHandler } from 'react-native';
 import { FlashList } from "@shopify/flash-list";
 
 const TypedFlashList = FlashList as any;
@@ -31,6 +31,19 @@ const SearchScreen = () => {
     const [filters, setFilters] = useState<FilterOptions | null>(null);
     const { searchedUsers, searchingUsers } = useUserSearchQuery(searchQuery);
     const searchInputRef = useRef<TextInput>(null);
+
+    useEffect(() => {
+        const backAction = () => {
+            if (searchQuery !== '' || filters !== null) {
+                setSearchQuery('');
+                setFilters(null);
+                return true;
+            }
+            return false;
+        };
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+        return () => backHandler.remove();
+    }, [searchQuery, filters]);
 
     // Filter trips using centralized utility
     const filteredTrips = useMemo(() => {

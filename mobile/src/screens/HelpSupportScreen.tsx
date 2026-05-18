@@ -15,6 +15,7 @@ const TAWKTO_WIDGET_ID = process.env.EXPO_PUBLIC_TAWKTO_WIDGET_ID || '';
 const SUPPORT_EMAIL = 'support@nxtvibes.app';
 
 import { useRouter } from 'expo-router';
+import { NeumorphicBackButton } from '../components/NeumorphicIconButtons';
 
 const HelpSupportScreen = () => {
   const router = useRouter();
@@ -60,7 +61,7 @@ const HelpSupportScreen = () => {
   const chatUrl = `https://tawk.to/chat/${TAWKTO_PROPERTY_ID}/${TAWKTO_WIDGET_ID}`;
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top']}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -68,16 +69,9 @@ const HelpSupportScreen = () => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Icon name="CaretLeft" size={28} color={colors.text} />
-          </TouchableOpacity>
+          <NeumorphicBackButton onPress={() => router.back()} />
           <Text style={[styles.headerTitle, { color: colors.text }]}>Help & Support</Text>
-          <View style={styles.placeholder} />
+          <View style={{ width: 45 }} />
         </View>
 
         <ScrollView
@@ -256,20 +250,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-  },
-  backButton: {
-    width: TOUCH_TARGET.min,
-    height: TOUCH_TARGET.min,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 10 : 20,
+    paddingBottom: 20,
   },
   headerTitle: {
     fontSize: FONT_SIZE.lg,
     fontWeight: FONT_WEIGHT.semibold,
-  },
-  placeholder: {
-    width: TOUCH_TARGET.min,
   },
   content: {
     flex: 1,

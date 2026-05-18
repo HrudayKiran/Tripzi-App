@@ -10,6 +10,7 @@ import {
     Alert,
     KeyboardAvoidingView,
     Platform,
+    BackHandler,
 } from 'react-native';
 import { FlashList } from "@shopify/flash-list";
 
@@ -54,6 +55,23 @@ const CreateGroupScreen = () => {
     const [groupName, setGroupName] = useState('');
     const [groupIcon, setGroupIcon] = useState<string | null>(null);
     const [creating, setCreating] = useState(false);
+
+    useEffect(() => {
+        const backAction = () => {
+            if (searchQuery !== '') {
+                setSearchQuery('');
+                setSearchResults([]);
+                return true;
+            }
+            if (step === 'details') {
+                setStep('select');
+                return true;
+            }
+            return false;
+        };
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+        return () => backHandler.remove();
+    }, [searchQuery, step]);
 
 
 

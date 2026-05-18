@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
-import { ThemeProvider } from '../src/contexts/ThemeContext';
+import { ThemeProvider, useTheme } from '../src/contexts/ThemeContext';
+import { DarkTheme, DefaultTheme, ThemeProvider as NavigationProvider } from '@react-navigation/native';
 import { NetworkProvider } from '../src/contexts/NetworkContext';
 import OfflineBanner from '../src/components/OfflineBanner';
 import { NotificationToast } from '../src/components/NotificationToast';
@@ -19,6 +20,33 @@ import { useRemoteConfig } from '../src/hooks/useRemoteConfig';
 
 // Register FCM background message handler
 registerBackgroundHandler();
+
+function AppNavigator() {
+  const { isDarkMode, colors } = useTheme();
+
+  const navigationTheme = {
+    ...(isDarkMode ? DarkTheme : DefaultTheme),
+    colors: {
+      ...(isDarkMode ? DarkTheme.colors : DefaultTheme.colors),
+      background: colors.background,
+      card: colors.card,
+      text: colors.text,
+      border: colors.border,
+    },
+  };
+
+  return (
+    <NavigationProvider value={navigationTheme}>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background }, animation: 'fade' }}>
+        <Stack.Screen name="(auth)" options={{ contentStyle: { backgroundColor: colors.background } }} />
+        <Stack.Screen name="(tabs)" options={{ contentStyle: { backgroundColor: colors.background } }} />
+        <Stack.Screen name="chat" options={{ contentStyle: { backgroundColor: colors.background } }} />
+        <Stack.Screen name="trip" options={{ contentStyle: { backgroundColor: colors.background } }} />
+        <Stack.Screen name="profile" options={{ contentStyle: { backgroundColor: colors.background } }} />
+      </Stack>
+    </NavigationProvider>
+  );
+}
 
 export default function RootLayout() {
   const currentVersion = '1.0.0';
@@ -55,13 +83,7 @@ export default function RootLayout() {
       <DatabaseProvider database={database}>
         <ThemeProvider>
           <NetworkProvider>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="chat" />
-              <Stack.Screen name="trip" />
-              <Stack.Screen name="profile" />
-            </Stack>
+            <AppNavigator />
             <OfflineBanner />
             <NotificationToast />
           </NetworkProvider>

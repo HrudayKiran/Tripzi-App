@@ -49,7 +49,7 @@ const WelcomeScreen = () => {
                         transition={{ type: 'timing', duration: 1000 }}
                         style={styles.topSection}
                     >
-                        <AppLogo size={96} showDot={true} />
+                        <AppLogo size={96} showDot={false} />
                         <Text style={styles.appName}>NxtVibes</Text>
                     </MotiView>
 

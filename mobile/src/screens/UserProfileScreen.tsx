@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Dimensions, Animated, Alert, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Dimensions, Animated, Alert, Modal, TextInput, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { NeumorphicBackButton, NeumorphicIconButton } from '../components/NeumorphicIconButtons';
 
 import Icon from '../components/Icon';
 import { MotiView } from 'moti';
@@ -198,9 +199,9 @@ const UserProfileScreen = () => {
     if (!user) {
         return (
             <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-                <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                    <Icon name="CaretLeft" size={24} color={colors.text} />
-                </TouchableOpacity>
+                <View style={{ paddingHorizontal: SPACING.lg, paddingTop: Platform.OS === 'ios' ? 10 : 20, paddingBottom: 20 }}>
+                    <NeumorphicBackButton onPress={() => router.back()} />
+                </View>
                 <View style={styles.loadingContainer}>
                     <Icon name="User" size={64} color={colors.textSecondary} />
                     <Text style={[styles.notFoundText, { color: colors.text }]}>User not found</Text>
@@ -225,13 +226,11 @@ const UserProfileScreen = () => {
                 ]}
             >
                 <View style={styles.headerRow}>
-                    <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={() => router.back()}>
-                        <Icon name="CaretLeft" size={24} color={colors.text} />
-                    </TouchableOpacity>
-                    {isOwnProfile && (
-                        <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.card }]} onPress={handleCreateButtonPress}>
-                            <Icon name="Plus" size={24} color={colors.text} />
-                        </TouchableOpacity>
+                    <NeumorphicBackButton onPress={() => router.back()} />
+                    {isOwnProfile ? (
+                        <NeumorphicIconButton iconName="Plus" onPress={handleCreateButtonPress} />
+                    ) : (
+                        <View style={{ width: 45 }} />
                     )}
                 </View>
             </Animated.View>
@@ -384,10 +383,8 @@ const styles = StyleSheet.create({
     container: { flex: 1 },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     notFoundText: { fontSize: FONT_SIZE.xl, fontWeight: 'bold', marginTop: SPACING.lg },
-    backBtn: { padding: SPACING.lg },
     stickyHeader: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg },
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' },
-    headerButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
     profileContent: { paddingHorizontal: 20 },
     headerProfileRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
     avatar: { width: 80, height: 80, borderRadius: 40 },

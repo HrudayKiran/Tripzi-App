@@ -35,7 +35,7 @@ const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/;
 const sanitizeUsername = (value: string): string => value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
 
 const CompleteProfileScreen = () => {
-    const { colors } = useTheme();
+    const { colors, isDarkMode } = useTheme();
     const router = useRouter();
     const routeParams = useLocalSearchParams();
     const [fullName, setFullName] = useState('');
@@ -274,21 +274,21 @@ const CompleteProfileScreen = () => {
                                     style={[
                                         styles.genderOption,
                                         { backgroundColor: colors.inputBackground, borderColor: colors.border },
-                                        gender === 'male' && [styles.genderSelected, { borderColor: colors.primary, backgroundColor: colors.primaryLight }],
+                                        gender === 'male' && [styles.genderSelected, { borderColor: isDarkMode ? '#FFFFFF' : '#000000', backgroundColor: isDarkMode ? '#FFFFFF' : '#000000' }],
                                     ]}
                                     onPress={() => setGender('male')}
                                 >
-                                    <Text style={[styles.genderText, { color: gender === 'male' ? colors.primary : colors.text }]}>Male</Text>
+                                    <Text style={[styles.genderText, { color: gender === 'male' ? (isDarkMode ? '#000000' : '#FFFFFF') : colors.text }]}>Male</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     style={[
                                         styles.genderOption,
                                         { backgroundColor: colors.inputBackground, borderColor: colors.border },
-                                        gender === 'female' && [styles.genderSelected, { borderColor: colors.primary, backgroundColor: colors.primaryLight }],
+                                        gender === 'female' && [styles.genderSelected, { borderColor: isDarkMode ? '#FFFFFF' : '#000000', backgroundColor: isDarkMode ? '#FFFFFF' : '#000000' }],
                                     ]}
                                     onPress={() => setGender('female')}
                                 >
-                                    <Text style={[styles.genderText, { color: gender === 'female' ? colors.primary : colors.text }]}>Female</Text>
+                                    <Text style={[styles.genderText, { color: gender === 'female' ? (isDarkMode ? '#000000' : '#FFFFFF') : colors.text }]}>Female</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -332,18 +332,35 @@ const CompleteProfileScreen = () => {
                         <TouchableOpacity
                             disabled={!canSubmit}
                             onPress={handleSubmit}
-                            style={[styles.submitBtn, { opacity: canSubmit ? 1 : 0.6 }]}
+                            style={[
+                                styles.submitBtn,
+                                {
+                                    backgroundColor: canSubmit
+                                        ? (isDarkMode ? '#FFFFFF' : '#000000')
+                                        : (isDarkMode ? '#1E1E1E' : '#E5E7EB'),
+                                    borderColor: canSubmit
+                                        ? (isDarkMode ? '#FFFFFF' : '#000000')
+                                        : (isDarkMode ? '#2D2D2D' : '#D1D5DB'),
+                                    borderWidth: 1,
+                                }
+                            ]}
                         >
-                            <LinearGradient
-                                colors={canSubmit ? [colors.primary, colors.gradientEnd || colors.primary] : [NEUTRAL.gray300, NEUTRAL.gray300]}
-                                style={styles.submitGradient}
-                            >
+                            <View style={styles.submitGradient}>
                                 {submitting ? (
-                                    <ActivityIndicator color="#fff" />
+                                    <ActivityIndicator color={isDarkMode ? '#000000' : '#FFFFFF'} />
                                 ) : (
-                                    <Text style={styles.submitText}>Continue</Text>
+                                    <Text style={[
+                                        styles.submitText,
+                                        {
+                                            color: canSubmit
+                                                ? (isDarkMode ? '#000000' : '#FFFFFF')
+                                                : (isDarkMode ? '#555555' : '#9CA3AF')
+                                        }
+                                    ]}>
+                                        Continue
+                                    </Text>
                                 )}
-                            </LinearGradient>
+                            </View>
                         </TouchableOpacity>
                     </View>
                 </ScrollView>

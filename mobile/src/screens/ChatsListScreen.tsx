@@ -10,6 +10,7 @@ import {
     TextInput,
     Modal,
     Alert,
+    BackHandler,
 } from 'react-native';
 import { FlashList } from "@shopify/flash-list";
 
@@ -17,6 +18,7 @@ const TypedFlashList = FlashList as any;
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Icon from '../components/Icon';
+import { NeumorphicBackButton, NeumorphicSearchButton, NeumorphicIconButton } from '../components/NeumorphicIconButtons';
 import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, NEUTRAL } from '../styles';
@@ -36,7 +38,7 @@ interface SearchUser {
 
 const ChatsListScreen = () => {
     const router = useRouter();
-    const { colors } = useTheme();
+    const { colors, isDarkMode } = useTheme();
     const { chats, loading, refreshChats, deleteChat } = useChatsQuery();
 
     // Use state for currentUser to properly handle auth state
@@ -56,6 +58,20 @@ const ChatsListScreen = () => {
     const [searchResults, setSearchResults] = useState<SearchUser[]>([]);
     const [searching, setSearching] = useState(false);
     const [startingChat, setStartingChat] = useState(false);
+
+    React.useEffect(() => {
+        const backAction = () => {
+            if (showSearch) {
+                setShowSearch(false);
+                setSearchQuery('');
+                setSearchResults([]);
+                return true;
+            }
+            return false;
+        };
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+        return () => backHandler.remove();
+    }, [showSearch]);
 
 
     // Messages Settings modal
@@ -341,7 +357,7 @@ const ChatsListScreen = () => {
         return (
             <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={colors.primary} />
+                    <ActivityIndicator size="large" color={isDarkMode ? '#FFFFFF' : '#000000'} />
                 </View>
             </SafeAreaView>
         );
@@ -368,22 +384,18 @@ const ChatsListScreen = () => {
                 <View style={styles.header}>
                     <Text style={[styles.headerTitle, { color: colors.text }]}>Messages</Text>
                     <View style={styles.headerButtons}>
-                        <TouchableOpacity
-                            style={[styles.headerButton, { backgroundColor: colors.card }]}
+                        <NeumorphicSearchButton
                             onPress={() => setShowSearch(true)}
-                            activeOpacity={0.7}
-                            testID="chats-search-button"
-                        >
-                            <Icon name="MagnifyingGlass" size={22} color={colors.text} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.headerButton, { backgroundColor: colors.card }]}
+                            size={44}
+                            iconSize={22}
+                            style={{ marginRight: SPACING.xs }}
+                        />
+                        <NeumorphicIconButton
                             onPress={() => setShowMessagesSettings(true)}
-                            activeOpacity={0.7}
-                            testID="chats-menu-button"
-                        >
-                            <Icon name="DotsThreeVertical" size={22} color={colors.text} />
-                        </TouchableOpacity>
+                            iconName="DotsThreeVertical"
+                            size={44}
+                            iconSize={22}
+                        />
                     </View>
                 </View>
             )}
@@ -403,7 +415,9 @@ const ChatsListScreen = () => {
                     <RefreshControl
                         refreshing={loading}
                         onRefresh={refreshChats}
-                        tintColor={colors.primary}
+                        colors={[isDarkMode ? '#FFFFFF' : '#000000']}
+                        tintColor={isDarkMode ? '#FFFFFF' : '#000000'}
+                        progressBackgroundColor={isDarkMode ? '#222222' : '#FFFFFF'}
                     />
                 }
                 showsVerticalScrollIndicator={false}
@@ -411,21 +425,30 @@ const ChatsListScreen = () => {
             />
 
             {/* Search Modal */}
-            <Modal visible={showSearch} animationType="slide" transparent>
+            <Modal
+                visible={showSearch}
+                animationType="slide"
+                transparent
+                onRequestClose={() => {
+                    setShowSearch(false);
+                    setSearchQuery('');
+                    setSearchResults([]);
+                }}
+            >
                 <View style={[styles.searchModal, { backgroundColor: colors.background }]}>
                     <SafeAreaView style={styles.searchModalContent}>
                         {/* Search Header */}
                         <View style={[styles.searchHeader, { borderBottomColor: colors.border }]}>
-                            <TouchableOpacity
-                                style={styles.closeButton}
+                            <NeumorphicBackButton
                                 onPress={() => {
                                     setShowSearch(false);
                                     setSearchQuery('');
                                     setSearchResults([]);
                                 }}
-                            >
-                                <Icon name="CaretLeft" size={24} color={colors.text} />
-                            </TouchableOpacity>
+                                size={40}
+                                iconSize={24}
+                                style={{ marginRight: SPACING.md }}
+                            />
                             <TextInput
                                 style={[styles.searchInput, { backgroundColor: colors.card, color: colors.text }]}
                                 placeholder="Search by name or username..."
@@ -440,7 +463,7 @@ const ChatsListScreen = () => {
                         {/* Search Results */}
                         {searching ? (
                             <View style={styles.searchLoading}>
-                                <ActivityIndicator size="small" color={colors.primary} />
+                                <ActivityIndicator size="small" color={isDarkMode ? '#FFFFFF' : '#000000'} />
                                 <Text style={[styles.searchingText, { color: colors.textSecondary }]}>Searching...</Text>
                             </View>
                         ) : searchQuery.length > 0 && searchResults.length === 0 ? (
@@ -470,7 +493,7 @@ const ChatsListScreen = () => {
 
                         {startingChat && (
                             <View style={styles.startingChatOverlay}>
-                                <ActivityIndicator size="large" color={colors.primary} />
+                                <ActivityIndicator size="large" color={isDarkMode ? '#FFFFFF' : '#000000'} />
                                 <Text style={[styles.startingChatText, { color: colors.text }]}>Starting chat...</Text>
                             </View>
                         )}
@@ -490,7 +513,9 @@ const ChatsListScreen = () => {
                             style={styles.dropdownItem}
                             onPress={() => {
                                 setShowMessagesSettings(false);
-                                router.push('/chat/settings');
+                                setTimeout(() => {
+                                    router.push('/chat/settings');
+                                }, 200);
                             }}
                         >
                             <Icon name="Gear" size={20} color={colors.text} />
@@ -772,7 +797,7 @@ const styles = StyleSheet.create({
     },
     dropdownMenu: {
         position: 'absolute',
-        top: 60,
+        top: 115,
         right: SPACING.lg,
         borderRadius: BORDER_RADIUS.md,
         minWidth: 180,

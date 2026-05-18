@@ -146,7 +146,7 @@ const StartScreen = () => {
             transition={{ type: 'timing', duration: 1000, delay: 300 }}
             style={styles.logoSection}
           >
-            <AppLogo size={140} showGlow={true} />
+            <AppLogo size={96} showDot={false} />
             <View style={styles.textContainer}>
               <Text style={styles.appName}>NxtVibes</Text>
               <Text style={styles.tagline}>CONNECT. PLAN. TRAVEL.</Text>

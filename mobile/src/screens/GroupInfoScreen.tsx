@@ -10,6 +10,7 @@ import {
     TextInput,
     Modal,
     ScrollView,
+    BackHandler,
 } from 'react-native';
 import { FlashList } from "@shopify/flash-list";
 
@@ -129,6 +130,20 @@ const GroupInfoScreen = () => {
             setEditName(groupData.group_name);
         }
     }, [groupData]);
+
+    useEffect(() => {
+        const backAction = () => {
+            if (showAddMember) {
+                setShowAddMember(false);
+                setSearchQuery('');
+                setSearchResults([]);
+                return true;
+            }
+            return false;
+        };
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+        return () => backHandler.remove();
+    }, [showAddMember]);
 
     const updateGroupName = async () => {
         if (!editName.trim() || !isAdmin) return;
@@ -438,7 +453,16 @@ const GroupInfoScreen = () => {
             </ScrollView>
 
             {/* Add Member Modal */}
-            <Modal visible={showAddMember} animationType="slide" transparent>
+            <Modal
+                visible={showAddMember}
+                animationType="slide"
+                transparent
+                onRequestClose={() => {
+                    setShowAddMember(false);
+                    setSearchQuery('');
+                    setSearchResults([]);
+                }}
+            >
                 <View style={[styles.modalContainer, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
                     <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
                         <View style={styles.modalHeader}>

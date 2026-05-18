@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ScrollView, Dimensions, Animated, Platform, KeyboardAvoidingView } from 'react-native';
 import Icon from '../components/Icon';
+import { NeumorphicCloseButton } from '../components/NeumorphicIconButtons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useTheme } from '../contexts/ThemeContext';
@@ -90,7 +91,7 @@ const BOOKING_STATUSES = [
 ];
 
 const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalProps) => {
-    const { colors } = useTheme();
+    const { colors, isDarkMode } = useTheme();
     const [sortBy, setSortBy] = useState('newest');
     const [destination, setDestination] = useState('');
     const [startingFrom, setStartingFrom] = useState('');
@@ -266,23 +267,21 @@ const FilterModal = ({ visible, onClose, onApply, currentFilters }: FilterModalP
                             {/* Header */}
                             <View style={[styles.header, { borderBottomColor: colors.border }]}>
                                 <View style={styles.headerLeft}>
-                                    <View style={[styles.headerIcon, { backgroundColor: colors.primaryLight }]}>
-                                        <Icon name="Sliders" size={20} color={colors.primary} />
+                                    <View style={[styles.headerIcon, { backgroundColor: isDarkMode ? '#222222' : '#F3F4F6' }]}>
+                                        <Icon name="Sliders" size={20} color={isDarkMode ? '#FFFFFF' : '#000000'} />
                                     </View>
                                     <Text style={[styles.title, { color: colors.text }]}>Filters</Text>
                                     {activeCount > 0 && (
-                                        <View style={[styles.filterCountBadge, { backgroundColor: colors.primary }]}>
-                                            <Text style={styles.filterCountText}>{activeCount}</Text>
+                                        <View style={[styles.filterCountBadge, { backgroundColor: isDarkMode ? '#FFFFFF' : '#000000' }]}>
+                                            <Text style={[styles.filterCountText, { color: isDarkMode ? '#000000' : '#FFFFFF' }]}>{activeCount}</Text>
                                         </View>
                                     )}
                                 </View>
-                                <TouchableOpacity
+                                <NeumorphicCloseButton
                                     onPress={onClose}
-                                    style={styles.closeButton}
-                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                >
-                                    <Icon name="X" size={24} color={colors.text} />
-                                </TouchableOpacity>
+                                    size={42}
+                                    iconSize={22}
+                                />
                             </View>
 
                             <ScrollView style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">

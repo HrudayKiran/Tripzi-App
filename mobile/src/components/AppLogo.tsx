@@ -49,7 +49,7 @@ const AppLogo = ({ size = 80, style, showDot = true, showGlow = false }: AppLogo
                 ]}
             >
                 <Image
-                    source={require('../../assets/icon.png')}
+                    source={require('../../assets/applogo.png')}
                     style={{ width: iconSize, height: iconSize, borderRadius: borderRadius * 0.8 }}
                     contentFit="contain"
                 />

@@ -12,6 +12,7 @@ import * as Haptics from 'expo-haptics';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, STATUS, NEUTRAL } from '../styles';
 
 import { useRouter } from 'expo-router';
+import { NeumorphicBackButton } from '../components/NeumorphicIconButtons';
 
 const TAWKTO_TICKET_EMAIL = 'tickets@nxtvibes.p.tawk.email';
 
@@ -143,7 +144,7 @@ const SuggestFeatureScreen = () => {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top']}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -151,16 +152,9 @@ const SuggestFeatureScreen = () => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Icon name="CaretLeft" size={28} color={colors.text} />
-          </TouchableOpacity>
+          <NeumorphicBackButton onPress={() => router.back()} />
           <Text style={[styles.headerTitle, { color: colors.text }]}>Feedback</Text>
-          <View style={styles.placeholder} />
+          <View style={{ width: 45 }} />
         </View>
 
         {/* Tabs */}
@@ -415,16 +409,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-  },
-  backButton: {
-    width: TOUCH_TARGET.min,
-    height: TOUCH_TARGET.min,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 10 : 20,
+    paddingBottom: 20,
   },
   headerTitle: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.semibold },
-  placeholder: { width: TOUCH_TARGET.min },
   tabContainer: {
     flexDirection: 'row',
     marginHorizontal: SPACING.xl,

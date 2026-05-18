@@ -9,6 +9,7 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, ST
 import { supabase } from '../lib/supabase';
 import { workersApi } from '../lib/workersApi';
 import { resetDatabase } from '../database';
+import { NeumorphicBackButton } from '../components/NeumorphicIconButtons';
 
 const DELETE_REASONS = [
     'I have privacy concerns',
@@ -63,7 +64,7 @@ const DeleteAccountScreen = () => {
     };
 
     return (
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top']}>
             <KeyboardAvoidingView 
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={styles.container}
@@ -71,16 +72,9 @@ const DeleteAccountScreen = () => {
             <View style={styles.container}>
                 {/* Header */}
                 <View style={styles.header}>
-                    <TouchableOpacity
-                        style={styles.backButton}
-                        onPress={() => router.back()}
-                        activeOpacity={0.7}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                        <Icon name="CaretLeft" size={28} color={colors.text} />
-                    </TouchableOpacity>
+                    <NeumorphicBackButton onPress={() => router.back()} />
                     <Text style={[styles.title, { color: colors.text }]}>Delete Account</Text>
-                    <View style={styles.placeholder} />
+                    <View style={{ width: 45 }} />
                 </View>
 
                 <ScrollView 
@@ -235,22 +229,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: SPACING.lg,
-        paddingVertical: SPACING.sm,
-        marginBottom: SPACING.sm,
-        paddingTop: 25,
-    },
-    backButton: {
-        width: TOUCH_TARGET.min,
-        height: TOUCH_TARGET.min,
-        justifyContent: 'center',
-        alignItems: 'center',
+        paddingTop: Platform.OS === 'ios' ? 10 : 20,
+        paddingBottom: 20,
     },
     title: {
         fontSize: FONT_SIZE.lg,
         fontWeight: FONT_WEIGHT.semibold,
-    },
-    placeholder: {
-        width: TOUCH_TARGET.min,
     },
     scrollView: {
         flex: 1,

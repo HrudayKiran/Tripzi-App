@@ -231,22 +231,15 @@ const ProfileScreen = () => {
           </MotiView>
         </TouchableOpacity>
 
-        {/* My Trips Section */}
+        {/* My Itineraries Section */}
         <MotiView
           from={{ opacity: 0, translateY: 20 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{ type: 'timing', duration: 400, delay: 100 }}
           style={styles.menuSection}
         >
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>MY TRIPS</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>MY ITINERARIES</Text>
 
-          <MenuItem
-            icon="MapTrifold"
-            iconColor="#6366F1"
-            iconBg="#E0E7FF"
-            text="My Trips"
-            onPress={() => router.push('/trip/my-trips')}
-          />
           <MenuItem
             icon="Notebook"
             iconColor="#10B981"

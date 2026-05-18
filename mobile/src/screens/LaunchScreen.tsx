@@ -8,9 +8,6 @@ import AppLogo from '../components/AppLogo';
 import { MotiView } from 'moti';
 import { BRAND, NEUTRAL } from '../styles';
 
-const { width, height } = Dimensions.get('window');
-
-const MAP_PATTERN_URL = 'https://lh3.googleusercontent.com/aida-public/AB6AXuC2zQAHh1rkj2FOH71NZ5u5InNaK_bDbfoyy8O91U9Xmx-N7Qu3U5uuuQ386ncxJR4ZMfcZi2iglnw8Vqdn0-Q03VIJ0PK6sugqvEXcydEzxm1ulpMWGy1TwUT1RlTaUOhfBviPNgVlb_1sxRuF83KnmRjmtJFDQHj4gOSXjflVp27SQzE_Xm8m5r4kvyaGe2o-MucjQ5US4UfjqhIFXRIYfureKViEvplWqzhcJbeCbExN7KVaP8enyNUYXGu0PLp0gMNZ79-7WbA';
 
 const LaunchScreen = () => {
   const router = useRouter();
@@ -81,8 +78,8 @@ const LaunchScreen = () => {
             transition={{ type: 'timing', duration: 1000 }}
             style={styles.logoWrapper}
           >
-            {/* Logo with Glow */}
-            <AppLogo size={112} showDot={true} showGlow={true} />
+            {/* Logo matching WelcomeScreen exactly */}
+            <AppLogo size={96} showDot={false} />
 
             {/* Text */}
             <View style={styles.textContainer}>

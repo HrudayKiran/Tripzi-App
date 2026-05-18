@@ -1,9 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, TextInput, FlatList, Alert, Modal, ActivityIndicator, Platform, KeyboardAvoidingView, Keyboard, Share } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, TextInput, FlatList, Alert, Modal, ActivityIndicator, Platform, KeyboardAvoidingView, Keyboard, Share, BackHandler } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTripStore } from '../store/tripStore';
 import Icon from '../components/Icon';
+import {
+    NeumorphicBackButton,
+    NeumorphicFloatingButton,
+    NeumorphicCloseButton,
+    NeumorphicSearchButton,
+    NeumorphicLoadingIcon
+} from '../components/NeumorphicIconButtons';
 import { useRouter } from 'expo-router';
 import { MotiView, AnimatePresence } from 'moti';
 import MapView, { Marker } from 'react-native-maps';
@@ -246,24 +253,21 @@ export default function ItineraryViewScreen() {
         };
     }, []);
 
-    const handleScroll = (event: any) => {
-        const currentOffset = event.nativeEvent.contentOffset.y;
-        if (currentOffset < 0) return;
+    useEffect(() => {
+        const backAction = () => {
+            if (showUserSearch) {
+                setShowUserSearch(false);
+                setSearchQuery('');
+                setSearchResults([]);
+                return true;
+            }
+            return false;
+        };
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+        return () => backHandler.remove();
+    }, [showUserSearch]);
 
-        const diff = currentOffset - scrollOffsetRef.current;
-        if (Math.abs(diff) < 5) return;
-
-        if (currentOffset <= 20) {
-            setShowFloatingButton(true);
-        } else if (diff > 0) {
-            setShowFloatingButton(false);
-        } else {
-            setShowFloatingButton(true);
-        }
-
-        scrollOffsetRef.current = currentOffset;
-    };
-
+    // Scroll handling for FAB is now managed by drag events directly
     const tabs: TabType[] = ['Full Itinerary', 'checklist', 'notes', 'itinerary mapview'];
 
     const renderTabContent = () => {
@@ -341,7 +345,7 @@ export default function ItineraryViewScreen() {
         setSearchResults([]);
     };
 
-    const getAllData = () => {
+    const allData = React.useMemo(() => {
         const data = [];
         const duration = tripDraft?.duration || Math.max(...places.map(p => p.day), 1);
         const fromDate = tripDraft?.fromDate ? new Date(tripDraft.fromDate) : null;
@@ -360,7 +364,13 @@ export default function ItineraryViewScreen() {
             }
         }
         return data;
-    };
+    }, [places, tripDraft?.duration, tripDraft?.fromDate]);
+
+    const activePlacesMemo = React.useMemo(() => {
+        return selectedDayTab === 'All'
+            ? allData
+            : [...places].filter(p => p.day === parseInt(selectedDayTab.replace('Day ', ''))).sort((a, b) => a.order - b.order);
+    }, [places, selectedDayTab, allData]);
 
     const onTimeChange = (event: any, selectedDate?: Date) => {
         if (Platform.OS === 'android') {
@@ -474,9 +484,7 @@ export default function ItineraryViewScreen() {
             }))
         ];
 
-        const activePlaces = selectedDayTab === 'All'
-            ? getAllData()
-            : places.filter(p => p.day === parseInt(selectedDayTab.replace('Day ', ''))).sort((a, b) => a.order - b.order);
+        const activePlaces = activePlacesMemo;
 
         return (
             <View style={{ flex: 1 }}>
@@ -657,24 +665,9 @@ export default function ItineraryViewScreen() {
                     keyExtractor={item => item}
                     contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 150 }}
                     onDragEnd={handleCategoryDragEnd}
-                    onScroll={handleScroll}
-                    onScrollOffsetChange={(offset) => {
-                        const currentOffset = offset;
-                        if (currentOffset < 0) return;
-
-                        const diff = currentOffset - scrollOffsetRef.current;
-                        if (Math.abs(diff) < 5) return;
-
-                        if (currentOffset <= 20) {
-                            setShowFloatingButton(true);
-                        } else if (diff > 0) {
-                            setShowFloatingButton(false);
-                        } else {
-                            setShowFloatingButton(true);
-                        }
-
-                        scrollOffsetRef.current = currentOffset;
-                    }}
+                    onScrollBeginDrag={() => setShowFloatingButton(false)}
+                    onScrollEndDrag={() => setShowFloatingButton(true)}
+                    onMomentumScrollEnd={() => setShowFloatingButton(true)}
                     scrollEventThrottle={16}
                 />
             </View>
@@ -788,24 +781,7 @@ export default function ItineraryViewScreen() {
             >
                 {/* Header */}
                 <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-                    <TouchableOpacity
-                        onPress={() => router.back()}
-                        style={[
-                            styles.backButton,
-                            styles.neumorphicButton,
-                            {
-                                backgroundColor: colors.card,
-                                shadowColor: isDarkMode ? '#000' : '#d1d9e6',
-                                width: 45,
-                                height: 45,
-                                borderRadius: 22.5,
-                                justifyContent: 'center',
-                                alignItems: 'center'
-                            }
-                        ]}
-                    >
-                        <Icon name="CaretLeft" size={24} color={colors.text} />
-                    </TouchableOpacity>
+                    <NeumorphicBackButton style={styles.backButton} />
                     <View style={styles.headerTitleContainer}>
                         <Text style={[styles.headerTitle, { color: colors.text }]}>{tripDraft?.title || 'Trip Itinerary'}</Text>
                         <Text style={[styles.headerSubtitle, { color: colors.textSecondary, fontSize: 10 }]} numberOfLines={1}>
@@ -897,23 +873,14 @@ export default function ItineraryViewScreen() {
                 </View>
 
                 {activeTab === 'checklist' && showFloatingButton && !isKeyboardVisible && (
-                    <TouchableOpacity
+                    <NeumorphicFloatingButton
                         onPress={() => {
                             setChecklistModalMode('add_category');
                             setChecklistModalInputValue('');
                             setChecklistModalVisible(true);
                         }}
-                        style={[
-                            styles.floatingActionButton,
-                            styles.neumorphicButton,
-                            {
-                                backgroundColor: colors.card,
-                                shadowColor: isDarkMode ? '#000' : '#b8c4d9',
-                            }
-                        ]}
-                    >
-                        <Icon name="Plus" size={26} color={colors.primary} weight="bold" />
-                    </TouchableOpacity>
+                        bottom={10}
+                    />
                 )}
 
             </KeyboardAvoidingView>
@@ -939,14 +906,17 @@ export default function ItineraryViewScreen() {
                 />
             )}
             {/* User Search Modal */}
-            <Modal visible={showUserSearch} animationType="slide" transparent>
+            <Modal
+                visible={showUserSearch}
+                animationType="slide"
+                transparent
+                onRequestClose={() => setShowUserSearch(false)}
+            >
                 <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
                     <View style={{ backgroundColor: colors.card, height: '80%', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 20 }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                             <Text style={{ color: colors.text, fontSize: 20, fontWeight: 'bold' }}>Add Collaborators</Text>
-                            <TouchableOpacity onPress={() => setShowUserSearch(false)}>
-                                <Icon name="X" size={24} color={colors.text} />
-                            </TouchableOpacity>
+                            <NeumorphicCloseButton onPress={() => setShowUserSearch(false)} />
                         </View>
 
                         <View style={[styles.inputContainer, { marginBottom: 15 }]}>

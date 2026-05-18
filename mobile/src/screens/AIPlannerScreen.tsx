@@ -10,6 +10,7 @@ import { showUploadNotification, completeUploadNotification, failUploadNotificat
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import Icon from '../components/Icon';
+import { NeumorphicCloseButton } from '../components/NeumorphicIconButtons';
 import { SPACING, FONT_SIZE, FONT_WEIGHT, BORDER_RADIUS, NEUTRAL } from '../styles';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MotiView } from 'moti';
@@ -127,7 +128,7 @@ const EMPTY_STATE_SUGGESTIONS = [
 export default function AIPlannerScreen() {
     const router = useRouter();
     const params = useLocalSearchParams();
-    const { colors } = useTheme();
+    const { colors, isDarkMode } = useTheme();
     const insets = useSafeAreaInsets();
 
     // UI State
@@ -582,7 +583,7 @@ export default function AIPlannerScreen() {
                                 },
                             },
                             member_count: 1,
-                            created_by: currentUser.id, 
+                            created_by: currentUser.id,
                             last_message: { text: 'Trip created by NxtVibes AI!', sender_id: null, created_at: new Date().toISOString() },
                         });
 
@@ -593,10 +594,10 @@ export default function AIPlannerScreen() {
                             user: { _id: 'nxtvibes-ai', name: 'NxtVibes AI' },
                         };
                         await completeUploadNotification('Trip Posted!', `"${trip.title}" has been posted.`);
-                        
+
                         // Trigger sync
                         syncDatabase().catch(err => console.error('[AIPlanner] Post-creation sync failed:', err));
-                        
+
                         setMessages(prev => [successMsg, ...prev]);
                     } catch {
                         await failUploadNotification('Auto-post failed');
@@ -864,9 +865,11 @@ export default function AIPlannerScreen() {
             <Animated.View style={[styles.drawerContainer, { backgroundColor: colors.card, transform: [{ translateX: drawerAnim }], paddingTop: insets.top }]}>
                 <View style={styles.drawerHeader}>
                     <Text style={[styles.drawerTitle, { color: colors.text }]}>Chat History</Text>
-                    <TouchableOpacity onPress={toggleDrawer}>
-                        <Icon name="X" size={24} color={colors.text} />
-                    </TouchableOpacity>
+                    <NeumorphicCloseButton
+                        onPress={toggleDrawer}
+                        size={38}
+                        iconSize={22}
+                    />
                 </View>
                 <ScrollView contentContainerStyle={{ padding: SPACING.md }}>
                     <TouchableOpacity style={[styles.newChatBtn, { backgroundColor: colors.text }]} onPress={handleNewChat}>

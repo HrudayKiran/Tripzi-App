@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, RefreshControl, Modal, Dimensions, Animated, NativeSyntheticEvent, NativeScrollEvent, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, RefreshControl, Modal, Dimensions, Animated, NativeSyntheticEvent, NativeScrollEvent, Platform, ScrollView, BackHandler } from 'react-native';
 import { FlashList } from "@shopify/flash-list";
 
 const TypedFlashList = FlashList as any;
@@ -12,6 +12,7 @@ import TripCardSkeleton from '../components/TripCardSkeleton';
 import useTrips from '../hooks/useTrips';
 import usePermissions from '../hooks/usePermissions';
 import Icon from '../components/Icon';
+import { NeumorphicIconButton, NeumorphicSearchButton, NeumorphicLoadingIcon } from '../components/NeumorphicIconButtons';
 import { MotiView } from 'moti';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../contexts/ThemeContext';
@@ -49,7 +50,7 @@ const getActiveFilterCount = (filters: FilterOptions | null) => {
 const FeedScreen = () => {
     const { trips, loading, refetch, currentUserId } = useTrips();
     const { requestNotificationPermission } = usePermissions();
-    const { colors } = useTheme();
+    const { colors, isDarkMode } = useTheme();
     const insets = useSafeAreaInsets();
     const router = useRouter();
 
@@ -90,6 +91,21 @@ const FeedScreen = () => {
     const [searchedUsers, setSearchedUsers] = useState<any[]>([]);
     const [searchingUsers, setSearchingUsers] = useState(false);
     const [focusedTripId, setFocusedTripId] = useState<string | null>(null);
+
+    useEffect(() => {
+        const backAction = () => {
+            if (searchVisible) {
+                setSearchQuery('');
+                setSearchedUsers([]);
+                setSearchingUsers(false);
+                setSearchVisible(false);
+                return true;
+            }
+            return false;
+        };
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+        return () => backHandler.remove();
+    }, [searchVisible]);
 
     // Hoisted Modal State
     const [activeModal, setActiveModal] = useState<'none' | 'report'>('none');
@@ -219,36 +235,37 @@ const FeedScreen = () => {
                 <Text style={[styles.headerTitle, { color: colors.text }]}>NxtVibes</Text>
             </View>
             <View style={styles.headerActions}>
-                <TouchableOpacity
-                    style={[styles.iconButton, { backgroundColor: colors.card }]}
+                <NeumorphicSearchButton
                     onPress={() => setSearchVisible(true)}
-                    testID="search-button"
-                >
-                    <Icon name="MagnifyingGlass" size={22} color={colors.text} />
-                </TouchableOpacity>
+                    size={42}
+                    iconSize={22}
+                />
 
-                <TouchableOpacity
-                    style={[styles.iconButton, { backgroundColor: colors.card }]}
-                    onPress={() => setFilterVisible(true)}
-                    testID="filter-button"
-                >
-                    <Icon name="Sliders" size={22} color={activeFilterCount > 0 ? colors.primary : colors.text} />
+                <View style={{ position: 'relative' }}>
+                    <NeumorphicIconButton
+                        onPress={() => setFilterVisible(true)}
+                        iconName="Sliders"
+                        size={42}
+                        iconSize={22}
+                        bgOverride={activeFilterCount > 0 ? (isDarkMode ? '#000000' : '#FFFFFF') : undefined}
+                        iconColorOverride={activeFilterCount > 0 ? (isDarkMode ? '#FFFFFF' : '#000000') : undefined}
+                    />
                     {activeFilterCount > 0 && (
-                        <View style={[styles.filterBadge, { backgroundColor: colors.primary }]}>
-                            <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+                        <View style={[styles.filterBadge, { backgroundColor: isDarkMode ? '#FFFFFF' : '#000000' }]}>
+                            <Text style={[styles.filterBadgeText, { color: isDarkMode ? '#000000' : '#FFFFFF' }]}>{activeFilterCount}</Text>
                         </View>
                     )}
-                </TouchableOpacity>
+                </View>
 
-                <TouchableOpacity
-                    style={[styles.notifyButton, { backgroundColor: colors.card }]}
-                    onPress={() => setNotificationsVisible(true)}
-                    activeOpacity={0.7}
-                    testID="notifications-button"
-                >
-                    <Icon name="Bell" size={22} color={colors.text} />
+                <View style={{ position: 'relative' }}>
+                    <NeumorphicIconButton
+                        onPress={() => setNotificationsVisible(true)}
+                        iconName="Bell"
+                        size={42}
+                        iconSize={22}
+                    />
                     {hasNotifications && <View style={[styles.notificationDot, { backgroundColor: colors.error }]} />}
-                </TouchableOpacity>
+                </View>
             </View>
         </Animated.View>
     );
@@ -263,9 +280,9 @@ const FeedScreen = () => {
             {/* Sticky Header */}
             {renderStickyHeader()}
             {loading ? (
-                <ScrollView 
-                    style={{ flex: 1 }} 
-                    contentContainerStyle={{ padding: SPACING.md, paddingTop: HEADER_HEIGHT + SPACING.md }} 
+                <ScrollView
+                    style={{ flex: 1 }}
+                    contentContainerStyle={{ padding: SPACING.md, paddingTop: HEADER_HEIGHT + SPACING.md }}
                     showsVerticalScrollIndicator={false}
                 >
                     <TripCardSkeleton />
@@ -285,19 +302,43 @@ const FeedScreen = () => {
                             transition={{ type: 'timing', duration: 300 }}
                             style={styles.emptyContainer}
                         >
-                            <View style={[styles.emptyIcon, { backgroundColor: colors.primaryLight }]}>
-                                <Icon name="Compass" size={48} color={colors.primary} />
+                            <View style={[
+                                styles.emptyIcon,
+                                {
+                                    backgroundColor: isDarkMode ? '#000000' : '#FFFFFF',
+                                    shadowColor: isDarkMode ? '#000000' : '#b8c4d9',
+                                    shadowOffset: { width: 3, height: 3 },
+                                    shadowOpacity: 0.8,
+                                    shadowRadius: 5,
+                                    elevation: 4,
+                                }
+                            ]}>
+                                <Icon name="Compass" size={48} color={isDarkMode ? '#FFFFFF' : '#000000'} />
                             </View>
-                            <Text style={[styles.emptyTitle, { color: colors.text }]}>No trips found</Text>
+                            <Text style={[styles.emptyTitle, { color: colors.text }]}>No itineraries found</Text>
                             <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
                                 Try adjusting your filters or search
                             </Text>
                             {hasActiveFilters && (
                                 <TouchableOpacity
-                                    style={[styles.clearButton, { backgroundColor: colors.primary }]}
+                                    style={[
+                                        styles.clearButton,
+                                        {
+                                            backgroundColor: isDarkMode ? '#000000' : '#FFFFFF',
+                                            shadowColor: isDarkMode ? '#000000' : '#b8c4d9',
+                                            shadowOffset: { width: 3, height: 3 },
+                                            shadowOpacity: 0.8,
+                                            shadowRadius: 5,
+                                            elevation: 4,
+                                            borderColor: isDarkMode ? '#222222' : '#E5E7EB',
+                                            borderWidth: 1,
+                                        }
+                                    ]}
                                     onPress={clearFilters}
                                 >
-                                    <Text style={styles.clearButtonText}>Clear Filters</Text>
+                                    <Text style={[styles.clearButtonText, { color: isDarkMode ? '#FFFFFF' : '#000000' }]}>
+                                        Clear Filters
+                                    </Text>
                                 </TouchableOpacity>
                             )}
                         </MotiView>
@@ -306,8 +347,10 @@ const FeedScreen = () => {
                         <RefreshControl
                             refreshing={refreshing}
                             onRefresh={onRefresh}
-                            colors={[colors.primary]}
-                            tintColor={colors.primary}
+                            colors={[isDarkMode ? '#FFFFFF' : '#000000']}
+                            tintColor={isDarkMode ? '#FFFFFF' : '#000000'}
+                            progressBackgroundColor={isDarkMode ? '#222222' : '#FFFFFF'}
+                            progressViewOffset={HEADER_HEIGHT}
                         />
                     }
                     renderItem={() => null}
@@ -340,8 +383,10 @@ const FeedScreen = () => {
                         <RefreshControl
                             refreshing={refreshing}
                             onRefresh={onRefresh}
-                            colors={[colors.primary]}
-                            tintColor={colors.primary}
+                            colors={[isDarkMode ? '#FFFFFF' : '#000000']}
+                            tintColor={isDarkMode ? '#FFFFFF' : '#000000'}
+                            progressBackgroundColor={isDarkMode ? '#222222' : '#FFFFFF'}
+                            progressViewOffset={HEADER_HEIGHT}
                         />
                     }
                     estimatedItemSize={100}
@@ -349,7 +394,17 @@ const FeedScreen = () => {
             )}
 
             {/* Search Modal - Inlined to prevent re-mounting on state change */}
-            <Modal visible={searchVisible} animationType="slide" transparent>
+            <Modal
+                visible={searchVisible}
+                animationType="slide"
+                transparent
+                onRequestClose={() => {
+                    setSearchQuery('');
+                    setSearchedUsers([]);
+                    setSearchingUsers(false);
+                    setSearchVisible(false);
+                }}
+            >
                 <View style={[styles.searchModalContainer, { backgroundColor: colors.background }]}>
                     <SafeAreaView style={{ flex: 1 }}>
                         <View style={styles.searchModalHeader}>
@@ -378,7 +433,7 @@ const FeedScreen = () => {
                                 }}
                                 style={styles.cancelButton}
                             >
-                                <Text style={[styles.cancelText, { color: colors.primary }]}>Cancel</Text>
+                                <Text style={[styles.cancelText, { color: isDarkMode ? '#FFFFFF' : '#000000' }]}>Cancel</Text>
                             </TouchableOpacity>
                         </View>
 
@@ -386,7 +441,7 @@ const FeedScreen = () => {
                             {/* Loading State */}
                             {searchingUsers && searchQuery.length >= 2 && (
                                 <View style={{ padding: 40, alignItems: 'center' }}>
-                                    <ActivityIndicator size="large" color={colors.primary} />
+                                    <NeumorphicLoadingIcon size={50} iconSize={24} style={{ marginBottom: 12 }} />
                                     <Text style={{ marginTop: 16, color: colors.textSecondary, fontSize: 16 }}>Searching...</Text>
                                 </View>
                             )}

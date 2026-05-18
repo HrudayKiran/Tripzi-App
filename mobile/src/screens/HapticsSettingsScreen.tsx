@@ -4,7 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import { useTheme } from '../contexts/ThemeContext';
 import { useRouter } from 'expo-router';
-import { SPACING, BORDER_RADIUS, FONT_SIZE } from '../styles';
+import { NeumorphicBackButton, NeumorphicToggleLeftButton, NeumorphicToggleRightButton } from '../components/NeumorphicIconButtons';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { getBooleanPreference, setBooleanPreference, getStringPreference, setStringPreference, PREFERENCE_KEYS } from '../utils/preferences';
 import * as Haptics from 'expo-haptics';
 import { MotiView } from 'moti';
@@ -108,31 +109,41 @@ const HapticsSettingsScreen = () => {
         }
     };
 
-    const AnimatedSwitch = ({ value, onValueChange }: { value: boolean, onValueChange: (v: boolean) => void }) => (
-        <TouchableOpacity onPress={() => onValueChange(!value)} activeOpacity={0.8}>
+    const AnimatedSwitch = ({ value, onValueChange }: { value: boolean, onValueChange: (v: boolean) => void }) => {
+        const handlePress = async () => {
+            onValueChange(!value);
+            try {
+                const enabled = await getBooleanPreference(PREFERENCE_KEYS.hapticsEnabled, true);
+                if (enabled) {
+                    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
+            } catch {
+                // Ignore
+            }
+        };
+
+        return (
             <MotiView
                 animate={{
-                    scale: value ? 1.1 : 1,
+                    scale: value ? 1 : 1,
                 }}
                 transition={{ type: 'spring', damping: 12, stiffness: 150 }}
             >
-                <Icon 
-                    name={value ? "ToggleRight" : "ToggleLeft"} 
-                    size={36} 
-                    color={value ? activeColor : colors.textSecondary} 
-                />
+                {value ? (
+                    <NeumorphicToggleRightButton onPress={handlePress} size={46} iconSize={30} />
+                ) : (
+                    <NeumorphicToggleLeftButton onPress={handlePress} size={46} iconSize={30} />
+                )}
             </MotiView>
-        </TouchableOpacity>
-    );
+        );
+    };
 
     return (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top']}>
             <View style={styles.header}>
-                <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                    <Icon name="CaretLeft" size={24} color={colors.text} />
-                </TouchableOpacity>
+                <NeumorphicBackButton onPress={() => router.back()} />
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Haptics & Feedback</Text>
-                <View style={{ width: 40 }} />
+                <View style={{ width: 45 }} />
             </View>
 
             <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -234,11 +245,11 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: SPACING.md,
-        height: 56,
+        paddingHorizontal: SPACING.lg,
+        paddingTop: Platform.OS === 'ios' ? 10 : 20,
+        paddingBottom: 20,
     },
-    backBtn: { padding: SPACING.xs },
-    headerTitle: { fontSize: FONT_SIZE.xl, fontWeight: '700' },
+    headerTitle: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.semibold },
     sectionTitle: {
         fontSize: 12,
         fontWeight: '600',

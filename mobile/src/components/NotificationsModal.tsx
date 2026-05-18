@@ -5,6 +5,7 @@ import { FlashList } from "@shopify/flash-list";
 const TypedFlashList = FlashList as any;
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
+import { NeumorphicCloseButton, NeumorphicLoadingIcon } from '../components/NeumorphicIconButtons';
 import { MotiView } from 'moti';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '../contexts/ThemeContext';
@@ -128,7 +129,7 @@ const NotificationItem = ({
 };
 
 const NotificationsModal = ({ visible, onClose, onNotificationsChange }: NotificationsModalProps) => {
-    const { colors } = useTheme();
+    const { colors, isDarkMode } = useTheme();
     const router = useRouter();
     const slideAnim = useRef(new Animated.Value(width)).current;
 
@@ -215,8 +216,8 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                             {/* Header */}
                             <View style={[styles.header, { borderBottomColor: colors.border }]}>
                                 <View style={styles.headerLeft}>
-                                    <View style={[styles.headerIcon, { backgroundColor: colors.primaryLight }]}>
-                                        <Icon name="Bell" size={20} color={colors.primary} />
+                                    <View style={[styles.headerIcon, { backgroundColor: isDarkMode ? '#222222' : '#F3F4F6' }]}>
+                                        <Icon name="Bell" size={20} color={isDarkMode ? '#FFFFFF' : '#000000'} />
                                     </View>
                                     <Text style={[styles.title, { color: colors.text }]}>Notifications</Text>
                                     {unreadCount > 0 && (
@@ -225,18 +226,16 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                                         </View>
                                     )}
                                 </View>
-                                <TouchableOpacity
+                                <NeumorphicCloseButton
                                     onPress={onClose}
-                                    style={styles.closeButton}
-                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                >
-                                    <Icon name="X" size={24} color={colors.text} />
-                                </TouchableOpacity>
+                                    size={42}
+                                    iconSize={22}
+                                />
                             </View>
 
                             {loading ? (
                                 <View style={styles.loadingContainer}>
-                                    <ActivityIndicator size="large" color={colors.primary} />
+                                    <NeumorphicLoadingIcon size={50} iconSize={24} />
                                 </View>
                             ) : notifications.length > 0 ? (
                                 <>
@@ -285,8 +284,18 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                             ) : (
                                 /* Empty State */
                                 <View style={styles.emptyState}>
-                                    <View style={[styles.emptyIcon, { backgroundColor: colors.primaryLight }]}>
-                                        <Icon name="BellSlash" size={48} color={colors.primary} />
+                                    <View style={[
+                                        styles.emptyIcon,
+                                        {
+                                            backgroundColor: isDarkMode ? '#000000' : '#FFFFFF',
+                                            shadowColor: isDarkMode ? '#000000' : '#b8c4d9',
+                                            shadowOffset: { width: 3, height: 3 },
+                                            shadowOpacity: 0.8,
+                                            shadowRadius: 5,
+                                            elevation: 4,
+                                        }
+                                    ]}>
+                                        <Icon name="BellSlash" size={48} color={isDarkMode ? '#FFFFFF' : '#000000'} />
                                     </View>
                                     <Text style={[styles.emptyTitle, { color: colors.text }]}>All caught up!</Text>
                                     <Text style={[styles.emptyText, { color: colors.textSecondary }]}>

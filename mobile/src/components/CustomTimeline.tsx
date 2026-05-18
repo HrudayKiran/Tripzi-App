@@ -5,6 +5,14 @@ import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Icon from './Icon';
+import {
+    NeumorphicBackButton,
+    NeumorphicFloatingButton,
+    NeumorphicLoadingIcon,
+    NeumorphicSearchButton,
+    NeumorphicToggleLeftButton,
+    NeumorphicToggleRightButton
+} from './NeumorphicIconButtons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
@@ -481,7 +489,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
     if (loading && !trip) {
         return (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
-                <ActivityIndicator size="large" color={colors.primary} />
+                <NeumorphicLoadingIcon />
             </View>
         );
     }
@@ -583,22 +591,24 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
             return { label: `Day ${i + 1}`, date: dateStr, dayNum: i + 1 };
         })
     ];
-    const activePlaces = selectedTab === 'All'
-        ? places.sort((a, b) => a.day === b.day ? a.order - b.order : a.day - b.day)
-        : places.filter(p => p.day === parseInt(selectedTab.replace('Day ', ''))).sort((a, b) => a.order - b.order);
+    const activePlaces = React.useMemo(() => {
+        return selectedTab === 'All'
+            ? [...places].sort((a, b) => a.day === b.day ? a.order - b.order : a.day - b.day)
+            : [...places].filter(p => p.day === parseInt(selectedTab.replace('Day ', ''))).sort((a, b) => a.order - b.order);
+    }, [places, selectedTab]);
 
-    const getAllData = () => {
+    const allData = React.useMemo(() => {
         const data = [];
-        const duration = trip?.duration || 1;
-        const fromDate = trip?.fromDate ? new Date(trip.fromDate) : null;
+        const dur = trip?.duration || 1;
+        const fromD = trip?.fromDate ? new Date(trip.fromDate) : null;
 
-        for (let day = 1; day <= duration; day++) {
+        for (let day = 1; day <= dur; day++) {
             const dayPlaces = places.filter(p => p.day === day).sort((a, b) => a.order - b.order);
             if (dayPlaces.length > 0) {
                 let dateStr = '';
-                if (fromDate) {
-                    const currentDate = new Date(fromDate);
-                    currentDate.setDate(fromDate.getDate() + day - 1);
+                if (fromD) {
+                    const currentDate = new Date(fromD);
+                    currentDate.setDate(fromD.getDate() + day - 1);
                     dateStr = currentDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
                 }
                 data.push({ id: `day-${day}-header`, isHeader: true, day, dateStr });
@@ -606,7 +616,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
             }
         }
         return data;
-    };
+    }, [places, trip?.duration, trip?.fromDate]);
 
     const handlePlacePress = (item: StructuredPlace) => {
         if (item.latitude && item.longitude && mapRef.current) {
@@ -869,27 +879,14 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                         ))}
                     </MapView>
 
-                    <TouchableOpacity
-                        onPress={() => router.back()}
+                    <NeumorphicBackButton
+                        size={40}
                         style={{
                             position: 'absolute',
                             top: 2,
                             left: 16,
-                            backgroundColor: colors.card,
-                            borderRadius: 20,
-                            width: 40,
-                            height: 40,
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            shadowColor: '#000',
-                            shadowOffset: { width: 0, height: 2 },
-                            shadowOpacity: 0.25,
-                            shadowRadius: 3.84,
-                            elevation: 5,
                         }}
-                    >
-                        <Icon name="CaretLeft" size={24} color={colors.text} />
-                    </TouchableOpacity>
+                    />
 
                     <View style={{
                         position: 'absolute',
@@ -936,24 +933,10 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                             </MotiView>
                         )}
 
-                        <TouchableOpacity
+                        <NeumorphicSearchButton
                             onPress={() => setIsSearchVisible(!isSearchVisible)}
-                            style={{
-                                backgroundColor: colors.card,
-                                borderRadius: 20,
-                                width: 40,
-                                height: 40,
-                                justifyContent: 'center',
-                                alignItems: 'center',
-                                shadowColor: '#000',
-                                shadowOffset: { width: 0, height: 2 },
-                                shadowOpacity: 0.25,
-                                shadowRadius: 3.84,
-                                elevation: 5,
-                            }}
-                        >
-                            <Icon name="MagnifyingGlass" size={20} color={colors.text} />
-                        </TouchableOpacity>
+                            size={40}
+                        />
                     </View>
 
                     {isSearchVisible && searchResults.length > 0 && (
@@ -1064,7 +1047,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                 <View style={{ flex: 1 }}>
                     {selectedTab === 'All' ? (
                         <DraggableFlatList
-                            data={getAllData()}
+                            data={allData}
                             renderItem={renderDraggableItem}
                             keyExtractor={item => item.id}
                             onDragEnd={({ data }) => {
@@ -1114,19 +1097,12 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
             </KeyboardAvoidingView>
 
             {isFABVisible && (
-                <TouchableOpacity
+                <NeumorphicFloatingButton
                     onPress={handleAddDay}
-                    style={[
-                        styles.floatingAddButton,
-                        {
-                            backgroundColor: colors.card,
-                            bottom: 100,
-                            shadowColor: '#000'
-                        }
-                    ]}
-                >
-                    <Icon name="Plus" size={24} color={colors.primary} weight="bold" />
-                </TouchableOpacity>
+                    bottom={100}
+                    size={50}
+                    iconSize={24}
+                />
             )}
 
             {!isKeyboardVisible && (

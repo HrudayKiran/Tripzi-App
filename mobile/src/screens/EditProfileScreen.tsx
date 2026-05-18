@@ -21,6 +21,8 @@ import { supabase } from '../lib/supabase';
 import { workersApi } from '../lib/workersApi';
 import { LinearGradient } from 'expo-linear-gradient';
 import { database } from '../database';
+import { NeumorphicBackButton } from '../components/NeumorphicIconButtons';
+import { MotiView } from 'moti';
 
 
 import { useTheme } from '../contexts/ThemeContext';
@@ -322,35 +324,75 @@ const EditProfileScreen = () => {
 
     };
 
+    const isDark = colors.background !== '#FFFFFF' && colors.background !== '#ffffff';
+
+    const SkeletonBlock = ({ style }: { style: any }) => (
+        <MotiView
+            from={{ opacity: 0.4 }}
+            animate={{ opacity: 1 }}
+            transition={{
+                type: 'timing',
+                duration: 1000,
+                loop: true,
+                repeatReverse: true,
+            }}
+            style={[style, { backgroundColor: isDark ? '#262626' : '#E5E7EB' }]}
+        />
+    );
+
     if (loading) {
         return (
             <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top']}>
-                <View style={styles.loaderWrap}>
-                    <ActivityIndicator size="large" color={colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000'} />
+                <View style={styles.header}>
+                    <NeumorphicBackButton onPress={() => router.back()} />
+                    <Text style={[styles.headerTitle, { color: colors.text }]}>Edit Profile</Text>
+                    <View style={{ width: 45 }} />
                 </View>
+
+                <ScrollView
+                    contentContainerStyle={styles.content}
+                    showsVerticalScrollIndicator={false}
+                >
+                    <View style={styles.skeletonContainer}>
+                        {/* Avatar Section Skeleton */}
+                        <View style={styles.avatarSection}>
+                            <SkeletonBlock style={styles.skeletonAvatar} />
+                            <SkeletonBlock style={styles.skeletonChangePhotoBtn} />
+                        </View>
+
+                        {/* Form Inputs Skeletons */}
+                        {[1, 2, 3, 4].map((i) => (
+                            <View key={i} style={styles.skeletonFormGroup}>
+                                <SkeletonBlock style={styles.skeletonLabel} />
+                                <SkeletonBlock style={styles.skeletonInput} />
+                            </View>
+                        ))}
+
+                        {/* Bio Input Skeleton */}
+                        <View style={styles.skeletonFormGroup}>
+                            <SkeletonBlock style={styles.skeletonLabel} />
+                            <SkeletonBlock style={styles.skeletonBioInput} />
+                        </View>
+
+                        {/* Save Button Skeleton */}
+                        <SkeletonBlock style={styles.skeletonSaveButton} />
+                    </View>
+                </ScrollView>
             </SafeAreaView>
         );
     }
 
     return (
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top']}>
             <KeyboardAvoidingView
                 style={styles.keyboardContainer}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
             >
                 <View style={styles.header}>
-                    <TouchableOpacity
-                        style={[styles.headerBtn]}
-                        onPress={() => router.back()}
-                        activeOpacity={0.8}
-                    >
-                        <Icon name="CaretLeft" size={24} color={colors.text} />
-                    </TouchableOpacity>
-
-
+                    <NeumorphicBackButton onPress={() => router.back()} />
                     <Text style={[styles.headerTitle, { color: colors.text }]}>Edit Profile</Text>
-                    <View style={styles.headerBtn} />
+                    <View style={{ width: 45 }} />
                 </View>
 
                 <ScrollView
@@ -452,19 +494,13 @@ const EditProfileScreen = () => {
 const styles = StyleSheet.create({
     safeArea: { flex: 1 },
     keyboardContainer: { flex: 1 },
-    loaderWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: SPACING.lg,
-        paddingVertical: SPACING.sm,
-    },
-    headerBtn: {
-        width: TOUCH_TARGET.min,
-        height: TOUCH_TARGET.min,
-        justifyContent: 'center',
-        alignItems: 'center',
+        paddingTop: Platform.OS === 'ios' ? 10 : 20,
+        paddingBottom: 20,
     },
     headerTitle: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.semibold },
     content: {
@@ -531,6 +567,44 @@ const styles = StyleSheet.create({
         color: NEUTRAL.white,
         fontSize: FONT_SIZE.md,
         fontWeight: FONT_WEIGHT.bold,
+    },
+    skeletonContainer: {
+        paddingTop: SPACING.md,
+    },
+    skeletonAvatar: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        marginBottom: SPACING.sm,
+    },
+    skeletonChangePhotoBtn: {
+        width: 120,
+        height: 32,
+        borderRadius: BORDER_RADIUS.md,
+        marginTop: SPACING.xs,
+    },
+    skeletonFormGroup: {
+        marginBottom: SPACING.md,
+    },
+    skeletonLabel: {
+        width: 80,
+        height: 14,
+        borderRadius: BORDER_RADIUS.sm,
+        marginBottom: SPACING.xs,
+        marginTop: SPACING.sm,
+    },
+    skeletonInput: {
+        height: 52,
+        borderRadius: BORDER_RADIUS.md,
+    },
+    skeletonBioInput: {
+        height: 100,
+        borderRadius: BORDER_RADIUS.md,
+    },
+    skeletonSaveButton: {
+        height: 56,
+        borderRadius: BORDER_RADIUS.lg,
+        marginTop: SPACING.xl,
     },
 });
 

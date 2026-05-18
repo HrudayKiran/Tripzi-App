@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, ActivityIndicator } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
-
+import { useTheme } from '../contexts/ThemeContext';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 
 const DEFAULT_REGION = {
@@ -13,8 +13,89 @@ const DEFAULT_REGION = {
   longitudeDelta: 12,
 };
 
+const darkMapStyle = [
+  {
+    "elementType": "geometry",
+    "stylers": [{ "color": "#1c1c1e" }]
+  },
+  {
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#8e8e93" }]
+  },
+  {
+    "elementType": "labels.text.stroke",
+    "stylers": [{ "color": "#1c1c1e" }]
+  },
+  {
+    "featureType": "administrative",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#3a3a3c" }]
+  },
+  {
+    "featureType": "administrative.country",
+    "elementType": "geometry.stroke",
+    "stylers": [{ "color": "#3a3a3c" }]
+  },
+  {
+    "featureType": "landscape.man_made",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#1c1c1e" }]
+  },
+  {
+    "featureType": "landscape.natural",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#1c1c1e" }]
+  },
+  {
+    "featureType": "poi",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#2c2c2e" }]
+  },
+  {
+    "featureType": "poi",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#8e8e93" }]
+  },
+  {
+    "featureType": "road",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#2c2c2e" }]
+  },
+  {
+    "featureType": "road",
+    "elementType": "geometry.stroke",
+    "stylers": [{ "color": "#1c1c1e" }]
+  },
+  {
+    "featureType": "road",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#8e8e93" }]
+  },
+  {
+    "featureType": "road.highway",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#3a3a3c" }]
+  },
+  {
+    "featureType": "road.highway",
+    "elementType": "geometry.stroke",
+    "stylers": [{ "color": "#2c2c2e" }]
+  },
+  {
+    "featureType": "water",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#0a0a0c" }]
+  },
+  {
+    "featureType": "water",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#3a3a3c" }]
+  }
+];
+
 const MapScreen = () => {
   const router = useRouter();
+  const { colors, isDarkMode } = useTheme();
   const params = useLocalSearchParams();
   const [location, setLocation] = useState(null);
   const [region, setRegion] = useState(DEFAULT_REGION);
@@ -64,17 +145,18 @@ const MapScreen = () => {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#8A2BE2" />
-          <Text style={styles.loadingText}>Loading map...</Text>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading map...</Text>
         </View>
       ) : (
         <MapView
           style={styles.map}
           initialRegion={region}
           onPress={(e) => setLocation(e.nativeEvent.coordinate)}
+          customMapStyle={isDarkMode ? darkMapStyle : undefined}
         >
           {location && (
             <Marker
@@ -86,13 +168,13 @@ const MapScreen = () => {
         </MapView>
       )}
       {locationPermissionDenied && (
-        <View style={styles.permissionBanner}>
-          <Text style={styles.permissionText}>
+        <View style={[styles.permissionBanner, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
+          <Text style={[styles.permissionText, { color: colors.text }]}>
             Location permission is off. Pick a place manually on the map.
           </Text>
         </View>
       )}
-      <TouchableOpacity style={styles.sendButton} onPress={handleSelectLocation}>
+      <TouchableOpacity style={[styles.sendButton, { backgroundColor: colors.primary }]} onPress={handleSelectLocation}>
         <Text style={styles.sendButtonText}>Send Location</Text>
       </TouchableOpacity>
     </View>

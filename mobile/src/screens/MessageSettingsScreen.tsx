@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
+import { NeumorphicBackButton, NeumorphicToggleLeftButton, NeumorphicToggleRightButton } from '../components/NeumorphicIconButtons';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { supabase } from '../lib/supabase';
@@ -50,22 +51,22 @@ const MessageSettingsScreen = () => {
         }
     };
 
-    const AnimatedSwitch = ({ value, onValueChange }: { value: boolean, onValueChange: (v: boolean) => void }) => (
-        <TouchableOpacity onPress={() => onValueChange(!value)} activeOpacity={0.8}>
+    const AnimatedSwitch = ({ value, onValueChange }: { value: boolean, onValueChange: (v: boolean) => void }) => {
+        return (
             <MotiView
                 animate={{
-                    scale: value ? 1.1 : 1,
+                    scale: value ? 1 : 1,
                 }}
                 transition={{ type: 'spring', damping: 12, stiffness: 150 }}
             >
-                <Icon 
-                    name={value ? "ToggleRight" : "ToggleLeft"} 
-                    size={36} 
-                    color={value ? activeColor : colors.textSecondary} 
-                />
+                {value ? (
+                    <NeumorphicToggleRightButton onPress={() => onValueChange(false)} size={46} iconSize={30} />
+                ) : (
+                    <NeumorphicToggleLeftButton onPress={() => onValueChange(true)} size={46} iconSize={30} />
+                )}
             </MotiView>
-        </TouchableOpacity>
-    );
+        );
+    };
 
     const SettingItem = ({ icon, title, subtitle, value, onValueChange }) => (
         <View style={[styles.settingItem, { backgroundColor: colors.card }]}>
@@ -88,9 +89,7 @@ const MessageSettingsScreen = () => {
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
             <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                    <Icon name="CaretLeft" size={24} color={colors.text} />
-                </TouchableOpacity>
+                <NeumorphicBackButton onPress={() => router.back()} size={40} iconSize={24} style={{ marginRight: SPACING.md }} />
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Message Settings</Text>
             </View>
 
@@ -157,6 +156,8 @@ const styles = StyleSheet.create({
         fontSize: FONT_SIZE.xs,
         marginTop: 2,
     },
+    switchBg: {},
+    switchThumb: {},
 });
 
 export default MessageSettingsScreen;

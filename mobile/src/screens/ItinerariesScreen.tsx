@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import Icon from '../components/Icon';
 import { useRouter } from 'expo-router';
 import { MotiView } from 'moti';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
+import { NeumorphicBackButton } from '../components/NeumorphicIconButtons';
 
 const ItinerariesScreen = () => {
     const { colors, isDarkMode } = useTheme();
@@ -17,7 +19,7 @@ const ItinerariesScreen = () => {
                 <Icon 
                     name={activeTab === 'Shared' ? 'Users' : activeTab === 'Posted' ? 'PaperPlaneTilt' : 'BookmarkSimple'} 
                     size={48} 
-                    color={colors.primary} 
+                    color={isDarkMode ? '#FFFFFF' : '#000000'} 
                 />
             </View>
             <Text style={[styles.emptyTitle, { color: colors.text }]}>
@@ -31,31 +33,23 @@ const ItinerariesScreen = () => {
                     : "Itineraries you've saved for inspiration will appear here."}
             </Text>
             <TouchableOpacity 
-                style={[styles.actionButton, { backgroundColor: colors.primary }]}
+                style={[styles.actionButton, { backgroundColor: isDarkMode ? '#FFFFFF' : '#000000' }]}
                 onPress={() => router.push('/(tabs)/create')}
             >
-                <Text style={styles.actionButtonText}>Create New Trip</Text>
+                <Text style={[styles.actionButtonText, { color: isDarkMode ? '#000000' : '#FFFFFF' }]}>Create New Trip</Text>
             </TouchableOpacity>
         </View>
     );
 
+    const themeActiveBg = isDarkMode ? '#FFFFFF' : '#000000';
+    const themeActiveText = isDarkMode ? '#000000' : '#FFFFFF';
+
     return (
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top']}>
             <View style={styles.container}>
                 {/* Header */}
                 <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                    <TouchableOpacity 
-                        onPress={() => router.back()}
-                        style={[
-                            styles.backButton,
-                            { 
-                                backgroundColor: colors.card,
-                                shadowColor: isDarkMode ? '#000' : '#d1d9e6'
-                            }
-                        ]}
-                    >
-                        <Icon name="CaretLeft" size={24} color={colors.text} />
-                    </TouchableOpacity>
+                    <NeumorphicBackButton onPress={() => router.back()} />
                     <Text style={[styles.headerTitle, { color: colors.text }]}>Itineraries</Text>
                     <View style={{ width: 45 }} />
                 </View>
@@ -67,12 +61,12 @@ const ItinerariesScreen = () => {
                             onPress={() => setActiveTab('Shared')}
                             style={[
                                 styles.tab, 
-                                activeTab === 'Shared' && [styles.activeTab, { backgroundColor: colors.primary }]
+                                activeTab === 'Shared' && [styles.activeTab, { backgroundColor: themeActiveBg }]
                             ]}
                         >
                             <Text style={[
                                 styles.tabText, 
-                                { color: activeTab === 'Shared' ? '#fff' : colors.textSecondary }
+                                { color: activeTab === 'Shared' ? themeActiveText : colors.textSecondary }
                             ]}>
                                 Shared
                             </Text>
@@ -81,12 +75,12 @@ const ItinerariesScreen = () => {
                             onPress={() => setActiveTab('Posted')}
                             style={[
                                 styles.tab, 
-                                activeTab === 'Posted' && [styles.activeTab, { backgroundColor: colors.primary }]
+                                activeTab === 'Posted' && [styles.activeTab, { backgroundColor: themeActiveBg }]
                             ]}
                         >
                             <Text style={[
                                 styles.tabText, 
-                                { color: activeTab === 'Posted' ? '#fff' : colors.textSecondary }
+                                { color: activeTab === 'Posted' ? themeActiveText : colors.textSecondary }
                             ]}>
                                 Posted
                             </Text>
@@ -95,12 +89,12 @@ const ItinerariesScreen = () => {
                             onPress={() => setActiveTab('Saved')}
                             style={[
                                 styles.tab, 
-                                activeTab === 'Saved' && [styles.activeTab, { backgroundColor: colors.primary }]
+                                activeTab === 'Saved' && [styles.activeTab, { backgroundColor: themeActiveBg }]
                             ]}
                         >
                             <Text style={[
                                 styles.tabText, 
-                                { color: activeTab === 'Saved' ? '#fff' : colors.textSecondary }
+                                { color: activeTab === 'Saved' ? themeActiveText : colors.textSecondary }
                             ]}>
                                 Saved
                             </Text>
@@ -138,19 +132,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 20,
-        paddingVertical: 15,
+        paddingTop: Platform.OS === 'ios' ? 10 : 20,
+        paddingBottom: 20,
         borderBottomWidth: 1,
-    },
-    backButton: {
-        width: 45,
-        height: 45,
-        borderRadius: 22.5,
-        justifyContent: 'center',
-        alignItems: 'center',
-        elevation: 4,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
     },
     headerTitle: {
         fontSize: FONT_SIZE.xl,
