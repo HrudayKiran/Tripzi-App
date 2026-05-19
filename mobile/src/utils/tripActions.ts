@@ -36,11 +36,3 @@ export const cancelTrip = async (tripId: string, reason: string) => {
 export const deleteTrip = async (tripId: string, reason: string) => {
     return workersApi('/trips/delete', { body: { tripId, reason } });
 };
-
-export const rateTrip = async (
-    tripId: string,
-    rating: number,
-    feedback: string
-) => {
-    return workersApi('/trips/rate', { body: { tripId, rating, feedback } });
-};

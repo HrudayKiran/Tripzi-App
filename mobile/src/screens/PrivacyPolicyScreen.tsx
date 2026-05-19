@@ -33,7 +33,7 @@ const PrivacyPolicyScreen = () => {
 
             <Section title="1. Information We Collect" colors={colors}>
               NxtVibes may collect your Google account email, profile details you submit during onboarding,
-              trip content, chat content, ratings, reports, bug submissions, device tokens for notifications,
+              trip content, chat content, reports, bug submissions, device tokens for notifications,
               and technical diagnostics needed to operate the app.
             </Section>
 
@@ -44,7 +44,7 @@ const PrivacyPolicyScreen = () => {
 
             <Section title="3. What Other Users Can See" colors={colors}>
               Other signed-in users may see your public NxtVibes profile information, public trip posts,
-              ratings you leave where applicable, and content you share inside chats or group chats.
+              and content you share inside chats or group chats.
             </Section>
 
             <Section title="4. Permissions and Device Access" colors={colors}>

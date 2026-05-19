@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, TextInput, FlatList, Alert, Modal, ActivityIndicator, Platform, KeyboardAvoidingView, Keyboard, Share, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, TextInput, FlatList, Alert, Modal, ActivityIndicator, Platform, KeyboardAvoidingView, Keyboard, Share, BackHandler, Image } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTripStore } from '../store/tripStore';
@@ -9,14 +9,16 @@ import {
     NeumorphicFloatingButton,
     NeumorphicCloseButton,
     NeumorphicSearchButton,
-    NeumorphicLoadingIcon
+    NeumorphicLoadingIcon,
+    NeumorphicIconButton
 } from '../components/NeumorphicIconButtons';
 import { useRouter } from 'expo-router';
 import { MotiView, AnimatePresence } from 'moti';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker, Polyline } from 'react-native-maps';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 
@@ -221,7 +223,8 @@ type TabType = 'Full Itinerary' | 'checklist' | 'notes' | 'itinerary mapview';
 export default function ItineraryViewScreen() {
     const { colors, isDarkMode } = useTheme();
     const router = useRouter();
-    const { places, setPlaces, checklist, setChecklist, notes, setNotes, essentials, setEssentials, tripDraft } = useTripStore();
+    const insets = useSafeAreaInsets();
+    const { places, setPlaces, checklist, setChecklist, notes, setNotes, essentials, setEssentials, tripDraft, customCategories, setCustomCategories, collaborators, setCollaborators } = useTripStore();
     const [activeTab, setActiveTab] = useState<TabType>('Full Itinerary');
     const [newChecklistItem, setNewChecklistItem] = useState('');
     const [newEssentialItem, setNewEssentialItem] = useState('');
@@ -229,19 +232,95 @@ export default function ItineraryViewScreen() {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [searching, setSearching] = useState(false);
-    const [collaborators, setCollaborators] = useState<any[]>([]);
     const [selectedDayTab, setSelectedDayTab] = useState('All');
     const [showTimePicker, setShowTimePicker] = useState(false);
     const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
     const [isKeyboardVisible, setKeyboardVisible] = useState(false);
 
-    const [customCategories, setCustomCategories] = useState<string[]>([]);
+    const [startingCoords, setStartingCoords] = useState<{ lat: number, lng: number } | null>(null);
+    const [destinationCoords, setDestinationCoords] = useState<{ lat: number, lng: number } | null>(null);
+
+    useEffect(() => {
+        const geocodeLocation = async (address: string, type: 'starting' | 'destination') => {
+            try {
+                const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyBURfArYP_txIxAGEPYhNKm-FCtY4gQ7oQ';
+                const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`);
+                const data = await response.json();
+                if (data.results && data.results.length > 0) {
+                    const loc = data.results[0].geometry.location;
+                    if (type === 'starting') {
+                        setStartingCoords({ lat: loc.lat, lng: loc.lng });
+                    } else {
+                        setDestinationCoords({ lat: loc.lat, lng: loc.lng });
+                    }
+                }
+            } catch (error) {
+                console.error('Geocoding error:', error);
+            }
+        };
+
+        if (tripDraft?.fromLocation && !startingCoords) {
+            geocodeLocation(tripDraft.fromLocation, 'starting');
+        }
+        if (tripDraft?.toLocation && !destinationCoords) {
+            geocodeLocation(tripDraft.toLocation, 'destination');
+        }
+    }, [tripDraft?.fromLocation, tripDraft?.toLocation]);
+
+
+    const [noteModalVisible, setNoteModalVisible] = useState(false);
+    const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+    const [noteTitleInput, setNoteTitleInput] = useState('');
+    const [noteContentInput, setNoteContentInput] = useState('');
+
     const [checklistModalVisible, setChecklistModalVisible] = useState(false);
     const [checklistModalMode, setChecklistModalMode] = useState<'add_category' | 'add_item' | 'edit_category'>('add_category');
     const [checklistModalTargetCategory, setChecklistModalTargetCategory] = useState('');
     const [checklistModalInputValue, setChecklistModalInputValue] = useState('');
     const [showFloatingButton, setShowFloatingButton] = useState(true);
     const scrollOffsetRef = useRef(0);
+
+    const [finalizeModalVisible, setFinalizeModalVisible] = useState(false);
+    const [isFinalizing, setIsFinalizing] = useState(false);
+    const [currentUser, setCurrentUser] = useState<any>(null);
+    const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+
+    useEffect(() => {
+        supabase.auth.getUser().then(async ({ data: { user } }) => {
+            setCurrentUser(user);
+            if (user) {
+                try {
+                    const { data } = await supabase
+                        .from('profiles')
+                        .select('id, name, display_name, photo_url')
+                        .eq('id', user.id)
+                        .maybeSingle();
+                    
+                    setCurrentUserProfile({
+                        id: user.id,
+                        name: data?.name || data?.display_name || user.user_metadata?.full_name || 'Admin',
+                        display_name: data?.display_name || data?.name || user.user_metadata?.full_name || 'Admin',
+                        photo_url: data?.photo_url || user.user_metadata?.avatar_url || null
+                    });
+                } catch (err) {
+                    console.error('Error fetching profile:', err);
+                    setCurrentUserProfile({
+                        id: user.id,
+                        name: user.user_metadata?.full_name || 'Admin',
+                        display_name: user.user_metadata?.full_name || 'Admin',
+                        photo_url: user.user_metadata?.avatar_url || null
+                    });
+                }
+            }
+        });
+    }, []);
+
+    useEffect(() => {
+        if (!showUserSearch) {
+            setSearchQuery('');
+            setSearchResults([]);
+        }
+    }, [showUserSearch]);
 
     useEffect(() => {
         const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -252,6 +331,32 @@ export default function ItineraryViewScreen() {
             keyboardDidHideListener.remove();
         };
     }, []);
+
+    useEffect(() => {
+        if (tripDraft && tripDraft.mandatory_items) {
+            try {
+                const items = typeof tripDraft.mandatory_items === 'string'
+                    ? JSON.parse(tripDraft.mandatory_items)
+                    : tripDraft.mandatory_items;
+                
+                if (Array.isArray(items) && items.length >= 5) {
+                    const parsedChecklist = typeof items[0] === 'string' ? JSON.parse(items[0]) : items[0];
+                    const parsedCategories = typeof items[1] === 'string' ? JSON.parse(items[1]) : items[1];
+                    const parsedNotes = typeof items[2] === 'string' ? JSON.parse(items[2]) : items[2];
+                    const parsedEssentials = typeof items[3] === 'string' ? JSON.parse(items[3]) : items[3];
+                    const parsedCollaborators = typeof items[4] === 'string' ? JSON.parse(items[4]) : items[4];
+                    
+                    if (Array.isArray(parsedChecklist) && parsedChecklist.length > 0) setChecklist(parsedChecklist);
+                    if (Array.isArray(parsedCategories) && parsedCategories.length > 0) setCustomCategories(parsedCategories);
+                    if (Array.isArray(parsedNotes) && parsedNotes.length > 0) setNotes(parsedNotes);
+                    if (Array.isArray(parsedEssentials) && parsedEssentials.length > 0) setEssentials(parsedEssentials);
+                    if (Array.isArray(parsedCollaborators) && parsedCollaborators.length > 0) setCollaborators(parsedCollaborators);
+                }
+            } catch (e) {
+                console.error('Failed to unpack custom itinerary details:', e);
+            }
+        }
+    }, [tripDraft]);
 
     useEffect(() => {
         const backAction = () => {
@@ -299,7 +404,8 @@ export default function ItineraryViewScreen() {
                 .limit(10);
 
             if (error) throw error;
-            setSearchResults(data || []);
+            const filteredResults = (data || []).filter((item: any) => item.id !== currentUser?.id);
+            setSearchResults(filteredResults);
         } catch (error) {
             console.error('Search error:', error);
             Alert.alert('Search Error', 'Could not search for users. Please try again.');
@@ -340,10 +446,28 @@ export default function ItineraryViewScreen() {
             return;
         }
         setCollaborators([...collaborators, user]);
-        setShowUserSearch(false);
-        setSearchQuery('');
-        setSearchResults([]);
     };
+
+    const removeCollaborator = (userId: string) => {
+        Alert.alert(
+            'Remove Collaborator',
+            'Are you sure you want to remove this collaborator from this itinerary?',
+            [
+                {
+                    text: 'Cancel',
+                    style: 'cancel'
+                },
+                {
+                    text: 'Remove',
+                    style: 'destructive',
+                    onPress: () => {
+                        setCollaborators(collaborators.filter(c => c.id !== userId));
+                    }
+                }
+            ]
+        );
+    };
+
 
     const allData = React.useMemo(() => {
         const data = [];
@@ -385,6 +509,125 @@ export default function ItineraryViewScreen() {
 
     const handleDeletePlace = (id: string) => {
         setPlaces(places.filter(p => p.id !== id));
+    };
+
+    const handleFinalizeAction = async (bookingStatus: 'posted' | 'saved') => {
+        if (!currentUser) {
+            Alert.alert('Authentication Required', 'Please log in to finalize your trip.');
+            return;
+        }
+
+        setIsFinalizing(true);
+        try {
+            // 1. Fetch user's profile info
+            const { data: currentUserData } = await supabase
+                .from('profiles')
+                .select('name, display_name, photo_url, username')
+                .eq('id', currentUser.id)
+                .maybeSingle();
+            const userData: any = currentUserData || {};
+
+            // 2. Prepare itinerary arrays and fields
+            // Map places list to simple string list for itinerary vertical timeline view
+            const itineraryStrings = (places || []).map(p => {
+                const timeStr = p.time ? `[${p.time}] ` : '';
+                return `${timeStr}${p.name}${p.address ? ` - ${p.address}` : ''}`;
+            });
+
+            // Mapped places to JSON string in places_to_visit
+            const placesToVisitJSON = JSON.stringify(places || []);
+
+            // Packing checklist, categories, notes, essentials, collaborators to mandatory_items
+            const mandatoryItemsArray = [
+                JSON.stringify(checklist || []),
+                JSON.stringify(customCategories || []),
+                JSON.stringify(notes || []),
+                JSON.stringify(essentials || []),
+                JSON.stringify(collaborators || [])
+            ];
+
+            const fromDateStr = tripDraft?.fromDate ? new Date(tripDraft.fromDate).toISOString() : new Date().toISOString();
+            const toDateStr = tripDraft?.toDate ? new Date(tripDraft.toDate).toISOString() : new Date().toISOString();
+            const durationDays = tripDraft?.duration ? parseInt(tripDraft.duration) : 1;
+
+            const tripPayload = {
+                user_id: currentUser.id,
+                title: tripDraft?.title || 'My Trip Itinerary',
+                description: tripDraft?.description || '',
+                from_location: tripDraft?.fromLocation || null,
+                to_location: tripDraft?.toLocation || null,
+                from_date: fromDateStr,
+                to_date: toDateStr,
+                duration_days: durationDays,
+                duration: tripDraft?.duration ? String(tripDraft.duration) : String(durationDays),
+                cost: parseFloat(tripDraft?.costPerPerson) || 0,
+                cost_per_person: parseFloat(tripDraft?.costPerPerson) || 0,
+                total_cost: parseFloat(tripDraft?.costPerPerson) || 0,
+                max_travelers: parseInt(tripDraft?.maxTravelers) || 10,
+                current_travelers: 1,
+                trip_type: tripDraft?.tripType || 'solo',
+                transport_mode: tripDraft?.transportMode || null,
+                accommodation_type: tripDraft?.accommodationType || null,
+                gender_preference: tripDraft?.genderPreference || 'anyone',
+                booking_status: bookingStatus, // 'posted' or 'saved'
+                places_to_visit: [placesToVisitJSON],
+                mandatory_items: mandatoryItemsArray,
+                itinerary: itineraryStrings,
+                images: tripDraft?.images || [],
+                cover_image: tripDraft?.images?.[0] || null,
+                image_object_keys: tripDraft?.imageObjectKeys || [],
+                image_locations: tripDraft?.imageLocations || [],
+                owner_display_name: userData.name || userData.display_name || currentUser.user_metadata?.full_name || 'Traveler',
+                owner_photo_url: userData.photo_url || currentUser.user_metadata?.avatar_url || null,
+                owner_username: userData.username || null,
+                participants: [currentUser.id, ...(collaborators || []).map(c => c.id || c.uid || c)],
+                location: tripDraft?.toLocation || '',
+                trip_types: tripDraft?.tripTypes || [],
+                transport_modes: tripDraft?.transportModes || [],
+                accommodation_days: tripDraft?.accommodationDays ? parseInt(tripDraft.accommodationDays) : null,
+                updated_at: new Date().toISOString(),
+            };
+
+            let tripId = tripDraft?.id;
+            
+            // Check if we should insert or update in Supabase
+            if (tripId && tripId !== 'new-trip') {
+                const { error: updateError } = await supabase
+                    .from('trips')
+                    .update(tripPayload)
+                    .eq('id', tripId);
+                if (updateError) throw updateError;
+            } else {
+                const { data: newTrip, error: insertError } = await supabase
+                    .from('trips')
+                    .insert(tripPayload)
+                    .select()
+                    .single();
+                if (insertError) throw insertError;
+                tripId = newTrip.id;
+            }
+
+            setFinalizeModalVisible(false);
+            Alert.alert(
+                bookingStatus === 'posted' ? 'Itinerary Published!' : 'Itinerary Saved!',
+                bookingStatus === 'posted'
+                    ? 'Your itinerary is now published as a live trip!'
+                    : 'Your itinerary has been saved under saved tab.',
+                [
+                    {
+                        text: 'OK',
+                        onPress: () => {
+                            router.replace('/(tabs)/profile');
+                        }
+                    }
+                ]
+            );
+        } catch (error: any) {
+            console.error(error);
+            Alert.alert('Error', error.message || 'Could not finalize the trip itinerary. Please try again.');
+        } finally {
+            setIsFinalizing(false);
+        }
     };
 
     const renderDraggableItem = ({ item, drag, isActive }: RenderItemParams<any>) => {
@@ -674,24 +917,112 @@ export default function ItineraryViewScreen() {
         );
     };
 
-    const renderNotes = () => (
-        <View style={styles.tabPane}>
-            <TextInput
-                style={[styles.notesInput, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
-                placeholder="Write your trip notes here..."
-                placeholderTextColor={colors.textSecondary}
-                multiline
-                value={notes}
-                onChangeText={setNotes}
-                textAlignVertical="top"
-            />
-        </View>
-    );
+    const renderNotes = () => {
+        const handleNoteDragEnd = ({ data }: { data: any[] }) => {
+            const updated = data.map((item, index) => ({ ...item, order: index }));
+            setNotes(updated);
+        };
+
+        const renderNoteCard = ({ item, drag, isActive }: RenderItemParams<any>) => (
+            <ScaleDecorator>
+                <TouchableOpacity
+                    activeOpacity={0.8}
+                    onLongPress={drag}
+                    onPress={() => {
+                        setEditingNoteId(item.id);
+                        setNoteTitleInput(item.title);
+                        setNoteContentInput(item.content);
+                        setNoteModalVisible(true);
+                    }}
+                    style={{
+                        backgroundColor: colors.card,
+                        borderRadius: 16,
+                        padding: 16,
+                        marginVertical: 8,
+                        marginHorizontal: 20,
+                        borderWidth: 1.5,
+                        borderColor: isActive ? colors.primary : colors.border,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: isActive ? 6 : 2 },
+                        shadowOpacity: isActive ? 0.15 : 0.04,
+                        shadowRadius: isActive ? 8 : 4,
+                        elevation: isActive ? 6 : 2,
+                    }}
+                >
+                    {item.title ? (
+                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 8 }} numberOfLines={1}>
+                            {item.title}
+                        </Text>
+                    ) : null}
+                    <Text style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 20 }} numberOfLines={5}>
+                        {item.content || 'Empty note'}
+                    </Text>
+                </TouchableOpacity>
+            </ScaleDecorator>
+        );
+
+        return (
+            <View style={{ flex: 1 }}>
+                {notes.length === 0 ? (
+                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30, paddingTop: 60 }}>
+                        <View style={{
+                            width: 80,
+                            height: 80,
+                            borderRadius: 40,
+                            backgroundColor: colors.primary + '15',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            marginBottom: 20
+                        }}>
+                            <Icon name="Notebook" size={40} color={colors.primary} weight="duotone" />
+                        </View>
+                        <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: 8, textAlign: 'center' }}>
+                            No notes yet
+                        </Text>
+                        <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginBottom: 30, paddingHorizontal: 20, lineHeight: 20 }}>
+                            Tap the + button to add a new note for your trip.
+                        </Text>
+                    </View>
+                ) : (
+                    <DraggableFlatList
+                        data={[...notes].sort((a, b) => a.order - b.order)}
+                        renderItem={renderNoteCard}
+                        keyExtractor={item => item.id}
+                        contentContainerStyle={{ paddingVertical: 10, paddingBottom: 150 }}
+                        onDragEnd={handleNoteDragEnd}
+                        onScrollBeginDrag={() => setShowFloatingButton(false)}
+                        onScrollEndDrag={() => setShowFloatingButton(true)}
+                        onMomentumScrollEnd={() => setShowFloatingButton(true)}
+                        scrollEventThrottle={16}
+                    />
+                )}
+            </View>
+        );
+    };
 
     const renderMap = () => {
-        const initialRegion = places.length > 0 ? {
-            latitude: places[0].latitude || 20.5937,
-            longitude: places[0].longitude || 78.9629,
+        const mapPlacesCoords = places.filter(p => p.latitude && p.longitude).map(p => ({
+            latitude: p.latitude!,
+            longitude: p.longitude!,
+            title: p.name,
+            description: p.title || p.address
+        }));
+
+        const allCoords: { latitude: number, longitude: number, title?: string, description?: string, type?: string }[] = [];
+
+        if (startingCoords) {
+            allCoords.push({ latitude: startingCoords.lat, longitude: startingCoords.lng, title: tripDraft?.fromLocation || 'Start', type: 'start' });
+        }
+
+        allCoords.push(...mapPlacesCoords);
+
+        if (destinationCoords) {
+            allCoords.push({ latitude: destinationCoords.lat, longitude: destinationCoords.lng, title: tripDraft?.toLocation || 'Destination', type: 'end' });
+        }
+
+        const initialRegion = allCoords.length > 0 ? {
+            latitude: allCoords[0].latitude,
+            longitude: allCoords[0].longitude,
             latitudeDelta: 0.5,
             longitudeDelta: 0.5,
         } : {
@@ -707,16 +1038,23 @@ export default function ItineraryViewScreen() {
                     style={StyleSheet.absoluteFill}
                     initialRegion={initialRegion}
                 >
-                    {places.map((place, index) => (
-                        place.latitude && place.longitude ? (
-                            <Marker
-                                key={place.id}
-                                coordinate={{ latitude: place.latitude, longitude: place.longitude }}
-                                title={place.name}
-                                description={place.title}
-                            />
-                        ) : null
+                    {allCoords.map((coord, index) => (
+                        <Marker
+                            key={`marker-${index}`}
+                            coordinate={{ latitude: coord.latitude, longitude: coord.longitude }}
+                            title={coord.title}
+                            description={coord.description}
+                            pinColor={coord.type === 'start' ? 'green' : (coord.type === 'end' ? 'blue' : 'red')}
+                        />
                     ))}
+                    {allCoords.length > 1 && (
+                        <Polyline
+                            coordinates={allCoords}
+                            strokeColor={colors.primary}
+                            strokeWidth={3}
+                            lineDashPattern={[5, 5]}
+                        />
+                    )}
                 </MapView>
             </View>
         );
@@ -788,7 +1126,6 @@ export default function ItineraryViewScreen() {
                             {tripDraft?.fromLocation ? `${tripDraft.fromLocation.split(',')[0]} → ` : ''}{tripDraft?.toLocation?.split(',')[0] || 'Ready for adventure'}
                         </Text>
                     </View>
-                    {tripDraft?.tripType !== 'solo' && (
                         <TouchableOpacity
                             onPress={() => setShowUserSearch(true)}
                             style={[
@@ -801,45 +1138,96 @@ export default function ItineraryViewScreen() {
                                     height: 45,
                                     borderRadius: 22.5,
                                     justifyContent: 'center',
-                                    alignItems: 'center',
-                                    marginRight: 10
+                                    alignItems: 'center'
                                 }
                             ]}
                         >
-                            <Icon name="UserPlus" size={22} color={colors.primary} />
+                            <Icon name="UserPlus" size={22} color={colors.text} />
                         </TouchableOpacity>
-                    )}
-                    <TouchableOpacity
-                        onPress={handleShareTrip}
-                        style={[
-                            styles.shareButton,
-                            styles.neumorphicButton,
-                            {
-                                backgroundColor: colors.card,
-                                shadowColor: isDarkMode ? '#000' : '#d1d9e6',
-                                width: 45,
-                                height: 45,
-                                borderRadius: 22.5,
-                                justifyContent: 'center',
-                                alignItems: 'center'
-                            }
-                        ]}
-                    >
-                        <Icon name="ShareNetwork" size={22} color={colors.text} />
-                    </TouchableOpacity>
                 </View>
 
                 {/* Collaborators Row */}
-                {collaborators.length > 0 && (
+                {(currentUserProfile || collaborators.length > 0) && (
                     <View style={{ paddingHorizontal: 20, paddingVertical: 10, flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={{ color: colors.textSecondary, fontSize: 12, marginRight: 10 }}>With:</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                            {collaborators.map(user => (
-                                <View key={user.id} style={{ marginRight: 8, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 15, backgroundColor: colors.primary + '20', borderWidth: 1, borderColor: colors.primary + '40' }}>
-                                    <Text style={{ color: colors.primary, fontSize: 11, fontWeight: 'bold' }}>@{user.username}</Text>
-                                </View>
+                        <Text style={{ color: colors.textSecondary, fontSize: 12, marginRight: 15 }}>Collaborators:</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            {currentUserProfile && (
+                                <TouchableOpacity
+                                    key={currentUserProfile.id}
+                                    onPress={() => router.push(`/profile/${currentUserProfile.id}`)}
+                                    style={{
+                                        zIndex: 100,
+                                        position: 'relative',
+                                    }}
+                                >
+                                    {currentUserProfile.photo_url ? (
+                                        <Image
+                                            source={{ uri: currentUserProfile.photo_url }}
+                                            style={{
+                                                width: 40,
+                                                height: 40,
+                                                borderRadius: 20,
+                                                borderWidth: 2,
+                                                borderColor: colors.card
+                                            }}
+                                        />
+                                    ) : (
+                                        <View
+                                            style={{
+                                                width: 40,
+                                                height: 40,
+                                                borderRadius: 20,
+                                                backgroundColor: colors.primary,
+                                                justifyContent: 'center',
+                                                alignItems: 'center',
+                                                borderWidth: 2,
+                                                borderColor: colors.card
+                                            }}
+                                        >
+                                            <Icon name="User" size={18} color="#fff" />
+                                        </View>
+                                    )}
+                                </TouchableOpacity>
+                            )}
+                            {collaborators.map((user, index) => (
+                                <TouchableOpacity
+                                    key={user.id}
+                                    onPress={() => router.push(`/profile/${user.id}`)}
+                                    style={{
+                                        marginLeft: -15,
+                                        zIndex: 99 - index,
+                                    }}
+                                >
+                                    {user.photo_url ? (
+                                        <Image
+                                            source={{ uri: user.photo_url }}
+                                            style={{
+                                                width: 40,
+                                                height: 40,
+                                                borderRadius: 20,
+                                                borderWidth: 2,
+                                                borderColor: colors.card
+                                            }}
+                                        />
+                                    ) : (
+                                        <View
+                                            style={{
+                                                width: 40,
+                                                height: 40,
+                                                borderRadius: 20,
+                                                backgroundColor: colors.primary,
+                                                justifyContent: 'center',
+                                                alignItems: 'center',
+                                                borderWidth: 2,
+                                                borderColor: colors.card
+                                            }}
+                                        >
+                                            <Icon name="User" size={18} color="#fff" />
+                                        </View>
+                                    )}
+                                </TouchableOpacity>
                             ))}
-                        </ScrollView>
+                        </View>
                     </View>
                 )}
 
@@ -882,6 +1270,17 @@ export default function ItineraryViewScreen() {
                         bottom={10}
                     />
                 )}
+                {activeTab === 'notes' && showFloatingButton && !isKeyboardVisible && (
+                    <NeumorphicFloatingButton
+                        onPress={() => {
+                            setEditingNoteId(null);
+                            setNoteTitleInput('');
+                            setNoteContentInput('');
+                            setNoteModalVisible(true);
+                        }}
+                        bottom={10}
+                    />
+                )}
 
             </KeyboardAvoidingView>
 
@@ -890,12 +1289,139 @@ export default function ItineraryViewScreen() {
                 <View style={[styles.bottomBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: Platform.OS === 'ios' ? 30 : 20 }]}>
                     <TouchableOpacity
                         style={[styles.primaryButton, { backgroundColor: colors.primary }]}
-                        onPress={() => Alert.alert('Trip Saved!', 'Your itinerary has been finalized.')}
+                        onPress={() => setFinalizeModalVisible(true)}
                     >
                         <Text style={styles.buttonText}>Finalize Trip</Text>
                     </TouchableOpacity>
                 </View>
             )}
+
+            {/* Finalize Trip Center Modal */}
+            <Modal
+                visible={finalizeModalVisible}
+                animationType="fade"
+                transparent
+                onRequestClose={() => setFinalizeModalVisible(false)}
+            >
+                <View style={{
+                    flex: 1,
+                    backgroundColor: 'rgba(0,0,0,0.6)',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    padding: 20
+                }}>
+                    <View style={{
+                        width: '90%',
+                        backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff',
+                        borderRadius: 24,
+                        padding: 24,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        alignItems: 'center',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 10 },
+                        shadowOpacity: 0.25,
+                        shadowRadius: 20,
+                        elevation: 10,
+                    }}>
+                        {/* Beautiful Header Icon */}
+                        <View style={{
+                            width: 60,
+                            height: 60,
+                            borderRadius: 30,
+                            backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            marginBottom: 16,
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                        }}>
+                            <Icon name="PaperPlaneTilt" size={32} color={colors.primary} weight="fill" />
+                        </View>
+
+                        <Text style={{
+                            color: colors.text,
+                            fontSize: 22,
+                            fontWeight: 'bold',
+                            textAlign: 'center',
+                            marginBottom: 8
+                        }}>
+                            Finalize Itinerary
+                        </Text>
+
+                        <Text style={{
+                            color: colors.textSecondary,
+                            fontSize: 14,
+                            textAlign: 'center',
+                            marginBottom: 24,
+                            paddingHorizontal: 10,
+                            lineHeight: 20
+                        }}>
+                            Choose how you would like to save this trip itinerary.
+                        </Text>
+
+                        {/* Option 1: Post as Trip */}
+                        <TouchableOpacity
+                            disabled={isFinalizing}
+                            onPress={() => handleFinalizeAction('posted')}
+                            style={{
+                                width: '100%',
+                                backgroundColor: colors.primary,
+                                borderRadius: 16,
+                                paddingVertical: 16,
+                                alignItems: 'center',
+                                marginBottom: 12,
+                                shadowColor: colors.primary,
+                                shadowOffset: { width: 0, height: 4 },
+                                shadowOpacity: 0.3,
+                                shadowRadius: 6,
+                                elevation: 3,
+                            }}
+                        >
+                            {isFinalizing ? (
+                                <ActivityIndicator color="#ffffff" size="small" />
+                            ) : (
+                                <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: 'bold' }}>
+                                    Post Itinerary as Trip
+                                </Text>
+                            )}
+                        </TouchableOpacity>
+
+                        {/* Option 2: Save Itinerary */}
+                        <TouchableOpacity
+                            disabled={isFinalizing}
+                            onPress={() => handleFinalizeAction('saved')}
+                            style={{
+                                width: '100%',
+                                backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : '#f3f4f6',
+                                borderRadius: 16,
+                                paddingVertical: 16,
+                                alignItems: 'center',
+                                marginBottom: 20,
+                                borderWidth: 1,
+                                borderColor: colors.border,
+                            }}
+                        >
+                            <Text style={{ color: colors.text, fontSize: 16, fontWeight: 'bold' }}>
+                                Save Itinerary
+                            </Text>
+                        </TouchableOpacity>
+
+                        {/* Cancel Button */}
+                        <TouchableOpacity
+                            disabled={isFinalizing}
+                            onPress={() => setFinalizeModalVisible(false)}
+                            style={{
+                                paddingVertical: 8,
+                            }}
+                        >
+                            <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '600' }}>
+                                Cancel
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
             {showTimePicker && (
                 <DateTimePicker
                     value={new Date()}
@@ -919,9 +1445,22 @@ export default function ItineraryViewScreen() {
                             <NeumorphicCloseButton onPress={() => setShowUserSearch(false)} />
                         </View>
 
-                        <View style={[styles.inputContainer, { marginBottom: 15 }]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
                             <TextInput
-                                style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+                                style={[
+                                    styles.input, 
+                                    { 
+                                        backgroundColor: colors.background, 
+                                        color: colors.text, 
+                                        borderColor: colors.border, 
+                                        flex: 1, 
+                                        height: 45, 
+                                        borderRadius: 12,
+                                        paddingHorizontal: 15,
+                                        marginRight: 10,
+                                        paddingVertical: 0
+                                    }
+                                ]}
                                 placeholder="Search by username or name..."
                                 placeholderTextColor={colors.textSecondary}
                                 value={searchQuery}
@@ -931,34 +1470,88 @@ export default function ItineraryViewScreen() {
                                 }}
                                 autoFocus
                             />
-                            <TouchableOpacity onPress={() => handleSearchUsers()} style={[styles.addButton, { backgroundColor: colors.primary }]}>
-                                {searching ? <ActivityIndicator size="small" color="#fff" /> : <Icon name="MagnifyingGlass" size={20} color="#fff" />}
-                            </TouchableOpacity>
+                            <NeumorphicSearchButton onPress={() => handleSearchUsers()} size={45} iconSize={20} />
                         </View>
 
-                        <FlatList
-                            data={searchResults}
-                            keyExtractor={item => item.id}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity
-                                    onPress={() => addCollaborator(item)}
-                                    style={{ flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: colors.border }}
-                                >
-                                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary + '20', justifyContent: 'center', alignItems: 'center', marginRight: 15 }}>
-                                        <Icon name="User" size={20} color={colors.primary} />
-                                    </View>
-                                    <View>
-                                        <Text style={{ color: colors.text, fontWeight: 'bold' }}>{item.name}</Text>
-                                        <Text style={{ color: colors.textSecondary, fontSize: 12 }}>@{item.username}</Text>
-                                    </View>
-                                    <View style={{ flex: 1 }} />
-                                    <Icon name="Plus" size={20} color={colors.primary} />
-                                </TouchableOpacity>
-                            )}
-                            ListEmptyComponent={() => searchQuery.length >= 1 && !searching ? (
-                                <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 20 }}>No users found</Text>
-                            ) : null}
-                        />
+                        {searching ? (
+                            <View style={{ marginTop: 10 }}>
+                                {[1, 2, 3].map((key) => (
+                                    <MotiView
+                                        key={key}
+                                        from={{ opacity: 0.5 }}
+                                        animate={{ opacity: 1 }}
+                                        transition={{
+                                            loop: true,
+                                            type: 'timing',
+                                            duration: 800,
+                                            repeatReverse: true
+                                        }}
+                                        style={{ flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: colors.border }}
+                                    >
+                                        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isDarkMode ? '#333' : '#E5E7EB', marginRight: 15 }} />
+                                        <View>
+                                            <View style={{ width: 120, height: 16, backgroundColor: isDarkMode ? '#333' : '#E5E7EB', borderRadius: 4, marginBottom: 8 }} />
+                                            <View style={{ width: 80, height: 12, backgroundColor: isDarkMode ? '#333' : '#E5E7EB', borderRadius: 4 }} />
+                                        </View>
+                                    </MotiView>
+                                ))}
+                            </View>
+                        ) : (
+                            <FlatList
+                                data={searchResults}
+                                keyExtractor={item => item.id}
+                                renderItem={({ item }) => {
+                                    const isCollaborator = collaborators.some(c => c.id === item.id);
+                                    return (
+                                        <TouchableOpacity
+                                            onPress={() => {
+                                                if (isCollaborator) {
+                                                    removeCollaborator(item.id);
+                                                } else {
+                                                    addCollaborator(item);
+                                                }
+                                            }}
+                                            style={{ flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: colors.border }}
+                                        >
+                                            {item.photo_url ? (
+                                                <Image
+                                                    source={{ uri: item.photo_url }}
+                                                    style={{ width: 40, height: 40, borderRadius: 20, marginRight: 15 }}
+                                                />
+                                            ) : (
+                                                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary + '20', justifyContent: 'center', alignItems: 'center', marginRight: 15 }}>
+                                                    <Icon name="User" size={20} color={colors.primary} />
+                                                </View>
+                                            )}
+                                            <View>
+                                                <Text style={{ color: colors.text, fontWeight: 'bold' }}>{item.name}</Text>
+                                                <Text style={{ color: colors.textSecondary, fontSize: 12 }}>@{item.username}</Text>
+                                            </View>
+                                            <View style={{ flex: 1 }} />
+                                            {isCollaborator ? (
+                                                <NeumorphicIconButton 
+                                                    onPress={() => removeCollaborator(item.id)} 
+                                                    iconName="Trash" 
+                                                    size={36} 
+                                                    iconSize={18} 
+                                                    iconColorOverride="#EF4444"
+                                                />
+                                            ) : (
+                                                <NeumorphicIconButton 
+                                                    onPress={() => addCollaborator(item)} 
+                                                    iconName="Plus" 
+                                                    size={36} 
+                                                    iconSize={18} 
+                                                />
+                                            )}
+                                        </TouchableOpacity>
+                                    );
+                                }}
+                                ListEmptyComponent={() => searchQuery.length >= 1 && !searching ? (
+                                    <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 20 }}>No users found</Text>
+                                ) : null}
+                            />
+                        )}
                     </View>
                 </View>
             </Modal>
@@ -1061,6 +1654,92 @@ export default function ItineraryViewScreen() {
                             </View>
                         </View>
                     </KeyboardAvoidingView>
+                </View>
+            </Modal>
+            {/* Note Editor Modal */}
+            <Modal
+                visible={noteModalVisible}
+                animationType="slide"
+                presentationStyle="pageSheet"
+                onRequestClose={() => {
+                    const title = noteTitleInput.trim();
+                    const content = noteContentInput.trim();
+                    if (title || content) {
+                        if (editingNoteId) {
+                            setNotes(notes.map(n => n.id === editingNoteId ? { ...n, title, content } : n));
+                        } else {
+                            setNotes([...notes, { id: Date.now().toString(), title, content, order: notes.length }]);
+                        }
+                    } else if (editingNoteId) {
+                        setNotes(notes.filter(n => n.id !== editingNoteId));
+                    }
+                    setNoteModalVisible(false);
+                }}
+            >
+                <View style={{ flex: 1, backgroundColor: colors.background }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingTop: Math.max(insets.top, 20), paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.card }}>
+                        <NeumorphicBackButton
+                            onPress={() => {
+                                const title = noteTitleInput.trim();
+                                const content = noteContentInput.trim();
+                                if (title || content) {
+                                    if (editingNoteId) {
+                                        setNotes(notes.map(n => n.id === editingNoteId ? { ...n, title, content } : n));
+                                    } else {
+                                        setNotes([...notes, { id: Date.now().toString(), title, content, order: notes.length }]);
+                                    }
+                                } else if (editingNoteId) {
+                                    setNotes(notes.filter(n => n.id !== editingNoteId));
+                                }
+                                setNoteModalVisible(false);
+                            }}
+                            size={40}
+                        />
+                        <View style={{ flex: 1 }} />
+                        {editingNoteId && (
+                            <TouchableOpacity
+                                onPress={() => {
+                                    Alert.alert(
+                                        'Delete Note',
+                                        'Are you sure you want to delete this note?',
+                                        [
+                                            { text: 'Cancel', style: 'cancel' },
+                                            {
+                                                text: 'Delete',
+                                                style: 'destructive',
+                                                onPress: () => {
+                                                    setNotes(notes.filter(n => n.id !== editingNoteId));
+                                                    setNoteModalVisible(false);
+                                                }
+                                            }
+                                        ]
+                                    );
+                                }}
+                                style={{ padding: 10 }}
+                            >
+                                <Icon name="Trash" size={24} color="#D63031" />
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                    <ScrollView style={{ flex: 1, padding: 20 }}>
+                        <TextInput
+                            style={{ fontSize: 24, fontWeight: 'bold', color: colors.text, marginBottom: 15 }}
+                            placeholder="Title"
+                            placeholderTextColor={colors.textSecondary + '80'}
+                            value={noteTitleInput}
+                            onChangeText={setNoteTitleInput}
+                        />
+                        <TextInput
+                            style={{ fontSize: 16, color: colors.text, lineHeight: 24 }}
+                            placeholder="Note"
+                            placeholderTextColor={colors.textSecondary + '80'}
+                            multiline
+                            autoFocus={!editingNoteId}
+                            value={noteContentInput}
+                            onChangeText={setNoteContentInput}
+                            textAlignVertical="top"
+                        />
+                    </ScrollView>
                 </View>
             </Modal>
         </GestureHandlerRootView>

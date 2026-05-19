@@ -37,7 +37,7 @@ trips.post('/join', async (c) => {
     current_travelers: newParticipants.length 
   }).eq('id', tripId);
 
-  // Add user to the trip's group chat or create it if missing
+  // Add user to the trip's group chat if it exists
   const { data: groupChat } = await sb.from('group_chats')
     .select('id, participants')
     .eq('trip_id', tripId)
@@ -52,19 +52,6 @@ trips.post('/join', async (c) => {
         updated_at: new Date().toISOString(),
       }).eq('id', groupChat.id);
     }
-  } else {
-    // Auto-create group chat
-    await sb.from('group_chats').insert({
-      trip_id: tripId,
-      group_name: trip.title || 'Trip Group',
-      trip_image: trip.cover_image || null,
-      participants: [trip.user_id, userId], // Owner and joiner
-      created_by: trip.user_id, // Owner
-      member_count: 2,
-      hidden: false,
-      admins: [trip.user_id],
-      last_message: { text: 'Group created', sender_id: null, created_at: new Date().toISOString() },
-    });
   }
 
   const actor = await getProfile(sb, userId);
@@ -218,37 +205,6 @@ trips.post('/delete', async (c) => {
 
   await sb.from('trip_participants').delete().eq('trip_id', tripId);
   await sb.from('trips').delete().eq('id', tripId);
-  return c.json({ success: true });
-});
-
-trips.post('/rate', async (c) => {
-  const userId = c.get('userId');
-  const { tripId, rating, feedback } = await c.req.json<{ tripId?: string; rating?: number; feedback?: string }>();
-  if (!tripId?.trim()) return c.json({ error: 'tripId is required.' }, 400);
-  const r = Number(rating);
-  if (!Number.isFinite(r) || r < 1 || r > 5) return c.json({ error: 'Rating must be 1-5.' }, 400);
-  const sb = getSupabaseAdmin(c.env);
-
-  const { data: trip } = await sb.from('trips').select('*').eq('id', tripId).maybeSingle();
-  if (!trip) return c.json({ error: 'Trip not found.' }, 404);
-  if (trip.user_id === userId) return c.json({ error: 'Hosts cannot rate own trips.' }, 400);
-
-  const { data: part } = await sb.from('trip_participants').select('id').eq('trip_id', tripId).eq('user_id', userId).maybeSingle();
-  if (!part) return c.json({ error: 'Only joined travelers can rate.' }, 403);
-
-  const actor = await getProfile(sb, userId);
-
-  await sb.from('ratings').upsert({ 
-    trip_id: tripId, 
-    user_id: userId, 
-    host_id: trip.user_id, 
-    rating: r, 
-    feedback: feedback?.trim() || '', 
-    trip_title: trip.title || 'Trip', 
-    user_name: actor?.display_name || 'Traveler', 
-    user_photo: actor?.photo_url || '' 
-  }, { onConflict: 'trip_id,user_id' });
-  
   return c.json({ success: true });
 });
 

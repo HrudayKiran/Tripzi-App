@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Platform, Modal, ActivityIndicator, KeyboardAvoidingView, Vibration } from 'react-native';
-import { Image } from 'expo-image';
 import { GestureHandlerRootView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
 import { NestableScrollContainer } from 'react-native-draggable-flatlist';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,14 +15,12 @@ import { supabase } from '../lib/supabase';
 import { syncDatabase } from '../database/sync';
 import { useTripStore } from '../store/tripStore';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND } from '../styles';
 import { deleteTripImagesFromR2, uploadTripImageToR2 } from '../utils/imageUpload';
 import { showUploadNotification, completeUploadNotification, failUploadNotification } from '../utils/notifications';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import MapView, { Marker } from 'react-native-maps';
-const { width } = Dimensions.get('window');
 
 const TRIP_TYPES = [
     { id: 'adventure', label: 'Adventure', icon: 'Compass', color: '#F59E0B' },
@@ -87,7 +84,6 @@ const tripSchema = z.object({
     accommodationType: z.string().min(1, 'Select accommodation type'),
     bookingStatus: z.string().min(1, 'Booking status is required'),
     accommodationDays: z.string().min(1, 'Accommodation days is required'),
-    maxTravelers: z.string().min(1, 'Max travelers is required'),
     tripType: z.string().min(1, 'Select trip type'),
     placesToVisit: z.string().optional(),
 });
@@ -150,7 +146,6 @@ const CreateTripScreen = () => {
             accommodationType: initialData?.accommodationType || '',
             bookingStatus: initialData?.bookingStatus || '',
             accommodationDays: initialData?.accommodationDays ? String(initialData.accommodationDays) : '',
-            maxTravelers: initialData?.maxTravelers ? String(initialData.maxTravelers) : '',
             tripType: initialData?.tripType || '',
             placesToVisit: Array.isArray(initialData?.placesToVisit) ? initialData.placesToVisit.join(', ') : (initialData?.placesToVisit || ''),
         }
@@ -344,7 +339,7 @@ const CreateTripScreen = () => {
                 accommodation_type: data.accommodationType,
                 booking_status: data.bookingStatus,
                 accommodation_days: data.accommodationDays ? parseInt(data.accommodationDays) : null,
-                max_travelers: parseInt(data.maxTravelers) || 5,
+                max_travelers: data.tripType === 'solo' ? 1 : null,
                 current_travelers: 1,
                 places_to_visit: data.placesToVisit ? data.placesToVisit.split(',').map(place => place.trim()).filter(Boolean) : [],
                 user_id: currentUser.id,
@@ -363,29 +358,7 @@ const CreateTripScreen = () => {
             if (tripErr || !tripRow) throw tripErr || new Error('Failed to create trip');
             setCreatedTripId(tripRow.id);
 
-            await showUploadNotification(0.8, 'Creating trip group...');
-
-
-            // Create group chat for the trip
-            try {
-                await supabase.from('group_chats').insert({
-                    trip_id: tripRow.id,
-                    group_name: data.title,
-                    trip_image: finalImages[0] || null,
-                    participants: [currentUser.id],
-                    participant_details: {
-                        [currentUser.id]: {
-                            displayName: tripData.owner_display_name,
-                            photoURL: tripData.owner_photo_url || '',
-                        },
-                    },
-                    member_count: 1,
-                    created_by: currentUser.id,
-                    last_message: { text: 'Trip group created!', sender_id: null, created_at: new Date().toISOString() },
-                });
-            } catch {
-                // Group chat creation is non-critical — user can still access the trip
-            }
+            await showUploadNotification(0.8, 'Finalizing trip...');
 
             setIsPosting(false);
             await completeUploadNotification('Trip Posted! 🎉', 'Your trip has been posted successfully.');
@@ -487,11 +460,6 @@ const CreateTripScreen = () => {
                                                                     onChange(null); // Deselect
                                                                 } else {
                                                                     onChange(type.id);
-                                                                    if (type.id === 'solo') {
-                                                                        setValue('maxTravelers', '1');
-                                                                    } else {
-                                                                        setValue('maxTravelers', '');
-                                                                    }
                                                                 }
                                                             }}
                                                         >
@@ -532,11 +500,6 @@ const CreateTripScreen = () => {
                                                                     onChange(null); // Deselect
                                                                 } else {
                                                                     onChange(type.id);
-                                                                    if (type.id === 'solo') {
-                                                                        setValue('maxTravelers', '1');
-                                                                    } else {
-                                                                        setValue('maxTravelers', '');
-                                                                    }
                                                                 }
                                                             }}
                                                         >
@@ -884,25 +847,6 @@ const CreateTripScreen = () => {
                                         </>
                                     )}
 
-                                    <Text style={[styles.label, { color: colors.text, marginTop: SPACING.md }]}>Max Travelers <Text style={styles.required}>*</Text></Text>
-                                    <Controller
-                                        control={control}
-                                        name="maxTravelers"
-                                        render={({ field: { onChange, onBlur, value } }) => (
-                                            <TextInput
-                                                style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: formErrors.maxTravelers ? '#EF4444' : colors.border, opacity: watch('tripType') === 'solo' ? 0.6 : 1 }]}
-                                                placeholder="e.g., 5"
-                                                placeholderTextColor={colors.textSecondary}
-                                                onBlur={onBlur}
-                                                onChangeText={onChange}
-                                                value={value}
-                                                keyboardType="numeric"
-                                                editable={watch('tripType') !== 'solo'}
-                                            />
-                                        )}
-                                    />
-                                    {formErrors.maxTravelers && <Text style={styles.errorText}>{formErrors.maxTravelers.message}</Text>}
-
                                 </MotiView>
                             )}
 
@@ -929,7 +873,7 @@ const CreateTripScreen = () => {
                                                 if (step === 1) fieldsToValidate = ['tripType'];
                                                 if (step === 2) fieldsToValidate = ['title', 'fromLocation', 'toLocation', 'fromDate', 'toDate'];
                                                 if (step === 3) fieldsToValidate = ['tripTypes', 'transportModes', 'costPerPerson'];
-                                                
+
                                                 const isValid = await trigger(fieldsToValidate);
                                                 if (isValid) setStep(s => s + 1);
                                             }}
@@ -945,7 +889,7 @@ const CreateTripScreen = () => {
                                             setTripDraft(data); // Persist draft
                                             router.push({
                                                 pathname: '/trip/timeline',
-                                                params: { 
+                                                params: {
                                                     tripData: JSON.stringify(data),
                                                     tripImages: JSON.stringify(tripImages)
                                                 }

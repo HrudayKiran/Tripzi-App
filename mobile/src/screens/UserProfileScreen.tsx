@@ -49,7 +49,7 @@ const UserProfileScreen = () => {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const isOwnProfile = userId === currentUser?.id;
-    const { user, trips, hostRating, loading } = useUserProfileQuery(userId, isOwnProfile);
+    const { user, trips, loading } = useUserProfileQuery(userId, isOwnProfile);
     const [profileImage, setProfileImage] = useState<string | null>(null);
     const [profileImageObjectKey, setProfileImageObjectKey] = useState<string | null>(null);
     const [showFullImage, setShowFullImage] = useState(false);
@@ -257,13 +257,7 @@ const UserProfileScreen = () => {
                                 <Text style={[styles.displayName, { color: colors.text }]} numberOfLines={1}>{user.displayName}</Text>
                             </View>
                             {user.username && <Text style={[styles.displayUsername, { color: colors.textSecondary }]}>@{user.username}</Text>}
-                            {hostRating && (
-                                <View style={styles.ratingContainer}>
-                                    <Icon name="Star" size={12} color="#F59E0B" weight="fill" />
-                                    <Text style={styles.ratingScore}>{hostRating.average}</Text>
-                                    <Text style={[styles.ratingCount, { color: colors.textSecondary }]}>({hostRating.count})</Text>
-                                </View>
-                            )}
+
                         </View>
 
                         <View style={styles.statsColumn}>

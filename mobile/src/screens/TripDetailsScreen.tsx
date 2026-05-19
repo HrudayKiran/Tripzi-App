@@ -13,7 +13,7 @@ import DefaultAvatar from '../components/DefaultAvatar';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
 import ReportTripModal from '../components/ReportTripModal';
 import ActionReasonModal from '../components/ActionReasonModal';
-import { cancelTrip, deleteTrip, joinTrip, leaveTrip, rateTrip } from '../utils/tripActions';
+import { cancelTrip, deleteTrip, joinTrip, leaveTrip } from '../utils/tripActions';
 import useTripDetailsQuery from '../hooks/useTripDetailsQuery';
 import { useQueryClient } from '@tanstack/react-query';
 import CustomTimeline from '../components/CustomTimeline';
@@ -64,12 +64,6 @@ const TripDetailsScreen = () => {
     supabase.auth.getUser().then(({ data: { user: u } }) => setUser(u));
   }, []);
 
-  // Rating states
-  const [userRating, setUserRating] = useState(0);
-  const [userFeedback, setUserFeedback] = useState('');
-  const [existingRatings, setExistingRatings] = useState<any[]>([]);
-  const [submittingRating, setSubmittingRating] = useState(false);
-  const [hasRated, setHasRated] = useState(false);
 
   // Edit/Delete states
   const [showReportModal, setShowReportModal] = useState(false);
@@ -118,72 +112,11 @@ const TripDetailsScreen = () => {
     };
     fetchParticipants();
   }, [trip?.participants]);
-
-  // Fetch ratings for completed trips
-  useEffect(() => {
-    const fetchRatings = async () => {
-      try {
-        const { data: ratings } = await supabase
-          .from('ratings')
-          .select('*')
-          .eq('trip_id', tripId)
-          .order('created_at', { ascending: false });
-
-        setExistingRatings(ratings || []);
-
-        if (user) {
-          const userRatingDoc = (ratings || []).find(r => r.user_id === user.id);
-          if (userRatingDoc) {
-            setHasRated(true);
-            setUserRating(userRatingDoc.rating);
-            setUserFeedback(userRatingDoc.feedback || '');
-          }
-        }
-      } catch (error) {
-      }
-    };
-
-    if (tripId) {
-      fetchRatings();
-    }
-  }, [tripId, user]);
-
   const isCompleted = React.useMemo(() => {
     if (!trip || !trip.toDate) return false;
     const endDate = trip.toDate.toDate ? trip.toDate.toDate() : new Date(trip.toDate);
     return endDate < new Date();
   }, [trip]);
-
-  const handleSubmitRating = async () => {
-    if (!isCompleted) {
-      Alert.alert('Trip Not Completed', 'You can only rate a trip after it has ended.');
-      return;
-    }
-
-    setSubmittingRating(true);
-    try {
-      const ratingData = {
-        tripId,
-        rating: userRating,
-        feedback: userFeedback.trim(),
-      };
-
-      await rateTrip(ratingData.tripId, ratingData.rating, ratingData.feedback);
-      setHasRated(true);
-
-      Alert.alert('Thank You! ⭐', 'Your rating has been submitted.');
-    } catch (error) {
-      // Error handled silently
-      Alert.alert('Error', 'Failed to submit rating. Please try again.');
-    } finally {
-      setSubmittingRating(false);
-    }
-  };
-
-  // Calculate average rating
-  const averageRating = existingRatings.length > 0
-    ? (existingRatings.reduce((sum, r) => sum + r.rating, 0) / existingRatings.length).toFixed(1)
-    : null;
 
   const handleJoinToggle = async () => {
     if (!user) {
@@ -281,33 +214,15 @@ const TripDetailsScreen = () => {
     }
     try {
       // Look up the actual group chat for this trip in group_chats
-      let { data: groupChat } = await supabase
+      const { data: groupChat } = await supabase
         .from('group_chats')
         .select('id')
         .eq('trip_id', tripId)
         .maybeSingle();
 
       if (!groupChat) {
-        // Auto-create missing group chat
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        
-        const { data: newChat, error } = await supabase.from('group_chats').insert({
-            trip_id: tripId,
-            group_name: trip.title || 'Trip Group',
-            trip_image: trip.coverImage || trip.images?.[0] || null,
-            participants: Array.from(new Set([trip.userId, ...(trip.participants || []), user.id])),
-            participant_details: {}, // Minimal, will be populated
-            member_count: Array.from(new Set([trip.userId, ...(trip.participants || []), user.id])).length,
-            created_by: trip.userId, // Owner
-            last_message: { text: 'Group auto-created', sender_id: null, created_at: new Date().toISOString() },
-        }).select('id').single();
-        
-        if (error || !newChat) {
-             Alert.alert('Group Chat', 'Failed to initialize group chat for this trip.');
-             return;
-        }
-        groupChat = newChat;
+        Alert.alert('Group Chat', 'No group chat exists for this trip.');
+        return;
       }
 
       router.push({
@@ -763,122 +678,6 @@ const TripDetailsScreen = () => {
             </View>
           </MotiView>
 
-          {/* Ratings Section - Moved outside isCompleted check for LIST, kept for submitting */}
-          {/* Always show if there are ratings OR if completed */}
-          {(existingRatings.length > 0 || isCompleted) && (
-            <MotiView
-              from={{ opacity: 0, translateY: 20 }}
-              animate={{ opacity: 1, translateY: 0 }}
-              transition={{ type: 'timing', duration: 400, delay: 900 }}
-            >
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Ratings & Reviews {averageRating && `⭐ ${averageRating}`}
-              </Text>
-
-              {/* Only allow submitting if completed */}
-              {isCompleted && !isOwner && (
-                <View style={[styles.ratingCard, { backgroundColor: colors.card }]}>
-                  {isJoined ? (
-                    <>
-                      <Text style={[styles.ratingCardTitle, { color: colors.text }]}>
-                        {hasRated ? 'Update Your Rating' : 'Rate This Trip'}
-                      </Text>
-
-                      <View style={styles.starsRow}>
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <TouchableOpacity
-                            key={star}
-                            onPress={() => setUserRating(star)}
-                            style={styles.starButton}
-                          >
-                            <Icon
-                              name="Star"
-                              size={36}
-                              color={star <= userRating ? '#F59E0B' : colors.textSecondary}
-                              weight={star <= userRating ? 'fill' : 'regular'}
-                            />
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-
-                      <TextInput
-                        style={[styles.feedbackInput, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                        placeholder="Share your experience... (optional)"
-                        placeholderTextColor={colors.textSecondary}
-                        value={userFeedback}
-                        onChangeText={setUserFeedback}
-                        multiline
-                        maxLength={500}
-                      />
-
-                      <TouchableOpacity
-                        style={[styles.submitRatingButton, { backgroundColor: colors.primary, opacity: submittingRating ? 0.6 : 1 }]}
-                        onPress={handleSubmitRating}
-                        disabled={submittingRating}
-                      >
-                        {submittingRating ? (
-                          <ActivityIndicator color="#fff" size="small" />
-                        ) : (
-                          <Text style={styles.submitRatingButtonText}>
-                            {hasRated ? 'Update Rating' : 'Submit Rating'}
-                          </Text>
-                        )}
-                      </TouchableOpacity>
-                    </>
-                  ) : (
-                    <View style={{ alignItems: 'center', padding: SPACING.lg }}>
-                      <Icon name="Lock" size={48} color={colors.textSecondary} />
-                      <Text style={[styles.ratingCardTitle, { color: colors.text, marginTop: SPACING.md }]}>
-                        Join Trip to Rate
-                      </Text>
-                      <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: SPACING.xs }}>
-                        Only travelers who have joined this trip can leave ratings and reviews.
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {/* Reviews List - Always show if exists, regardless of isCompleted */}
-              {existingRatings.length > 0 && (
-                <View style={styles.reviewsList}>
-                  {existingRatings.slice(0, 5).map((review) => (
-                    <View key={review.id} style={[styles.reviewItem, { backgroundColor: colors.card }]}>
-                      <View style={styles.reviewHeader}>
-                        <TouchableOpacity onPress={() => router.push({ pathname: '/profile/[id]', params: { id: review.userId } })}>
-                          <DefaultAvatar
-                            uri={review.userPhoto}
-                            name={review.userName}
-                            size={36}
-                            style={styles.reviewAvatar}
-                          />
-                        </TouchableOpacity>
-                        <View style={styles.reviewInfo}>
-                          <Text style={[styles.reviewName, { color: colors.text }]}>{review.userName}</Text>
-                          <View style={styles.reviewStars}>
-                            {[1, 2, 3, 4, 5].map((star) => (
-                              <Icon
-                                key={star}
-                                name="Star"
-                                size={14}
-                                color={star <= review.rating ? '#F59E0B' : colors.textSecondary}
-                                weight={star <= review.rating ? 'fill' : 'regular'}
-                              />
-                            ))}
-                          </View>
-                        </View>
-                      </View>
-                      {review.feedback && (
-                        <Text style={[styles.reviewText, { color: colors.textSecondary }]}>
-                          {review.feedback}
-                        </Text>
-                      )}
-                    </View>
-                  ))}
-                </View>
-              )}
-            </MotiView>
-          )}
 
           {/* Spacer for scroll */}
           <View style={{ height: 40 }} />

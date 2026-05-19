@@ -73,8 +73,7 @@ account.post('/delete', async (c) => {
   // 4. Delete owned trips
   await supabase.from('trips').delete().eq('user_id', userId);
 
-  // 5. Delete ratings, reports, feedback
-  await supabase.from('ratings').delete().eq('user_id', userId);
+  // 5. Delete reports, feedback
   await supabase.from('reports').delete().eq('reporter_id', userId);
   await supabase.from('suggestions').delete().eq('user_id', userId);
   await supabase.from('bugs').delete().eq('user_id', userId);

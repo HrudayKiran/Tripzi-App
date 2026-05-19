@@ -35,7 +35,6 @@ const HelpSupportScreen = () => {
     { id: 2, question: "Why can't I join some trips?", answer: 'Trips may be full, already started, cancelled, or restricted by host gender preference. Your profile must also be complete.' },
     { id: 3, question: 'When do group chats appear?', answer: 'A trip group chat is created automatically when the first traveler joins a trip. Later joined users are added to the same group.' },
     { id: 4, question: 'Why are notifications not working?', answer: 'NxtVibes needs device notification permission. If permission is denied, NxtVibes may disable both push and in-app notifications until you enable it again.' },
-    { id: 5, question: 'Can I rate a trip anytime?', answer: 'No. Ratings are available only after the trip end date and only for travelers who joined that trip.' },
     { id: 6, question: 'How do I delete my account?', answer: 'Open Settings, choose Delete Account, select a reason, and confirm. NxtVibes will delete your account and connected data, while keeping limited safety records if required.' },
     { id: 7, question: 'Is NxtVibes available outside India?', answer: 'No. NxtVibes is currently designed only for users in India and for adults aged 18 or above.' },
   ];

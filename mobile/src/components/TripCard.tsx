@@ -48,7 +48,6 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
     const [isJoining, setIsJoining] = useState(false);
     const [hasJoined, setHasJoined] = useState(false);
     const [showFullDescription, setShowFullDescription] = useState(false);
-    const [userRating, setUserRating] = useState<{ avg: number; count: number } | null>(null);
     const [activeImageIndex, setActiveImageIndex] = useState(0);
     const [showMenu, setShowMenu] = useState(false);
     const [menuPosition, setMenuPosition] = useState<{ top: number, right: number } | null>(null);
@@ -85,27 +84,6 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
         }
     }, [trip.id, trip.participants, currentUser?.id]);
 
-    // Load user rating
-    useEffect(() => {
-        if (!trip.userId) return;
-
-        supabase
-            .from('public_profiles')
-            .select('avg_rating, total_ratings, total_rating, rating_count')
-            .eq('id', trip.userId)
-            .maybeSingle()
-            .then(({ data }) => {
-                if (data) {
-                    if ((data.avg_rating || data.total_ratings) || (data.total_rating && data.rating_count)) {
-                        setUserRating({
-                            avg: data.avg_rating || parseFloat((data.total_rating / data.rating_count).toFixed(1)),
-                            count: data.total_ratings || data.rating_count || 0,
-                        });
-                    }
-                }
-            })
-            .then(undefined, () => { });
-    }, [trip.userId]);
 
     const formatCost = (cost) => {
         if (!cost) return 'Free';
@@ -261,12 +239,6 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                                     <Text style={[styles.userName, { color: colors.text }]}>
                                         {trip.user?.displayName || trip.user?.name || 'Traveler'}
                                     </Text>
-                                    {userRating && (
-                                        <View style={styles.ratingBadge}>
-                                            <Icon name="Star" size={10} color="#F59E0B" weight="fill" />
-                                            <Text style={styles.ratingText}>{userRating.avg}</Text>
-                                        </View>
-                                    )}
                                 </View>
                                 <Text style={[styles.postTime, { color: colors.textSecondary }]}>
                                     {getTimeAgo(trip.createdAt)}

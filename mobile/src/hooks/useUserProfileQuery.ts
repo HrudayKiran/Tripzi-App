@@ -78,35 +78,7 @@ export function useUserProfileQuery(userId: string | undefined, isOwnProfile: bo
         enabled: !!userId,
     });
 
-    // Query for host ratings
-    const { data: hostRating = null, isLoading: loadingRatings } = useQuery({
-        queryKey: ['hostRatings', userId],
-        queryFn: async () => {
-            if (!userId) return null;
 
-            console.log(`[useUserProfileQuery] Fetching ratings for ${userId}...`);
-            const { data, error } = await supabase
-                .from('ratings')
-                .select('rating')
-                .eq('host_id', userId);
-
-            if (error) {
-                console.error('[useUserProfileQuery] Error fetching ratings:', error);
-                throw error;
-            }
-
-            if (data && data.length > 0) {
-                const totalRating = data.reduce((sum, r) => sum + (r.rating || 0), 0);
-                return {
-                    average: Math.round((totalRating / data.length) * 10) / 10,
-                    count: data.length,
-                };
-            }
-
-            return null;
-        },
-        enabled: !!userId,
-    });
 
     // Realtime subscription for trips
     useEffect(() => {
@@ -127,8 +99,7 @@ export function useUserProfileQuery(userId: string | undefined, isOwnProfile: bo
     return {
         user: userProfile,
         trips,
-        hostRating,
-        loading: loadingProfile || loadingTrips || loadingRatings,
+        loading: loadingProfile || loadingTrips,
         profileError,
     };
 }
