@@ -13,7 +13,7 @@ const DEFAULT_REGION = {
   longitudeDelta: 12,
 };
 
-const darkMapStyle = [
+export const darkMapStyle = [
   {
     "elementType": "geometry",
     "stylers": [{ "color": "#1c1c1e" }]

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Dimensions, Platform, ActivityIndicator, KeyboardAvoidingView, Vibration, LayoutAnimation } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Dimensions, Platform, ActivityIndicator, KeyboardAvoidingView, Vibration, LayoutAnimation, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { GestureHandlerRootView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
-import { ScaleDecorator, NestableScrollContainer, NestableDraggableFlatList } from 'react-native-draggable-flatlist';
+import { Sortable, SortableItem } from 'react-native-reanimated-dnd';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import { MotiView } from 'moti';
@@ -446,7 +446,7 @@ const EditTripScreen = () => {
                             <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading trip details...</Text>
                         </View>
                     ) : (
-                        <NestableScrollContainer
+                        <ScrollView
                             contentContainerStyle={styles.content}
                             showsVerticalScrollIndicator={false}
                             keyboardShouldPersistTaps="handled"
@@ -475,71 +475,76 @@ const EditTripScreen = () => {
                                     <Text style={[styles.label, { color: colors.text, marginTop: 0 }]}>Trip Images (Max 5)</Text>
                                 </View>
 
-                                <NestableDraggableFlatList
-                                    data={tripImages}
-                                    onDragEnd={({ data }) => {
-                                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                                        setTripImages(data);
-                                    }}
-                                    keyExtractor={(item) => item.id}
-                                    renderItem={({ item, drag, isActive }) => (
-                                        <GHTouchableOpacity
-                                            activeOpacity={0.9}
-                                            onLongPress={drag}
-                                            disabled={isActive}
-                                            delayLongPress={200}
-                                            style={[
-                                                styles.reorderItemVertical,
-                                                isActive && {
-                                                    elevation: 8,
-                                                    shadowColor: '#000',
-                                                    shadowOffset: { width: 0, height: 4 },
-                                                    shadowOpacity: 0.3,
-                                                    shadowRadius: 5,
-                                                    backgroundColor: colors.card,
-                                                    transform: [{ scale: 1.02 }]
-                                                }
-                                            ]}
-                                        >
-                                            <View style={[styles.reorderImageVertical, { overflow: 'hidden' }]}>
-                                                <Image
-                                                    source={{ uri: item.uri }}
-                                                    style={styles.tripImage}
-                                                    contentFit="cover"
-                                                    transition={200}
-                                                />
-                                            </View>
+                                 <Sortable
+                                      data={tripImages}
+                                      itemHeight={84}
+                                      useFlatList={false}
+                                      style={{ backgroundColor: 'transparent', height: tripImages.length * 84 }}
+                                      renderItem={({ item, id, positions, ...props }) => (
+                                         <SortableItem
+                                             key={id}
+                                             id={id}
+                                             data={item}
+                                             positions={positions}
+                                             {...props}
+                                             onDrop={(draggedId, newPosition, allPositions) => {
+                                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                                 if (allPositions) {
+                                                     const sortedData = [...tripImages].sort((a, b) => {
+                                                         const posA = allPositions[a.id] ?? 0;
+                                                         const posB = allPositions[b.id] ?? 0;
+                                                         return posA - posB;
+                                                     });
+                                                     setTripImages(sortedData);
+                                                 }
+                                             }}
+                                         >
+                                             <View
+                                                 style={[
+                                                     styles.reorderItemVertical,
+                                                     { height: 76, marginBottom: 8 }
+                                                 ]}
+                                             >
+                                                 <View style={[styles.reorderImageVertical, { overflow: 'hidden' }]}>
+                                                     <Image
+                                                         source={{ uri: item.uri }}
+                                                         style={styles.tripImage}
+                                                         contentFit="cover"
+                                                         transition={200}
+                                                     />
+                                                 </View>
 
-                                            <View style={styles.verticalReorderControls}>
-                                                <View style={styles.reorderInfo}>
-                                                    <Text style={[styles.reorderIndexText, { color: colors.text }]} numberOfLines={1}>
-                                                        Long press to move
-                                                    </Text>
-                                                </View>
-                                                <View style={styles.reorderActionArea}>
-                                                    <View style={styles.dragHandleContainer}>
-                                                        <View style={styles.dragHandleColumn}>
-                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                        </View>
-                                                        <View style={styles.dragHandleColumn}>
-                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                            <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                        </View>
-                                                    </View>
-                                                    <TouchableOpacity
-                                                        style={[styles.removeImage, { position: 'relative', top: 0, right: 0, marginLeft: 10, elevation: 0, backgroundColor: 'transparent' }]}
-                                                        onPress={() => removeImage(item.id)}
-                                                    >
-                                                        <Icon name="XCircle" size={24} color="#EF4444" />
-                                                    </TouchableOpacity>
-                                                </View>
-                                            </View>
-                                        </GHTouchableOpacity>
-                                    )}
-                                />
+                                                 <View style={styles.verticalReorderControls}>
+                                                     <View style={styles.reorderInfo}>
+                                                         <Text style={[styles.reorderIndexText, { color: colors.text }]} numberOfLines={1}>
+                                                             Long press to move
+                                                         </Text>
+                                                     </View>
+                                                     <View style={styles.reorderActionArea}>
+                                                         <View style={styles.dragHandleContainer}>
+                                                             <View style={styles.dragHandleColumn}>
+                                                                 <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                                 <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                                 <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                             </View>
+                                                             <View style={styles.dragHandleColumn}>
+                                                                 <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                                 <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                                 <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
+                                                             </View>
+                                                         </View>
+                                                         <TouchableOpacity
+                                                             style={[styles.removeImage, { position: 'relative', top: 0, right: 0, marginLeft: 10, elevation: 0, backgroundColor: 'transparent' }]}
+                                                             onPress={() => removeImage(item.id)}
+                                                         >
+                                                             <Icon name="XCircle" size={24} color="#EF4444" />
+                                                         </TouchableOpacity>
+                                                     </View>
+                                                 </View>
+                                             </View>
+                                         </SortableItem>
+                                     )}
+                                 />
 
                                 {tripImages.length < 5 && (
                                     <TouchableOpacity style={[styles.addImageButton, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10, alignSelf: 'flex-start', width: 'auto', paddingHorizontal: 20, height: 40, borderStyle: 'dashed' }]} onPress={pickImages}>
@@ -796,7 +801,7 @@ const EditTripScreen = () => {
 
                             </MotiView>
                             <View style={{ height: 150 }} />
-                        </NestableScrollContainer>
+                        </ScrollView>
                     )}
                 </KeyboardAvoidingView>
             </SafeAreaView>

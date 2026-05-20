@@ -15,14 +15,17 @@ import {
 } from './NeumorphicIconButtons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
-import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
+import { Sortable, SortableItem } from 'react-native-reanimated-dnd';
 import MapView, { Marker } from 'react-native-maps';
+import { darkMapStyle } from '../screens/MapScreen';
 import * as Haptics from 'expo-haptics';
 import { deleteTripImagesFromR2, uploadTripImageToR2 } from '../utils/imageUpload';
 import { showUploadNotification, completeUploadNotification, failUploadNotification } from '../utils/notifications';
 import { syncDatabase } from '../database/sync';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTripStore } from '../store/tripStore';
+
+const SortableAny = Sortable as any;
 
 type TimelineItem = {
     title: string;
@@ -673,14 +676,76 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
         }
     };
 
-    const renderDraggableItem = ({ item, drag, isActive }: RenderItemParams<any>) => {
+    const renderDraggableItem = ({ item, id, positions, isAllTab, ...props }: any) => {
+        const handleDrop = (draggedId: string, newPosition: number, allPositions?: { [id: string]: number }) => {
+            if (allPositions) {
+                const currentData = isAllTab ? allData : activePlaces;
+                const sortedData = [...currentData].sort((a, b) => {
+                    const posA = allPositions[a.id] ?? 0;
+                    const posB = allPositions[b.id] ?? 0;
+                    return posA - posB;
+                });
+
+                if (isAllTab) {
+                    let currentDay = 1;
+                    const updatedPlaces: any[] = [];
+                    sortedData.forEach((item) => {
+                        if (item.isHeader) {
+                            currentDay = item.day;
+                        } else {
+                            updatedPlaces.push({ ...item, day: currentDay });
+                        }
+                    });
+
+                    const finalPlaces: any[] = [];
+                    const duration = trip?.duration || 1;
+                    for (let day = 1; day <= duration; day++) {
+                        const dayPlaces = updatedPlaces.filter(p => p.day === day);
+                        dayPlaces.forEach((p, index) => {
+                            finalPlaces.push({ ...p, order: index });
+                        });
+                    }
+
+                    setPlaces(finalPlaces);
+                } else {
+                    const currentDay = parseInt(selectedTab.replace('Day ', ''));
+                    const otherDayPlaces = places.filter(p => p.day !== currentDay);
+                    const updatedDayPlaces = sortedData.map((item, index) => ({ ...item, order: index }));
+                    setPlaces([...otherDayPlaces, ...updatedDayPlaces]);
+                }
+            }
+        };
+
         if (item.isHeader) {
             return (
-                <View style={{ paddingHorizontal: 15, paddingVertical: 5, marginTop: 10 }}>
-                    <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 16 }}>
-                        Day {item.day}{item.dateStr ? ` - ${item.dateStr}` : ''}
-                    </Text>
-                </View>
+                <SortableItem key={id} id={id} data={item} positions={positions} {...props} onDrop={handleDrop}>
+                    <View style={{ height: 110, justifyContent: 'center', paddingHorizontal: 15, marginVertical: 5 }}>
+                        <View style={{
+                            backgroundColor: colors.primary + '15',
+                            padding: 12,
+                            borderRadius: 16,
+                            borderWidth: 1.5,
+                            borderColor: colors.primary + '30',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                        }}>
+                            <View style={{
+                                width: 36,
+                                height: 36,
+                                borderRadius: 18,
+                                backgroundColor: colors.primary,
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                marginRight: 12
+                            }}>
+                                <Icon name="Calendar" size={20} color="#fff" weight="bold" />
+                            </View>
+                            <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 16 }}>
+                                Day {item.day}{item.dateStr ? ` - ${item.dateStr}` : ''}
+                            </Text>
+                        </View>
+                    </View>
+                </SortableItem>
             );
         }
 
@@ -698,11 +763,13 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
         };
 
         return (
-            <ScaleDecorator>
-                <View style={{ flexDirection: 'row', paddingHorizontal: 15, marginVertical: 10, alignItems: 'center' }}>
-                    <TouchableOpacity onLongPress={drag} style={{ padding: 5, marginRight: 5 }}>
-                        <Icon name="DotsSixVertical" size={20} color={colors.textSecondary} />
-                    </TouchableOpacity>
+            <SortableItem key={id} id={id} data={item} positions={positions} {...props} onDrop={handleDrop}>
+                <View style={{ flexDirection: 'row', paddingHorizontal: 15, height: 110, alignItems: 'center', marginVertical: 5 }}>
+                    <SortableItem.Handle>
+                        <View style={{ padding: 5, marginRight: 5 }}>
+                            <Icon name="DotsSixVertical" size={20} color={colors.textSecondary} />
+                        </View>
+                    </SortableItem.Handle>
 
                     <View style={{ width: 80, alignItems: 'center' }}>
                         <View style={{
@@ -736,7 +803,6 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                         >
                             <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: '600' }}>{item.time || 'Pick a time'}</Text>
                         </TouchableOpacity>
-                        <View style={{ width: 2, height: 40, backgroundColor: colors.border, marginVertical: 5 }} />
                     </View>
 
                     <View
@@ -744,23 +810,25 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                             styles.draggableItem,
                             {
                                 flex: 1,
+                                height: 100,
                                 backgroundColor: colors.card,
                                 borderColor: colors.border,
                                 borderRadius: 16,
-                                padding: 16,
+                                padding: 12,
                                 shadowColor: '#000',
                                 shadowOffset: { width: 0, height: 2 },
                                 shadowOpacity: 0.1,
                                 shadowRadius: 4,
                                 elevation: 3,
                                 borderWidth: 1,
-                            }
+                                justifyContent: 'center',
+                             }
                         ]}
                     >
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             <View style={{ flex: 1 }}>
                                 <TextInput
-                                    style={{ color: colors.textSecondary, fontWeight: 'bold', fontSize: 14, marginBottom: 4, padding: 0 }}
+                                    style={{ color: colors.textSecondary, fontWeight: 'bold', fontSize: 14, marginBottom: 2, padding: 0 }}
                                     value={item.title}
                                     placeholder="Enter a title"
                                     placeholderTextColor={colors.textSecondary}
@@ -773,19 +841,19 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                                     }}
                                 />
                                 <TouchableOpacity onPress={() => handlePlacePress(item)}>
-                                    <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 15 }}>{item.name}</Text>
-                                    {item.address && (
-                                        <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4 }}>{item.address}</Text>
-                                    )}
+                                    <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 14 }} numberOfLines={1}>{item.name}</Text>
+                                    {item.address ? (
+                                        <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }} numberOfLines={1}>{item.address}</Text>
+                                    ) : null}
                                 </TouchableOpacity>
                             </View>
-                            <TouchableOpacity onPress={() => handleDeletePlace(item.id)}>
+                            <TouchableOpacity onPress={() => handleDeletePlace(item.id)} style={{ padding: 4 }}>
                                 <Icon name="Trash" size={18} color={colors.textSecondary} />
                             </TouchableOpacity>
                         </View>
                     </View>
                 </View>
-            </ScaleDecorator>
+            </SortableItem>
         );
     };
 
@@ -796,13 +864,17 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                 style={{ flex: 1 }}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
             >
-                <View style={{ height: 40 }} />
+                <View style={{ height: 40, backgroundColor: colors.background }} />
 
                 <View style={{ height: mapHeight, position: 'relative' }}>
                     <MapView
                         ref={mapRef}
                         style={StyleSheet.absoluteFill}
                         initialRegion={mapRegion}
+                        customMapStyle={isDarkMode ? darkMapStyle : undefined}
+                        loadingEnabled={true}
+                        loadingBackgroundColor={colors.background}
+                        loadingIndicatorColor={colors.primary}
                         onPoiClick={async (e) => {
                             const poi = e.nativeEvent;
                             let name = poi.name;
@@ -1044,49 +1116,25 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                     </ScrollView>
                 </View>
 
-                <View style={{ flex: 1 }}>
+                <View 
+                    style={{ flex: 1, backgroundColor: colors.background }}
+                >
                     {selectedTab === 'All' ? (
-                        <DraggableFlatList
+                        <SortableAny
                             data={allData}
-                            renderItem={renderDraggableItem}
-                            keyExtractor={item => item.id}
-                            onDragEnd={({ data }) => {
-                                let currentDay = 1;
-                                const updatedPlaces = [];
-                                data.forEach((item) => {
-                                    if (item.isHeader) {
-                                        currentDay = item.day;
-                                    } else {
-                                        updatedPlaces.push({ ...item, day: currentDay });
-                                    }
-                                });
-
-                                const finalPlaces = [];
-                                const duration = trip?.duration || 1;
-                                for (let day = 1; day <= duration; day++) {
-                                    const dayPlaces = updatedPlaces.filter(p => p.day === day);
-                                    dayPlaces.forEach((p, index) => {
-                                        finalPlaces.push({ ...p, order: index });
-                                    });
-                                }
-
-                                setPlaces(finalPlaces);
-                            }}
+                            itemHeight={120}
+                            style={{ backgroundColor: colors.background }}
+                            renderItem={(itemProps) => renderDraggableItem({ ...itemProps, isAllTab: true })}
                             onScrollBeginDrag={() => setIsFABVisible(false)}
                             onScrollEndDrag={() => setIsFABVisible(true)}
                             onMomentumScrollEnd={() => setIsFABVisible(true)}
                         />
                     ) : (
-                        <DraggableFlatList
+                        <SortableAny
                             data={activePlaces}
-                            renderItem={renderDraggableItem}
-                            keyExtractor={item => item.id}
-                            onDragEnd={({ data }) => {
-                                const currentDay = parseInt(selectedTab.replace('Day ', ''));
-                                const otherDayPlaces = places.filter(p => p.day !== currentDay);
-                                const updatedDayPlaces = data.map((item, index) => ({ ...item, order: index }));
-                                setPlaces([...otherDayPlaces, ...updatedDayPlaces]);
-                            }}
+                            itemHeight={120}
+                            style={{ backgroundColor: colors.background }}
+                            renderItem={(itemProps) => renderDraggableItem({ ...itemProps, isAllTab: false })}
                             onScrollBeginDrag={() => setIsFABVisible(false)}
                             onScrollEndDrag={() => setIsFABVisible(true)}
                             onMomentumScrollEnd={() => setIsFABVisible(true)}

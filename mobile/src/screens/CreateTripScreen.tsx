@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Platform, Modal, ActivityIndicator, KeyboardAvoidingView, Vibration } from 'react-native';
 import { GestureHandlerRootView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
-import { NestableScrollContainer } from 'react-native-draggable-flatlist';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import { MotiView } from 'moti';
@@ -425,7 +424,7 @@ const CreateTripScreen = () => {
                             <View style={{ height: '100%', backgroundColor: isDarkMode ? '#fff' : '#000', width: `${(step / totalSteps) * 100}%` }} />
                         </View>
 
-                        <NestableScrollContainer
+                        <ScrollView
                             contentContainerStyle={styles.content}
                             showsVerticalScrollIndicator={false}
                             keyboardShouldPersistTaps="handled"
@@ -902,7 +901,7 @@ const CreateTripScreen = () => {
                             </View>
 
                             <View style={{ height: 120 }} />
-                        </NestableScrollContainer>
+                        </ScrollView>
 
                         {showDateModal && Platform.OS === 'ios' && (
                             <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }]}>

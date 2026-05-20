@@ -75,6 +75,7 @@ module.exports = {
     },
     plugins: [
       'expo-router',
+      'expo-image',
       '@react-native-firebase/app',
 
       '@react-native-firebase/messaging',
@@ -87,7 +88,7 @@ module.exports = {
           android: {
             usesCleartextTraffic: false,
             minSdkVersion: 24,
-            compileSdkVersion: 35,
+            compileSdkVersion: 36,
             targetSdkVersion: 35,
             enableProguardInReleaseBuilds: true,
             enableShrinkResourcesInReleaseBuilds: true,

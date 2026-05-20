@@ -15,17 +15,18 @@ import {
 import { useRouter } from 'expo-router';
 import { MotiView, AnimatePresence } from 'moti';
 import MapView, { Marker, Polyline } from 'react-native-maps';
-import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
+import { Sortable, SortableItem, SortableGrid, SortableGridItem } from 'react-native-reanimated-dnd';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
+const SortableAny = Sortable as any;
+const SortableGridAny = SortableGrid as any;
+const SortableItemAny = SortableItem as any;
 
 interface CategoryCardProps {
     categoryName: string;
-    drag: () => void;
-    isActive: boolean;
     checklist: any[];
     colors: any;
     isDarkMode: boolean;
@@ -41,8 +42,6 @@ interface CategoryCardProps {
 
 const CategoryCard = React.memo(({
     categoryName,
-    drag,
-    isActive,
     checklist,
     colors,
     isDarkMode,
@@ -58,163 +57,171 @@ const CategoryCard = React.memo(({
     const catItems = checklist.filter(item => item.category === categoryName);
 
     return (
-        <ScaleDecorator>
+        <View
+            style={{
+                backgroundColor: colors.card,
+                borderRadius: 20,
+                padding: 16,
+                marginVertical: 10,
+                borderWidth: 1.5,
+                borderColor: colors.border,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.04,
+                shadowRadius: 4,
+                elevation: 2,
+            }}
+        >
+            {/* Category Header */}
             <View
                 style={{
-                    backgroundColor: colors.card,
-                    borderRadius: 20,
-                    padding: 16,
-                    marginVertical: 10,
-                    borderWidth: 1.5,
-                    borderColor: isActive ? colors.primary : colors.border,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: isActive ? 6 : 2 },
-                    shadowOpacity: isActive ? 0.15 : 0.04,
-                    shadowRadius: isActive ? 8 : 4,
-                    elevation: isActive ? 6 : 2,
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    borderBottomWidth: 1,
+                    borderBottomColor: colors.border,
+                    paddingBottom: 12,
+                    marginBottom: 10
                 }}
             >
-                {/* Category Header */}
-                <TouchableOpacity
-                    onLongPress={drag}
-                    delayLongPress={150}
-                    activeOpacity={0.9}
-                    style={{
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        borderBottomWidth: 1,
-                        borderBottomColor: colors.border,
-                        paddingBottom: 12,
-                        marginBottom: 10
-                    }}
-                >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text }}>{categoryName}</Text>
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <TouchableOpacity
-                            onPress={() => {
-                                setChecklistModalMode('add_item');
-                                setChecklistModalTargetCategory(categoryName);
-                                setChecklistModalInputValue('');
-                                setChecklistModalVisible(true);
-                            }}
-                            style={{ padding: 6, marginLeft: 8 }}
-                        >
-                            <Icon name="Plus" size={20} color={colors.text} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            onPress={() => {
-                                setChecklistModalMode('edit_category');
-                                setChecklistModalTargetCategory(categoryName);
-                                setChecklistModalInputValue(categoryName);
-                                setChecklistModalVisible(true);
-                            }}
-                            style={{ padding: 6, marginLeft: 8 }}
-                        >
-                            <Icon name="PencilSimple" size={20} color={colors.textSecondary} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            onPress={() => deleteCategory(categoryName)}
-                            style={{ padding: 6, marginLeft: 8 }}
-                        >
-                            <Icon name="Trash" size={20} color="#D63031" />
-                        </TouchableOpacity>
-                        <View style={{ padding: 6, marginLeft: 8, opacity: 0.6 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text }}>{categoryName}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <TouchableOpacity
+                        onPress={() => {
+                            setChecklistModalMode('add_item');
+                            setChecklistModalTargetCategory(categoryName);
+                            setChecklistModalInputValue('');
+                            setChecklistModalVisible(true);
+                        }}
+                        style={{ padding: 6, marginLeft: 8 }}
+                    >
+                        <Icon name="Plus" size={20} color={colors.text} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() => {
+                            setChecklistModalMode('edit_category');
+                            setChecklistModalTargetCategory(categoryName);
+                            setChecklistModalInputValue(categoryName);
+                            setChecklistModalVisible(true);
+                        }}
+                        style={{ padding: 6, marginLeft: 8 }}
+                    >
+                        <Icon name="PencilSimple" size={20} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() => deleteCategory(categoryName)}
+                        style={{ padding: 6, marginLeft: 8 }}
+                    >
+                        <Icon name="Trash" size={20} color="#D63031" />
+                    </TouchableOpacity>
+                    <SortableItem.Handle>
+                        <View style={{ padding: 6, marginLeft: 8 }}>
                             <Icon name="Equals" size={20} color={colors.textSecondary} />
                         </View>
-                    </View>
-                </TouchableOpacity>
+                    </SortableItem.Handle>
+                </View>
+            </View>
 
-                {/* Category Tasks List */}
-                {catItems.length === 0 ? (
-                    <Text style={{ fontSize: 13, color: colors.textSecondary, fontStyle: 'italic', textAlign: 'center', paddingVertical: 15 }}>
-                        No tasks in this category. Tap + to add!
-                    </Text>
-                ) : (
-                    <DraggableFlatList
-                        data={catItems}
-                        keyExtractor={item => item.id}
-                        scrollEnabled={false}
-                        onDragEnd={({ data }) => {
-                            const otherItems = checklist.filter(x => x.category !== categoryName);
-                            setChecklist([...otherItems, ...data]);
-                        }}
-                        renderItem={({ item, drag: dragTask, isActive: isTaskActive }) => {
-                            return (
-                                <ScaleDecorator>
-                                    <View style={{
-                                        backgroundColor: isTaskActive ? colors.card : colors.background,
-                                        borderRadius: 12,
-                                        paddingHorizontal: 14,
-                                        paddingVertical: 12,
-                                        flexDirection: 'row',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        marginVertical: 4,
-                                        borderWidth: 1,
-                                        borderColor: isTaskActive ? colors.primary : colors.border,
-                                        opacity: isTaskActive ? 0.9 : 1,
-                                    }}>
-                                        <TouchableOpacity
-                                            onPress={() => toggleItem(item.id)}
-                                            style={{ padding: 2 }}
-                                        >
-                                            <Icon
-                                                name={item.checked ? "CheckSquare" : "Square"}
-                                                size={20}
-                                                color={item.checked ? colors.primary : colors.textSecondary}
-                                                weight={item.checked ? "fill" : "regular"}
-                                            />
-                                        </TouchableOpacity>
+            {/* Category Tasks List */}
+            {catItems.length === 0 ? (
+                <Text style={{ fontSize: 13, color: colors.textSecondary, fontStyle: 'italic', textAlign: 'center', paddingVertical: 15 }}>
+                    No tasks in this category. Tap + to add!
+                </Text>
+            ) : (
+                <Sortable
+                    data={catItems}
+                    itemHeight={58}
+                    useFlatList={false}
+                    style={{ backgroundColor: 'transparent', height: catItems.length * 58 }}
+                    renderItem={({ item, id, positions, ...props }) => {
+                        return (
+                            <SortableItem
+                                key={id}
+                                id={id}
+                                data={item}
+                                positions={positions}
+                                {...props}
+                                onDrop={(draggedId, newPosition, allPositions) => {
+                                    if (allPositions) {
+                                        const sortedData = [...catItems].sort((a, b) => {
+                                            const posA = allPositions[a.id] ?? 0;
+                                            const posB = allPositions[b.id] ?? 0;
+                                            return posA - posB;
+                                        });
+                                        const otherItems = checklist.filter(x => x.category !== categoryName);
+                                        setChecklist([...otherItems, ...sortedData]);
+                                    }
+                                }}
+                            >
+                                <View style={{
+                                    backgroundColor: colors.background,
+                                    borderRadius: 12,
+                                    paddingHorizontal: 14,
+                                    height: 50,
+                                    marginBottom: 8,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    borderWidth: 1,
+                                    borderColor: colors.border,
+                                }}>
+                                    <TouchableOpacity
+                                        onPress={() => toggleItem(item.id)}
+                                        style={{ padding: 2 }}
+                                    >
+                                        <Icon
+                                            name={item.checked ? "CheckSquare" : "Square"}
+                                            size={20}
+                                            color={item.checked ? colors.primary : colors.textSecondary}
+                                            weight={item.checked ? "fill" : "regular"}
+                                        />
+                                    </TouchableOpacity>
 
-                                        <View style={{ flex: 1, marginLeft: 12, alignSelf: 'stretch', justifyContent: 'center' }}>
-                                            <View style={{ alignSelf: 'flex-start', justifyContent: 'center' }}>
-                                                <Text style={{
-                                                    fontSize: 14,
-                                                    color: item.checked ? colors.textSecondary : colors.text,
-                                                    opacity: item.checked ? 0.6 : 1,
-                                                }}>
-                                                    {item.text}
-                                                </Text>
-                                                {item.checked && (
-                                                    <View style={{
-                                                        position: 'absolute',
-                                                        left: 0,
-                                                        right: 0,
-                                                        height: 2.5,
-                                                        backgroundColor: isDarkMode ? '#2ECC71' : '#27AE60',
-                                                        opacity: 0.9
-                                                    }} />
-                                                )}
-                                            </View>
-                                        </View>
-
-                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                            <TouchableOpacity
-                                                onPress={() => deleteItem(item.id)}
-                                                style={{ padding: 4, opacity: 0.6 }}
-                                            >
-                                                <Icon name="Trash" size={16} color={colors.textSecondary} />
-                                            </TouchableOpacity>
-
-                                            <TouchableOpacity
-                                                onLongPress={dragTask}
-                                                delayLongPress={100}
-                                                style={{ padding: 4, marginLeft: 6, opacity: 0.6 }}
-                                            >
-                                                <Icon name="Equals" size={18} color={colors.textSecondary} />
-                                            </TouchableOpacity>
+                                    <View style={{ flex: 1, marginLeft: 12, alignSelf: 'stretch', justifyContent: 'center' }}>
+                                        <View style={{ alignSelf: 'flex-start', justifyContent: 'center' }}>
+                                            <Text style={{
+                                                fontSize: 14,
+                                                color: item.checked ? colors.textSecondary : colors.text,
+                                                opacity: item.checked ? 0.6 : 1,
+                                            }}>
+                                                {item.text}
+                                            </Text>
+                                            {item.checked && (
+                                                <View style={{
+                                                    position: 'absolute',
+                                                    left: 0,
+                                                    right: 0,
+                                                    height: 2.5,
+                                                    backgroundColor: isDarkMode ? '#2ECC71' : '#27AE60',
+                                                    opacity: 0.9
+                                                }} />
+                                            )}
                                         </View>
                                     </View>
-                                </ScaleDecorator>
-                            );
-                        }}
-                    />
-                )}
-            </View>
-        </ScaleDecorator>
+
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <TouchableOpacity
+                                            onPress={() => deleteItem(item.id)}
+                                            style={{ padding: 4, opacity: 0.6 }}
+                                        >
+                                            <Icon name="Trash" size={16} color={colors.textSecondary} />
+                                        </TouchableOpacity>
+
+                                        <SortableItem.Handle>
+                                            <View style={{ padding: 4, marginLeft: 6, opacity: 0.6 }}>
+                                                <Icon name="Equals" size={18} color={colors.textSecondary} />
+                                            </View>
+                                        </SortableItem.Handle>
+                                    </View>
+                                </View>
+                            </SortableItem>
+                        );
+                    }}
+                />
+            )}
+        </View>
     );
 });
 
@@ -346,11 +353,11 @@ export default function ItineraryViewScreen() {
                     const parsedEssentials = typeof items[3] === 'string' ? JSON.parse(items[3]) : items[3];
                     const parsedCollaborators = typeof items[4] === 'string' ? JSON.parse(items[4]) : items[4];
                     
-                    if (Array.isArray(parsedChecklist) && parsedChecklist.length > 0) setChecklist(parsedChecklist);
-                    if (Array.isArray(parsedCategories) && parsedCategories.length > 0) setCustomCategories(parsedCategories);
-                    if (Array.isArray(parsedNotes) && parsedNotes.length > 0) setNotes(parsedNotes);
-                    if (Array.isArray(parsedEssentials) && parsedEssentials.length > 0) setEssentials(parsedEssentials);
-                    if (Array.isArray(parsedCollaborators) && parsedCollaborators.length > 0) setCollaborators(parsedCollaborators);
+                    if (Array.isArray(parsedChecklist) && parsedChecklist.length > 0 && checklist.length === 0) setChecklist(parsedChecklist);
+                    if (Array.isArray(parsedCategories) && parsedCategories.length > 0 && customCategories.length === 0) setCustomCategories(parsedCategories);
+                    if (Array.isArray(parsedNotes) && parsedNotes.length > 0 && notes.length === 0) setNotes(parsedNotes);
+                    if (Array.isArray(parsedEssentials) && parsedEssentials.length > 0 && essentials.length === 0) setEssentials(parsedEssentials);
+                    if (Array.isArray(parsedCollaborators) && parsedCollaborators.length > 0 && collaborators.length === 0) setCollaborators(parsedCollaborators);
                 }
             } catch (e) {
                 console.error('Failed to unpack custom itinerary details:', e);
@@ -630,14 +637,74 @@ export default function ItineraryViewScreen() {
         }
     };
 
-    const renderDraggableItem = ({ item, drag, isActive }: RenderItemParams<any>) => {
+    const renderDraggableItem = ({ item, id, positions, ...props }: any) => {
+        const handleDrop = (draggedId: string, newPosition: number, allPositions?: { [id: string]: number }) => {
+            if (allPositions) {
+                const sortedData = [...activePlacesMemo].sort((a, b) => {
+                    const posA = allPositions[a.id] ?? 0;
+                    const posB = allPositions[b.id] ?? 0;
+                    return posA - posB;
+                });
+                
+                if (selectedDayTab === 'All') {
+                    let currentDay = 1;
+                    const updatedPlaces: any[] = [];
+                    sortedData.forEach((item) => {
+                        if (item.isHeader) {
+                            currentDay = item.day;
+                        } else {
+                            updatedPlaces.push({ ...item, day: currentDay });
+                        }
+                    });
+                    const duration = tripDraft?.duration || Math.max(...places.map(p => p.day), 1);
+                    // Reorder within days
+                    const finalPlaces: any[] = [];
+                    for (let day = 1; day <= duration; day++) {
+                        const dayPlaces = updatedPlaces.filter(p => p.day === day);
+                        dayPlaces.forEach((p, index) => {
+                            finalPlaces.push({ ...p, order: index });
+                        });
+                    }
+                    setPlaces(finalPlaces);
+                } else {
+                    const currentDay = parseInt(selectedDayTab.replace('Day ', ''));
+                    const otherDayPlaces = places.filter(p => p.day !== currentDay);
+                    const updatedDayPlaces = sortedData.map((item, index) => ({ ...item, order: index }));
+                    setPlaces([...otherDayPlaces, ...updatedDayPlaces]);
+                }
+            }
+        };
+
         if (item.isHeader) {
             return (
-                <View style={{ paddingHorizontal: 15, paddingVertical: 5, marginTop: 10 }}>
-                    <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 16 }}>
-                        Day {item.day}{item.dateStr ? ` - ${item.dateStr}` : ''}
-                    </Text>
-                </View>
+                <SortableItem key={id} id={id} data={item} positions={positions} {...props} onDrop={handleDrop}>
+                    <View style={{ height: 110, justifyContent: 'center', paddingHorizontal: 15, marginVertical: 5 }}>
+                        <View style={{
+                            backgroundColor: colors.primary + '15',
+                            padding: 12,
+                            borderRadius: 16,
+                            borderWidth: 1.5,
+                            borderColor: colors.primary + '30',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                        }}>
+                            <View style={{
+                                width: 36,
+                                height: 36,
+                                borderRadius: 18,
+                                backgroundColor: colors.primary,
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                marginRight: 12
+                            }}>
+                                <Icon name="Calendar" size={20} color="#fff" weight="bold" />
+                            </View>
+                            <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 16 }}>
+                                Day {item.day}{item.dateStr ? ` - ${item.dateStr}` : ''}
+                            </Text>
+                        </View>
+                    </View>
+                </SortableItem>
             );
         }
 
@@ -649,11 +716,13 @@ export default function ItineraryViewScreen() {
         };
 
         return (
-            <ScaleDecorator>
-                <View style={{ flexDirection: 'row', paddingHorizontal: 15, marginVertical: 10, alignItems: 'center' }}>
-                    <TouchableOpacity onLongPress={drag} style={{ padding: 5, marginRight: 5 }}>
-                        <Icon name="DotsSixVertical" size={20} color={colors.textSecondary} />
-                    </TouchableOpacity>
+            <SortableItem key={id} id={id} data={item} positions={positions} {...props} onDrop={handleDrop}>
+                <View style={{ flexDirection: 'row', paddingHorizontal: 15, height: 110, alignItems: 'center', marginVertical: 5 }}>
+                    <SortableItem.Handle>
+                        <View style={{ padding: 5, marginRight: 5 }}>
+                            <Icon name="DotsSixVertical" size={20} color={colors.textSecondary} />
+                        </View>
+                    </SortableItem.Handle>
 
                     <View style={{ width: 60, alignItems: 'center' }}>
                         <View style={{
@@ -687,14 +756,13 @@ export default function ItineraryViewScreen() {
                         >
                             <Text style={{ color: colors.textSecondary, fontSize: 9, fontWeight: '600' }}>{item.time || 'Pick a time'}</Text>
                         </TouchableOpacity>
-                        <View style={{ width: 2, height: 40, backgroundColor: colors.border, marginVertical: 5 }} />
                     </View>
 
-                    <View style={{ flex: 1, backgroundColor: colors.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border }}>
+                    <View style={{ flex: 1, height: 100, backgroundColor: colors.card, borderRadius: 16, padding: 12, borderWidth: 1.5, borderColor: colors.border, justifyContent: 'center' }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             <View style={{ flex: 1 }}>
                                 <TextInput
-                                    style={{ color: colors.textSecondary, fontWeight: 'bold', fontSize: 14, marginBottom: 4, padding: 0 }}
+                                    style={{ color: colors.textSecondary, fontWeight: 'bold', fontSize: 14, marginBottom: 2, padding: 0 }}
                                     value={item.title}
                                     placeholder="Enter a title"
                                     placeholderTextColor={colors.textSecondary}
@@ -702,18 +770,18 @@ export default function ItineraryViewScreen() {
                                         setPlaces(places.map(p => p.id === item.id ? { ...p, title: text } : p));
                                     }}
                                 />
-                                <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 15 }}>{item.name}</Text>
-                                {item.address && (
-                                    <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4 }}>{item.address}</Text>
-                                )}
+                                <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 14 }} numberOfLines={1}>{item.name}</Text>
+                                {item.address ? (
+                                    <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }} numberOfLines={1}>{item.address}</Text>
+                                ) : null}
                             </View>
-                            <TouchableOpacity onPress={() => handleDeletePlace(item.id)}>
+                            <TouchableOpacity onPress={() => handleDeletePlace(item.id)} style={{ padding: 4 }}>
                                 <Icon name="Trash" size={18} color={colors.textSecondary} />
                             </TouchableOpacity>
                         </View>
                     </View>
                 </View>
-            </ScaleDecorator>
+            </SortableItem>
         );
     };
 
@@ -756,38 +824,11 @@ export default function ItineraryViewScreen() {
                     </ScrollView>
                 </View>
 
-                <DraggableFlatList
+                <Sortable
                     data={activePlaces}
+                    itemHeight={120}
+                    style={{ backgroundColor: 'transparent' }}
                     renderItem={renderDraggableItem}
-                    keyExtractor={item => item.id}
-                    contentContainerStyle={{ paddingBottom: 150 }}
-                    onDragEnd={({ data }) => {
-                        if (selectedDayTab === 'All') {
-                            let currentDay = 1;
-                            const updatedPlaces: any[] = [];
-                            data.forEach((item) => {
-                                if (item.isHeader) {
-                                    currentDay = item.day;
-                                } else {
-                                    updatedPlaces.push({ ...item, day: currentDay });
-                                }
-                            });
-                            // Reorder within days
-                            const finalPlaces: any[] = [];
-                            for (let day = 1; day <= duration; day++) {
-                                const dayPlaces = updatedPlaces.filter(p => p.day === day);
-                                dayPlaces.forEach((p, index) => {
-                                    finalPlaces.push({ ...p, order: index });
-                                });
-                            }
-                            setPlaces(finalPlaces);
-                        } else {
-                            const currentDay = parseInt(selectedDayTab.replace('Day ', ''));
-                            const otherDayPlaces = places.filter(p => p.day !== currentDay);
-                            const updatedDayPlaces = data.map((item, index) => ({ ...item, order: index }));
-                            setPlaces([...otherDayPlaces, ...updatedDayPlaces]);
-                        }
-                    }}
                 />
             </View>
         );
@@ -875,90 +916,120 @@ export default function ItineraryViewScreen() {
             );
         }
 
-        const renderCategoryCard = ({ item: categoryName, drag, isActive }: RenderItemParams<string>) => {
-            return (
-                <CategoryCard
-                    categoryName={categoryName}
-                    drag={drag}
-                    isActive={isActive}
-                    checklist={checklist}
-                    colors={colors}
-                    isDarkMode={isDarkMode}
-                    toggleItem={toggleItem}
-                    deleteItem={deleteItem}
-                    deleteCategory={deleteCategory}
-                    setChecklistModalMode={setChecklistModalMode}
-                    setChecklistModalTargetCategory={setChecklistModalTargetCategory}
-                    setChecklistModalInputValue={setChecklistModalInputValue}
-                    setChecklistModalVisible={setChecklistModalVisible}
-                    setChecklist={setChecklist}
-                />
-            );
-        };
-
-        const handleCategoryDragEnd = ({ data }: { data: string[] }) => {
-            setCustomCategories(data);
-        };
+        const categoryData = categories.map((catName) => ({
+            id: catName,
+            name: catName,
+        }));
 
         return (
             <View style={{ flex: 1 }}>
-                <DraggableFlatList
-                    data={categories}
-                    renderItem={renderCategoryCard}
-                    keyExtractor={item => item}
+                <SortableAny
+                    data={categoryData}
+                    enableDynamicHeights={true}
+                    useFlatList={false}
+                    style={{ backgroundColor: 'transparent' }}
                     contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 150 }}
-                    onDragEnd={handleCategoryDragEnd}
                     onScrollBeginDrag={() => setShowFloatingButton(false)}
                     onScrollEndDrag={() => setShowFloatingButton(true)}
                     onMomentumScrollEnd={() => setShowFloatingButton(true)}
-                    scrollEventThrottle={16}
+                    renderItem={({ item, id, positions, ...props }) => (
+                        <SortableItemAny
+                            key={id}
+                            id={id}
+                            data={item}
+                            positions={positions}
+                            {...props}
+                            onDrop={(draggedId, newPosition, allPositions) => {
+                                if (allPositions) {
+                                    const sortedCats = [...categoryData].sort((a, b) => {
+                                        const posA = allPositions[a.id] ?? 0;
+                                        const posB = allPositions[b.id] ?? 0;
+                                        return posA - posB;
+                                    }).map(c => c.name);
+                                    setCustomCategories(sortedCats);
+                                }
+                            }}
+                        >
+                            <View style={{ paddingVertical: 6 }}>
+                                <CategoryCard
+                                    categoryName={item.name}
+                                    checklist={checklist}
+                                    colors={colors}
+                                    isDarkMode={isDarkMode}
+                                    toggleItem={toggleItem}
+                                    deleteItem={deleteItem}
+                                    deleteCategory={deleteCategory}
+                                    setChecklistModalMode={setChecklistModalMode}
+                                    setChecklistModalTargetCategory={setChecklistModalTargetCategory}
+                                    setChecklistModalInputValue={setChecklistModalInputValue}
+                                    setChecklistModalVisible={setChecklistModalVisible}
+                                    setChecklist={setChecklist}
+                                />
+                            </View>
+                        </SortableItemAny>
+                    )}
                 />
             </View>
         );
     };
 
     const renderNotes = () => {
-        const handleNoteDragEnd = ({ data }: { data: any[] }) => {
-            const updated = data.map((item, index) => ({ ...item, order: index }));
-            setNotes(updated);
-        };
+        const sortedNotes = [...notes].sort((a, b) => a.order - b.order);
+        const itemHeight = 120;
 
-        const renderNoteCard = ({ item, drag, isActive }: RenderItemParams<any>) => (
-            <ScaleDecorator>
-                <TouchableOpacity
-                    activeOpacity={0.8}
-                    onLongPress={drag}
-                    onPress={() => {
-                        setEditingNoteId(item.id);
-                        setNoteTitleInput(item.title);
-                        setNoteContentInput(item.content);
-                        setNoteModalVisible(true);
-                    }}
-                    style={{
-                        backgroundColor: colors.card,
-                        borderRadius: 16,
-                        padding: 16,
-                        marginVertical: 8,
-                        marginHorizontal: 20,
-                        borderWidth: 1.5,
-                        borderColor: isActive ? colors.primary : colors.border,
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: isActive ? 6 : 2 },
-                        shadowOpacity: isActive ? 0.15 : 0.04,
-                        shadowRadius: isActive ? 8 : 4,
-                        elevation: isActive ? 6 : 2,
-                    }}
-                >
-                    {item.title ? (
-                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 8 }} numberOfLines={1}>
-                            {item.title}
+        const renderNoteCard = ({ item, id, positions, ...props }: any) => (
+            <SortableItemAny
+                key={id}
+                id={id}
+                data={item}
+                positions={positions}
+                {...props}
+                onDrop={(draggedId, newPosition, allPositions) => {
+                    if (allPositions) {
+                        const sortedData = [...sortedNotes].sort((a, b) => {
+                            const posA = allPositions[a.id] ?? 0;
+                            const posB = allPositions[b.id] ?? 0;
+                            return posA - posB;
+                        });
+                        const updated = sortedData.map((noteItem, index) => ({ ...noteItem, order: index }));
+                        setNotes(updated);
+                    }
+                }}
+            >
+                <View style={{ height: 112, justifyContent: 'center', paddingHorizontal: 20, marginVertical: 4 }}>
+                    <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => {
+                            setEditingNoteId(item.id);
+                            setNoteTitleInput(item.title);
+                            setNoteContentInput(item.content);
+                            setNoteModalVisible(true);
+                        }}
+                        style={{
+                            backgroundColor: colors.card,
+                            borderRadius: 16,
+                            padding: 16,
+                            flex: 1,
+                            borderWidth: 1.5,
+                            borderColor: colors.border,
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.04,
+                            shadowRadius: 4,
+                            elevation: 2,
+                        }}
+                    >
+                        {item.title ? (
+                            <Text style={{ fontSize: 14, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
+                                {item.title}
+                            </Text>
+                        ) : null}
+                        <Text style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 16 }} numberOfLines={3}>
+                            {item.content || 'Empty note'}
                         </Text>
-                    ) : null}
-                    <Text style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 20 }} numberOfLines={5}>
-                        {item.content || 'Empty note'}
-                    </Text>
-                </TouchableOpacity>
-            </ScaleDecorator>
+                    </TouchableOpacity>
+                </View>
+            </SortableItemAny>
         );
 
         return (
@@ -984,16 +1055,15 @@ export default function ItineraryViewScreen() {
                         </Text>
                     </View>
                 ) : (
-                    <DraggableFlatList
-                        data={[...notes].sort((a, b) => a.order - b.order)}
-                        renderItem={renderNoteCard}
-                        keyExtractor={item => item.id}
+                    <SortableAny
+                        data={sortedNotes}
+                        itemHeight={120}
+                        style={{ backgroundColor: 'transparent' }}
                         contentContainerStyle={{ paddingVertical: 10, paddingBottom: 150 }}
-                        onDragEnd={handleNoteDragEnd}
+                        renderItem={renderNoteCard}
                         onScrollBeginDrag={() => setShowFloatingButton(false)}
                         onScrollEndDrag={() => setShowFloatingButton(true)}
                         onMomentumScrollEnd={() => setShowFloatingButton(true)}
-                        scrollEventThrottle={16}
                     />
                 )}
             </View>
@@ -1147,89 +1217,112 @@ export default function ItineraryViewScreen() {
                 </View>
 
                 {/* Collaborators Row */}
-                {(currentUserProfile || collaborators.length > 0) && (
-                    <View style={{ paddingHorizontal: 20, paddingVertical: 10, flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={{ color: colors.textSecondary, fontSize: 12, marginRight: 15 }}>Collaborators:</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            {currentUserProfile && (
-                                <TouchableOpacity
-                                    key={currentUserProfile.id}
-                                    onPress={() => router.push(`/profile/${currentUserProfile.id}`)}
+                <View style={{ height: 60, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center' }}>
+                    {(currentUserProfile || collaborators.length > 0) ? (
+                        <>
+                            <Text style={{ color: colors.textSecondary, fontSize: 12, marginRight: 15 }}>Collaborators:</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                {currentUserProfile && (
+                                    <TouchableOpacity
+                                        key={currentUserProfile.id}
+                                        onPress={() => router.push(`/profile/${currentUserProfile.id}`)}
+                                        style={{
+                                            zIndex: 100,
+                                            position: 'relative',
+                                        }}
+                                    >
+                                        {currentUserProfile.photo_url ? (
+                                            <Image
+                                                source={{ uri: currentUserProfile.photo_url }}
+                                                style={{
+                                                    width: 40,
+                                                    height: 40,
+                                                    borderRadius: 20,
+                                                    borderWidth: 2,
+                                                    borderColor: colors.card
+                                                }}
+                                            />
+                                        ) : (
+                                            <View
+                                                style={{
+                                                    width: 40,
+                                                    height: 40,
+                                                    borderRadius: 20,
+                                                    backgroundColor: colors.primary,
+                                                    justifyContent: 'center',
+                                                    alignItems: 'center',
+                                                    borderWidth: 2,
+                                                    borderColor: colors.card
+                                                }}
+                                            >
+                                                <Icon name="User" size={18} color="#fff" />
+                                            </View>
+                                        )}
+                                    </TouchableOpacity>
+                                )}
+                                {collaborators.map((user, index) => (
+                                    <TouchableOpacity
+                                        key={user.id}
+                                        onPress={() => router.push(`/profile/${user.id}`)}
+                                        style={{
+                                            marginLeft: -15,
+                                            zIndex: 99 - index,
+                                        }}
+                                    >
+                                        {user.photo_url ? (
+                                            <Image
+                                                source={{ uri: user.photo_url }}
+                                                style={{
+                                                    width: 40,
+                                                    height: 40,
+                                                    borderRadius: 20,
+                                                    borderWidth: 2,
+                                                    borderColor: colors.card
+                                                }}
+                                            />
+                                        ) : (
+                                            <View
+                                                style={{
+                                                    width: 40,
+                                                    height: 40,
+                                                    borderRadius: 20,
+                                                    backgroundColor: colors.primary,
+                                                    justifyContent: 'center',
+                                                    alignItems: 'center',
+                                                    borderWidth: 2,
+                                                    borderColor: colors.card
+                                                }}
+                                            >
+                                                <Icon name="User" size={18} color="#fff" />
+                                            </View>
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </>
+                    ) : (
+                        <>
+                            <Text style={{ color: colors.textSecondary, fontSize: 12, marginRight: 15 }}>Collaborators:</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <View
                                     style={{
-                                        zIndex: 100,
-                                        position: 'relative',
+                                        width: 40,
+                                        height: 40,
+                                        borderRadius: 20,
+                                        backgroundColor: colors.border,
+                                        opacity: 0.3,
+                                        borderWidth: 2,
+                                        borderColor: colors.card,
+                                        justifyContent: 'center',
+                                        alignItems: 'center'
                                     }}
                                 >
-                                    {currentUserProfile.photo_url ? (
-                                        <Image
-                                            source={{ uri: currentUserProfile.photo_url }}
-                                            style={{
-                                                width: 40,
-                                                height: 40,
-                                                borderRadius: 20,
-                                                borderWidth: 2,
-                                                borderColor: colors.card
-                                            }}
-                                        />
-                                    ) : (
-                                        <View
-                                            style={{
-                                                width: 40,
-                                                height: 40,
-                                                borderRadius: 20,
-                                                backgroundColor: colors.primary,
-                                                justifyContent: 'center',
-                                                alignItems: 'center',
-                                                borderWidth: 2,
-                                                borderColor: colors.card
-                                            }}
-                                        >
-                                            <Icon name="User" size={18} color="#fff" />
-                                        </View>
-                                    )}
-                                </TouchableOpacity>
-                            )}
-                            {collaborators.map((user, index) => (
-                                <TouchableOpacity
-                                    key={user.id}
-                                    onPress={() => router.push(`/profile/${user.id}`)}
-                                    style={{
-                                        marginLeft: -15,
-                                        zIndex: 99 - index,
-                                    }}
-                                >
-                                    {user.photo_url ? (
-                                        <Image
-                                            source={{ uri: user.photo_url }}
-                                            style={{
-                                                width: 40,
-                                                height: 40,
-                                                borderRadius: 20,
-                                                borderWidth: 2,
-                                                borderColor: colors.card
-                                            }}
-                                        />
-                                    ) : (
-                                        <View
-                                            style={{
-                                                width: 40,
-                                                height: 40,
-                                                borderRadius: 20,
-                                                backgroundColor: colors.primary,
-                                                justifyContent: 'center',
-                                                alignItems: 'center',
-                                                borderWidth: 2,
-                                                borderColor: colors.card
-                                            }}
-                                        >
-                                            <Icon name="User" size={18} color="#fff" />
-                                        </View>
-                                    )}
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </View>
-                )}
+                                    <Icon name="User" size={18} color={colors.textSecondary} />
+                                </View>
+                            </View>
+                        </>
+                    )}
+                </View>
 
                 {/* Premium Tab Bar */}
                 <View style={{ backgroundColor: colors.card }}>
