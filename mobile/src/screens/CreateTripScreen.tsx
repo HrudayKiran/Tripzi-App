@@ -81,10 +81,27 @@ const tripSchema = z.object({
     transportModes: z.array(z.string()).min(1, 'Select at least one transport mode'),
     costPerPerson: z.string().min(1, 'Cost per person is required'),
     accommodationType: z.string().min(1, 'Select accommodation type'),
-    bookingStatus: z.string().min(1, 'Booking status is required'),
-    accommodationDays: z.string().min(1, 'Accommodation days is required'),
+    bookingStatus: z.string().optional(),
+    accommodationDays: z.string().optional(),
     tripType: z.string().min(1, 'Select trip type'),
     placesToVisit: z.string().optional(),
+}).superRefine((data, ctx) => {
+    if (data.accommodationType && data.accommodationType !== 'none') {
+        if (!data.bookingStatus || data.bookingStatus.length === 0) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'Booking status is required',
+                path: ['bookingStatus'],
+            });
+        }
+        if (!data.accommodationDays || data.accommodationDays.length === 0) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'Accommodation days is required',
+                path: ['accommodationDays'],
+            });
+        }
+    }
 });
 
 type TripFormData = z.infer<typeof tripSchema>;

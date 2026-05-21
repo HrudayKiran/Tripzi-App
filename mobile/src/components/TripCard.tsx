@@ -457,15 +457,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                     </View>
                     <View style={styles.detailItem}>
                         <Text style={styles.detailEmoji}>👥</Text>
-                        <Text style={[styles.detailValue, { color: colors.text }]}>{spotsLeft} left</Text>
-                    </View>
-                    <View style={styles.detailItem}>
-                        <Text style={styles.detailEmoji}>
-                            {trip.genderPreference === 'male' ? '👨' : trip.genderPreference === 'female' ? '👩' : '👥'}
-                        </Text>
-                        <Text style={[styles.detailValue, { color: colors.text }]}>
-                            {trip.genderPreference === 'male' ? 'Male' : trip.genderPreference === 'female' ? 'Female' : 'Any'}
-                        </Text>
+                        <Text style={[styles.detailValue, { color: colors.text }]}>{trip.participants?.length || 1} travelers</Text>
                     </View>
                     {trip.tripTypes?.slice(0, 1).map((type: string, index: number) => (
                         <View key={index} style={styles.detailItem}>

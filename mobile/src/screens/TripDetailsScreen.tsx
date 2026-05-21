@@ -8,6 +8,7 @@ import { database } from '../database';
 import Icon from '../components/Icon';
 import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
+import MapView, { Marker } from 'react-native-maps';
 
 import DefaultAvatar from '../components/DefaultAvatar';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
@@ -16,7 +17,6 @@ import ActionReasonModal from '../components/ActionReasonModal';
 import { cancelTrip, deleteTrip, joinTrip, leaveTrip } from '../utils/tripActions';
 import useTripDetailsQuery from '../hooks/useTripDetailsQuery';
 import { useQueryClient } from '@tanstack/react-query';
-import CustomTimeline from '../components/CustomTimeline';
 
 const { width } = Dimensions.get('window');
 
@@ -43,8 +43,6 @@ const DELETE_REASONS = [
   'Safety or moderation concern',
   'Other',
 ];
-
-// Unused constants removed
 
 const TripDetailsScreen = () => {
   const router = useRouter();
@@ -90,6 +88,95 @@ const TripDetailsScreen = () => {
   const scrollY = useRef(new Animated.Value(0)).current;
   const isOwner = trip?.userId === user?.id || trip?.user_id === user?.id;
 
+  // Parse structured data from mandatory_items
+  const parsedData = useMemo(() => {
+    const items = trip?.mandatoryItems || trip?.mandatory_items || [];
+    let checklist: any[] = [], categories: string[] = [], notes: any[] = [], collaborators: any[] = [];
+    try {
+      if (items.length > 0) {
+        const firstItem = items[0];
+        if (typeof firstItem === 'string' && (firstItem.trim().startsWith('[') || firstItem.trim().startsWith('{'))) {
+          checklist = JSON.parse(firstItem);
+          categories = JSON.parse(items[1] || '[]');
+          notes = JSON.parse(items[2] || '[]');
+          const collabIndex = items.length >= 5 ? 4 : 3;
+          collaborators = JSON.parse(items[collabIndex] || '[]');
+        }
+      }
+    } catch { }
+    return {
+      checklist: Array.isArray(checklist) ? checklist : [],
+      categories: Array.isArray(categories) ? categories : [],
+      notes: Array.isArray(notes) ? notes : [],
+      collaborators: Array.isArray(collaborators) ? collaborators : []
+    };
+  }, [trip?.mandatoryItems, trip?.mandatory_items]);
+
+  // Parse structured places from places_to_visit
+  const parsedPlaces = useMemo(() => {
+    const pv = trip?.placesToVisit || trip?.places_to_visit || [];
+    try {
+      if (pv.length > 0) {
+        const firstItem = pv[0];
+        if (typeof firstItem === 'string' && firstItem.trim().startsWith('[')) {
+          const parsed = JSON.parse(firstItem);
+          if (Array.isArray(parsed)) {
+            return parsed
+              .filter((p: any) => p && p.name)
+              .sort((a: any, b: any) => (a.day || 0) - (b.day || 0) || (a.order || 0) - (b.order || 0));
+          }
+        } else if (typeof firstItem === 'string') {
+          // Old format: simple string array
+          return pv
+            .filter((item: any) => typeof item === 'string' && item.length < 200 && !item.trim().startsWith('['))
+            .map((name: string, i: number) => ({ name, day: 1, order: i }));
+        }
+      }
+    } catch { }
+    return [];
+  }, [trip?.placesToVisit, trip?.places_to_visit]);
+
+  // Group places by day
+  const placesByDay = useMemo(() => {
+    const grouped: { [key: number]: any[] } = {};
+    parsedPlaces.forEach((place: any) => {
+      const day = place.day || 1;
+      if (!grouped[day]) grouped[day] = [];
+      grouped[day].push(place);
+    });
+    return grouped;
+  }, [parsedPlaces]);
+
+  // Group checklist by category
+  const checklistByCategory = useMemo(() => {
+    const grouped: { [key: string]: any[] } = {};
+    parsedData.checklist.forEach((item: any) => {
+      const cat = item.category || 'General';
+      if (!grouped[cat]) grouped[cat] = [];
+      grouped[cat].push(item);
+    });
+    return grouped;
+  }, [parsedData.checklist]);
+
+  // MapView region from places
+  const mapRegion = useMemo(() => {
+    const validPlaces = parsedPlaces.filter((p: any) => p.latitude && p.longitude);
+    if (validPlaces.length === 0) return null;
+
+    const lats = validPlaces.map((p: any) => p.latitude);
+    const lngs = validPlaces.map((p: any) => p.longitude);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+
+    return {
+      latitude: (minLat + maxLat) / 2,
+      longitude: (minLng + maxLng) / 2,
+      latitudeDelta: Math.max(0.02, (maxLat - minLat) * 1.5),
+      longitudeDelta: Math.max(0.02, (maxLng - minLng) * 1.5),
+    };
+  }, [parsedPlaces]);
 
 
   // Fetch participant data when trip.participants changes
@@ -283,7 +370,9 @@ const TripDetailsScreen = () => {
 
   const images = trip.images?.length > 0 ? trip.images : [trip.coverImage || 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800'];
   const imageLocations = trip.imageLocations || [];
-  const spotsLeft = Math.max(0, (trip.maxTravelers || 8) - (trip.participants?.length || trip.currentTravelers || 1));
+  const collaboratorCount = parsedData.collaborators.length > 0
+    ? parsedData.collaborators.length
+    : (trip.participants?.length || 1);
 
 
 
@@ -305,27 +394,6 @@ const TripDetailsScreen = () => {
 
           {/* Right Side Actions */}
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            {/* Join button for non-owners */}
-            {!isOwner && !isCompleted && (
-              <TouchableOpacity
-                style={[
-                  styles.headerJoinButton,
-                  {
-                    backgroundColor: isJoined ? 'transparent' : colors.primary,
-                    borderColor: colors.primary,
-                    marginRight: SPACING.sm
-                  },
-                ]}
-                onPress={handleJoinToggle}
-                disabled={spotsLeft <= 0 && !isJoined}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.headerJoinText, { color: isJoined ? colors.primary : '#fff' }]}>
-                  {isJoined ? 'Joined' : spotsLeft <= 0 ? 'Full' : 'Join'}
-                </Text>
-              </TouchableOpacity>
-            )}
-
             {/* Three Dots Menu for Owner */}
             {isOwner && (
               <View>
@@ -534,8 +602,7 @@ const TripDetailsScreen = () => {
             </TouchableOpacity>
           </View>
 
-          {/* ... (Stats, Description, Details, Places, Items, Participants - unchanged) ... */}
-          {/* Quick Stats */}
+          {/* Quick Stats — collaborator count instead of spots left */}
           <MotiView
             from={{ opacity: 0, translateY: 20 }}
             animate={{ opacity: 1, translateY: 0 }}
@@ -556,8 +623,8 @@ const TripDetailsScreen = () => {
             <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
             <View style={styles.statItem}>
               <Text style={styles.statEmoji}>👥</Text>
-              <Text style={[styles.statValue, { color: colors.text }]}>{spotsLeft}</Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>spots left</Text>
+              <Text style={[styles.statValue, { color: colors.text }]}>{collaboratorCount}</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>collaborators</Text>
             </View>
           </MotiView>
 
@@ -593,67 +660,167 @@ const TripDetailsScreen = () => {
             {trip.bookingStatus && (
               <DetailRow icon="✅" label="Booking" value={trip.bookingStatus === 'booked' ? 'Already Booked' : trip.bookingStatus === 'to_book' ? 'Yet to Book' : 'Not Needed'} colors={colors} />
             )}
-            <DetailRow icon="👥" label="Group" value={`${trip.genderPreference === 'male' ? 'Male only' : trip.genderPreference === 'female' ? 'Female only' : 'Anyone can join'}`} colors={colors} />
           </MotiView>
 
-
-          {/* Places to Visit */}
-          {trip.placesToVisit?.length > 0 && (
+          {/* Full Itinerary — Places grouped by day (View-based timeline, no SVG) */}
+          {parsedPlaces.length > 0 && (
             <MotiView
               from={{ opacity: 0, translateY: 20 }}
               animate={{ opacity: 1, translateY: 0 }}
-              transition={{ type: 'timing', duration: 400, delay: 600 }}
+              transition={{ type: 'timing', duration: 400, delay: 500 }}
             >
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Places to Visit</Text>
-              {trip.placesToVisit.map((place: string, index: number) => (
-                <View key={index} style={[styles.placeItem, { backgroundColor: colors.card }]}>
-                  <View style={[styles.placeNumber, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.placeNumberText}>{index + 1}</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Full Itinerary</Text>
+              {Object.keys(placesByDay).sort((a, b) => Number(a) - Number(b)).map((dayKey) => {
+                const day = Number(dayKey);
+                const dayPlaces = placesByDay[day];
+                return (
+                  <View key={`day-${day}`} style={{ marginBottom: SPACING.md }}>
+                    <View style={[styles.dayHeader, { backgroundColor: colors.primary + '15' }]}>
+                      <Text style={[styles.dayHeaderText, { color: colors.primary }]}>Day {day}</Text>
+                    </View>
+                    {dayPlaces.map((place: any, idx: number) => (
+                      <View key={`place-${day}-${idx}`} style={styles.timelineItem}>
+                        {/* View-based timeline connector (no SVG) */}
+                        <View style={styles.timelineLeft}>
+                          <View style={[styles.timelineDot, { backgroundColor: colors.primary }]} />
+                          {idx < dayPlaces.length - 1 && (
+                            <View style={[styles.timelineLine, { backgroundColor: colors.primary + '40' }]} />
+                          )}
+                        </View>
+                        <View style={[styles.timelineContent, { backgroundColor: colors.card }]}>
+                          <Text style={[styles.timelinePlaceName, { color: colors.text }]}>{place.name}</Text>
+                          {(place.time || place.address) && (
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                              {place.time ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                  <Icon name="Clock" size={12} color={colors.textSecondary} />
+                                  <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{place.time}</Text>
+                                </View>
+                              ) : null}
+                              {place.address ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}>
+                                  <Icon name="MapPin" size={12} color={colors.textSecondary} />
+                                  <Text style={{ color: colors.textSecondary, fontSize: 12 }} numberOfLines={1}>{place.address}</Text>
+                                </View>
+                              ) : null}
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    ))}
                   </View>
-                  <Text style={[styles.placeText, { color: colors.text }]}>{place}</Text>
+                );
+              })}
+            </MotiView>
+          )}
+
+          {/* Itinerary Timeline (old string-based — fallback) */}
+          {(!parsedPlaces.length && trip.itinerary?.length > 0) && (
+            <MotiView
+              from={{ opacity: 0, translateY: 20 }}
+              animate={{ opacity: 1, translateY: 0 }}
+              transition={{ type: 'timing', duration: 400, delay: 500 }}
+            >
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Itinerary</Text>
+              {trip.itinerary.map((item: string, idx: number) => (
+                <View key={`it-${idx}`} style={styles.timelineItem}>
+                  <View style={styles.timelineLeft}>
+                    <View style={[styles.timelineDot, { backgroundColor: colors.primary }]} />
+                    {idx < trip.itinerary.length - 1 && (
+                      <View style={[styles.timelineLine, { backgroundColor: colors.primary + '40' }]} />
+                    )}
+                  </View>
+                  <View style={[styles.timelineContent, { backgroundColor: colors.card }]}>
+                    <Text style={[styles.timelinePlaceName, { color: colors.text }]}>{item}</Text>
+                  </View>
                 </View>
               ))}
             </MotiView>
           )}
 
-          {/* Itinerary Timeline */}
-          {trip.itinerary?.length > 0 && (
+          {/* Checklist (grouped by category) */}
+          {parsedData.checklist.length > 0 && (
+            <MotiView
+              from={{ opacity: 0, translateY: 20 }}
+              animate={{ opacity: 1, translateY: 0 }}
+              transition={{ type: 'timing', duration: 400, delay: 600 }}
+            >
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Checklist</Text>
+              {Object.keys(checklistByCategory).map((category) => (
+                <View key={`cat-${category}`} style={{ marginBottom: SPACING.md }}>
+                  <Text style={[styles.checklistCategoryTitle, { color: colors.primary }]}>{category}</Text>
+                  {checklistByCategory[category].map((item: any, idx: number) => (
+                    <View key={`check-${idx}`} style={[styles.checklistItem, { backgroundColor: colors.card }]}>
+                      <View style={[styles.checkBox, { borderColor: item.checked ? colors.primary : colors.border, backgroundColor: item.checked ? colors.primary : 'transparent' }]}>
+                        {item.checked && <Icon name="Check" size={12} color="#fff" weight="bold" />}
+                      </View>
+                      <Text style={[styles.checklistText, { color: colors.text, textDecorationLine: item.checked ? 'line-through' : 'none', opacity: item.checked ? 0.6 : 1 }]}>{item.text}</Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </MotiView>
+          )}
+
+          {/* Notes */}
+          {parsedData.notes.length > 0 && (
             <MotiView
               from={{ opacity: 0, translateY: 20 }}
               animate={{ opacity: 1, translateY: 0 }}
               transition={{ type: 'timing', duration: 400, delay: 650 }}
             >
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Itinerary</Text>
-              <CustomTimeline items={trip.itinerary} />
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Notes</Text>
+              {parsedData.notes.map((note: any, idx: number) => (
+                <View key={`note-${idx}`} style={[styles.noteCard, { backgroundColor: colors.card }]}>
+                  {note.title ? (
+                    <Text style={[styles.noteTitle, { color: colors.text }]}>{note.title}</Text>
+                  ) : null}
+                  {note.content ? (
+                    <Text style={[styles.noteContent, { color: colors.textSecondary }]}>{note.content}</Text>
+                  ) : null}
+                </View>
+              ))}
             </MotiView>
           )}
 
-          {/* Mandatory Items */}
-          {trip.mandatoryItems?.length > 0 && (
+          {/* Itinerary MapView */}
+          {mapRegion && (
             <MotiView
               from={{ opacity: 0, translateY: 20 }}
               animate={{ opacity: 1, translateY: 0 }}
               transition={{ type: 'timing', duration: 400, delay: 700 }}
             >
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>What to Bring</Text>
-              <View style={styles.itemsGrid}>
-                {trip.mandatoryItems.map((item: string, index: number) => (
-                  <View key={index} style={[styles.itemChip, { backgroundColor: colors.card }]}>
-                    <Text style={[styles.itemText, { color: colors.text }]}>✓ {item}</Text>
-                  </View>
-                ))}
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Itinerary MapView</Text>
+              <View style={styles.mapContainer}>
+                <MapView
+                  style={styles.mapView}
+                  region={mapRegion}
+                  scrollEnabled={false}
+                  zoomEnabled={false}
+                  pitchEnabled={false}
+                  rotateEnabled={false}
+                >
+                  {parsedPlaces.filter((p: any) => p.latitude && p.longitude).map((place: any, idx: number) => (
+                    <Marker
+                      key={`marker-${idx}`}
+                      coordinate={{ latitude: place.latitude, longitude: place.longitude }}
+                      title={place.name}
+                      description={place.address || `Day ${place.day || 1}`}
+                    />
+                  ))}
+                </MapView>
               </View>
             </MotiView>
           )}
 
-          {/* Participants */}
+          {/* Participants / Collaborators */}
           <MotiView
             from={{ opacity: 0, translateY: 20 }}
             animate={{ opacity: 1, translateY: 0 }}
             transition={{ type: 'timing', duration: 400, delay: 800 }}
           >
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Travelers ({trip.participants?.length || 1}/{trip.maxTravelers || 8})
+              Collaborators ({collaboratorCount})
             </Text>
             <View style={styles.participantsRow}>
               {participantsData.slice(0, 5).map((participant, i) => (
@@ -685,8 +852,6 @@ const TripDetailsScreen = () => {
       </ScrollView>
 
       {/* Footer Removed (Message button moved to creator row) */}
-
-      {/* ... (Keep Modal Rendering - same as before) ... */}
 
       {/* Report Trip Modal */}
       <ReportTripModal
@@ -773,7 +938,7 @@ const TripDetailsScreen = () => {
   );
 };
 
-const DetailRow = ({ icon, label, value, colors }) => (
+const DetailRow = ({ icon, label, value, colors }: { icon: string; label: string; value: string; colors: any }) => (
   <View style={styles.detailRow}>
     <Text style={styles.detailIcon}>{icon}</Text>
     <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{label}</Text>
@@ -830,7 +995,9 @@ const styles = StyleSheet.create({
   detailIcon: { fontSize: 18, width: 30 },
   detailLabel: { flex: 1, fontSize: FONT_SIZE.sm },
   detailValue: { flex: 2, fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold, textAlign: 'right' },
-  mapContainer: { borderRadius: BORDER_RADIUS.lg, overflow: 'hidden' },
+  // Map
+  mapContainer: { borderRadius: BORDER_RADIUS.lg, overflow: 'hidden', marginBottom: SPACING.md },
+  mapView: { width: '100%', height: 220 },
   mapPlaceholder: { height: 150, justifyContent: 'center', alignItems: 'center' },
   staticMap: { width: '100%', height: 120, backgroundColor: '#e5e7eb' },
   mapOverlay: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: SPACING.sm, gap: SPACING.xs },
@@ -838,6 +1005,25 @@ const styles = StyleSheet.create({
   mapSubtext: { fontSize: FONT_SIZE.xs },
   viewMapButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: SPACING.md, gap: SPACING.sm },
   viewMapButtonText: { color: '#fff', fontWeight: FONT_WEIGHT.bold, fontSize: FONT_SIZE.sm },
+  // Timeline (View-based, no SVG)
+  timelineItem: { flexDirection: 'row', marginBottom: 0, minHeight: 52 },
+  timelineLeft: { width: 24, alignItems: 'center', marginRight: SPACING.sm },
+  timelineDot: { width: 12, height: 12, borderRadius: 6, marginTop: 6 },
+  timelineLine: { width: 2, flex: 1, marginTop: 2 },
+  timelineContent: { flex: 1, padding: SPACING.sm, borderRadius: BORDER_RADIUS.md, marginBottom: SPACING.xs },
+  timelinePlaceName: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold },
+  dayHeader: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.md, marginBottom: SPACING.sm, alignSelf: 'flex-start' },
+  dayHeaderText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
+  // Checklist
+  checklistCategoryTitle: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold, marginBottom: SPACING.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
+  checklistItem: { flexDirection: 'row', alignItems: 'center', padding: SPACING.sm, borderRadius: BORDER_RADIUS.md, marginBottom: SPACING.xs },
+  checkBox: { width: 20, height: 20, borderRadius: 4, borderWidth: 1.5, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.sm },
+  checklistText: { fontSize: FONT_SIZE.sm, flex: 1 },
+  // Notes
+  noteCard: { padding: SPACING.md, borderRadius: BORDER_RADIUS.md, marginBottom: SPACING.sm },
+  noteTitle: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold, marginBottom: SPACING.xs },
+  noteContent: { fontSize: FONT_SIZE.sm, lineHeight: 20 },
+  // Places
   placeItem: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, borderRadius: BORDER_RADIUS.md, marginBottom: SPACING.sm },
   placeNumber: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.md },
   placeNumberText: { color: '#fff', fontWeight: FONT_WEIGHT.bold, fontSize: FONT_SIZE.sm },

@@ -15,17 +15,147 @@ import {
 } from './NeumorphicIconButtons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
-import { Sortable, SortableItem } from 'react-native-reanimated-dnd';
+import { Sortable, SortableItem, useSortableList, DropProvider, SortableDirection } from 'react-native-reanimated-dnd';
 import MapView, { Marker } from 'react-native-maps';
-import { darkMapStyle } from '../screens/MapScreen';
 import * as Haptics from 'expo-haptics';
 import { deleteTripImagesFromR2, uploadTripImageToR2 } from '../utils/imageUpload';
 import { showUploadNotification, completeUploadNotification, failUploadNotification } from '../utils/notifications';
 import { syncDatabase } from '../database/sync';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { GestureHandlerRootView, FlatList as GHFlatList, ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { useTripStore } from '../store/tripStore';
+import Animated from 'react-native-reanimated';
 
 const SortableAny = Sortable as any;
+const SortableItemAny = SortableItem as any;
+const AnimatedFlatList = Animated.createAnimatedComponent(GHFlatList);
+const AnimatedScrollView = Animated.createAnimatedComponent(GHScrollView);
+
+interface NonFlickerSortableProps {
+    data: any[];
+    renderItem: (props: any) => any;
+    direction?: SortableDirection;
+    itemHeight?: number | number[] | ((item: any, index: number) => number);
+    enableDynamicHeights?: boolean;
+    estimatedItemHeight?: number;
+    onHeightsMeasured?: (heights: { [id: string]: number }) => void;
+    style?: any;
+    contentContainerStyle?: any;
+    itemKeyExtractor?: (item: any, index: number) => string;
+    useFlatList?: boolean;
+    onScrollBeginDrag?: any;
+    onScrollEndDrag?: any;
+    onMomentumScrollEnd?: any;
+}
+
+const NonFlickerSortable = React.memo(({
+    data,
+    renderItem,
+    direction = SortableDirection.Vertical,
+    itemHeight,
+    enableDynamicHeights = false,
+    estimatedItemHeight = 60,
+    onHeightsMeasured,
+    style,
+    contentContainerStyle,
+    itemKeyExtractor = (item: any) => item.id,
+    useFlatList = true,
+    ...scrollProps
+}: NonFlickerSortableProps) => {
+    const {
+        scrollViewRef,
+        dropProviderRef,
+        handleScroll,
+        handleScrollEnd,
+        contentHeight,
+        getItemProps
+    } = useSortableList({
+        data,
+        itemHeight,
+        enableDynamicHeights,
+        estimatedItemHeight,
+        onHeightsMeasured,
+        itemKeyExtractor
+    });
+
+    const combinedOnScrollEndDrag = (e: any) => {
+        handleScrollEnd();
+        if (scrollProps.onScrollEndDrag) {
+            scrollProps.onScrollEndDrag(e);
+        }
+    };
+
+    const combinedOnMomentumScrollEnd = (e: any) => {
+        handleScrollEnd();
+        if (scrollProps.onMomentumScrollEnd) {
+            scrollProps.onMomentumScrollEnd(e);
+        }
+    };
+
+    if (useFlatList) {
+        return (
+            <GestureHandlerRootView style={{ flex: 1 }}>
+                <DropProvider ref={dropProviderRef}>
+                    <AnimatedFlatList
+                        ref={scrollViewRef}
+                        data={data}
+                        keyExtractor={itemKeyExtractor}
+                        scrollEventThrottle={16}
+                        onScroll={handleScroll}
+                        style={[{ flex: 1, position: 'relative', backgroundColor: 'transparent' }, style]}
+                        contentContainerStyle={[{ height: contentHeight }, contentContainerStyle]}
+                        onScrollBeginDrag={scrollProps.onScrollBeginDrag}
+                        onScrollEndDrag={combinedOnScrollEndDrag}
+                        onMomentumScrollEnd={combinedOnMomentumScrollEnd}
+                        simultaneousHandlers={dropProviderRef}
+                        showsVerticalScrollIndicator={false}
+                        renderItem={({ item, index }: any) => {
+                            const itemProps = getItemProps(item, index);
+                            return renderItem({
+                                item,
+                                index,
+                                id: itemProps.id,
+                                positions: itemProps.positions,
+                                direction: SortableDirection.Vertical,
+                                ...itemProps
+                            }) as any;
+                        }}
+                    />
+                </DropProvider>
+            </GestureHandlerRootView>
+        );
+    }
+
+    return (
+        <GestureHandlerRootView style={{ flex: 1 }}>
+            <DropProvider ref={dropProviderRef}>
+                <AnimatedScrollView
+                    ref={scrollViewRef}
+                    scrollEventThrottle={16}
+                    onScroll={handleScroll}
+                    style={[{ flex: 1, position: 'relative', backgroundColor: 'transparent' }, style]}
+                    contentContainerStyle={[{ height: contentHeight }, contentContainerStyle]}
+                    onScrollBeginDrag={scrollProps.onScrollBeginDrag}
+                    onScrollEndDrag={combinedOnScrollEndDrag}
+                    onMomentumScrollEnd={combinedOnMomentumScrollEnd}
+                    simultaneousHandlers={dropProviderRef}
+                >
+                    {data.map((item, index) => {
+                        const itemProps = getItemProps(item, index);
+                        return renderItem({
+                            item,
+                            index,
+                            id: itemProps.id,
+                            positions: itemProps.positions,
+                            direction: SortableDirection.Vertical,
+                            ...itemProps
+                        }) as any;
+                    })}
+                </AnimatedScrollView>
+            </DropProvider>
+        </GestureHandlerRootView>
+    );
+});
+
 
 type TimelineItem = {
     title: string;
@@ -718,7 +848,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
 
         if (item.isHeader) {
             return (
-                <SortableItem key={id} id={id} data={item} positions={positions} {...props} onDrop={handleDrop}>
+                <SortableItemAny key={id} id={id} data={item} positions={positions} {...props} onDrop={handleDrop}>
                     <View style={{ height: 110, justifyContent: 'center', paddingHorizontal: 15, marginVertical: 5 }}>
                         <View style={{
                             backgroundColor: colors.primary + '15',
@@ -745,7 +875,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                             </Text>
                         </View>
                     </View>
-                </SortableItem>
+                </SortableItemAny>
             );
         }
 
@@ -763,13 +893,13 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
         };
 
         return (
-            <SortableItem key={id} id={id} data={item} positions={positions} {...props} onDrop={handleDrop}>
+            <SortableItemAny key={id} id={id} data={item} positions={positions} {...props} onDrop={handleDrop}>
                 <View style={{ flexDirection: 'row', paddingHorizontal: 15, height: 110, alignItems: 'center', marginVertical: 5 }}>
-                    <SortableItem.Handle>
+                    <SortableItemAny.Handle>
                         <View style={{ padding: 5, marginRight: 5 }}>
                             <Icon name="DotsSixVertical" size={20} color={colors.textSecondary} />
                         </View>
-                    </SortableItem.Handle>
+                    </SortableItemAny.Handle>
 
                     <View style={{ width: 80, alignItems: 'center' }}>
                         <View style={{
@@ -853,7 +983,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                         </View>
                     </View>
                 </View>
-            </SortableItem>
+            </SortableItemAny>
         );
     };
 
@@ -871,7 +1001,6 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                         ref={mapRef}
                         style={StyleSheet.absoluteFill}
                         initialRegion={mapRegion}
-                        customMapStyle={isDarkMode ? darkMapStyle : undefined}
                         loadingEnabled={true}
                         loadingBackgroundColor={colors.background}
                         loadingIndicatorColor={colors.primary}
@@ -1120,7 +1249,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                     style={{ flex: 1, backgroundColor: colors.background }}
                 >
                     {selectedTab === 'All' ? (
-                        <SortableAny
+                        <NonFlickerSortable
                             data={allData}
                             itemHeight={120}
                             style={{ backgroundColor: colors.background }}
@@ -1130,7 +1259,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                             onMomentumScrollEnd={() => setIsFABVisible(true)}
                         />
                     ) : (
-                        <SortableAny
+                        <NonFlickerSortable
                             data={activePlaces}
                             itemHeight={120}
                             style={{ backgroundColor: colors.background }}

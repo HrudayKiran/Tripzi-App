@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, TextInput, FlatList, Alert, Modal, ActivityIndicator, Platform, KeyboardAvoidingView, Keyboard, Share, BackHandler, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, TextInput, FlatList, Alert, Modal, ActivityIndicator, Platform, KeyboardAvoidingView, Keyboard, BackHandler, Image } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { aiService } from '../services/AIService';
+import { showUploadNotification, completeUploadNotification, failUploadNotification } from '../utils/notifications';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTripStore } from '../store/tripStore';
 import Icon from '../components/Icon';
@@ -15,15 +17,253 @@ import {
 import { useRouter } from 'expo-router';
 import { MotiView, AnimatePresence } from 'moti';
 import MapView, { Marker, Polyline } from 'react-native-maps';
-import { Sortable, SortableItem, SortableGrid, SortableGridItem } from 'react-native-reanimated-dnd';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import {
+    SortableItem,
+    SortableGridItem,
+    useSortableList,
+    useGridSortableList,
+    DropProvider,
+    SortableDirection,
+    GridOrientation,
+    GridStrategy
+} from 'react-native-reanimated-dnd';
+import { GestureHandlerRootView, FlatList as GHFlatList, ScrollView as GHScrollView } from 'react-native-gesture-handler';
+import Animated from 'react-native-reanimated';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
-const SortableAny = Sortable as any;
-const SortableGridAny = SortableGrid as any;
 const SortableItemAny = SortableItem as any;
+const SortableGridItemAny = SortableGridItem as any;
+
+const AnimatedFlatList = Animated.createAnimatedComponent(GHFlatList);
+const AnimatedScrollView = Animated.createAnimatedComponent(GHScrollView);
+
+interface NonFlickerSortableProps {
+    data: any[];
+    renderItem: (props: any) => any;
+    direction?: SortableDirection;
+    itemHeight?: number | number[] | ((item: any, index: number) => number);
+    enableDynamicHeights?: boolean;
+    estimatedItemHeight?: number;
+    onHeightsMeasured?: (heights: { [id: string]: number }) => void;
+    style?: any;
+    contentContainerStyle?: any;
+    itemKeyExtractor?: (item: any, index: number) => string;
+    useFlatList?: boolean;
+    onScrollBeginDrag?: any;
+    onScrollEndDrag?: any;
+    onMomentumScrollEnd?: any;
+}
+
+const NonFlickerSortable = React.memo(({
+    data,
+    renderItem,
+    direction = SortableDirection.Vertical,
+    itemHeight,
+    enableDynamicHeights = false,
+    estimatedItemHeight = 60,
+    onHeightsMeasured,
+    style,
+    contentContainerStyle,
+    itemKeyExtractor = (item: any) => item.id,
+    useFlatList = true,
+    ...scrollProps
+}: NonFlickerSortableProps) => {
+    const {
+        scrollViewRef,
+        dropProviderRef,
+        handleScroll,
+        handleScrollEnd,
+        contentHeight,
+        getItemProps
+    } = useSortableList({
+        data,
+        itemHeight,
+        enableDynamicHeights,
+        estimatedItemHeight,
+        onHeightsMeasured,
+        itemKeyExtractor
+    });
+
+    const combinedOnScrollEndDrag = (e: any) => {
+        handleScrollEnd();
+        if (scrollProps.onScrollEndDrag) {
+            scrollProps.onScrollEndDrag(e);
+        }
+    };
+
+    const combinedOnMomentumScrollEnd = (e: any) => {
+        handleScrollEnd();
+        if (scrollProps.onMomentumScrollEnd) {
+            scrollProps.onMomentumScrollEnd(e);
+        }
+    };
+
+    if (useFlatList) {
+        return (
+            <GestureHandlerRootView style={{ flex: 1 }}>
+                <DropProvider ref={dropProviderRef}>
+                    <AnimatedFlatList
+                        ref={scrollViewRef}
+                        data={data}
+                        keyExtractor={itemKeyExtractor}
+                        scrollEventThrottle={16}
+                        onScroll={handleScroll}
+                        style={[{ flex: 1, position: 'relative', backgroundColor: 'transparent' }, style]}
+                        contentContainerStyle={[{ height: contentHeight }, contentContainerStyle]}
+                        onScrollBeginDrag={scrollProps.onScrollBeginDrag}
+                        onScrollEndDrag={combinedOnScrollEndDrag}
+                        onMomentumScrollEnd={combinedOnMomentumScrollEnd}
+                        simultaneousHandlers={dropProviderRef}
+                        showsVerticalScrollIndicator={false}
+                        renderItem={({ item, index }: any) => {
+                            const itemProps = getItemProps(item, index);
+                            return renderItem({
+                                item,
+                                index,
+                                id: itemProps.id,
+                                positions: itemProps.positions,
+                                direction: SortableDirection.Vertical,
+                                ...itemProps
+                            }) as any;
+                        }}
+                    />
+                </DropProvider>
+            </GestureHandlerRootView>
+        );
+    }
+
+    return (
+        <GestureHandlerRootView style={{ flex: 1 }}>
+            <DropProvider ref={dropProviderRef}>
+                <AnimatedScrollView
+                    ref={scrollViewRef}
+                    scrollEventThrottle={16}
+                    onScroll={handleScroll}
+                    style={[{ flex: 1, position: 'relative', backgroundColor: 'transparent' }, style]}
+                    contentContainerStyle={[{ height: contentHeight }, contentContainerStyle]}
+                    onScrollBeginDrag={scrollProps.onScrollBeginDrag}
+                    onScrollEndDrag={combinedOnScrollEndDrag}
+                    onMomentumScrollEnd={combinedOnMomentumScrollEnd}
+                    simultaneousHandlers={dropProviderRef}
+                >
+                    {data.map((item, index) => {
+                        const itemProps = getItemProps(item, index);
+                        return renderItem({
+                            item,
+                            index,
+                            id: itemProps.id,
+                            positions: itemProps.positions,
+                            direction: SortableDirection.Vertical,
+                            ...itemProps
+                        }) as any;
+                    })}
+                </AnimatedScrollView>
+            </DropProvider>
+        </GestureHandlerRootView>
+    );
+});
+
+interface NonFlickerSortableGridProps {
+    data: any[];
+    renderItem: (props: any) => any;
+    dimensions: {
+        itemWidth: number;
+        itemHeight: number;
+        columns?: number;
+        rows?: number;
+        columnGap?: number;
+        rowGap?: number;
+    };
+    orientation?: GridOrientation;
+    strategy?: GridStrategy;
+    style?: any;
+    contentContainerStyle?: any;
+    itemKeyExtractor?: (item: any, index: number) => string;
+    scrollEnabled?: boolean;
+    onScrollBeginDrag?: any;
+    onScrollEndDrag?: any;
+    onMomentumScrollEnd?: any;
+}
+
+const NonFlickerSortableGrid = React.memo(({
+    data,
+    renderItem,
+    dimensions,
+    orientation = GridOrientation.Vertical,
+    strategy = GridStrategy.Insert,
+    style,
+    contentContainerStyle,
+    itemKeyExtractor = (item: any) => item.id,
+    scrollEnabled = true,
+    ...scrollProps
+}: NonFlickerSortableGridProps) => {
+    const {
+        scrollViewRef,
+        dropProviderRef,
+        handleScroll,
+        handleScrollEnd,
+        contentWidth,
+        contentHeight,
+        getItemProps
+    } = useGridSortableList({
+        data,
+        dimensions,
+        orientation,
+        strategy,
+        itemKeyExtractor
+    });
+
+    const combinedOnScrollEndDrag = (e: any) => {
+        handleScrollEnd();
+        if (scrollProps.onScrollEndDrag) {
+            scrollProps.onScrollEndDrag(e);
+        }
+    };
+
+    const combinedOnMomentumScrollEnd = (e: any) => {
+        handleScrollEnd();
+        if (scrollProps.onMomentumScrollEnd) {
+            scrollProps.onMomentumScrollEnd(e);
+        }
+    };
+
+    return (
+        <GestureHandlerRootView style={{ flex: 1 }}>
+            <DropProvider ref={dropProviderRef}>
+                <AnimatedScrollView
+                    ref={scrollViewRef}
+                    onScroll={handleScroll}
+                    scrollEventThrottle={16}
+                    scrollEnabled={scrollEnabled}
+                    style={[{ flex: 1, position: 'relative' }, style]}
+                    contentContainerStyle={contentContainerStyle}
+                    onScrollBeginDrag={scrollProps.onScrollBeginDrag}
+                    onScrollEndDrag={combinedOnScrollEndDrag}
+                    onMomentumScrollEnd={combinedOnMomentumScrollEnd}
+                    simultaneousHandlers={dropProviderRef}
+                    showsVerticalScrollIndicator={false}
+                    showsHorizontalScrollIndicator={false}
+                >
+                    <View style={{ width: contentWidth, height: contentHeight, position: 'relative' }}>
+                        {data.map((item, index) => {
+                            const itemProps = getItemProps(item, index);
+                            return renderItem({
+                                item,
+                                index,
+                                ...itemProps
+                            }) as any;
+                        })}
+                    </View>
+                </AnimatedScrollView>
+            </DropProvider>
+        </GestureHandlerRootView>
+    );
+});
+
+let cachedCurrentUser: any = null;
+let cachedCurrentUserProfile: any = null;
 
 interface CategoryCardProps {
     categoryName: string;
@@ -62,7 +302,6 @@ const CategoryCard = React.memo(({
                 backgroundColor: colors.card,
                 borderRadius: 20,
                 padding: 16,
-                marginVertical: 10,
                 borderWidth: 1.5,
                 borderColor: colors.border,
                 shadowColor: '#000',
@@ -80,7 +319,7 @@ const CategoryCard = React.memo(({
                     alignItems: 'center',
                     borderBottomWidth: 1,
                     borderBottomColor: colors.border,
-                    paddingBottom: 12,
+                    height: 40,
                     marginBottom: 10
                 }}
             >
@@ -126,115 +365,120 @@ const CategoryCard = React.memo(({
 
             {/* Category Tasks List */}
             {catItems.length === 0 ? (
-                <Text style={{ fontSize: 13, color: colors.textSecondary, fontStyle: 'italic', textAlign: 'center', paddingVertical: 15 }}>
-                    No tasks in this category. Tap + to add!
-                </Text>
+                <View style={{ height: 48, justifyContent: 'center', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, fontStyle: 'italic', textAlign: 'center' }}>
+                        No tasks in this category. Tap + to add!
+                    </Text>
+                </View>
             ) : (
-                <Sortable
-                    data={catItems}
-                    itemHeight={58}
-                    useFlatList={false}
-                    style={{ backgroundColor: 'transparent', height: catItems.length * 58 }}
-                    renderItem={({ item, id, positions, ...props }) => {
-                        return (
-                            <SortableItem
-                                key={id}
-                                id={id}
-                                data={item}
-                                positions={positions}
-                                {...props}
-                                onDrop={(draggedId, newPosition, allPositions) => {
-                                    if (allPositions) {
-                                        const sortedData = [...catItems].sort((a, b) => {
-                                            const posA = allPositions[a.id] ?? 0;
-                                            const posB = allPositions[b.id] ?? 0;
-                                            return posA - posB;
-                                        });
-                                        const otherItems = checklist.filter(x => x.category !== categoryName);
-                                        setChecklist([...otherItems, ...sortedData]);
-                                    }
-                                }}
-                            >
-                                <View style={{
-                                    backgroundColor: colors.background,
-                                    borderRadius: 12,
-                                    paddingHorizontal: 14,
-                                    height: 50,
-                                    marginBottom: 8,
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    borderWidth: 1,
-                                    borderColor: colors.border,
-                                }}>
-                                    <TouchableOpacity
-                                        onPress={() => toggleItem(item.id)}
-                                        style={{ padding: 2 }}
-                                    >
-                                        <Icon
-                                            name={item.checked ? "CheckSquare" : "Square"}
-                                            size={20}
-                                            color={item.checked ? colors.primary : colors.textSecondary}
-                                            weight={item.checked ? "fill" : "regular"}
-                                        />
-                                    </TouchableOpacity>
-
-                                    <View style={{ flex: 1, marginLeft: 12, alignSelf: 'stretch', justifyContent: 'center' }}>
-                                        <View style={{ alignSelf: 'flex-start', justifyContent: 'center' }}>
-                                            <Text style={{
-                                                fontSize: 14,
-                                                color: item.checked ? colors.textSecondary : colors.text,
-                                                opacity: item.checked ? 0.6 : 1,
-                                            }}>
-                                                {item.text}
-                                            </Text>
-                                            {item.checked && (
-                                                <View style={{
-                                                    position: 'absolute',
-                                                    left: 0,
-                                                    right: 0,
-                                                    height: 2.5,
-                                                    backgroundColor: isDarkMode ? '#2ECC71' : '#27AE60',
-                                                    opacity: 0.9
-                                                }} />
-                                            )}
-                                        </View>
-                                    </View>
-
-                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ height: catItems.length * 58 }}>
+                    <NonFlickerSortable
+                        data={catItems}
+                        itemHeight={58}
+                        useFlatList={false}
+                        style={{ backgroundColor: 'transparent', height: catItems.length * 58 }}
+                        renderItem={({ item, id, positions, ...props }: any) => {
+                            return (
+                                <SortableItemAny
+                                    key={id}
+                                    id={id}
+                                    data={item}
+                                    positions={positions}
+                                    {...props}
+                                    onDrop={(draggedId: string, newPosition: number, allPositions: { [id: string]: number }) => {
+                                        if (allPositions) {
+                                            const sortedData = [...catItems].sort((a, b) => {
+                                                const posA = allPositions[a.id] ?? 0;
+                                                const posB = allPositions[b.id] ?? 0;
+                                                return posA - posB;
+                                            });
+                                            const otherItems = checklist.filter(x => x.category !== categoryName);
+                                            setChecklist([...otherItems, ...sortedData]);
+                                        }
+                                    }}
+                                >
+                                    <View style={{
+                                        backgroundColor: colors.background,
+                                        borderRadius: 12,
+                                        paddingHorizontal: 14,
+                                        height: 50,
+                                        marginBottom: 8,
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        borderWidth: 1,
+                                        borderColor: colors.border,
+                                    }}>
                                         <TouchableOpacity
-                                            onPress={() => deleteItem(item.id)}
-                                            style={{ padding: 4, opacity: 0.6 }}
+                                            onPress={() => toggleItem(item.id)}
+                                            style={{ padding: 2 }}
                                         >
-                                            <Icon name="Trash" size={16} color={colors.textSecondary} />
+                                            <Icon
+                                                name={item.checked ? "CheckSquare" : "Square"}
+                                                size={20}
+                                                color={item.checked ? colors.primary : colors.textSecondary}
+                                                weight={item.checked ? "fill" : "regular"}
+                                            />
                                         </TouchableOpacity>
 
-                                        <SortableItem.Handle>
-                                            <View style={{ padding: 4, marginLeft: 6, opacity: 0.6 }}>
-                                                <Icon name="Equals" size={18} color={colors.textSecondary} />
+                                        <View style={{ flex: 1, marginLeft: 12, alignSelf: 'stretch', justifyContent: 'center' }}>
+                                            <View style={{ alignSelf: 'flex-start', justifyContent: 'center' }}>
+                                                <Text style={{
+                                                    fontSize: 14,
+                                                    color: item.checked ? colors.textSecondary : colors.text,
+                                                    opacity: item.checked ? 0.6 : 1,
+                                                }}>
+                                                    {item.text}
+                                                </Text>
+                                                {item.checked && (
+                                                    <View style={{
+                                                        position: 'absolute',
+                                                        left: 0,
+                                                        right: 0,
+                                                        height: 2.5,
+                                                        backgroundColor: isDarkMode ? '#2ECC71' : '#27AE60',
+                                                        opacity: 0.9
+                                                    }} />
+                                                )}
                                             </View>
-                                        </SortableItem.Handle>
+                                        </View>
+
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <TouchableOpacity
+                                                onPress={() => deleteItem(item.id)}
+                                                style={{ padding: 4, opacity: 0.6 }}
+                                            >
+                                                <Icon name="Trash" size={16} color={colors.textSecondary} />
+                                            </TouchableOpacity>
+
+                                            <SortableItemAny.Handle>
+                                                <View style={{ padding: 4, marginLeft: 6, opacity: 0.6 }}>
+                                                    <Icon name="Equals" size={18} color={colors.textSecondary} />
+                                                </View>
+                                            </SortableItemAny.Handle>
+                                        </View>
                                     </View>
-                                </View>
-                            </SortableItem>
-                        );
-                    }}
-                />
+                                </SortableItemAny>
+                            );
+                        }}
+                    />
+                </View>
             )}
         </View>
     );
 });
 
-type TabType = 'Full Itinerary' | 'checklist' | 'notes' | 'itinerary mapview';
+type TabType = 'Full Itinerary' | 'checklist' | 'notes' | 'Itinerary MapView';
 
 export default function ItineraryViewScreen() {
     const { colors, isDarkMode } = useTheme();
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const { places, setPlaces, checklist, setChecklist, notes, setNotes, essentials, setEssentials, tripDraft, customCategories, setCustomCategories, collaborators, setCollaborators } = useTripStore();
+    const { places, setPlaces, checklist, setChecklist, notes, setNotes, tripDraft, customCategories, setCustomCategories, collaborators, setCollaborators } = useTripStore();
     const [activeTab, setActiveTab] = useState<TabType>('Full Itinerary');
     const [newChecklistItem, setNewChecklistItem] = useState('');
-    const [newEssentialItem, setNewEssentialItem] = useState('');
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [processingStatus, setProcessingStatus] = useState('');
     const [showUserSearch, setShowUserSearch] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -279,6 +523,8 @@ export default function ItineraryViewScreen() {
     const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
     const [noteTitleInput, setNoteTitleInput] = useState('');
     const [noteContentInput, setNoteContentInput] = useState('');
+    const noteTitleInputRef = useRef<TextInput>(null);
+    const [containerWidth, setContainerWidth] = useState(Dimensions.get('window').width);
 
     const [checklistModalVisible, setChecklistModalVisible] = useState(false);
     const [checklistModalMode, setChecklistModalMode] = useState<'add_category' | 'add_item' | 'edit_category'>('add_category');
@@ -289,35 +535,49 @@ export default function ItineraryViewScreen() {
 
     const [finalizeModalVisible, setFinalizeModalVisible] = useState(false);
     const [isFinalizing, setIsFinalizing] = useState(false);
-    const [currentUser, setCurrentUser] = useState<any>(null);
-    const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+    const [currentUser, setCurrentUser] = useState<any>(cachedCurrentUser);
+    const [currentUserProfile, setCurrentUserProfile] = useState<any>(cachedCurrentUserProfile);
 
     useEffect(() => {
-        supabase.auth.getUser().then(async ({ data: { user } }) => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            const user = session?.user || null;
             setCurrentUser(user);
+            cachedCurrentUser = user;
             if (user) {
-                try {
-                    const { data } = await supabase
-                        .from('profiles')
-                        .select('id, name, display_name, photo_url')
-                        .eq('id', user.id)
-                        .maybeSingle();
-                    
-                    setCurrentUserProfile({
-                        id: user.id,
-                        name: data?.name || data?.display_name || user.user_metadata?.full_name || 'Admin',
-                        display_name: data?.display_name || data?.name || user.user_metadata?.full_name || 'Admin',
-                        photo_url: data?.photo_url || user.user_metadata?.avatar_url || null
-                    });
-                } catch (err) {
-                    console.error('Error fetching profile:', err);
-                    setCurrentUserProfile({
-                        id: user.id,
-                        name: user.user_metadata?.full_name || 'Admin',
-                        display_name: user.user_metadata?.full_name || 'Admin',
-                        photo_url: user.user_metadata?.avatar_url || null
-                    });
+                const initialProfile = {
+                    id: user.id,
+                    name: user.user_metadata?.full_name || 'Admin',
+                    display_name: user.user_metadata?.full_name || 'Admin',
+                    photo_url: user.user_metadata?.avatar_url || null
+                };
+                if (!cachedCurrentUserProfile) {
+                    setCurrentUserProfile(initialProfile);
+                    cachedCurrentUserProfile = initialProfile;
                 }
+
+                const fetchProfile = async () => {
+                    try {
+                        const { data } = await supabase
+                            .from('profiles')
+                            .select('id, name, display_name, photo_url')
+                            .eq('id', user.id)
+                            .maybeSingle();
+
+                        if (data) {
+                            const updatedProfile = {
+                                id: user.id,
+                                name: data.name || data.display_name || user.user_metadata?.full_name || 'Admin',
+                                display_name: data.display_name || data.name || user.user_metadata?.full_name || 'Admin',
+                                photo_url: data.photo_url || user.user_metadata?.avatar_url || null
+                            };
+                            setCurrentUserProfile(updatedProfile);
+                            cachedCurrentUserProfile = updatedProfile;
+                        }
+                    } catch (err) {
+                        console.error('Error fetching profile in background:', err);
+                    }
+                };
+                fetchProfile();
             }
         });
     }, []);
@@ -345,18 +605,19 @@ export default function ItineraryViewScreen() {
                 const items = typeof tripDraft.mandatory_items === 'string'
                     ? JSON.parse(tripDraft.mandatory_items)
                     : tripDraft.mandatory_items;
-                
-                if (Array.isArray(items) && items.length >= 5) {
+
+                if (Array.isArray(items) && items.length >= 3) {
                     const parsedChecklist = typeof items[0] === 'string' ? JSON.parse(items[0]) : items[0];
                     const parsedCategories = typeof items[1] === 'string' ? JSON.parse(items[1]) : items[1];
                     const parsedNotes = typeof items[2] === 'string' ? JSON.parse(items[2]) : items[2];
-                    const parsedEssentials = typeof items[3] === 'string' ? JSON.parse(items[3]) : items[3];
-                    const parsedCollaborators = typeof items[4] === 'string' ? JSON.parse(items[4]) : items[4];
-                    
+                    // Backward compat: old format had 5 items [checklist, categories, notes, essentials, collaborators]
+                    // New format has 4 items [checklist, categories, notes, collaborators]
+                    const collabIndex = items.length >= 5 ? 4 : 3;
+                    const parsedCollaborators = typeof items[collabIndex] === 'string' ? JSON.parse(items[collabIndex]) : items[collabIndex];
+
                     if (Array.isArray(parsedChecklist) && parsedChecklist.length > 0 && checklist.length === 0) setChecklist(parsedChecklist);
                     if (Array.isArray(parsedCategories) && parsedCategories.length > 0 && customCategories.length === 0) setCustomCategories(parsedCategories);
                     if (Array.isArray(parsedNotes) && parsedNotes.length > 0 && notes.length === 0) setNotes(parsedNotes);
-                    if (Array.isArray(parsedEssentials) && parsedEssentials.length > 0 && essentials.length === 0) setEssentials(parsedEssentials);
                     if (Array.isArray(parsedCollaborators) && parsedCollaborators.length > 0 && collaborators.length === 0) setCollaborators(parsedCollaborators);
                 }
             } catch (e) {
@@ -367,6 +628,7 @@ export default function ItineraryViewScreen() {
 
     useEffect(() => {
         const backAction = () => {
+            if (isProcessing) return true; // Block back during processing
             if (showUserSearch) {
                 setShowUserSearch(false);
                 setSearchQuery('');
@@ -377,10 +639,10 @@ export default function ItineraryViewScreen() {
         };
         const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
         return () => backHandler.remove();
-    }, [showUserSearch]);
+    }, [showUserSearch, isProcessing]);
 
     // Scroll handling for FAB is now managed by drag events directly
-    const tabs: TabType[] = ['Full Itinerary', 'checklist', 'notes', 'itinerary mapview'];
+    const tabs: TabType[] = ['Full Itinerary', 'checklist', 'notes', 'Itinerary MapView'];
 
     const renderTabContent = () => {
         switch (activeTab) {
@@ -390,7 +652,7 @@ export default function ItineraryViewScreen() {
                 return renderChecklist();
             case 'notes':
                 return renderNotes();
-            case 'itinerary mapview':
+            case 'Itinerary MapView':
                 return renderMap();
             default:
                 return null;
@@ -421,31 +683,6 @@ export default function ItineraryViewScreen() {
         }
     };
 
-    const handleShareTrip = async () => {
-        try {
-            const tripId = tripDraft?.id || 'new-trip';
-            const shareUrl = `https://nxtvibes.app/trip/${tripId}`;
-            const message = `Check out my trip itinerary on NxtVibes: ${tripDraft?.title || 'Trip'}\n\nJoin me here: ${shareUrl}`;
-
-            const result = await Share.share({
-                message,
-                url: shareUrl, // iOS only
-                title: 'Share Trip Itinerary'
-            });
-
-            if (result.action === Share.sharedAction) {
-                if (result.activityType) {
-                    // shared with activity type of result.activityType
-                } else {
-                    // shared
-                }
-            } else if (result.action === Share.dismissedAction) {
-                // dismissed
-            }
-        } catch (error: any) {
-            Alert.alert('Error', error.message);
-        }
-    };
 
     const addCollaborator = (user: any) => {
         if (collaborators.find(c => c.id === user.id)) {
@@ -524,7 +761,11 @@ export default function ItineraryViewScreen() {
             return;
         }
 
-        setIsFinalizing(true);
+        // Close modal and show processing overlay
+        setFinalizeModalVisible(false);
+        setIsProcessing(true);
+        setProcessingStatus(bookingStatus === 'posted' ? 'Posting your trip...' : 'Saving your itinerary...');
+
         try {
             // 1. Fetch user's profile info
             const { data: currentUserData } = await supabase
@@ -534,22 +775,58 @@ export default function ItineraryViewScreen() {
                 .maybeSingle();
             const userData: any = currentUserData || {};
 
-            // 2. Prepare itinerary arrays and fields
-            // Map places list to simple string list for itinerary vertical timeline view
+            // 2. Fetch Unsplash images for itinerary places
+            setProcessingStatus('Fetching place images...');
+            await showUploadNotification(0.1, 'Fetching place images...');
+
+            const orderedPlaces = [...(places || [])].sort((a, b) => a.day - b.day || a.order - b.order);
+            const placeNames = orderedPlaces.map(p => p.name).filter(Boolean);
+            let finalImages: string[] = [];
+
+            if (placeNames.length > 0) {
+                try {
+                    const unsplashResults = await aiService.fetchPlaceImages(placeNames);
+                    finalImages = unsplashResults
+                        .filter(img => img.imageUrl)
+                        .map(img => img.imageUrl);
+                } catch (imgErr) {
+                    console.error('Unsplash fetch error:', imgErr);
+                }
+            }
+
+            // Fallback to destination if no place images
+            if (finalImages.length === 0 && tripDraft?.toLocation) {
+                try {
+                    const fallbackResults = await aiService.fetchPlaceImages([tripDraft.toLocation]);
+                    finalImages = fallbackResults
+                        .filter(img => img.imageUrl)
+                        .map(img => img.imageUrl);
+                } catch (fbErr) {
+                    console.error('Fallback image fetch error:', fbErr);
+                }
+            }
+
+            // Ultimate fallback
+            if (finalImages.length === 0) {
+                finalImages = ['https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800'];
+            }
+
+            await showUploadNotification(0.4, 'Preparing trip data...');
+            setProcessingStatus('Preparing trip data...');
+
+            // 3. Prepare itinerary arrays and fields
             const itineraryStrings = (places || []).map(p => {
                 const timeStr = p.time ? `[${p.time}] ` : '';
                 return `${timeStr}${p.name}${p.address ? ` - ${p.address}` : ''}`;
             });
 
-            // Mapped places to JSON string in places_to_visit
             const placesToVisitJSON = JSON.stringify(places || []);
 
-            // Packing checklist, categories, notes, essentials, collaborators to mandatory_items
+            // Packing checklist, categories, notes, collaborators to mandatory_items (no essentials)
             const mandatoryItemsArray = [
                 JSON.stringify(checklist || []),
                 JSON.stringify(customCategories || []),
                 JSON.stringify(notes || []),
-                JSON.stringify(essentials || []),
                 JSON.stringify(collaborators || [])
             ];
 
@@ -580,14 +857,14 @@ export default function ItineraryViewScreen() {
                 places_to_visit: [placesToVisitJSON],
                 mandatory_items: mandatoryItemsArray,
                 itinerary: itineraryStrings,
-                images: tripDraft?.images || [],
-                cover_image: tripDraft?.images?.[0] || null,
-                image_object_keys: tripDraft?.imageObjectKeys || [],
-                image_locations: tripDraft?.imageLocations || [],
+                images: finalImages,
+                cover_image: finalImages[0] || null,
+                image_object_keys: [],
+                image_locations: [],
                 owner_display_name: userData.name || userData.display_name || currentUser.user_metadata?.full_name || 'Traveler',
                 owner_photo_url: userData.photo_url || currentUser.user_metadata?.avatar_url || null,
                 owner_username: userData.username || null,
-                participants: [currentUser.id, ...(collaborators || []).map(c => c.id || c.uid || c)],
+                participants: [currentUser.id, ...(collaborators || []).map((c: any) => c.id || c.uid || c)],
                 location: tripDraft?.toLocation || '',
                 trip_types: tripDraft?.tripTypes || [],
                 transport_modes: tripDraft?.transportModes || [],
@@ -595,9 +872,12 @@ export default function ItineraryViewScreen() {
                 updated_at: new Date().toISOString(),
             };
 
+            // 4. Save to Supabase
+            setProcessingStatus('Saving to cloud...');
+            await showUploadNotification(0.7, 'Saving to cloud...');
+
             let tripId = tripDraft?.id;
-            
-            // Check if we should insert or update in Supabase
+
             if (tripId && tripId !== 'new-trip') {
                 const { error: updateError } = await supabase
                     .from('trips')
@@ -614,23 +894,48 @@ export default function ItineraryViewScreen() {
                 tripId = newTrip.id;
             }
 
-            setFinalizeModalVisible(false);
-            Alert.alert(
-                bookingStatus === 'posted' ? 'Itinerary Published!' : 'Itinerary Saved!',
+            // 5. Send notifications to collaborators (excluding creator)
+            if (collaborators.length > 0 && tripId) {
+                setProcessingStatus('Notifying collaborators...');
+                await showUploadNotification(0.9, 'Notifying collaborators...');
+
+                const notificationRows = collaborators
+                    .filter((c: any) => c.id !== currentUser.id)
+                    .map((c: any) => ({
+                        recipient_id: c.id,
+                        type: 'trip_update',
+                        title: bookingStatus === 'posted'
+                            ? 'Itinerary Published! 🎉'
+                            : 'Itinerary Saved! 📋',
+                        message: `${userData.name || userData.display_name || 'A collaborator'} has ${bookingStatus === 'posted' ? 'posted' : 'saved'} the itinerary: "${tripDraft?.title || 'Trip'}"`,
+                        entity_id: tripId,
+                        entity_type: 'trip',
+                        actor_id: currentUser.id,
+                        actor_name: userData.name || userData.display_name || 'Traveler',
+                        deep_link_route: 'TripDetails',
+                        deep_link_params: { tripId },
+                        is_read: false,
+                    }));
+
+                if (notificationRows.length > 0) {
+                    await supabase.from('notifications').insert(notificationRows);
+                }
+            }
+
+            // 6. Done — show completion notification and navigate
+            await completeUploadNotification(
+                bookingStatus === 'posted' ? 'Trip Posted! 🎉' : 'Itinerary Saved! 📋',
                 bookingStatus === 'posted'
-                    ? 'Your itinerary is now published as a live trip!'
-                    : 'Your itinerary has been saved under saved tab.',
-                [
-                    {
-                        text: 'OK',
-                        onPress: () => {
-                            router.replace('/(tabs)/profile');
-                        }
-                    }
-                ]
+                    ? `"${tripDraft?.title || 'Trip'}" is now live!`
+                    : `"${tripDraft?.title || 'Trip'}" has been saved.`
             );
+
+            setIsProcessing(false);
+            router.replace('/(tabs)/profile');
         } catch (error: any) {
             console.error(error);
+            await failUploadNotification(error.message || 'Failed to finalize trip');
+            setIsProcessing(false);
             Alert.alert('Error', error.message || 'Could not finalize the trip itinerary. Please try again.');
         } finally {
             setIsFinalizing(false);
@@ -645,7 +950,7 @@ export default function ItineraryViewScreen() {
                     const posB = allPositions[b.id] ?? 0;
                     return posA - posB;
                 });
-                
+
                 if (selectedDayTab === 'All') {
                     let currentDay = 1;
                     const updatedPlaces: any[] = [];
@@ -824,7 +1129,7 @@ export default function ItineraryViewScreen() {
                     </ScrollView>
                 </View>
 
-                <Sortable
+                <NonFlickerSortable
                     data={activePlaces}
                     itemHeight={120}
                     style={{ backgroundColor: 'transparent' }}
@@ -916,30 +1221,44 @@ export default function ItineraryViewScreen() {
             );
         }
 
-        const categoryData = categories.map((catName) => ({
-            id: catName,
-            name: catName,
-        }));
+        const categoryData = categories.map((catName) => {
+            const catItems = checklist.filter(item => item.category === catName);
+            const itemsHash = catItems.map(item => `${item.id}-${item.checked}`).join(',');
+            return {
+                id: catName,
+                name: catName,
+                itemsHash,
+            };
+        });
+
+        const getCategoryCardHeight = (item: any) => {
+            const catItems = checklist.filter(x => x.category === item.name);
+            if (catItems.length === 0) {
+                return 153;
+            }
+            return 105 + catItems.length * 58;
+        };
 
         return (
             <View style={{ flex: 1 }}>
-                <SortableAny
+                <NonFlickerSortable
+                    key="checklist-categories-list"
                     data={categoryData}
-                    enableDynamicHeights={true}
+                    itemHeight={getCategoryCardHeight}
                     useFlatList={false}
                     style={{ backgroundColor: 'transparent' }}
-                    contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 150 }}
+                    contentContainerStyle={{ paddingHorizontal: 0, paddingBottom: 150 }}
                     onScrollBeginDrag={() => setShowFloatingButton(false)}
                     onScrollEndDrag={() => setShowFloatingButton(true)}
                     onMomentumScrollEnd={() => setShowFloatingButton(true)}
-                    renderItem={({ item, id, positions, ...props }) => (
+                    renderItem={({ item, id, positions, ...props }: any) => (
                         <SortableItemAny
                             key={id}
                             id={id}
                             data={item}
                             positions={positions}
                             {...props}
-                            onDrop={(draggedId, newPosition, allPositions) => {
+                            onDrop={(draggedId: string, newPosition: number, allPositions: { [id: string]: number }) => {
                                 if (allPositions) {
                                     const sortedCats = [...categoryData].sort((a, b) => {
                                         const posA = allPositions[a.id] ?? 0;
@@ -950,7 +1269,7 @@ export default function ItineraryViewScreen() {
                                 }
                             }}
                         >
-                            <View style={{ paddingVertical: 6 }}>
+                            <View style={{ paddingVertical: 10, paddingHorizontal: 15 }}>
                                 <CategoryCard
                                     categoryName={item.name}
                                     checklist={checklist}
@@ -975,28 +1294,36 @@ export default function ItineraryViewScreen() {
 
     const renderNotes = () => {
         const sortedNotes = [...notes].sort((a, b) => a.order - b.order);
-        const itemHeight = 120;
+        const columns = 2;
+        const scrollPadding = 10;
+        const columnGap = 4;
+        const rowGap = 4;
+        const availableWidth = containerWidth - (scrollPadding * 2);
+        const itemWidth = (availableWidth - columnGap) / 2;
+        const itemHeight = 135;
 
         const renderNoteCard = ({ item, id, positions, ...props }: any) => (
-            <SortableItemAny
+            <SortableGridItemAny
                 key={id}
                 id={id}
                 data={item}
                 positions={positions}
                 {...props}
-                onDrop={(draggedId, newPosition, allPositions) => {
+                onDrop={(draggedId: string, newPosition: number, allPositions?: any) => {
                     if (allPositions) {
                         const sortedData = [...sortedNotes].sort((a, b) => {
-                            const posA = allPositions[a.id] ?? 0;
-                            const posB = allPositions[b.id] ?? 0;
-                            return posA - posB;
+                            const posA = allPositions[a.id];
+                            const posB = allPositions[b.id];
+                            const idxA = typeof posA === 'object' && posA !== null ? (posA.index ?? 0) : (posA ?? 0);
+                            const idxB = typeof posB === 'object' && posB !== null ? (posB.index ?? 0) : (posB ?? 0);
+                            return idxA - idxB;
                         });
                         const updated = sortedData.map((noteItem, index) => ({ ...noteItem, order: index }));
                         setNotes(updated);
                     }
                 }}
             >
-                <View style={{ height: 112, justifyContent: 'center', paddingHorizontal: 20, marginVertical: 4 }}>
+                <View style={{ flex: 1, padding: 6 }}>
                     <TouchableOpacity
                         activeOpacity={0.8}
                         onPress={() => {
@@ -1008,7 +1335,7 @@ export default function ItineraryViewScreen() {
                         style={{
                             backgroundColor: colors.card,
                             borderRadius: 16,
-                            padding: 16,
+                            padding: 12,
                             flex: 1,
                             borderWidth: 1.5,
                             borderColor: colors.border,
@@ -1017,23 +1344,32 @@ export default function ItineraryViewScreen() {
                             shadowOpacity: 0.04,
                             shadowRadius: 4,
                             elevation: 2,
+                            justifyContent: 'space-between'
                         }}
                     >
-                        {item.title ? (
-                            <Text style={{ fontSize: 14, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
-                                {item.title}
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 13, fontWeight: 'bold', color: colors.text, marginBottom: 6 }} numberOfLines={1}>
+                                {item.title || 'Untitled'}
                             </Text>
-                        ) : null}
-                        <Text style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 16 }} numberOfLines={3}>
-                            {item.content || 'Empty note'}
-                        </Text>
+                            <Text style={{ fontSize: 11, color: colors.textSecondary, lineHeight: 14 }} numberOfLines={4}>
+                                {item.content || 'Empty note'}
+                            </Text>
+                        </View>
                     </TouchableOpacity>
                 </View>
-            </SortableItemAny>
+            </SortableGridItemAny>
         );
 
         return (
-            <View style={{ flex: 1 }}>
+            <View
+                style={{ flex: 1 }}
+                onLayout={(e) => {
+                    const w = e.nativeEvent.layout.width;
+                    if (w > 0 && w !== containerWidth) {
+                        setContainerWidth(w);
+                    }
+                }}
+            >
                 {notes.length === 0 ? (
                     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30, paddingTop: 60 }}>
                         <View style={{
@@ -1055,11 +1391,11 @@ export default function ItineraryViewScreen() {
                         </Text>
                     </View>
                 ) : (
-                    <SortableAny
+                    <NonFlickerSortableGrid
                         data={sortedNotes}
-                        itemHeight={120}
+                        dimensions={{ columns, itemWidth, itemHeight, columnGap, rowGap }}
                         style={{ backgroundColor: 'transparent' }}
-                        contentContainerStyle={{ paddingVertical: 10, paddingBottom: 150 }}
+                        contentContainerStyle={{ paddingHorizontal: scrollPadding, paddingVertical: 10, paddingBottom: 150 }}
                         renderItem={renderNoteCard}
                         onScrollBeginDrag={() => setShowFloatingButton(false)}
                         onScrollEndDrag={() => setShowFloatingButton(true)}
@@ -1130,55 +1466,7 @@ export default function ItineraryViewScreen() {
         );
     };
 
-    const renderEssentials = () => {
-        const addItem = () => {
-            if (newEssentialItem.trim()) {
-                setEssentials([...essentials, { id: Date.now().toString(), text: newEssentialItem, packed: false }]);
-                setNewEssentialItem('');
-            }
-        };
 
-        const toggleItem = (id: string) => {
-            setEssentials(essentials.map(item => item.id === id ? { ...item, packed: !item.packed } : item));
-        };
-
-        return (
-            <View style={styles.tabPane}>
-                <View style={styles.inputContainer}>
-                    <TextInput
-                        style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
-                        placeholder="Add essential item..."
-                        placeholderTextColor={colors.textSecondary}
-                        value={newEssentialItem}
-                        onChangeText={setNewEssentialItem}
-                        onSubmitEditing={addItem}
-                    />
-                    <TouchableOpacity onPress={addItem} style={[styles.addButton, { backgroundColor: colors.primary }]}>
-                        <Icon name="Plus" size={20} color="#fff" />
-                    </TouchableOpacity>
-                </View>
-                <FlatList
-                    data={essentials}
-                    keyExtractor={item => item.id}
-                    renderItem={({ item }) => (
-                        <View style={styles.listItem}>
-                            <TouchableOpacity onPress={() => toggleItem(item.id)} style={styles.checkRow}>
-                                <Icon
-                                    name={(item.packed ? "Package" : "Cube") as any}
-                                    size={24}
-                                    color={item.packed ? colors.primary : colors.textSecondary}
-                                    weight={item.packed ? "fill" : "regular"}
-                                />
-                                <Text style={[styles.listText, { color: colors.text, opacity: item.packed ? 0.6 : 1 }]}>
-                                    {item.text}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
-                />
-            </View>
-        );
-    };
 
     return (
         <GestureHandlerRootView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -1189,31 +1477,31 @@ export default function ItineraryViewScreen() {
             >
                 {/* Header */}
                 <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-                    <NeumorphicBackButton style={styles.backButton} />
+                    <NeumorphicBackButton />
                     <View style={styles.headerTitleContainer}>
                         <Text style={[styles.headerTitle, { color: colors.text }]}>{tripDraft?.title || 'Trip Itinerary'}</Text>
                         <Text style={[styles.headerSubtitle, { color: colors.textSecondary, fontSize: 10 }]} numberOfLines={1}>
                             {tripDraft?.fromLocation ? `${tripDraft.fromLocation.split(',')[0]} → ` : ''}{tripDraft?.toLocation?.split(',')[0] || 'Ready for adventure'}
                         </Text>
                     </View>
-                        <TouchableOpacity
-                            onPress={() => setShowUserSearch(true)}
-                            style={[
-                                styles.shareButton,
-                                styles.neumorphicButton,
-                                {
-                                    backgroundColor: colors.card,
-                                    shadowColor: isDarkMode ? '#000' : '#d1d9e6',
-                                    width: 45,
-                                    height: 45,
-                                    borderRadius: 22.5,
-                                    justifyContent: 'center',
-                                    alignItems: 'center'
-                                }
-                            ]}
-                        >
-                            <Icon name="UserPlus" size={22} color={colors.text} />
-                        </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() => setShowUserSearch(true)}
+                        style={[
+                            styles.shareButton,
+                            styles.neumorphicButton,
+                            {
+                                backgroundColor: colors.card,
+                                shadowColor: isDarkMode ? '#000' : '#d1d9e6',
+                                width: 45,
+                                height: 45,
+                                borderRadius: 22.5,
+                                justifyContent: 'center',
+                                alignItems: 'center'
+                            }
+                        ]}
+                    >
+                        <Icon name="UserPlus" size={22} color={colors.text} />
+                    </TouchableOpacity>
                 </View>
 
                 {/* Collaborators Row */}
@@ -1515,6 +1803,50 @@ export default function ItineraryViewScreen() {
                     </View>
                 </View>
             </Modal>
+
+            {/* Processing Overlay */}
+            {isProcessing && (
+                <View style={{
+                    ...StyleSheet.absoluteFillObject,
+                    backgroundColor: 'rgba(0,0,0,0.7)',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    zIndex: 9999,
+                }}>
+                    <View style={{
+                        backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff',
+                        borderRadius: 24,
+                        padding: 32,
+                        alignItems: 'center',
+                        width: '80%',
+                        maxWidth: 320,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 10 },
+                        shadowOpacity: 0.3,
+                        shadowRadius: 20,
+                        elevation: 15,
+                    }}>
+                        <ActivityIndicator size="large" color={colors.primary} style={{ marginBottom: 20 }} />
+                        <Text style={{
+                            color: colors.text,
+                            fontSize: 18,
+                            fontWeight: 'bold',
+                            textAlign: 'center',
+                            marginBottom: 8,
+                        }}>
+                            Please wait
+                        </Text>
+                        <Text style={{
+                            color: colors.textSecondary,
+                            fontSize: 14,
+                            textAlign: 'center',
+                            lineHeight: 20,
+                        }}>
+                            {processingStatus}
+                        </Text>
+                    </View>
+                </View>
+            )}
             {showTimePicker && (
                 <DateTimePicker
                     value={new Date()}
@@ -1541,13 +1873,13 @@ export default function ItineraryViewScreen() {
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
                             <TextInput
                                 style={[
-                                    styles.input, 
-                                    { 
-                                        backgroundColor: colors.background, 
-                                        color: colors.text, 
-                                        borderColor: colors.border, 
-                                        flex: 1, 
-                                        height: 45, 
+                                    styles.input,
+                                    {
+                                        backgroundColor: colors.background,
+                                        color: colors.text,
+                                        borderColor: colors.border,
+                                        flex: 1,
+                                        height: 45,
                                         borderRadius: 12,
                                         paddingHorizontal: 15,
                                         marginRight: 10,
@@ -1622,19 +1954,19 @@ export default function ItineraryViewScreen() {
                                             </View>
                                             <View style={{ flex: 1 }} />
                                             {isCollaborator ? (
-                                                <NeumorphicIconButton 
-                                                    onPress={() => removeCollaborator(item.id)} 
-                                                    iconName="Trash" 
-                                                    size={36} 
-                                                    iconSize={18} 
+                                                <NeumorphicIconButton
+                                                    onPress={() => removeCollaborator(item.id)}
+                                                    iconName="Trash"
+                                                    size={36}
+                                                    iconSize={18}
                                                     iconColorOverride="#EF4444"
                                                 />
                                             ) : (
-                                                <NeumorphicIconButton 
-                                                    onPress={() => addCollaborator(item)} 
-                                                    iconName="Plus" 
-                                                    size={36} 
-                                                    iconSize={18} 
+                                                <NeumorphicIconButton
+                                                    onPress={() => addCollaborator(item)}
+                                                    iconName="Plus"
+                                                    size={36}
+                                                    iconSize={18}
                                                 />
                                             )}
                                         </TouchableOpacity>
@@ -1754,6 +2086,13 @@ export default function ItineraryViewScreen() {
                 visible={noteModalVisible}
                 animationType="slide"
                 presentationStyle="pageSheet"
+                onShow={() => {
+                    if (!editingNoteId) {
+                        setTimeout(() => {
+                            noteTitleInputRef.current?.focus();
+                        }, 100);
+                    }
+                }}
                 onRequestClose={() => {
                     const title = noteTitleInput.trim();
                     const content = noteContentInput.trim();
@@ -1816,18 +2155,19 @@ export default function ItineraryViewScreen() {
                     </View>
                     <ScrollView style={{ flex: 1, padding: 20 }}>
                         <TextInput
+                            ref={noteTitleInputRef}
                             style={{ fontSize: 24, fontWeight: 'bold', color: colors.text, marginBottom: 15 }}
                             placeholder="Title"
                             placeholderTextColor={colors.textSecondary + '80'}
                             value={noteTitleInput}
                             onChangeText={setNoteTitleInput}
+                            autoFocus={!editingNoteId}
                         />
                         <TextInput
                             style={{ fontSize: 16, color: colors.text, lineHeight: 24 }}
                             placeholder="Note"
                             placeholderTextColor={colors.textSecondary + '80'}
                             multiline
-                            autoFocus={!editingNoteId}
                             value={noteContentInput}
                             onChangeText={setNoteContentInput}
                             textAlignVertical="top"
@@ -1851,10 +2191,7 @@ const styles = StyleSheet.create({
         paddingBottom: 20,
         borderBottomWidth: 1,
     },
-    backButton: {
-        padding: 8,
-        borderRadius: 12,
-    },
+
     neumorphicButton: {
         shadowOffset: { width: 3, height: 3 },
         shadowOpacity: 0.8,

@@ -18,14 +18,12 @@ interface TripState {
     checklist: { id: string; text: string; checked: boolean; category: string }[];
     customCategories: string[];
     notes: { id: string; title: string; content: string; order: number }[];
-    essentials: { id: string; text: string; packed: boolean }[];
     collaborators: any[];
     setPlaces: (places: StructuredPlace[]) => void;
     setTripDraft: (draft: any) => void;
     setChecklist: (checklist: { id: string; text: string; checked: boolean; category: string }[]) => void;
     setCustomCategories: (categories: string[]) => void;
     setNotes: (notes: { id: string; title: string; content: string; order: number }[]) => void;
-    setEssentials: (essentials: { id: string; text: string; packed: boolean }[]) => void;
     setCollaborators: (collaborators: any[]) => void;
     clearDraft: () => void;
 }
@@ -36,7 +34,6 @@ export const useTripStore = create<TripState>((set) => ({
     checklist: [],
     customCategories: [],
     notes: [],
-    essentials: [],
     collaborators: [],
     setPlaces: (places) => set({ places }),
     setTripDraft: (draft) => {
@@ -46,19 +43,20 @@ export const useTripStore = create<TripState>((set) => ({
                     ? JSON.parse(draft.mandatory_items)
                     : draft.mandatory_items;
                 
-                if (Array.isArray(items) && items.length >= 5) {
+                if (Array.isArray(items) && items.length >= 3) {
                     const parsedChecklist = typeof items[0] === 'string' ? JSON.parse(items[0]) : items[0];
                     const parsedCategories = typeof items[1] === 'string' ? JSON.parse(items[1]) : items[1];
                     const parsedNotes = typeof items[2] === 'string' ? JSON.parse(items[2]) : items[2];
-                    const parsedEssentials = typeof items[3] === 'string' ? JSON.parse(items[3]) : items[3];
-                    const parsedCollaborators = typeof items[4] === 'string' ? JSON.parse(items[4]) : items[4];
+                    // Backward compat: old format had 5 items [checklist, categories, notes, essentials, collaborators]
+                    // New format has 4 items [checklist, categories, notes, collaborators]
+                    const collabIndex = items.length >= 5 ? 4 : 3;
+                    const parsedCollaborators = typeof items[collabIndex] === 'string' ? JSON.parse(items[collabIndex]) : items[collabIndex];
                     
                     set({
                         tripDraft: draft,
                         checklist: Array.isArray(parsedChecklist) ? parsedChecklist : [],
                         customCategories: Array.isArray(parsedCategories) ? parsedCategories : [],
                         notes: Array.isArray(parsedNotes) ? parsedNotes : [],
-                        essentials: Array.isArray(parsedEssentials) ? parsedEssentials : [],
                         collaborators: Array.isArray(parsedCollaborators) ? parsedCollaborators : []
                     });
                     return;
@@ -72,7 +70,6 @@ export const useTripStore = create<TripState>((set) => ({
     setChecklist: (checklist) => set({ checklist }),
     setCustomCategories: (categories) => set({ customCategories: categories }),
     setNotes: (notes) => set({ notes }),
-    setEssentials: (essentials) => set({ essentials }),
     setCollaborators: (collaborators) => set({ collaborators }),
-    clearDraft: () => set({ places: [], tripDraft: null, checklist: [], customCategories: [], notes: [], essentials: [], collaborators: [] }),
+    clearDraft: () => set({ places: [], tripDraft: null, checklist: [], customCategories: [], notes: [], collaborators: [] }),
 }));
