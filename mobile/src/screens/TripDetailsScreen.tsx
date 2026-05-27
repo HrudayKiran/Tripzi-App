@@ -187,7 +187,7 @@ const TripDetailsScreen = () => {
         return;
       }
       try {
-        const ids = trip.participants.slice(0, 8);
+        const ids = [...new Set(trip.participants as string[])].slice(0, 8);
         const { data: profiles } = await supabase.from('public_profiles').select('*').in('id', ids);
         const participants = ids.map(uid => {
           const p = (profiles || []).find(pr => pr.id === uid);
@@ -825,7 +825,7 @@ const TripDetailsScreen = () => {
             <View style={styles.participantsRow}>
               {participantsData.slice(0, 5).map((participant, i) => (
                 <TouchableOpacity
-                  key={participant.id}
+                  key={`${participant.id}-${i}`}
                   style={[styles.participantAvatar, { marginLeft: i > 0 ? -10 : 0 }]}
                   onPress={() => router.push({ pathname: '/profile/[id]', params: { id: participant.id } })}
                 >

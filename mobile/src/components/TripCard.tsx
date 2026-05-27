@@ -417,7 +417,7 @@ const TripCard = memo(({ trip, onPress, isVisible = false, onReportPress, showOp
                             onPress={onPress}
                             activeOpacity={0.7}
                         >
-                            <Text style={[styles.viewDetailsText, { color: colors.primary, fontSize: 12 }]}>View Details</Text>
+                            <Text style={[styles.viewDetailsText, { color: colors.primary, fontSize: 12 }]}>View Full Itinerary</Text>
                             <Icon name="CaretRight" size={14} color={colors.primary} />
                         </TouchableOpacity>
                     </View>
