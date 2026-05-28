@@ -186,7 +186,6 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
     const router = useRouter();
     const tripId = params.id as string;
     const tripDataParam = params.tripData as string;
-    const tripImagesParam = params.tripImages as string;
 
     // Store
     const { places, setPlaces, tripDraft, setTripDraft } = useTripStore();
@@ -207,7 +206,6 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [showTimePicker, setShowTimePicker] = useState(false);
     const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
-    const [passedImages, setPassedImages] = useState<any[]>([]);
     const [startingCoords, setStartingCoords] = useState<{ lat: number, lng: number } | null>(null);
     const [destinationCoords, setDestinationCoords] = useState<{ lat: number, lng: number } | null>(null);
     const mapRef = useRef<MapView>(null);
@@ -284,9 +282,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                         setTimeout(() => geocodeLocation(parsedData.toLocation, 'destination'), 1500);
                     }
 
-                    if (tripImagesParam) {
-                        setPassedImages(JSON.parse(tripImagesParam));
-                    }
+
 
                     if (parsedData.fromDate && parsedData.toDate) {
                         const dur = getDuration(parsedData.fromDate, parsedData.toDate);
@@ -306,7 +302,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
                 setTrip((prev: any) => ({ ...prev, duration: dur }));
             }
         }
-    }, [tripId, propItems, tripDataParam, tripImagesParam]); // Removed tripDraft from here
+    }, [tripId, propItems, tripDataParam]); // Removed tripDraft from here
 
     const fetchTripDetails = async () => {
         setLoading(true);

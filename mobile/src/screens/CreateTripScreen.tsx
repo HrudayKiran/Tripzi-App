@@ -1,22 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Platform, Modal, ActivityIndicator, KeyboardAvoidingView, Vibration } from 'react-native';
-import { GestureHandlerRootView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Platform, KeyboardAvoidingView } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import LottieView from 'lottie-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { supabase } from '../lib/supabase';
-import { syncDatabase } from '../database/sync';
 import { useTripStore } from '../store/tripStore';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND } from '../styles';
-import { deleteTripImagesFromR2, uploadTripImageToR2 } from '../utils/imageUpload';
-import { showUploadNotification, completeUploadNotification, failUploadNotification } from '../utils/notifications';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -52,15 +46,8 @@ const ACCOMMODATION_TYPES = [
 const BOOKING_STATUS = [
     { id: 'booked', label: 'Already Booked' },
     { id: 'to_book', label: 'Yet to Book' },
-    { id: 'not_needed', label: 'Not Needed' },
 ];
 
-type TripImageItem = {
-    id: string;
-    uri: string;
-    location: string;
-    objectKey?: string | null;
-};
 
 
 const TRIP_FLOW_TYPES = [
@@ -110,7 +97,11 @@ const CreateTripScreen = () => {
     const { colors, isDarkMode } = useTheme();
     const router = useRouter();
     const params = useLocalSearchParams();
-    const { tripDraft, setTripDraft } = useTripStore();
+    const { tripDraft, setTripDraft, clearDraft } = useTripStore();
+
+    useEffect(() => {
+        clearDraft();
+    }, []);
 
     useEffect(() => {
         if (tripDraft) {
@@ -130,23 +121,7 @@ const CreateTripScreen = () => {
     }
 
     const [step, setStep] = useState(1);
-    const [showSuccess, setShowSuccess] = useState(false);
-    const [createdTripId, setCreatedTripId] = useState<string | null>(null);
-    const [currentUser, setCurrentUser] = useState<any>(null);
     const totalSteps = 4;
-    const [mapRegion, setMapRegion] = useState({
-        latitude: 20.5937,
-        longitude: 78.9629,
-        latitudeDelta: 10,
-        longitudeDelta: 10,
-    });
-    const [searchResults, setSearchResults] = useState<any[]>([]);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [isSearchVisible, setIsSearchVisible] = useState(false);
-
-    useEffect(() => {
-        supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
-    }, []);
 
     const { control, handleSubmit, formState: { errors: formErrors }, setValue, watch, trigger } = useForm<TripFormData>({
         resolver: zodResolver(tripSchema),
@@ -154,8 +129,16 @@ const CreateTripScreen = () => {
             title: initialData?.title || '',
             fromLocation: initialData?.fromLocation || '',
             toLocation: initialData?.toLocation || '',
-            fromDate: initialData?.fromDate?.toDate ? initialData.fromDate.toDate() : undefined,
-            toDate: initialData?.toDate?.toDate ? initialData.toDate.toDate() : undefined,
+            fromDate: initialData?.fromDate 
+                ? (typeof initialData.fromDate === 'string' 
+                    ? new Date(initialData.fromDate) 
+                    : (initialData.fromDate.toDate && typeof initialData.fromDate.toDate === 'function' ? initialData.fromDate.toDate() : new Date(initialData.fromDate))) 
+                : undefined,
+            toDate: initialData?.toDate 
+                ? (typeof initialData.toDate === 'string' 
+                    ? new Date(initialData.toDate) 
+                    : (initialData.toDate.toDate && typeof initialData.toDate.toDate === 'function' ? initialData.toDate.toDate() : new Date(initialData.toDate))) 
+                : undefined,
             tripTypes: initialData?.tripTypes || [],
             transportModes: initialData?.transportModes || [],
             costPerPerson: initialData?.costPerPerson ? String(initialData.costPerPerson) : '',
@@ -167,71 +150,10 @@ const CreateTripScreen = () => {
         }
     });
 
-    const [tripImages, setTripImages] = useState<TripImageItem[]>(
-        initialData?.images?.map((uri: string, i: number) => ({
-            id: `img-${Date.now()}-${i}`,
-            uri,
-            location: initialData?.imageLocations?.[i] || '',
-            objectKey: initialData?.imageObjectKeys?.[i] || null,
-        })) || []
-    );
 
     const [showDateModal, setShowDateModal] = useState<'from' | 'to' | null>(null);
 
-    const searchPlaces = async (query: string) => {
-        if (!query) {
-            setSearchResults([]);
-            return;
-        }
-        try {
-            const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-            const response = await fetch(`https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${apiKey}`);
-            const data = await response.json();
-            if (data.predictions) {
-                setSearchResults(data.predictions);
-            }
-        } catch (error) {
-            console.error('Error searching places:', error);
-        }
-    };
-    const [isPosting, setIsPosting] = useState(false);
 
-    const pickImages = async () => {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-            Alert.alert('Permission needed', 'Please grant camera roll permissions.');
-            return;
-        }
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [4, 5],
-            quality: 0.8,
-            allowsMultipleSelection: false,
-        });
-
-        if (!result.canceled && result.assets && result.assets.length > 0) {
-            const newImage = {
-                id: `img-new-${Date.now()}`,
-                uri: result.assets[0].uri,
-                location: '',
-                objectKey: null,
-            };
-            setTripImages(prev => [...prev, newImage].slice(0, 5));
-        }
-    };
-
-    const removeImage = (imgId: string) => {
-        setTripImages(prev => prev.filter(img => img.id !== imgId));
-    };
-
-    const toggleSelection = (id: string, list: string[], setList: (val: string[]) => void) => {
-        if (list.includes(id)) {
-            setList(list.filter(item => item !== id));
-        } else {
-            setList([...list, id]);
-        }
-    };
 
     const formatDate = (date?: Date) => {
         if (!date) return 'Select Date';
@@ -243,7 +165,7 @@ const CreateTripScreen = () => {
         if (event.type === 'set' && selectedDate) {
             setValue('fromDate', selectedDate);
             const toDate = watch('toDate');
-            if (selectedDate > (toDate || new Date())) {
+            if (toDate && selectedDate > toDate) {
                 setValue('toDate', new Date(selectedDate.getTime() + 24 * 60 * 60 * 1000));
             }
         }
@@ -253,7 +175,7 @@ const CreateTripScreen = () => {
         if (Platform.OS === 'android') setShowDateModal(null);
         if (event.type === 'set' && selectedDate) {
             const fromDate = watch('fromDate');
-            if (selectedDate >= (fromDate || new Date())) {
+            if (!fromDate || selectedDate >= fromDate) {
                 setValue('toDate', selectedDate);
             } else {
                 Alert.alert('Invalid Date', 'End date cannot be earlier than start date.');
@@ -267,130 +189,6 @@ const CreateTripScreen = () => {
         if (!fromDate || !toDate) return '0 days';
         const diff = Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
         return diff > 0 ? `${diff} day${diff > 1 ? 's' : ''}` : '1 day';
-    };
-
-    const generateMapsLink = (destination: string) => {
-        const encoded = encodeURIComponent(destination);
-        return `https://www.google.com/maps/search/?api=1&query=${encoded}`;
-    };
-
-    const handlePostTrip = async (data: TripFormData) => {
-        if (!currentUser) {
-            Alert.alert('Error', 'You need to be logged in to create a trip.');
-            router.push('/(auth)/start');
-            return;
-        }
-
-        setIsPosting(true);
-        await showUploadNotification(0, 'Preparing trip post...');
-        const newObjectKeys: string[] = [];
-
-        try {
-            const { data: currentUserData } = await supabase
-                .from('profiles')
-                .select('name, display_name, photo_url, username')
-                .eq('id', currentUser.id)
-                .maybeSingle();
-            const userData: { name?: string; display_name?: string; photo_url?: string; username?: string } = currentUserData || {};
-
-            let uploadedImageData: Array<{ uri: string, location: string, objectKey: string | null }> = [];
-            if (tripImages.length > 0) {
-                for (let i = 0; i < tripImages.length; i++) {
-                    const img = tripImages[i];
-                    const imageUri = img.uri;
-
-                    if (imageUri.startsWith('http') || imageUri.startsWith('https')) {
-                        uploadedImageData.push({
-                            uri: imageUri,
-                            location: img.location,
-                            objectKey: img.objectKey || null,
-                        });
-                        continue;
-                    }
-
-                    try {
-                        const progress = (i / tripImages.length) * 0.7;
-                        await showUploadNotification(progress, `Uploading image ${i + 1}/${tripImages.length}...`);
-                        const uploadResult = await uploadTripImageToR2(imageUri, currentUser.id);
-                        if (uploadResult.success && uploadResult.url && uploadResult.objectKey) {
-                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                            uploadedImageData.push({
-                                uri: uploadResult.url,
-                                location: img.location,
-                                objectKey: uploadResult.objectKey,
-                            });
-                            newObjectKeys.push(uploadResult.objectKey);
-                        }
-                    } catch (uploadError) {
-                        // Image upload failed
-                    }
-                }
-            }
-
-            const finalImages = uploadedImageData.map(d => d.uri);
-            const finalLocations = uploadedImageData.map(d => d.location);
-            const finalObjectKeys = uploadedImageData.map(d => d.objectKey || null);
-
-            if (finalImages.length === 0) {
-                finalImages.push('https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800');
-                finalLocations.push('');
-                finalObjectKeys.push(null);
-            }
-
-            const tripData = {
-                title: data.title,
-                images: finalImages,
-                image_locations: finalLocations,
-                from_location: data.fromLocation,
-                to_location: data.toLocation,
-                maps_link: generateMapsLink(data.toLocation),
-                from_date: data.fromDate.toISOString(),
-                to_date: data.toDate.toISOString(),
-                duration: getDuration(),
-                trip_types: data.tripTypes,
-                transport_modes: data.transportModes,
-                cost_per_person: parseFloat(data.costPerPerson) || 0,
-                total_cost: parseFloat(data.costPerPerson) || 0,
-                cost: parseFloat(data.costPerPerson) || 0,
-                accommodation_type: data.accommodationType,
-                booking_status: data.bookingStatus,
-                accommodation_days: data.accommodationDays ? parseInt(data.accommodationDays) : null,
-                max_travelers: data.tripType === 'solo' ? 1 : null,
-                current_travelers: 1,
-                places_to_visit: data.placesToVisit ? data.placesToVisit.split(',').map(place => place.trim()).filter(Boolean) : [],
-                user_id: currentUser.id,
-                owner_display_name: userData.name || userData.display_name || currentUser.user_metadata?.full_name || 'Traveler',
-                owner_photo_url: userData.photo_url || currentUser.user_metadata?.avatar_url || null,
-                owner_username: userData.username || null,
-                participants: [currentUser.id],
-                image_object_keys: finalObjectKeys,
-                location: data.toLocation,
-                trip_type: data.tripType,
-                cover_image: finalImages[0],
-            };
-
-            // Create trip
-            const { data: tripRow, error: tripErr } = await supabase.from('trips').insert(tripData).select('id').single();
-            if (tripErr || !tripRow) throw tripErr || new Error('Failed to create trip');
-            setCreatedTripId(tripRow.id);
-
-            await showUploadNotification(0.8, 'Finalizing trip...');
-
-            setIsPosting(false);
-            await completeUploadNotification('Trip Posted! 🎉', 'Your trip has been posted successfully.');
-
-            // Trigger sync to update local database immediately
-            syncDatabase().catch(err => console.error('[CreateTrip] Post-creation sync failed:', err));
-
-            setShowSuccess(true);
-        } catch (error: any) {
-            if (newObjectKeys.length > 0) {
-                await deleteTripImagesFromR2(newObjectKeys);
-            }
-            setIsPosting(false);
-            await failUploadNotification(error?.message || 'Failed to post trip');
-            Alert.alert('Error', `Failed to post trip: ${error?.message || 'Unknown error'}. Please try again.`);
-        }
     };
 
     const renderHeader = () => (
@@ -907,7 +705,6 @@ const CreateTripScreen = () => {
                                                 pathname: '/trip/timeline',
                                                 params: {
                                                     tripData: JSON.stringify(data),
-                                                    tripImages: JSON.stringify(tripImages)
                                                 }
                                             });
                                         })}
@@ -949,29 +746,6 @@ const CreateTripScreen = () => {
                             />
                         )}
 
-                        <Modal visible={showSuccess} transparent animationType="fade">
-                            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
-                                <View style={{ backgroundColor: colors.card, padding: SPACING.xl, borderRadius: BORDER_RADIUS.md, alignItems: 'center' }}>
-                                    <LottieView
-                                        source={{ uri: 'https://assets9.lottiefiles.com/packages/lf20_s2lryxtd.json' }}
-                                        autoPlay
-                                        loop={false}
-                                        style={{ width: 150, height: 150 }}
-                                        onAnimationFinish={() => {
-                                            setShowSuccess(false);
-                                            if (createdTripId) {
-                                                router.replace({ pathname: '/trip/timeline', params: { id: createdTripId } });
-                                            } else {
-                                                router.replace({ pathname: '/profile/[id]', params: { id: currentUser.id } });
-                                            }
-                                        }}
-                                    />
-                                    <Text style={{ color: colors.text, fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, marginTop: SPACING.md }}>
-                                        Trip Posted Successfully!
-                                    </Text>
-                                </View>
-                            </View>
-                        </Modal>
 
                     </KeyboardAvoidingView>
                 </SafeAreaView>
@@ -991,49 +765,20 @@ const styles = StyleSheet.create({
     keyboardContainer: { flex: 1 },
     content: { padding: SPACING.lg, paddingBottom: 100 },
     backButton: { padding: SPACING.sm, marginRight: SPACING.sm },
-    progressContainer: { flex: 1, gap: 4 },
-    progressBar: {
-        height: 6,
-        backgroundColor: 'rgba(0,0,0,0.05)',
-        borderRadius: 3,
-        overflow: 'hidden',
-    },
-    progressFill: { height: '100%', borderRadius: 3 },
-    stepText: { fontSize: 10, fontWeight: FONT_WEIGHT.medium },
-    stepContent: { paddingHorizontal: SPACING.xl },
-    stepTitle: { fontSize: FONT_SIZE.xxl, fontWeight: FONT_WEIGHT.bold, marginBottom: SPACING.xs },
-    stepSubtitle: { fontSize: FONT_SIZE.sm, marginBottom: SPACING.xl },
     label: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold, marginBottom: SPACING.sm, marginTop: SPACING.lg },
     required: { color: '#EF4444' },
     input: { padding: SPACING.md, borderRadius: BORDER_RADIUS.md, borderWidth: 1, fontSize: FONT_SIZE.md },
-    textArea: { padding: SPACING.md, borderRadius: BORDER_RADIUS.md, borderWidth: 1, fontSize: FONT_SIZE.md, minHeight: 140, textAlignVertical: 'top' },
     errorText: { color: '#EF4444', fontSize: FONT_SIZE.xs, marginTop: SPACING.xs },
-    hint: { fontSize: FONT_SIZE.xs, marginTop: SPACING.xs },
-    imagesContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.md },
-    imageWrapper: { position: 'relative' },
-    tripImage: { width: 80, height: 80, borderRadius: BORDER_RADIUS.md },
-    removeImage: { position: 'absolute', top: -8, right: -8 },
-    addImageButton: { width: 80, height: 80, borderRadius: BORDER_RADIUS.md, borderWidth: 2, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center' },
-    addImageText: { fontSize: FONT_SIZE.xs },
     dateRow: { flexDirection: 'row', gap: SPACING.md },
     dateField: { flex: 1 },
     dateButton: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, borderRadius: BORDER_RADIUS.md, borderWidth: 1, gap: SPACING.sm },
     dateText: { fontSize: FONT_SIZE.sm },
     durationText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold, marginTop: SPACING.sm },
-    mapsLink: { fontSize: FONT_SIZE.xs, marginTop: SPACING.xs },
-    chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-    chip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.lg, borderWidth: 1, gap: SPACING.xs },
-    chipText: { fontSize: FONT_SIZE.sm },
     radioGroup: { gap: SPACING.sm },
     radioItem: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
     radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, justifyContent: 'center', alignItems: 'center' },
     radioInner: { width: 12, height: 12, borderRadius: 6 },
     radioText: { fontSize: FONT_SIZE.sm },
-    divider: {
-        height: 1,
-        backgroundColor: '#E5E7EB',
-        marginVertical: SPACING.xl,
-    },
     sectionHeading: {
         fontSize: FONT_SIZE.lg,
         fontWeight: FONT_WEIGHT.bold,
@@ -1047,85 +792,9 @@ const styles = StyleSheet.create({
         fontWeight: FONT_WEIGHT.bold,
         flex: 1,
     },
-    headerSaveButton: {
-        paddingHorizontal: SPACING.md,
-        paddingVertical: 8,
-        borderRadius: BORDER_RADIUS.full,
-        backgroundColor: '#E0E7FF',
-    },
-    saveHeaderText: {
-        color: '#4F46E5',
-        fontWeight: FONT_WEIGHT.bold,
-        fontSize: FONT_SIZE.sm,
-    },
-    dateModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
     dateModalContent: { width: '85%', maxHeight: '70%', borderRadius: BORDER_RADIUS.xl, padding: SPACING.lg },
     dateModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },
     dateModalTitle: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold },
-    dateList: { maxHeight: 400 },
-    dateOption: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, borderRadius: BORDER_RADIUS.md, marginBottom: SPACING.sm, gap: SPACING.md },
-    dateOptionDay: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold, width: 40 },
-    dateOptionDate: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold, width: 40 },
-    dateOptionMonth: { fontSize: FONT_SIZE.sm, flex: 1 },
-
-    // Auto-image toggle styles
-    autoImageToggle: { flexDirection: 'row', alignItems: 'center', marginTop: SPACING.xl, padding: SPACING.md, borderRadius: BORDER_RADIUS.md, backgroundColor: 'rgba(139, 92, 246, 0.1)' },
-    hintText: { fontSize: FONT_SIZE.xs },
-    toggleButton: { width: 50, height: 28, borderRadius: 14, backgroundColor: '#E5E5EB', justifyContent: 'center', paddingHorizontal: 2 },
-    toggleButtonActive: { backgroundColor: '#9d74f7' },
-    toggleCircle: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#fff', elevation: 2 },
-    toggleCircleActive: { alignSelf: 'flex-end' },
-
-    // Reorder styles
-    reorderItemVertical: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: SPACING.sm,
-        backgroundColor: 'rgba(0,0,0,0.03)',
-        borderRadius: BORDER_RADIUS.md,
-        marginBottom: SPACING.sm,
-        width: '100%',
-        borderWidth: 1,
-        borderColor: BRAND.primary + '30',
-    },
-    reorderImageVertical: {
-        width: 60,
-        height: 60,
-        borderRadius: BORDER_RADIUS.sm,
-    },
-    verticalReorderControls: {
-        flex: 1,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingLeft: SPACING.md,
-    },
-    reorderInfo: {
-        flex: 1,
-    },
-    reorderIndexText: {
-        fontSize: FONT_SIZE.sm,
-        fontWeight: FONT_WEIGHT.bold,
-    },
-    reorderActionArea: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: SPACING.md,
-    },
-    dragHandleContainer: {
-        flexDirection: 'row',
-        gap: 2,
-        padding: 4,
-    },
-    dragHandleColumn: {
-        gap: 2,
-    },
-    dragDot: {
-        width: 4,
-        height: 4,
-        borderRadius: 2,
-        opacity: 0.6,
-    },
     neumorphicButton: {
         borderRadius: 25,
         overflow: 'hidden',
@@ -1134,18 +803,6 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 12,
         elevation: 6,
-    },
-    neumorphicInput: {
-        borderRadius: BORDER_RADIUS.md,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
-        overflow: 'hidden',
-        shadowColor: '#000',
-        shadowOffset: { width: 2, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        height: 50,
-        backgroundColor: 'rgba(255,255,255,0.05)',
     },
     buttonRow: {
         flexDirection: 'row',

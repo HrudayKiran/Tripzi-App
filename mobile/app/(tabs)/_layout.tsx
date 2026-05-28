@@ -11,7 +11,6 @@ import { getBooleanPreference, getStringPreference, PREFERENCE_KEYS } from '../.
 export default function TabsLayout() {
   const { colors } = useTheme();
   const router = useRouter();
-  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const triggerTabHaptics = async () => {
     try {
@@ -96,20 +95,7 @@ export default function TabsLayout() {
             },
           }}
         />
-        <Tabs.Screen
-          name="create"
-          options={{
-            title: 'Create',
-            tabBarIcon: ({ color, size }: { color: string; size: number }) => <Icon name="PlusCircle" size={size + 4} color={color} />,
-          }}
-          listeners={{
-            tabPress: (e) => {
-              e.preventDefault();
-              setShowCreateModal(true);
-              triggerTabHaptics();
-            },
-          }}
-        />
+
         <Tabs.Screen
           name="messages"
           options={{
@@ -135,38 +121,6 @@ export default function TabsLayout() {
           }}
         />
       </Tabs>
-
-      {/* Create Trip Modal */}
-      <Modal visible={showCreateModal} transparent animationType="fade" onRequestClose={() => setShowCreateModal(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowCreateModal(false)}>
-          <MotiView
-            from={{ opacity: 0, translateY: 100 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 300 }}
-            style={[styles.createModalContent, { backgroundColor: colors.background }]}
-          >
-            <Text style={[styles.createModalTitle, { color: colors.text }]}>Create New Trip ✈️</Text>
-
-            <TouchableOpacity style={[styles.createOption, { backgroundColor: colors.card }]} onPress={() => { setShowCreateModal(false); router.push('/trip/create'); }}>
-              <View style={[styles.createOptionIcon, { backgroundColor: '#E0E7FF' }]}><Icon name="PencilSimple" size={24} color="#6366F1" /></View>
-              <View style={styles.createOptionText}>
-                <Text style={[styles.createOptionTitle, { color: colors.text }]}>Manual Trip Planning</Text>
-                <Text style={[styles.createOptionDesc, { color: colors.textSecondary }]}>Fill in details and add photos</Text>
-              </View>
-              <Icon name="CaretRight" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.createOption, { backgroundColor: colors.card }]} onPress={() => { setShowCreateModal(false); router.push('/trip/ai-planner'); }}>
-              <View style={[styles.createOptionIcon, { backgroundColor: '#EDE9FE' }]}><Icon name="Sparkle" size={24} color="#8B5CF6" /></View>
-              <View style={styles.createOptionText}>
-                <Text style={[styles.createOptionTitle, { color: colors.text }]}>AI Trip Planning</Text>
-                <Text style={[styles.createOptionDesc, { color: colors.textSecondary }]}>Let AI plan and generate images</Text>
-              </View>
-              <Icon name="CaretRight" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </MotiView>
-        </TouchableOpacity>
-      </Modal>
     </View>
   );
 }

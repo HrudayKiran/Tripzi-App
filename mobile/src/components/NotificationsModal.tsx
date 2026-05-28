@@ -1,20 +1,44 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Animated, ActivityIndicator, Linking } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Animated, Linking } from 'react-native';
 import { FlashList } from "@shopify/flash-list";
 
 const TypedFlashList = FlashList as any;
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
-import { NeumorphicCloseButton, NeumorphicLoadingIcon } from '../components/NeumorphicIconButtons';
+import { NeumorphicCloseButton } from '../components/NeumorphicIconButtons';
 import { MotiView } from 'moti';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles';
-import { useNotificationsQuery, AppNotification, NotificationType } from '../hooks/useNotificationsQuery';
 import { useRouter } from 'expo-router';
-import { resolveNotificationTarget } from '../utils/notificationNavigation';
 
 const { width } = Dimensions.get('window');
+
+export type NotificationType =
+    | 'message'
+    | 'join_trip'
+    | 'join_success'
+    | 'trip_join'
+    | 'leave_trip'
+    | 'rating'
+    | 'trip_update'
+    | 'trip_cancelled'
+    | 'trip_full'
+    | 'report_submitted'
+    | 'trip_report'
+    | 'system'
+    | 'action_required';
+
+export interface AppNotification {
+    id: string;
+    type: NotificationType;
+    title: string;
+    message: string;
+    read: boolean;
+    deepLinkRoute?: string;
+    deepLinkParams?: Record<string, any>;
+    createdAt: Date;
+}
 
 type NotificationsModalProps = {
     visible: boolean;
@@ -133,14 +157,35 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
     const router = useRouter();
     const slideAnim = useRef(new Animated.Value(width)).current;
 
-    const {
-        notifications,
-        unreadCount,
-        loading,
-        markAsRead,
-        markAllAsRead,
-        deleteNotification
-    } = useNotificationsQuery();
+    // Local Mock Notification State
+    const [notifications, setNotifications] = useState<AppNotification[]>([
+        {
+            id: '1',
+            type: 'system',
+            title: 'Welcome to Tripzi! ✈️',
+            message: 'Create manual group chats or ask AI to generate custom trip itineraries.',
+            read: false,
+            createdAt: new Date(Date.now() - 3 * 60 * 1000), // 3 mins ago
+        },
+        {
+            id: '2',
+            type: 'trip_update',
+            title: 'AI Planner Draft Ready ✨',
+            message: 'Your personalized AI itinerary generator complete. Tap AI Planner to view.',
+            read: false,
+            createdAt: new Date(Date.now() - 15 * 60 * 1000), // 15 mins ago
+        },
+        {
+            id: '3',
+            type: 'message',
+            title: 'Group Chat Available 👥',
+            message: 'Start chat and invite collaborators to organize plans together.',
+            read: true,
+            createdAt: new Date(Date.now() - 120 * 60 * 1000), // 2 hours ago
+        }
+    ]);
+
+    const unreadCount = notifications.filter(n => !n.read).length;
 
     useEffect(() => {
         if (visible) {
@@ -166,38 +211,28 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
     }, [unreadCount]);
 
     const handleNotificationPress = async (notification: AppNotification) => {
-        // Mark as read
-        if (!notification.read) {
-            await markAsRead(notification.id);
-        }
+        // Mark as read locally
+        setNotifications(prev =>
+            prev.map(n => (n.id === notification.id ? { ...n, read: true } : n))
+        );
 
-        const target = notification.deepLinkRoute
-            ? await resolveNotificationTarget(notification)
-            : null;
-
-        if (target) {
+        if (notification.deepLinkRoute) {
             onClose();
             setTimeout(() => {
-                if (target.route === 'ExternalLink') {
-                    const url = typeof target.params?.['url'] === 'string'
-                        ? target.params['url']
-                        : null;
-                    if (url && url.length > 0) {
-                        Linking.openURL(url).catch(() => { });
-                    }
-                    return;
-                }
-
                 router.push({
-                    pathname: target.route,
-                    params: target.params as any,
+                    pathname: notification.deepLinkRoute as any,
+                    params: notification.deepLinkParams as any,
                 });
             }, 300);
         }
     };
 
     const handleDeleteNotification = (notificationId: string) => {
-        deleteNotification(notificationId);
+        setNotifications(prev => prev.filter(n => n.id !== notificationId));
+    };
+
+    const markAllAsRead = () => {
+        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     };
 
     return (
@@ -233,11 +268,7 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                                 />
                             </View>
 
-                            {loading ? (
-                                <View style={styles.loadingContainer}>
-                                    <NeumorphicLoadingIcon size={50} iconSize={24} />
-                                </View>
-                            ) : notifications.length > 0 ? (
+                            {notifications.length > 0 ? (
                                 <>
                                     {/* Action buttons */}
                                     <View style={styles.actionRow}>
@@ -247,7 +278,7 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                                         {unreadCount > 0 && (
                                             <TouchableOpacity
                                                 style={styles.markAllButton}
-                                                onPress={() => markAllAsRead()}
+                                                onPress={markAllAsRead}
                                                 activeOpacity={0.7}
                                             >
                                                 <Icon name="Checks" size={16} color={colors.primary} />
@@ -261,10 +292,10 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                                     {/* Notifications List */}
                                     <TypedFlashList
                                         data={notifications}
-                                        keyExtractor={(item) => item.id}
+                                        keyExtractor={(item: any) => item.id}
                                         contentContainerStyle={styles.content}
                                         showsVerticalScrollIndicator={false}
-                                        renderItem={({ item, index }) => (
+                                        renderItem={({ item, index }: any) => (
                                             <MotiView
                                                 from={{ opacity: 0, translateX: 20 }}
                                                 animate={{ opacity: 1, translateX: 0 }}

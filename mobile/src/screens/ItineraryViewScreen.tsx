@@ -474,7 +474,7 @@ export default function ItineraryViewScreen() {
     const { colors, isDarkMode } = useTheme();
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const { places, setPlaces, checklist, setChecklist, notes, setNotes, tripDraft, customCategories, setCustomCategories, collaborators, setCollaborators } = useTripStore();
+    const { places, setPlaces, checklist, setChecklist, notes, setNotes, tripDraft, customCategories, setCustomCategories, collaborators, setCollaborators, clearDraft } = useTripStore();
     const [activeTab, setActiveTab] = useState<TabType>('Full Itinerary');
     const [newChecklistItem, setNewChecklistItem] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
@@ -931,6 +931,7 @@ export default function ItineraryViewScreen() {
             );
 
             setIsProcessing(false);
+            clearDraft();
             router.replace('/(tabs)/profile');
         } catch (error: any) {
             console.error(error);

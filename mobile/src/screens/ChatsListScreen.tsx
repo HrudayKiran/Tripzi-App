@@ -514,6 +514,22 @@ const ChatsListScreen = () => {
                             onPress={() => {
                                 setShowMessagesSettings(false);
                                 setTimeout(() => {
+                                    router.push('/chat/create');
+                                }, 200);
+                            }}
+                        >
+                            <Icon name="Users" size={20} color={colors.text} />
+                            <Text style={[styles.dropdownText, { color: colors.text }]}>New Group Chat</Text>
+                        </TouchableOpacity>
+
+                        {/* Divider */}
+                        <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: SPACING.md }} />
+
+                        <TouchableOpacity
+                            style={styles.dropdownItem}
+                            onPress={() => {
+                                setShowMessagesSettings(false);
+                                setTimeout(() => {
                                     router.push('/chat/settings');
                                 }, 200);
                             }}

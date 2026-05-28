@@ -73,24 +73,8 @@ export async function syncDatabase() {
             console.log(`[Sync] Adjusted pull timestamp with 10s lookback: ${lastPulledAtDate}`);
         }
 
-        // 1. Pull Trips
-        // Optimization: For a full pull, only fetch trips from the last 90 days to keep it fast.
-        let tripQuery = supabase.from('trips').select('*');
-        if (lastPulledAtDate) {
-            tripQuery = tripQuery.gt('updated_at', lastPulledAtDate);
-        } else {
-            const ninetyDaysAgo = new Date();
-            ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-            tripQuery = tripQuery.gt('created_at', ninetyDaysAgo.toISOString());
-            console.log(`[Sync] Full pull detected. Limiting trips to last 90 days (since ${ninetyDaysAgo.toISOString()})`);
-        }
-
-        const { data: tripsData, error: tripsError } = await tripQuery;
-        if (tripsError) {
-            console.error('[Sync] Error pulling trips:', tripsError);
-            throw tripsError;
-        }
-        console.log(`[Sync] Pulled ${tripsData?.length || 0} trips.`);
+        // 1. Pull Trips (Bypassed in V1)
+        const tripsData: any[] = [];
 
         // 2. Pull Profiles
         let profilesData: any[] = [];
@@ -309,12 +293,21 @@ export async function syncDatabase() {
           updated_at: new Date(m.updated_at).getTime(),
         });
 
-        // Map all records
+        // Map all records and deduplicate by ID to prevent SQLite UNIQUE constraint crashes
+        const uniqById = (arr: any[]) => {
+          const seen = new Set();
+          return arr.filter(x => {
+            if (!x.id || seen.has(x.id)) return false;
+            seen.add(x.id);
+            return true;
+          });
+        };
+
         const mappedTrips = (tripsData || []).map(mapTrip);
-        const mappedProfiles = (profilesData || []).map(mapProfile);
-        const mappedChats = (chatsData || []).map(mapChat);
-        const mappedGroupChats = (groupChatsData || []).map(mapGroupChat);
-        const mappedMessages = messagesData.map(mapMessage);
+        const mappedProfiles = uniqById((profilesData || []).map(mapProfile));
+        const mappedChats = uniqById((chatsData || []).map(mapChat));
+        const mappedGroupChats = uniqById((groupChatsData || []).map(mapGroupChat));
+        const mappedMessages = uniqById(messagesData.map(mapMessage));
 
         // Split into created vs updated based on local existence
         const tripsChanges = await splitCreatedUpdated('trips', mappedTrips);
@@ -388,21 +381,9 @@ export async function syncDatabase() {
           return result;
         };
 
-        // Push Trips
+        // Push Trips (Bypassed in V1)
         if (changes.trips) {
-          const { created, updated } = changes.trips;
-          if (created.length > 0) {
-              console.log(`[Sync] Pushing ${created.length} new trips...`);
-              const { error } = await supabase.from('trips').insert(created.map(prepareForSupabase));
-              if (error) console.error('[Sync] Error pushing new trips:', error);
-          }
-          if (updated.length > 0) {
-            console.log(`[Sync] Pushing ${updated.length} trip updates...`);
-            for (const t of updated) {
-                const { error } = await supabase.from('trips').update(prepareForSupabase(t)).eq('id', t.id);
-                if (error) console.error(`[Sync] Error updating trip ${t.id}:`, error);
-            }
-          }
+          console.log('[Sync] Trips syncing is bypassed in V1.');
         }
 
         // Push Messages

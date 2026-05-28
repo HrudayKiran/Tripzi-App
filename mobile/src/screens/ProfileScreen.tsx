@@ -83,8 +83,9 @@ const ProfileScreen = () => {
       loadProfile();
 
       // Subscribe to profile changes via Supabase Realtime
+      const channelId = `profile-changes-${Math.random().toString(36).substring(2, 9)}`;
       const channel = supabase
-        .channel('profile-changes')
+        .channel(channelId)
         .on(
           'postgres_changes',
           {

@@ -180,8 +180,7 @@ const CreateGroupScreen = () => {
             });
 
             // Create group chat
-            const { data: chatRow, error: chatErr } = await supabase.from('chats').insert({
-                type: 'group',
+            const { data: chatRow, error: chatErr } = await supabase.from('group_chats').insert({
                 group_name: groupName.trim(),
                 group_icon: groupIconUrl,
                 participants,
@@ -197,7 +196,8 @@ const CreateGroupScreen = () => {
 
             // Add system message
             await supabase.from('messages').insert({
-                chat_id: chatRow.id,
+                group_chat_id: chatRow.id,
+                chat_id: null,
                 sender_id: 'system',
                 sender_name: 'System',
                 type: 'system',
@@ -210,7 +210,14 @@ const CreateGroupScreen = () => {
 
             router.replace({
                 pathname: '/chat/[id]',
-                params: { id: chatRow.id, chatId: chatRow.id }
+                params: {
+                    id: chatRow.id,
+                    chatId: chatRow.id,
+                    collectionName: 'group_chats',
+                    isGroupChat: 'true',
+                    otherUserName: groupName.trim(),
+                    otherUserPhoto: groupIconUrl || undefined,
+                }
             });
         } catch (error) {
             Alert.alert('Error', 'Failed to create group. Please try again.');

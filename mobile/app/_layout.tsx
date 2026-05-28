@@ -14,12 +14,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const queryClient = new QueryClient();
 import { syncDatabase } from '../src/database/sync';
-import { registerBackgroundHandler } from '../src/utils/notifications';
 import { useAppCheck } from '../src/hooks/useAppCheck';
 import { useRemoteConfig } from '../src/hooks/useRemoteConfig';
-
-// Register FCM background message handler
-registerBackgroundHandler();
 
 function AppNavigator() {
   const { isDarkMode, colors } = useTheme();
