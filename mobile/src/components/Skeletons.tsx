@@ -67,6 +67,65 @@ export const ChatSkeleton = () => {
   );
 };
 
+export const ChatItemSkeleton = () => {
+  const { colors } = useTheme();
+  return (
+    <View style={[styles.chatItemSkeleton, { backgroundColor: colors.card }]}>
+      <AvatarSkeleton size={52} style={{ marginRight: SPACING.md }} />
+      <View style={{ flex: 1, justifyContent: 'center' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.xs }}>
+          <TextSkeleton width={120} height={16} />
+          <TextSkeleton width={40} height={12} />
+        </View>
+        <TextSkeleton width={200} height={14} style={{ marginTop: 4 }} />
+      </View>
+    </View>
+  );
+};
+
+export const ChatsListSkeleton = () => {
+  return (
+    <View style={{ paddingHorizontal: SPACING.lg, paddingTop: SPACING.md }}>
+      <ChatItemSkeleton />
+      <ChatItemSkeleton />
+      <ChatItemSkeleton />
+      <ChatItemSkeleton />
+      <ChatItemSkeleton />
+      <ChatItemSkeleton />
+    </View>
+  );
+};
+
+export const UserSearchSkeleton = () => {
+  const { colors } = useTheme();
+  const isDark = colors.background !== '#FFFFFF';
+  return (
+    <View style={[styles.searchResultSkeleton, { backgroundColor: colors.card }]}>
+      <AvatarSkeleton size={48} style={{ marginRight: SPACING.md }} />
+      <View style={{ flex: 1, justifyContent: 'center' }}>
+        <TextSkeleton width={140} height={16} style={{ marginBottom: 6 }} />
+        <TextSkeleton width={80} height={12} />
+      </View>
+      <Shimmer
+        style={{ width: 20, height: 20, borderRadius: 10 }}
+        shimmerColors={getShimmerColors(isDark)}
+      />
+    </View>
+  );
+};
+
+export const UserSearchListSkeleton = () => {
+  return (
+    <View style={{ paddingHorizontal: SPACING.lg, paddingTop: SPACING.md }}>
+      <UserSearchSkeleton />
+      <UserSearchSkeleton />
+      <UserSearchSkeleton />
+      <UserSearchSkeleton />
+      <UserSearchSkeleton />
+    </View>
+  );
+};
+
 const styles = StyleSheet.create({
   chatContainer: {
     padding: SPACING.md,
@@ -85,5 +144,19 @@ const styles = StyleSheet.create({
   rightBubble: {
     alignSelf: 'flex-end',
     borderBottomRightRadius: 0,
+  },
+  chatItemSkeleton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    borderRadius: BORDER_RADIUS.lg,
+  },
+  searchResultSkeleton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    borderRadius: BORDER_RADIUS.lg,
   },
 });

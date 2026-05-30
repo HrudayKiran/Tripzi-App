@@ -16,8 +16,10 @@ const queryClient = new QueryClient();
 import { syncDatabase } from '../src/database/sync';
 import { useAppCheck } from '../src/hooks/useAppCheck';
 import { useRemoteConfig } from '../src/hooks/useRemoteConfig';
+import { usePresence } from '../src/hooks/usePresence';
 
 function AppNavigator() {
+  usePresence();
   const { isDarkMode, colors } = useTheme();
 
   const navigationTheme = {

@@ -116,12 +116,111 @@ export function useChatMessagesQuery(
                 .select();
 
             if (error) throw error;
+
+            // Update parent table last_message and unread_count in real-time
+            const parentTable = chatType === 'group' ? 'group_chats' : 'direct_chats';
+            
+            const { data: chatData } = await supabase
+                .from(parentTable)
+                .select('participants, unread_count')
+                .eq('id', chatId)
+                .maybeSingle();
+
+            let newUnread: any = {};
+            if (chatData) {
+                const participants = chatData.participants || [];
+                const currentUnread = chatData.unread_count || {};
+                participants.forEach((pId: string) => {
+                    if (pId !== userId) {
+                        newUnread[pId] = (currentUnread[pId] || 0) + 1;
+                    } else {
+                        newUnread[pId] = 0;
+                    }
+                });
+            }
+
+            await supabase
+                .from(parentTable)
+                .update({
+                    last_message: {
+                        text: text.trim(),
+                        sender_id: userId,
+                        sender_name: senderName,
+                        created_at: new Date().toISOString(),
+                        type: 'text',
+                    },
+                    unread_count: newUnread,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', chatId);
+
             return data;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
         },
     });
+
+    const markAsRead = useCallback(async () => {
+        if (!chatId || !userId || !chatType) return;
+        
+        try {
+            // First, find all messages in this chat sent by others that don't have our userId in read_by
+            const { data: unreadMessages, error: fetchError } = await supabase
+                .from('messages')
+                .select('id, read_by')
+                .eq('chat_id', chatId)
+                .neq('sender_id', userId);
+                
+            if (fetchError) throw fetchError;
+            
+            const toUpdate = (unreadMessages || []).filter((m: any) => {
+                const readBy = m.read_by || {};
+                return !readBy[userId];
+            });
+            
+            if (toUpdate.length > 0) {
+                // For each unread message, update its read_by object to include the current user ID and mark as read
+                await Promise.all(
+                    toUpdate.map(async (m: any) => {
+                        const newReadBy = { ...(m.read_by || {}), [userId]: new Date().toISOString() };
+                        await supabase
+                            .from('messages')
+                            .update({ 
+                                read_by: newReadBy,
+                                status: 'read'
+                            })
+                            .eq('id', m.id);
+                    })
+                );
+            }
+            
+            // Also reset the unread count for current user in the parent table (direct_chats or group_chats)
+            const parentTable = chatType === 'group' ? 'group_chats' : 'direct_chats';
+            const { data: chatData } = await supabase
+                .from(parentTable)
+                .select('unread_count')
+                .eq('id', chatId)
+                .maybeSingle();
+                
+            if (chatData) {
+                const currentUnread = chatData.unread_count || {};
+                if (currentUnread[userId] !== 0) {
+                    const newUnread = { ...currentUnread, [userId]: 0 };
+                    await supabase
+                        .from(parentTable)
+                        .update({ unread_count: newUnread })
+                        .eq('id', chatId);
+                }
+            }
+            
+            // Invalidate query to refresh UI
+            queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+            
+        } catch (error) {
+            console.error('[markAsRead] Error marking messages as read:', error);
+        }
+    }, [chatId, userId, chatType, queryClient]);
 
     const sendMessage = useCallback(async (text: string, replyTo?: ReplyTo, mentions?: string[]) => {
         await sendMessageMutation.mutateAsync({ text, replyTo, mentions });
@@ -132,7 +231,7 @@ export function useChatMessagesQuery(
         if (!chatId) return;
 
         const channel = supabase
-            .channel(`messages-${chatId}`)
+            .channel(`messages-${chatId}-${Math.random().toString(36).substring(7)}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` }, () => {
                 queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
             })
@@ -148,7 +247,7 @@ export function useChatMessagesQuery(
         loading,
         error,
         sendMessage,
-        markAsRead: async () => {},
+        markAsRead,
         loadMoreMessages: () => {},
         hasMore: false,
     };

@@ -24,6 +24,7 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL 
 import { supabase } from '../lib/supabase';
 import { searchUsersByPrefix } from '../utils/searchUsers';
 import { pickAndUploadImage } from '../utils/imageUpload';
+import { UserSearchListSkeleton } from '../components/Skeletons';
 
 interface User {
     id: string;
@@ -150,7 +151,7 @@ const CreateGroupScreen = () => {
             let groupIconUrl = '';
             if (groupIcon) {
                 const result = await pickAndUploadImage({
-                    folder: 'chats',
+                    folder: 'group_chats',
                     userId: currentUser.id,
                     existingUri: groupIcon,
                 });
@@ -158,14 +159,15 @@ const CreateGroupScreen = () => {
             }
 
             // Get current user profile
-            const { data: profile } = await supabase.from('profiles').select('name, display_name, photo_url').eq('id', currentUser.id).maybeSingle();
+            const { data: profile } = await supabase.from('profiles').select('name, photo_url').eq('id', currentUser.id).maybeSingle();
             const userData: any = profile || {};
+            const creatorName = userData.name || currentUser.user_metadata?.full_name || 'User';
 
             // Prepare participants
             const participants = [currentUser.id, ...selectedUsers.map((u) => u.id)];
             const participantDetails: { [key: string]: any } = {
                 [currentUser.id]: {
-                    displayName: userData.name || userData.display_name || currentUser.user_metadata?.full_name || 'User',
+                    displayName: creatorName,
                     photoURL: userData.photo_url || currentUser.user_metadata?.avatar_url || '',
                     role: 'admin',
                 },
@@ -188,20 +190,22 @@ const CreateGroupScreen = () => {
                 created_by: currentUser.id,
                 admins: [currentUser.id],
                 unread_count: participants.reduce((acc, uid) => { acc[uid] = 0; return acc; }, {} as { [key: string]: number }),
-                muted_by: [],
-                pinned_by: [],
-                last_message: `${userData.name || userData.display_name || 'Someone'} created the group "${groupName.trim()}"`,
+                last_message: {
+                    text: `${creatorName} created the group "${groupName.trim()}"`,
+                    sender_id: null,
+                    created_at: new Date().toISOString()
+                },
             }).select('id').single();
             if (chatErr || !chatRow) throw chatErr || new Error('Failed');
 
             // Add system message
             await supabase.from('messages').insert({
-                group_chat_id: chatRow.id,
-                chat_id: null,
+                chat_id: chatRow.id,
+                chat_type: 'group',
                 sender_id: 'system',
                 sender_name: 'System',
                 type: 'system',
-                text: `${userData.name || userData.display_name || 'Someone'} created the group "${groupName.trim()}"`,
+                text: `${creatorName} created the group "${groupName.trim()}"`,
                 status: 'sent',
                 read_by: {},
                 delivered_to: [],
@@ -219,8 +223,9 @@ const CreateGroupScreen = () => {
                     otherUserPhoto: groupIconUrl || undefined,
                 }
             });
-        } catch (error) {
-            Alert.alert('Error', 'Failed to create group. Please try again.');
+        } catch (error: any) {
+            console.error('Group creation error detailed:', error);
+            Alert.alert('Error', error?.message || 'Failed to create group. Please try again.');
         } finally {
             setCreating(false);
         }
@@ -345,9 +350,7 @@ const CreateGroupScreen = () => {
 
                         {/* User list */}
                         {searching ? (
-                            <View style={styles.loadingContainer}>
-                                <ActivityIndicator size="small" color={colors.primary} />
-                            </View>
+                            <UserSearchListSkeleton />
                         ) : (
                             <TypedFlashList
                                 data={searchResults}

@@ -22,7 +22,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, STATUS, NEUTRAL } from '../styles';
 import { supabase } from '../lib/supabase';
 import { workersApi } from '../lib/workersApi';
-import { uploadTripImageToR2 } from '../utils/imageUpload';
+import { uploadGroupChatImageToR2 } from '../utils/imageUpload';
 import { searchUsersByPrefix } from '../utils/searchUsers';
 import { getPublicProfilesByIds } from '../utils/publicProfiles';
 import DefaultAvatar from '../components/DefaultAvatar';
@@ -55,9 +55,13 @@ const GroupInfoScreen = () => {
     const requestedCollection = 'group_chats';
     const { colors } = useTheme();
     const [currentUser, setCurrentUser] = useState<any>(null);
+    const [loadingAuth, setLoadingAuth] = useState(true);
 
     useEffect(() => {
-        supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+        supabase.auth.getUser().then(({ data: { user } }) => {
+            setCurrentUser(user);
+            setLoadingAuth(false);
+        });
     }, []);
 
     const queryClient = useQueryClient();
@@ -93,14 +97,16 @@ const GroupInfoScreen = () => {
 
     const members = useMemo(() => {
         if (!groupData || !publicProfiles) return [];
+        const admins = Array.isArray(groupData.admins) ? groupData.admins : [groupData.created_by];
         const memberList = (groupData.participants || []).map((uid: string) => {
             const profile = publicProfiles.get(uid);
             const fallback = groupData.participant_details?.[uid] || {};
+            const isUserAdmin = admins.includes(uid) || groupData.created_by === uid;
             return {
                 id: uid,
                 displayName: profile?.displayName || fallback.displayName || 'User',
                 photoURL: profile?.photoURL || fallback.photoURL || undefined,
-                role: groupData.created_by === uid ? 'admin' : 'member',
+                role: isUserAdmin ? 'admin' : 'member',
             };
         });
 
@@ -113,7 +119,7 @@ const GroupInfoScreen = () => {
         return memberList;
     }, [groupData, publicProfiles]);
 
-    const loading = loadingGroup;
+    const loading = loadingGroup || loadingAuth || !publicProfiles;
 
     const [editing, setEditing] = useState(false);
     const [editName, setEditName] = useState('');
@@ -122,8 +128,12 @@ const GroupInfoScreen = () => {
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [searching, setSearching] = useState(false);
 
-    const isAdmin = group?.createdBy === currentUser?.id;
     const isCreator = group?.createdBy === currentUser?.id;
+    const isAdmin = useMemo(() => {
+        if (!currentUser || !groupData) return false;
+        const adminsList = Array.isArray(groupData.admins) ? groupData.admins : [groupData.created_by];
+        return adminsList.includes(currentUser.id) || groupData.created_by === currentUser.id;
+    }, [groupData, currentUser]);
 
     useEffect(() => {
         if (groupData?.group_name) {
@@ -146,10 +156,34 @@ const GroupInfoScreen = () => {
     }, [showAddMember]);
 
     const updateGroupName = async () => {
-        if (!editName.trim() || !isAdmin) return;
+        if (!editName.trim() || !isAdmin || !currentUser) return;
         try {
             const table = 'group_chats';
-            await supabase.from(table).update({ group_name: editName.trim() }).eq('id', chatId);
+            const userProfile = publicProfiles?.get(currentUser.id);
+            const userDisplayName = userProfile?.displayName || currentUser.user_metadata?.full_name || 'Admin';
+            const systemText = `${userDisplayName} changed the group name to "${editName.trim()}"`;
+
+            await Promise.all([
+                supabase.from(table).update({
+                    group_name: editName.trim(),
+                    last_message: {
+                        text: systemText,
+                        sender_id: null,
+                        created_at: new Date().toISOString()
+                    },
+                    updated_at: new Date().toISOString()
+                }).eq('id', chatId),
+                supabase.from('messages').insert({
+                    chat_id: chatId,
+                    chat_type: 'group',
+                    sender_id: 'system',
+                    sender_name: 'System',
+                    type: 'system',
+                    text: systemText,
+                    status: 'sent'
+                })
+            ]);
+
             queryClient.invalidateQueries({ queryKey: ['groupChat', chatId] });
             setEditing(false);
         } catch (error) {
@@ -174,10 +208,34 @@ const GroupInfoScreen = () => {
             });
 
             if (!result.canceled && result.assets[0]) {
-                const uploadResult = await uploadTripImageToR2(result.assets[0].uri, currentUser.id);
+                const uploadResult = await uploadGroupChatImageToR2(result.assets[0].uri, currentUser.id, chatId);
                 if (uploadResult.success && uploadResult.url) {
                     const table = 'group_chats';
-                    await supabase.from(table).update({ group_icon: uploadResult.url }).eq('id', chatId);
+                    const userProfile = publicProfiles?.get(currentUser.id);
+                    const userDisplayName = userProfile?.displayName || currentUser.user_metadata?.full_name || 'Admin';
+                    const systemText = `${userDisplayName} changed this group's icon`;
+
+                    await Promise.all([
+                        supabase.from(table).update({
+                            group_icon: uploadResult.url,
+                            last_message: {
+                                text: systemText,
+                                sender_id: null,
+                                created_at: new Date().toISOString()
+                            },
+                            updated_at: new Date().toISOString()
+                        }).eq('id', chatId),
+                        supabase.from('messages').insert({
+                            chat_id: chatId,
+                            chat_type: 'group',
+                            sender_id: 'system',
+                            sender_name: 'System',
+                            type: 'system',
+                            text: systemText,
+                            status: 'sent'
+                        })
+                    ]);
+
                     queryClient.invalidateQueries({ queryKey: ['groupChat', chatId] });
                 }
             }
@@ -211,7 +269,7 @@ const GroupInfoScreen = () => {
     const addMember = async (user: any) => {
         if (!isAdmin || !group) return;
         try {
-            await workersApi('/groups/add-member', { body: {
+            await workersApi('/group_chats/add-member', { body: {
                 chatId,
                 memberId: user.id,
                 collectionName: 'group_chats',
@@ -239,7 +297,7 @@ const GroupInfoScreen = () => {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await workersApi('/groups/remove-member', { body: {
+                            await workersApi('/group_chats/remove-member', { body: {
                                 chatId,
                                 memberId: member.id,
                                 collectionName: 'group_chats',
@@ -270,7 +328,7 @@ const GroupInfoScreen = () => {
                     text: 'Confirm',
                     onPress: async () => {
                         try {
-                            const endpoint = newRole === 'admin' ? '/groups/promote-admin' : '/groups/demote-admin';
+                            const endpoint = newRole === 'admin' ? '/group_chats/promote-admin' : '/group_chats/demote-admin';
                             await workersApi(endpoint, { body: {
                                 chatId,
                                 memberId: member.id,
@@ -297,7 +355,7 @@ const GroupInfoScreen = () => {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await workersApi('/groups/leave', { body: {
+                            await workersApi('/group_chats/leave', { body: {
                                 chatId,
                                 collectionName: 'group_chats',
                             } });
@@ -456,65 +514,63 @@ const GroupInfoScreen = () => {
             <Modal
                 visible={showAddMember}
                 animationType="slide"
-                transparent
+                transparent={false}
                 onRequestClose={() => {
                     setShowAddMember(false);
                     setSearchQuery('');
                     setSearchResults([]);
                 }}
             >
-                <View style={[styles.modalContainer, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-                    <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
-                        <View style={styles.modalHeader}>
-                            <Text style={[styles.modalTitle, { color: colors.text }]}>Add Members</Text>
-                            <TouchableOpacity onPress={() => { setShowAddMember(false); setSearchQuery(''); setSearchResults([]); }}>
-                                <Icon name="X" size={24} color={colors.text} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
-                            <Icon name="MagnifyingGlass" size={20} color={colors.textSecondary} />
-                            <TextInput
-                                style={[styles.searchInput, { color: colors.text }]}
-                                placeholder="Search users..."
-                                placeholderTextColor={colors.textSecondary}
-                                value={searchQuery}
-                                onChangeText={handleSearch}
-                                autoFocus
-                            />
-                        </View>
-
-                        {searching ? (
-                            <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 20 }} />
-                        ) : (
-                            <TypedFlashList
-                                data={searchResults}
-                                keyExtractor={(item) => item.id}
-                                renderItem={({ item }) => (
-                                    <TouchableOpacity
-                                        style={[styles.searchResultItem, { backgroundColor: colors.card }]}
-                                        onPress={() => addMember(item)}
-                                    >
-                                        <DefaultAvatar
-                                            uri={item.photoURL}
-                                            name={item.displayName}
-                                            size={40}
-                                        />
-                                        <Text style={[styles.searchName, { color: colors.text }]}>{item.displayName}</Text>
-                                        <Icon name="PlusCircle" size={24} color={colors.primary} />
-                                    </TouchableOpacity>
-                                )}
-                                ListEmptyComponent={
-                                    searchQuery.length > 0 ? (
-                                        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No users found</Text>
-                                    ) : null
-                                }
-                                contentContainerStyle={{ paddingTop: SPACING.md }}
-                                estimatedItemSize={60}
-                            />
-                        )}
+                <SafeAreaView style={[styles.fullScreenModal, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+                    <View style={styles.modalHeader}>
+                        <Text style={[styles.modalTitle, { color: colors.text }]}>Add Members</Text>
+                        <TouchableOpacity onPress={() => { setShowAddMember(false); setSearchQuery(''); setSearchResults([]); }}>
+                            <Icon name="X" size={24} color={colors.text} />
+                        </TouchableOpacity>
                     </View>
-                </View>
+
+                    <View style={[styles.searchContainer, { backgroundColor: colors.card, marginBottom: SPACING.md }]}>
+                        <Icon name="MagnifyingGlass" size={20} color={colors.textSecondary} />
+                        <TextInput
+                            style={[styles.searchInput, { color: colors.text }]}
+                            placeholder="Search users..."
+                            placeholderTextColor={colors.textSecondary}
+                            value={searchQuery}
+                            onChangeText={handleSearch}
+                            autoFocus
+                        />
+                    </View>
+
+                    {searching ? (
+                        <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 20 }} />
+                    ) : (
+                        <TypedFlashList
+                            data={searchResults}
+                            keyExtractor={(item) => item.id}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity
+                                    style={[styles.searchResultItem, { backgroundColor: colors.card }]}
+                                    onPress={() => addMember(item)}
+                                >
+                                    <DefaultAvatar
+                                        uri={item.photoURL}
+                                        name={item.displayName}
+                                        size={40}
+                                    />
+                                    <Text style={[styles.searchName, { color: colors.text }]}>{item.displayName}</Text>
+                                    <Icon name="PlusCircle" size={24} color={colors.primary} />
+                                </TouchableOpacity>
+                            )}
+                            ListEmptyComponent={
+                                searchQuery.length > 0 ? (
+                                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No users found</Text>
+                                ) : null
+                            }
+                            contentContainerStyle={{ paddingTop: SPACING.md }}
+                            estimatedItemSize={60}
+                        />
+                    )}
+                </SafeAreaView>
             </Modal>
         </SafeAreaView>
     );
@@ -547,6 +603,7 @@ const styles = StyleSheet.create({
     memberInfo: { flex: 1, marginLeft: SPACING.md },
     memberName: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.medium },
     memberRole: { fontSize: FONT_SIZE.xs, marginTop: 2 },
+    fullScreenModal: { flex: 1, paddingHorizontal: SPACING.lg, paddingTop: SPACING.md },
     modalContainer: { flex: 1, justifyContent: 'flex-end' },
     modalContent: { borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, maxHeight: '80%', padding: SPACING.xl },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },

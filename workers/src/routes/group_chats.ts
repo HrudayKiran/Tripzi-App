@@ -12,7 +12,8 @@ const getProfile = async (sb: any, uid: string) => {
 const addSystemMessage = async (sb: any, chatId: string, table: string, text: string) => {
   await sb.from('messages').insert({ 
     chat_id: chatId, 
-    sender_id: null, 
+    chat_type: 'group',
+    sender_id: 'system', 
     sender_name: 'System', 
     type: 'system', 
     text, 
@@ -168,6 +169,45 @@ groupChats.post('/promote-admin', async (c) => {
     type: 'system',
     title: 'Promoted to Admin',
     message: `You are now an admin of the group "${chat.group_name || 'Itinerary'}"`,
+    entityId: chatId,
+    entityType: 'chat',
+    actorId: callerUid,
+    actorName: actor?.display_name,
+    deepLinkRoute: 'ChatRoom',
+    deepLinkParams: { chatId, type: 'group' }
+  };
+  await createNotification(sb, notifPayload);
+  await sendPushToUser(sb, c.env.FIREBASE_SERVICE_ACCOUNT_JSON, memberId, {
+    title: notifPayload.title,
+    body: notifPayload.message,
+    data: { screen: 'ChatRoom', chatId, type: 'group' }
+  });
+
+  return c.json({ success: true });
+});
+
+groupChats.post('/demote-admin', async (c) => {
+  const callerUid = c.get('userId');
+  const { chatId, memberId } = await c.req.json<{ chatId?: string; memberId?: string }>();
+  if (!chatId || !memberId) return c.json({ error: 'chatId and memberId required.' }, 400);
+  const sb = getSupabaseAdmin(c.env);
+
+  const { data: chat } = await sb.from('group_chats').select('*').eq('id', chatId).maybeSingle();
+  if (!chat) return c.json({ error: 'Chat not found.' }, 404);
+  if (chat.created_by !== callerUid) return c.json({ error: 'Only creator can demote.' }, 403);
+
+  const admins = Array.isArray(chat.admins) ? chat.admins : [];
+  const newAdmins = admins.filter((a: string) => a !== memberId);
+
+  const [actor, member] = await Promise.all([getProfile(sb, callerUid), getProfile(sb, memberId)]);
+  await sb.from('group_chats').update({ admins: newAdmins }).eq('id', chatId);
+  await addSystemMessage(sb, chatId, 'chats', `${actor?.display_name || 'Admin'} removed ${member?.display_name || 'someone'} as admin`);
+  
+  const notifPayload = {
+    recipientId: memberId,
+    type: 'system',
+    title: 'Removed as Admin',
+    message: `You are no longer an admin of the group "${chat.group_name || 'Itinerary'}"`,
     entityId: chatId,
     entityType: 'chat',
     actorId: callerUid,

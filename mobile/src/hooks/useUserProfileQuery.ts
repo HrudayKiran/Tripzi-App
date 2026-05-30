@@ -63,7 +63,7 @@ export function useUserProfileQuery(userId: string | undefined, isOwnProfile: bo
 
             console.log(`[useUserProfileQuery] Fetching trips for ${userId}...`);
             const { data, error } = await supabase
-                .from('trips')
+                .from('itineraries')
                 .select('*')
                 .eq('user_id', userId)
                 .order('created_at', { ascending: false });
@@ -80,13 +80,14 @@ export function useUserProfileQuery(userId: string | undefined, isOwnProfile: bo
 
 
 
-    // Realtime subscription for trips
+    // Realtime subscription for itineraries
     useEffect(() => {
         if (!userId) return;
 
+        const channelName = `user-itineraries-${userId}-${Math.random().toString(36).substring(7)}`;
         const channel = supabase
-            .channel(`user-trips-${userId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'trips', filter: `user_id=eq.${userId}` }, () => {
+            .channel(channelName)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'itineraries', filter: `user_id=eq.${userId}` }, () => {
                 queryClient.invalidateQueries({ queryKey: ['userTrips', userId] });
             })
             .subscribe();

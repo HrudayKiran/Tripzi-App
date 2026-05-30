@@ -50,7 +50,7 @@ const extensionFromContentType = (contentType: string) => {
 };
 
 export const createR2ObjectKey = (
-  scope: 'profiles' | 'trips',
+  scope: 'profiles' | 'direct_chats' | 'group_chats' | 'itineraries',
   uid: string,
   contentType: string,
   fileName?: string
@@ -130,6 +130,6 @@ export const deleteR2Prefix = async (env: Env, prefix: string) => {
 
 export const isOwnedObjectKey = (
   objectKey: string,
-  scope: 'profiles' | 'trips',
+  scope: 'profiles' | 'direct_chats' | 'group_chats' | 'itineraries',
   uid: string
 ) => objectKey.startsWith(`${scope}/${uid}/`);

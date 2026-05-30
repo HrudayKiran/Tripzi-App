@@ -18,7 +18,7 @@ export interface LastMessage {
 export interface Chat {
     id: string;
     type: 'direct' | 'group';
-    collectionName: 'chats' | 'group_chats';
+    collectionName: 'direct_chats' | 'group_chats';
     participants: string[];
     participantDetails: { [uid: string]: ChatParticipant };
     groupName?: string;
@@ -47,7 +47,7 @@ interface UseChatsReturn {
     refreshChats: () => void;
 }
 
-const normalizeRow = (row: any, collectionName: 'chats' | 'group_chats'): Chat => {
+const normalizeRow = (row: any, collectionName: 'direct_chats' | 'group_chats'): Chat => {
     const participants = Array.isArray(row.participants) ? row.participants : [];
     const type: 'direct' | 'group' = collectionName === 'group_chats' ? 'group' : 'direct';
 
@@ -100,7 +100,7 @@ export function useChats(): UseChatsReturn {
 
         const fetchDirect = async () => {
             const { data, error: err } = await supabase
-                .from('chats')
+                .from('direct_chats')
                 .select('*')
                 .contains('participants', [userId])
                 .order('updated_at', { ascending: false });
@@ -108,7 +108,7 @@ export function useChats(): UseChatsReturn {
             if (err) { setError(err as any); return; }
 
             const chats = (data || [])
-                .map((row: any) => normalizeRow(row, 'chats'))
+                .map((row: any) => normalizeRow(row, 'direct_chats'))
                 .filter((c) => !c.deletedBy?.includes(userId) && c.hidden !== true);
 
             setDirectChats(chats);
@@ -119,7 +119,7 @@ export function useChats(): UseChatsReturn {
         const channelName = `chats-direct-${userId}-${Date.now()}`;
         const channel = supabase
             .channel(channelName)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'chats' }, () => fetchDirect())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'direct_chats' }, () => fetchDirect())
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
@@ -187,7 +187,7 @@ export function useChats(): UseChatsReturn {
             };
 
             const { data, error: insertError } = await supabase
-                .from('chats')
+                .from('direct_chats')
                 .insert(chatData)
                 .select('id')
                 .single();
@@ -210,14 +210,14 @@ export function useChats(): UseChatsReturn {
             if (existing) {
                 if (existing.deletedBy?.includes(userId)) {
                     const newDeletedBy = existing.deletedBy.filter((id) => id !== userId);
-                    await supabase.from('chats').update({ deleted_by: newDeletedBy }).eq('id', existing.id);
+                    await supabase.from('direct_chats').update({ deleted_by: newDeletedBy }).eq('id', existing.id);
                 }
                 return existing.id;
             }
 
             // Query DB
             const { data: found } = await supabase
-                .from('chats')
+                .from('direct_chats')
                 .select('id, participants, deleted_by')
                 .contains('participants', [userId]);
 
@@ -228,7 +228,7 @@ export function useChats(): UseChatsReturn {
             if (match) {
                 if (Array.isArray(match.deleted_by) && match.deleted_by.includes(userId)) {
                     const newDeletedBy = match.deleted_by.filter((id: string) => id !== userId);
-                    await supabase.from('chats').update({ deleted_by: newDeletedBy }).eq('id', match.id);
+                    await supabase.from('direct_chats').update({ deleted_by: newDeletedBy }).eq('id', match.id);
                 }
                 return match.id;
             }
@@ -240,8 +240,15 @@ export function useChats(): UseChatsReturn {
 
     const deleteChat = useCallback(async (chatId: string) => {
         if (!userId) return;
-        const targetChat = [...directChats, ...groupChats].find((c) => c.id === chatId);
-        const table = targetChat?.collectionName || 'chats';
+
+        // Determine correct table dynamically by checking direct_chats first
+        const { data: directCheck } = await supabase
+            .from('direct_chats')
+            .select('id')
+            .eq('id', chatId)
+            .maybeSingle();
+
+        const table = directCheck ? 'direct_chats' : 'group_chats';
 
         const { data: current } = await supabase
             .from(table)
@@ -251,7 +258,7 @@ export function useChats(): UseChatsReturn {
 
         const deletedBy = Array.isArray(current?.deleted_by) ? [...current.deleted_by, userId] : [userId];
         await supabase.from(table).update({ deleted_by: deletedBy }).eq('id', chatId);
-    }, [userId, directChats, groupChats]);
+    }, [userId]);
 
     const refreshChats = useCallback(() => {
         setRefreshKey((prev) => prev + 1);

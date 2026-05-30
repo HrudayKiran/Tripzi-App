@@ -18,7 +18,6 @@ import { supabase } from '../lib/supabase';
 import { Sortable, SortableItem, useSortableList, DropProvider, SortableDirection } from 'react-native-reanimated-dnd';
 import MapView, { Marker } from 'react-native-maps';
 import * as Haptics from 'expo-haptics';
-import { deleteTripImagesFromR2, uploadTripImageToR2 } from '../utils/imageUpload';
 import { showUploadNotification, completeUploadNotification, failUploadNotification } from '../utils/notifications';
 import { syncDatabase } from '../database/sync';
 import { GestureHandlerRootView, FlatList as GHFlatList, ScrollView as GHScrollView } from 'react-native-gesture-handler';
@@ -308,7 +307,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
         setLoading(true);
         try {
             const { data, error } = await supabase
-                .from('trips')
+                .from('itineraries')
                 .select('*')
                 .eq('id', tripId)
                 .single();

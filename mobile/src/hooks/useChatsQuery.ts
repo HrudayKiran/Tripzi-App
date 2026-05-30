@@ -19,7 +19,7 @@ export interface LastMessage {
 export interface Chat {
     id: string;
     type: 'direct' | 'group';
-    collectionName: 'chats' | 'group_chats';
+    collectionName: 'direct_chats' | 'group_chats';
     participants: string[];
     participantDetails: { [uid: string]: ChatParticipant };
     groupName?: string;
@@ -38,7 +38,7 @@ export interface Chat {
     updatedAt: Date | null;
 }
 
-const normalizeRow = (row: any, collectionName: 'chats' | 'group_chats'): Chat => {
+const normalizeRow = (row: any, collectionName: 'direct_chats' | 'group_chats'): Chat => {
     const participants = Array.isArray(row.participants) ? row.participants : [];
     const type: 'direct' | 'group' = collectionName === 'group_chats' ? 'group' : 'direct';
 
@@ -87,7 +87,7 @@ export function useChatsQuery() {
         queryFn: async () => {
             if (!userId) return [];
             const { data, error } = await supabase
-                .from('chats')
+                .from('direct_chats')
                 .select('*')
                 .contains('participants', [userId])
                 .order('updated_at', { ascending: false });
@@ -95,7 +95,7 @@ export function useChatsQuery() {
             if (error) throw error;
 
             return (data || [])
-                .map((row: any) => normalizeRow(row, 'chats'))
+                .map((row: any) => normalizeRow(row, 'direct_chats'))
                 .filter((c) => !c.deletedBy?.includes(userId) && c.hidden !== true);
         },
         enabled: !!userId,
@@ -155,7 +155,7 @@ export function useChatsQuery() {
             };
 
             const { data, error: insertError } = await supabase
-                .from('chats')
+                .from('direct_chats')
                 .insert(chatData)
                 .select('id')
                 .single();
@@ -171,8 +171,15 @@ export function useChatsQuery() {
     const deleteChatMutation = useMutation({
         mutationFn: async (chatId: string) => {
             if (!userId) return;
-            const targetChat = chats.find((c) => c.id === chatId);
-            const table = targetChat?.collectionName || 'chats';
+
+            // Determine correct table dynamically by checking direct_chats first
+            const { data: directCheck } = await supabase
+                .from('direct_chats')
+                .select('id')
+                .eq('id', chatId)
+                .maybeSingle();
+
+            const table = directCheck ? 'direct_chats' : 'group_chats';
 
             const { data: current } = await supabase
                 .from(table)
@@ -183,10 +190,9 @@ export function useChatsQuery() {
             const deletedBy = Array.isArray(current?.deleted_by) ? [...current.deleted_by, userId] : [userId];
             await supabase.from(table).update({ deleted_by: deletedBy }).eq('id', chatId);
         },
-        onSuccess: (_, chatId) => {
-            const targetChat = chats.find((c) => c.id === chatId);
-            const key = targetChat?.collectionName === 'group_chats' ? 'groupChats' : 'chats';
-            queryClient.invalidateQueries({ queryKey: [key, userId] });
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['chats', userId] });
+            queryClient.invalidateQueries({ queryKey: ['groupChats', userId] });
         },
     });
 
@@ -194,15 +200,16 @@ export function useChatsQuery() {
     useEffect(() => {
         if (!userId) return;
 
+        // Unique suffixes to prevent "cannot add callbacks after subscribe()" errors on hot-reloads
         const channelDirect = supabase
-            .channel(`chats-direct-query-${userId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'chats' }, () => {
+            .channel(`chats-direct-query-${userId}-${Math.random().toString(36).substring(7)}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'direct_chats' }, () => {
                 queryClient.invalidateQueries({ queryKey: ['chats', userId] });
             })
             .subscribe();
 
         const channelGroup = supabase
-            .channel(`chats-group-query-${userId}`)
+            .channel(`chats-group-query-${userId}-${Math.random().toString(36).substring(7)}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'group_chats' }, () => {
                 queryClient.invalidateQueries({ queryKey: ['groupChats', userId] });
             })
@@ -226,7 +233,7 @@ export function useChatsQuery() {
             if (existing) {
                 if (existing.deletedBy?.includes(userId)) {
                     const newDeletedBy = existing.deletedBy.filter((id) => id !== userId);
-                    await supabase.from('chats').update({ deleted_by: newDeletedBy }).eq('id', existing.id);
+                    await supabase.from('direct_chats').update({ deleted_by: newDeletedBy }).eq('id', existing.id);
                     queryClient.invalidateQueries({ queryKey: ['chats', userId] });
                 }
                 return existing.id;
@@ -234,7 +241,7 @@ export function useChatsQuery() {
 
             // Query DB
             const { data: found } = await supabase
-                .from('chats')
+                .from('direct_chats')
                 .select('id, participants, deleted_by')
                 .contains('participants', [userId]);
 
@@ -245,7 +252,7 @@ export function useChatsQuery() {
             if (match) {
                 if (Array.isArray(match.deleted_by) && match.deleted_by.includes(userId)) {
                     const newDeletedBy = match.deleted_by.filter((id: string) => id !== userId);
-                    await supabase.from('chats').update({ deleted_by: newDeletedBy }).eq('id', match.id);
+                    await supabase.from('direct_chats').update({ deleted_by: newDeletedBy }).eq('id', match.id);
                     queryClient.invalidateQueries({ queryKey: ['chats', userId] });
                 }
                 return match.id;

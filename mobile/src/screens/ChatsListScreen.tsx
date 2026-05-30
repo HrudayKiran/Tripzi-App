@@ -28,6 +28,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { LinearGradient } from 'expo-linear-gradient';
 import { searchUsersByPrefix } from '../utils/searchUsers';
 import DefaultAvatar from '../components/DefaultAvatar';
+import { ChatsListSkeleton, UserSearchListSkeleton } from '../components/Skeletons';
 
 interface SearchUser {
     id: string;
@@ -40,6 +41,16 @@ const ChatsListScreen = () => {
     const router = useRouter();
     const { colors, isDarkMode } = useTheme();
     const { chats, loading, refreshChats, deleteChat } = useChatsQuery();
+    const [refreshing, setRefreshing] = useState(false);
+
+    const handleRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            await refreshChats();
+        } finally {
+            setRefreshing(false);
+        }
+    }, [refreshChats]);
 
     // Use state for currentUser to properly handle auth state
     const [currentUser, setCurrentUser] = useState<any>(null);
@@ -163,6 +174,75 @@ const ChatsListScreen = () => {
         }
     };
 
+    const getLastMessageText = (item: Chat) => {
+        if (!item.lastMessage?.text) return 'Start a conversation';
+        if (!currentUser) return item.lastMessage.text;
+
+        const text = item.lastMessage.text;
+        const isGroup = item.type === 'group';
+
+        if (isGroup) {
+            if (text.includes('created the group') || text.includes('created this group')) {
+                if (item.createdBy === currentUser.id) {
+                    return 'You created this group';
+                }
+            }
+
+            const userName = item.participantDetails?.[currentUser.id]?.displayName || currentUser.user_metadata?.full_name || 'User';
+
+            if (item.lastMessage.type === 'system' || !item.lastMessage.senderId) {
+                let translated = text;
+                
+                if (translated.includes(' added ')) {
+                    const parts = translated.split(' added ');
+                    if (parts.length === 2) {
+                        const actorName = parts[0];
+                        const memberName = parts[1];
+                        const isActorMe = actorName.trim().toLowerCase() === userName.trim().toLowerCase();
+                        const isMemberMe = memberName.trim().toLowerCase() === userName.trim().toLowerCase();
+                        if (isActorMe) return `You added ${memberName}`;
+                        if (isMemberMe) return `${actorName} added You`;
+                    }
+                }
+                
+                if (translated.includes(' removed ')) {
+                    const parts = translated.split(' removed ');
+                    if (parts.length === 2) {
+                        const actorName = parts[0];
+                        const memberName = parts[1];
+                        const isActorMe = actorName.trim().toLowerCase() === userName.trim().toLowerCase();
+                        const isMemberMe = memberName.trim().toLowerCase() === userName.trim().toLowerCase();
+                        if (isActorMe) return `You removed ${memberName}`;
+                        if (isMemberMe) return `${actorName} removed You`;
+                    }
+                }
+
+                if (translated.includes(' made ') && translated.includes(' an admin')) {
+                    const regex = /(.+) made (.+) an admin/;
+                    const match = translated.match(regex);
+                    if (match && match.length === 3) {
+                        const actorName = match[1];
+                        const memberName = match[2];
+                        const isActorMe = actorName.trim().toLowerCase() === userName.trim().toLowerCase();
+                        const isMemberMe = memberName.trim().toLowerCase() === userName.trim().toLowerCase();
+                        if (isActorMe) return `You made ${memberName} an admin`;
+                        if (isMemberMe) return `${actorName} made You an admin`;
+                    }
+                }
+
+                if (translated.startsWith(userName)) {
+                    translated = 'You' + translated.substring(userName.length);
+                }
+                if (translated.endsWith(userName)) {
+                    translated = translated.substring(0, translated.length - userName.length) + 'You';
+                }
+                return translated;
+            }
+        }
+
+        return text;
+    };
+
     // Search users
     const handleSearch = async (query: string) => {
         setSearchQuery(query);
@@ -197,9 +277,8 @@ const ChatsListScreen = () => {
         try {
             // Check if chat already exists
             const { data: existingChats } = await supabase
-                .from('chats')
+                .from('direct_chats')
                 .select('*')
-                .eq('type', 'direct')
                 .contains('participants', [currentUser.id]);
 
             let chatId = null;
@@ -215,8 +294,7 @@ const ChatsListScreen = () => {
                 const { data: profile } = await supabase.from('profiles').select('name, display_name, photo_url').eq('id', currentUser.id).maybeSingle();
                 const userData: any = profile || {};
 
-                const { data: newChat } = await supabase.from('chats').insert({
-                    type: 'direct',
+                const { data: newChat } = await supabase.from('direct_chats').insert({
                     participants: [currentUser.id, user.id],
                     participant_details: {
                         [currentUser.id]: {
@@ -244,7 +322,7 @@ const ChatsListScreen = () => {
                 params: {
                     id: chatId,
                     chatId,
-                    collectionName: 'chats',
+                    collectionName: 'direct_chats',
                     otherUserId: user.id,
                     otherUserName: user.displayName,
                     otherUserPhoto: user.photoURL,
@@ -303,7 +381,7 @@ const ChatsListScreen = () => {
                                 ]}
                                 numberOfLines={1}
                             >
-                                {item.lastMessage?.text || 'Start a conversation'}
+                                {getLastMessageText(item)}
                             </Text>
 
                             {unreadCount > 0 && (
@@ -353,15 +431,7 @@ const ChatsListScreen = () => {
     );
 
 
-    if (loading) {
-        return (
-            <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={isDarkMode ? '#FFFFFF' : '#000000'} />
-                </View>
-            </SafeAreaView>
-        );
-    }
+    // Removed full-screen loading state to render skeletons inside main view
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -401,8 +471,11 @@ const ChatsListScreen = () => {
             )}
 
             {/* Chat List */}
-            <TypedFlashList
-                data={chats}
+            {loading ? (
+                <ChatsListSkeleton />
+            ) : (
+                <TypedFlashList
+                    data={chats}
                 renderItem={renderChatItem}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={[
@@ -413,8 +486,8 @@ const ChatsListScreen = () => {
                 ListEmptyComponent={renderEmptyState}
                 refreshControl={
                     <RefreshControl
-                        refreshing={loading}
-                        onRefresh={refreshChats}
+                        refreshing={refreshing}
+                        onRefresh={handleRefresh}
                         colors={[isDarkMode ? '#FFFFFF' : '#000000']}
                         tintColor={isDarkMode ? '#FFFFFF' : '#000000'}
                         progressBackgroundColor={isDarkMode ? '#222222' : '#FFFFFF'}
@@ -423,6 +496,7 @@ const ChatsListScreen = () => {
                 showsVerticalScrollIndicator={false}
                 estimatedItemSize={80}
             />
+            )}
 
             {/* Search Modal */}
             <Modal
@@ -462,10 +536,7 @@ const ChatsListScreen = () => {
 
                         {/* Search Results */}
                         {searching ? (
-                            <View style={styles.searchLoading}>
-                                <ActivityIndicator size="small" color={isDarkMode ? '#FFFFFF' : '#000000'} />
-                                <Text style={[styles.searchingText, { color: colors.textSecondary }]}>Searching...</Text>
-                            </View>
+                            <UserSearchListSkeleton />
                         ) : searchQuery.length > 0 && searchResults.length === 0 ? (
                             <View style={styles.noResults}>
                                 <Icon name="User" size={48} color={colors.textSecondary} />

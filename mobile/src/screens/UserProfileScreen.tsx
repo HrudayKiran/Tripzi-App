@@ -91,9 +91,8 @@ const UserProfileScreen = () => {
 
         try {
             const { data: existingChats } = await supabase
-                .from('chats')
+                .from('direct_chats')
                 .select('*')
-                .eq('type', 'direct')
                 .contains('participants', [currentUser.id]);
 
             let chatId = null;
@@ -109,9 +108,7 @@ const UserProfileScreen = () => {
                 const myName = profile?.name || profile?.display_name || currentUser.user_metadata?.full_name || 'User';
                 const myPhoto = profile?.photo_url || currentUser.user_metadata?.avatar_url || '';
 
-                const { data: newChat } = await supabase.from('chats').insert({
-                    type: 'direct',
-                    created_by: currentUser.id,
+                const { data: newChat } = await supabase.from('direct_chats').insert({
                     participants: [currentUser.id, userId],
                     participant_details: {
                         [currentUser.id]: { displayName: myName, photoURL: myPhoto },

@@ -14,7 +14,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
-import { deleteTripImagesFromR2, uploadTripImageToR2 } from '../utils/imageUpload';
+import { deleteItineraryImagesFromR2, uploadItineraryImageToR2 } from '../utils/imageUpload';
 
 const { width } = Dimensions.get('window');
 
@@ -317,7 +317,7 @@ const EditItineraryScreen = () => {
                 }
 
                 try {
-                    const uploadResult = await uploadTripImageToR2(imageUri, currentUser.id, tripId);
+                    const uploadResult = await uploadItineraryImageToR2(imageUri, currentUser.id, tripId);
                     if (uploadResult.success && uploadResult.url && uploadResult.objectKey) {
                         uploadedImageData.push({
                             uri: uploadResult.url,
@@ -372,27 +372,20 @@ const EditItineraryScreen = () => {
 
             await supabase.from('itineraries').update(tripData).eq('id', tripId);
             if (removedObjectKeys.length > 0) {
-                await deleteTripImagesFromR2(removedObjectKeys, tripId);
+                await deleteItineraryImagesFromR2(removedObjectKeys, tripId);
             }
             setInitialImageObjectKeys(
                 finalObjectKeys.filter((key): key is string => typeof key === 'string' && key.trim().length > 0)
             );
 
-            // Update chat title if exists
-            try {
-                await supabase.from('group_chats').update({
-                    group_name: title
-                }).eq('itinerary_id', tripId);
-            } catch (e) {
-                // Ignore if chat doesn't exist
-            }
+            // Group chats are completely separate and do not link to itineraries
 
             setIsPosting(false);
             Alert.alert('Success! 🎉', 'Your itinerary has been updated!');
             router.back();
         } catch (error: any) {
             if (newObjectKeys.length > 0) {
-                await deleteTripImagesFromR2(newObjectKeys, tripId);
+                await deleteItineraryImagesFromR2(newObjectKeys, tripId);
             }
             setIsPosting(false);
             Alert.alert('Error', `Failed to update trip: ${error?.message || 'Unknown error'}. Please try again.`);

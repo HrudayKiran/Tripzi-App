@@ -57,21 +57,8 @@ account.post('/delete', async (c) => {
     profile_snapshot: profile || {},
   });
 
-  // 3. Remove from trip participants
-  const { data: joinedTrips } = await supabase
-    .from('trip_participants')
-    .select('trip_id')
-    .eq('user_id', userId);
-
-  if (joinedTrips && joinedTrips.length > 0) {
-    await supabase
-      .from('trip_participants')
-      .delete()
-      .eq('user_id', userId);
-  }
-
-  // 4. Delete owned trips
-  await supabase.from('trips').delete().eq('user_id', userId);
+  // 3. Delete owned itineraries
+  await supabase.from('itineraries').delete().eq('user_id', userId);
 
   // 5. Delete reports, feedback
   await supabase.from('reports').delete().eq('reporter_id', userId);
@@ -92,6 +79,9 @@ account.post('/delete', async (c) => {
   // 9. Clean up R2 storage
   try {
     await deleteR2Prefix(c.env, `profiles/${userId}/`);
+    await deleteR2Prefix(c.env, `direct_chats/${userId}/`);
+    await deleteR2Prefix(c.env, `group_chats/${userId}/`);
+    await deleteR2Prefix(c.env, `itineraries/${userId}/`);
     await deleteR2Prefix(c.env, `trips/${userId}/`);
   } catch (e) {
     console.error('R2 cleanup error:', e);
