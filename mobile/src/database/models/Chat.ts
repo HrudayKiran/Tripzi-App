@@ -2,7 +2,7 @@ import { Model } from '@nozbe/watermelondb';
 import { field, date, children, readonly } from '@nozbe/watermelondb/decorators';
 
 export default class Chat extends Model {
-  static table = 'chats';
+  static table = 'direct_chats';
   static associations = {
     messages: { type: 'has_many', foreignKey: 'chat_id' },
   } as const;

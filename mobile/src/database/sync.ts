@@ -60,8 +60,6 @@ export async function syncDatabase() {
         if (user && user.id !== lastSyncUserId) {
             console.log(`[Sync] User switched from ${lastSyncUserId} to ${user.id}. Forcing full pull.`);
             actualLastPulledAt = null;
-            // Clear local private tables (optional but recommended for security)
-            // Note: We don't clear public trips/profiles here as they are shared.
         }
 
         // Clock drift mitigation: Subtract 10 seconds from lastPulledAt
@@ -73,15 +71,27 @@ export async function syncDatabase() {
             console.log(`[Sync] Adjusted pull timestamp with 10s lookback: ${lastPulledAtDate}`);
         }
 
-        // 1. Pull Trips (Bypassed in V1)
-        const tripsData: any[] = [];
+        // 1. Pull Itineraries
+        let itinerariesData: any[] = [];
+        if (user) {
+            const { data: iData, error: itinerariesError } = await supabase
+                .from('itineraries')
+                .select('*')
+                .or(`user_id.eq.${user.id},participants.cs.{"${user.id}"}`)
+                .gt('updated_at', lastPulledAtDate || '1970-01-01');
+            
+            if (itinerariesError) {
+                console.error('[Sync] Error pulling itineraries:', itinerariesError);
+            } else {
+                itinerariesData = iData || [];
+                console.log(`[Sync] Pulled ${itinerariesData.length} itineraries.`);
+            }
+        }
 
         // 2. Pull Profiles
         let profilesData: any[] = [];
 
         // 2a. ALWAYS pull the current user's own profile from `profiles` table
-        // This is critical — without this, WatermelonDB won't have the user's record
-        // and local reads/writes will fail with "Record not found".
         if (user) {
             const { data: ownProfile, error: ownProfileError } = await supabase
                 .from('profiles')
@@ -92,19 +102,24 @@ export async function syncDatabase() {
             if (ownProfileError) {
                 console.error('[Sync] Error pulling own profile:', ownProfileError);
             } else if (ownProfile) {
-                // Map from profiles table (uses `name` not `display_name`)
                 profilesData.push(ownProfile);
                 console.log('[Sync] Pulled current user\'s own profile.');
             }
         }
 
-        // 2b. Pull public profiles for trip owners
-        if (tripsData && tripsData.length > 0) {
-            const uniqueUserIds = [...new Set(tripsData.map(t => t.user_id))]
-                .filter(uid => uid !== user?.id); // Skip own profile, already pulled
+        // 2b. Pull public profiles for itinerary collaborators
+        if (itinerariesData && itinerariesData.length > 0) {
+            const uniqueUserIds = [...new Set(itinerariesData.flatMap(t => {
+                try {
+                  const arr = Array.isArray(t.participants) ? t.participants : JSON.parse(t.participants || '[]');
+                  return [t.user_id, ...arr];
+                } catch {
+                  return [t.user_id];
+                }
+            }))].filter(uid => uid !== user?.id);
             
             if (uniqueUserIds.length > 0) {
-                console.log(`[Sync] Fetching profiles for ${uniqueUserIds.length} unique trip owners...`);
+                console.log(`[Sync] Fetching profiles for ${uniqueUserIds.length} unique collaborators...`);
                 
                 for (let i = 0; i < uniqueUserIds.length; i += 50) {
                     const chunk = uniqueUserIds.slice(i, i + 50);
@@ -124,7 +139,6 @@ export async function syncDatabase() {
         console.log(`[Sync] Pulled ${profilesData.length} total profiles.`);
 
         // 3. Pull Chats & Messages (Conditional on Auth)
-        // Reuse the 'user' variable fetched at the start of pullChanges
         let chatsData: any[] = [];
         let groupChatsData: any[] = [];
         let messagesData: any[] = [];
@@ -133,7 +147,7 @@ export async function syncDatabase() {
             console.log(`[Sync] User authenticated (${user.id}), pulling private data...`);
             
             // Pull direct chats
-            const { data: cData, error: chatsError } = await supabase.from('chats')
+            const { data: cData, error: chatsError } = await supabase.from('direct_chats')
               .select('*')
               .contains('participants', [user.id])
               .gt('updated_at', lastPulledAtDate || '1970-01-01');
@@ -173,12 +187,10 @@ export async function syncDatabase() {
                   console.log(`[Sync] Pulled ${messagesData.length} messages.`);
               }
             }
-        } else {
-            console.log('[Sync] No authenticated user session. Skipping private data pull.');
         }
 
         // Mapping functions
-        const mapTrip = (t: any) => ({
+        const mapItinerary = (t: any) => ({
           id: t.id,
           user_id: t.user_id,
           title: t.title,
@@ -188,44 +200,22 @@ export async function syncDatabase() {
           to_location: t.to_location,
           from_date: t.from_date,
           to_date: t.to_date,
-          max_travelers: t.max_travelers,
-          current_travelers: t.current_travelers,
-          gender_preference: t.gender_preference,
-          status: t.status,
-          trip_type: t.trip_type,
-          transport_mode: t.transport_mode,
-          accommodation_type: t.accommodation_type,
           duration_days: t.duration_days,
-          booking_status: t.booking_status,
-          places_to_visit: Array.isArray(t.places_to_visit) ? JSON.stringify(t.places_to_visit) : (t.places_to_visit || null),
-          mandatory_items: Array.isArray(t.mandatory_items) ? JSON.stringify(t.mandatory_items) : (t.mandatory_items || null),
-          itinerary: Array.isArray(t.itinerary) ? JSON.stringify(t.itinerary) : (t.itinerary || null),
-          image_object_keys: Array.isArray(t.image_object_keys) ? JSON.stringify(t.image_object_keys) : (t.image_object_keys || null),
-          cancel_reason: t.cancel_reason,
-          cancelled_at: t.cancelled_at ? new Date(t.cancelled_at).getTime() : null,
-          completed_at: t.completed_at ? new Date(t.completed_at).getTime() : null,
-          delete_reason: t.delete_reason,
-          deleted_at: t.deleted_at ? new Date(t.deleted_at).getTime() : null,
-          last_leave_reason: t.last_leave_reason,
-          owner_profile_updated_at: t.owner_profile_updated_at ? new Date(t.owner_profile_updated_at).getTime() : null,
-          is_expired: t.is_expired,
-          is_cancelled: t.is_cancelled,
-          is_completed: t.is_completed,
-          owner_display_name: t.owner_display_name,
-          owner_photo_url: t.owner_photo_url,
-          owner_username: t.owner_username,
-          cost: t.cost,
-          total_cost: t.total_cost,
-          cost_per_person: t.cost_per_person,
-          accommodation_days: t.accommodation_days,
-          maps_link: t.maps_link,
-          duration: t.duration,
+          travel_style: t.travel_style,
           trip_types: Array.isArray(t.trip_types) ? JSON.stringify(t.trip_types) : (t.trip_types || null),
           transport_modes: Array.isArray(t.transport_modes) ? JSON.stringify(t.transport_modes) : (t.transport_modes || null),
-          image_locations: Array.isArray(t.image_locations) ? JSON.stringify(t.image_locations) : (t.image_locations || null),
+          cost_per_person: t.cost_per_person,
+          accommodation_type: t.accommodation_type,
+          booking_status: t.booking_status,
+          accommodation_days: t.accommodation_days,
+          places_to_visit: Array.isArray(t.places_to_visit) ? JSON.stringify(t.places_to_visit) : (t.places_to_visit || null),
+          itinerary: Array.isArray(t.itinerary) ? JSON.stringify(t.itinerary) : (t.itinerary || null),
           cover_image: t.cover_image,
           images: Array.isArray(t.images) ? JSON.stringify(t.images) : (t.images || null),
           participants: Array.isArray(t.participants) ? JSON.stringify(t.participants) : (t.participants || null),
+          checklist: Array.isArray(t.checklist) ? JSON.stringify(t.checklist) : (t.checklist || null),
+          notes: Array.isArray(t.notes) ? JSON.stringify(t.notes) : (t.notes || null),
+          itinerary_map_view: t.itinerary_map_view ? (typeof t.itinerary_map_view === 'string' ? t.itinerary_map_view : JSON.stringify(t.itinerary_map_view)) : null,
           created_at: new Date(t.created_at).getTime(),
           updated_at: new Date(t.updated_at).getTime(),
         });
@@ -253,11 +243,11 @@ export async function syncDatabase() {
 
         const mapGroupChat = (c: any) => ({
           id: c.id,
-          trip_id: c.trip_id,
+          itinerary_id: c.itinerary_id,
           group_name: c.group_name,
           group_description: c.group_description,
           group_icon: c.group_icon,
-          trip_image: c.trip_image,
+          itinerary_image: c.itinerary_image,
           participants: Array.isArray(c.participants) ? JSON.stringify(c.participants) : (c.participants || null),
           participant_details: c.participant_details ? JSON.stringify(c.participant_details) : null,
           created_by: c.created_by,
@@ -303,24 +293,24 @@ export async function syncDatabase() {
           });
         };
 
-        const mappedTrips = (tripsData || []).map(mapTrip);
+        const mappedItineraries = (itinerariesData || []).map(mapItinerary);
         const mappedProfiles = uniqById((profilesData || []).map(mapProfile));
         const mappedChats = uniqById((chatsData || []).map(mapChat));
         const mappedGroupChats = uniqById((groupChatsData || []).map(mapGroupChat));
         const mappedMessages = uniqById(messagesData.map(mapMessage));
 
         // Split into created vs updated based on local existence
-        const tripsChanges = await splitCreatedUpdated('trips', mappedTrips);
+        const itinerariesChanges = await splitCreatedUpdated('itineraries', mappedItineraries);
         const profilesChanges = await splitCreatedUpdated('profiles', mappedProfiles);
-        const chatsChanges = await splitCreatedUpdated('chats', mappedChats);
+        const chatsChanges = await splitCreatedUpdated('direct_chats', mappedChats);
         const groupChatsChanges = await splitCreatedUpdated('group_chats', mappedGroupChats);
         const messagesChanges = await splitCreatedUpdated('messages', mappedMessages);
 
         return {
           changes: {
-            trips: { ...tripsChanges, deleted: [] },
+            itineraries: { ...itinerariesChanges, deleted: [] },
             profiles: { ...profilesChanges, deleted: [] },
-            chats: { ...chatsChanges, deleted: [] },
+            direct_chats: { ...chatsChanges, deleted: [] },
             group_chats: { ...groupChatsChanges, deleted: [] },
             messages: { ...messagesChanges, deleted: [] },
           },
@@ -335,10 +325,9 @@ export async function syncDatabase() {
           
           // List of fields that are arrays in Supabase but strings in WatermelonDB
           const arrayFields = [
-              'places_to_visit', 'mandatory_items', 'itinerary', 'images', 
-              'image_object_keys', 'participants', 'image_locations', 
-              'trip_types', 'transport_modes', 'read_by', 'delivered_to', 
-              'deleted_for', 'mentions'
+              'places_to_visit', 'itinerary', 'images', 
+              'participants', 'trip_types', 'transport_modes', 'read_by', 'delivered_to', 
+              'deleted_for', 'mentions', 'checklist', 'notes'
           ];
           
           arrayFields.forEach(field => {
@@ -351,11 +340,6 @@ export async function syncDatabase() {
             }
           });
 
-          // Handle status field (convert 'pending' to 'sent' for Supabase)
-          if (result.status === 'pending') {
-            result.status = 'sent';
-          }
-
           // Handle date fields (convert ms timestamp to ISO string)
           const dateFields = ['created_at', 'updated_at', 'edited_at'];
           dateFields.forEach(field => {
@@ -365,8 +349,8 @@ export async function syncDatabase() {
           });
 
           // Handle specific object fields
-          if (typeof result.location === 'string') {
-              try { result.location = JSON.parse(result.location); } catch(e) {}
+          if (typeof result.itinerary_map_view === 'string') {
+              try { result.itinerary_map_view = JSON.parse(result.itinerary_map_view); } catch(e) {}
           }
           if (typeof result.reply_to === 'string') {
               try { result.reply_to = JSON.parse(result.reply_to); } catch(e) {}
@@ -381,9 +365,21 @@ export async function syncDatabase() {
           return result;
         };
 
-        // Push Trips (Bypassed in V1)
-        if (changes.trips) {
-          console.log('[Sync] Trips syncing is bypassed in V1.');
+        // Push Itineraries
+        if (changes.itineraries) {
+          const { created, updated } = changes.itineraries;
+          if (created.length > 0) {
+            console.log(`[Sync] Pushing ${created.length} new itineraries...`);
+            const { error } = await supabase.from('itineraries').insert(created.map(prepareForSupabase));
+            if (error) console.error('[Sync] Error pushing new itineraries:', error);
+          }
+          if (updated.length > 0) {
+            console.log(`[Sync] Pushing ${updated.length} updated itineraries...`);
+            for (const record of updated) {
+              const { error } = await supabase.from('itineraries').update(prepareForSupabase(record)).eq('id', record.id);
+              if (error) console.error(`[Sync] Error updating itinerary ${record.id}:`, error);
+            }
+          }
         }
 
         // Push Messages

@@ -174,72 +174,6 @@ export default function AIPlannerScreen() {
         }, [])
     );
 
-    const isLocationQuery = (text: string) => {
-        const q = text.toLowerCase();
-        return ['near', 'nearby', 'location', 'here', 'around', 'petrol', 'ev ', 'charging', 'rental', 'bunk', 'fuel', 'station'].some(t => q.includes(t));
-    };
-
-    const getCurrentLocation = async (forcePrompt = false) => {
-        try {
-            const enabled = await Location.hasServicesEnabledAsync();
-            if (!enabled && forcePrompt) {
-                Alert.alert("GPS Disabled", "Please enable location services (GPS) in your device settings.");
-                return null;
-            }
-
-            const { status } = await Location.getForegroundPermissionsAsync();
-
-            if (status === 'granted') {
-                let location = await Location.getLastKnownPositionAsync();
-
-                if (!location) {
-                    location = await Location.getCurrentPositionAsync({
-                        accuracy: Location.Accuracy.Balanced,
-                    });
-                }
-
-                let city = 'Unknown';
-                let country = 'Unknown';
-                try {
-                    const [place] = await Location.reverseGeocodeAsync({
-                        latitude: location.coords.latitude,
-                        longitude: location.coords.longitude,
-                    });
-                    city = place?.city || place?.region || 'Unknown';
-                    country = place?.country || 'Unknown';
-                } catch {
-                    // Fail silent, we still have coords
-                }
-
-                return {
-                    latitude: location.coords.latitude,
-                    longitude: location.coords.longitude,
-                    city,
-                    country,
-                };
-            }
-
-            if (!forcePrompt) return null;
-
-            // Try requesting
-            const { status: newStatus } = await Location.requestForegroundPermissionsAsync();
-
-            if (newStatus === 'granted') {
-                return getCurrentLocation(true);
-            }
-
-            // If denied, open settings as last resort
-            if (newStatus === 'denied') {
-                Platform.OS === 'ios' ? Linking.openURL('app-settings:') : Linking.openSettings();
-            }
-
-            return null;
-        } catch (err) {
-            console.error('Location Error:', err);
-            return null;
-        }
-    };
-
 
 
     const initChat = async (forceNew = false) => {
@@ -382,26 +316,11 @@ export default function AIPlannerScreen() {
         setIsTyping(true);
 
         try {
-            const isLoc = isLocationQuery(text);
-            const location = await getCurrentLocation(false); // Silent check
-
-            if (isLoc && !location) {
-                const reqMsg: AIMessage = {
-                    _id: 'loc-req-' + Date.now(),
-                    text: 'NXTVIBES_LOCATION_REQUIRED',
-                    createdAt: new Date(),
-                    user: { _id: 'nxtvibes-ai', name: 'NxtVibes AI' },
-                };
-                setMessages(prev => [reqMsg, ...prev]);
-                setIsTyping(false);
-                return;
-            }
-
             const convId = await ensureConversation(text);
             let newAiMessages: AIMessage[];
 
             if (convId) {
-                const result = await aiService.sendConversationMessage(convId, text, selectedModel, location);
+                const result = await aiService.sendConversationMessage(convId, text, selectedModel);
                 if (result) {
                     newAiMessages = [{
                         _id: result.aiMessage.id,
@@ -417,12 +336,6 @@ export default function AIPlannerScreen() {
             } else {
                 const responses = await aiService.sendMessage(text, messages, selectedModel);
                 newAiMessages = responses.reverse();
-            }
-
-            for (const msg of newAiMessages) {
-                if (msg.text.includes('trip_plan') && msg.text.includes('"type"')) {
-                    await enrichTripImagesWith(msg);
-                }
             }
 
             setMessages(prev => [...newAiMessages, ...prev]);
@@ -450,27 +363,11 @@ export default function AIPlannerScreen() {
         setIsTyping(true);
 
         try {
-            const startTime = Date.now();
-            const isLoc = isLocationQuery(text);
-            const location = await getCurrentLocation(false); // Silent check
-
-            if (isLoc && !location) {
-                const reqMsg: AIMessage = {
-                    _id: 'loc-req-' + Date.now(),
-                    text: 'NXTVIBES_LOCATION_REQUIRED',
-                    createdAt: new Date(),
-                    user: { _id: 'nxtvibes-ai', name: 'NxtVibes AI' },
-                };
-                setMessages(prev => [reqMsg, ...prev]);
-                setIsTyping(false);
-                return;
-            }
-
             const convId = await ensureConversation(text);
             let newAiMessages: AIMessage[];
 
             if (convId) {
-                const result = await aiService.sendConversationMessage(convId, text, selectedModel, location);
+                const result = await aiService.sendConversationMessage(convId, text, selectedModel);
                 if (result) {
                     newAiMessages = [{
                         _id: result.aiMessage.id,
@@ -488,12 +385,6 @@ export default function AIPlannerScreen() {
                 newAiMessages = responses.reverse();
             }
 
-            for (const msg of newAiMessages) {
-                if (msg.text.includes('trip_plan') && msg.text.includes('"type"')) {
-                    await enrichTripImagesWith(msg);
-                }
-            }
-
             setMessages(prev => [...newAiMessages, ...prev]);
         } catch {
             Alert.alert("Error", "Failed to connect to AI. Please try again.");
@@ -502,229 +393,8 @@ export default function AIPlannerScreen() {
         }
     };
 
-    const enrichTripImagesWith = async (msg: AIMessage) => {
-        try {
-            const codeBlockRegex = /```json\s*([\s\S]*?)\s*```/;
-            const match = msg.text.match(codeBlockRegex);
-            if (!match?.[1]) return;
-            const trip = JSON.parse(match[1]);
-            const places = trip.imageKeywords || trip.placesToVisit || [];
-            if (places.length === 0) return;
-            const images = await aiService.fetchPlaceImages(places);
-            if (images.length > 0) {
-                trip._unsplashImages = images;
-                msg.text = '```json\n' + JSON.stringify(trip) + '\n```';
-            }
-        } catch { }
-    };
-
-    const handleCreateTrip = (tripData: any) => {
-        const unsplashImages: PlaceImage[] = tripData._unsplashImages || [];
-        const imageUrls = unsplashImages.filter(img => img.imageUrl).map(img => img.imageUrl);
-        const dataForCreateTrip = {
-            ...tripData,
-            images: imageUrls.length > 0 ? imageUrls : undefined,
-            itinerary: Array.isArray(tripData.itinerary) ? tripData.itinerary.join('\n') : tripData.itinerary,
-        };
-        router.push({ pathname: '/trip/create', params: { initialTripData: JSON.stringify(dataForCreateTrip) } });
-    };
-
-    const handleAutoPostTrip = async (trip: any) => {
-        const { data: { user: currentUser } } = await supabase.auth.getUser();
-        if (!currentUser) return Alert.alert('Error', 'Please login to post a trip.');
-
-        Alert.alert("Post Trip? 🤖", "I'll create this trip and post it to your profile.", [
-            { text: "Cancel", style: "cancel" },
-            {
-                text: "Post It!",
-                onPress: async () => {
-                    try {
-                        await showUploadNotification(0.2, 'Auto-posting trip...');
-                        const images = trip._unsplashImages?.filter((i: any) => i.imageUrl).map((i: any) => i.imageUrl) || [`https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800`];
-                        const { data: profile } = await supabase.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
-
-                        const tripData = {
-                            title: trip.title, images,
-                            from_location: trip.fromLocation || 'Unknown', to_location: trip.toLocation,
-                            from_date: new Date().toISOString(),
-                            to_date: new Date(Date.now() + (trip.durationDays || 3) * 86400000).toISOString(),
-                            trip_types: [trip.tripType || 'adventure'],
-                            transport_modes: [trip.transportMode || 'mixed'],
-                            cost_per_person: trip.cost || 0, total_cost: trip.cost || 0,
-                            accommodation_type: trip.accommodationType || 'hotel',
-                            accommodation_days: trip.durationDays || 3,
-                            max_travelers: trip.maxTravelers || 5, current_travelers: 1,
-                            gender_preference: trip.genderPreference || 'anyone',
-                            description: trip.description,
-                            places_to_visit: trip.placesToVisit || [],
-                            user_id: currentUser.id,
-                            owner_display_name: profile?.name || 'Traveler',
-                            owner_photo_url: profile?.photo_url || null,
-                            owner_username: profile?.username || null,
-                            participants: [currentUser.id],
-                            location: trip.toLocation, trip_type: trip.tripType || 'adventure',
-                            cover_image: images[0],
-                        };
-
-                        const { data: tripRow, error: tripErr } = await supabase.from('trips').insert(tripData).select('id').single();
-                        if (tripErr) throw tripErr;
-
-                        await supabase.from('chats').insert({
-                            type: 'group',
-                            trip_id: tripRow.id,
-                            trip_title: trip.title,
-                            group_name: trip.title,
-                            trip_image: images[0] || null,
-                            participants: [currentUser.id],
-                            participant_details: {
-                                [currentUser.id]: {
-                                    displayName: profile?.name || 'Traveler',
-                                    photoURL: profile?.photo_url || '',
-                                },
-                            },
-                            member_count: 1,
-                            created_by: currentUser.id,
-                            last_message: { text: 'Trip created by NxtVibes AI!', sender_id: null, created_at: new Date().toISOString() },
-                        });
-
-                        const successMsg: AIMessage = {
-                            _id: Date.now() + Math.random(),
-                            text: `Done! 🎉 "${trip.title}" has been posted to your profile!`,
-                            createdAt: new Date(),
-                            user: { _id: 'nxtvibes-ai', name: 'NxtVibes AI' },
-                        };
-                        await completeUploadNotification('Trip Posted!', `"${trip.title}" has been posted.`);
-
-                        // Trigger sync
-                        syncDatabase().catch(err => console.error('[AIPlanner] Post-creation sync failed:', err));
-
-                        setMessages(prev => [successMsg, ...prev]);
-                    } catch {
-                        await failUploadNotification('Auto-post failed');
-                        Alert.alert("Error", "Failed to post trip.");
-                    }
-                }
-            }
-        ]);
-    };
-
-    const renderTripCard = (jsonString: string) => {
-        try {
-            let potentialJson = '';
-            const match = jsonString.match(/```json\s*([\s\S]*?)\s*```/);
-            if (match?.[1]) potentialJson = match[1];
-            else {
-                const f = jsonString.indexOf('{'), l = jsonString.lastIndexOf('}');
-                if (f === -1 || l === -1) return null;
-                potentialJson = jsonString.substring(f, l + 1);
-            }
-
-            const trip = JSON.parse(potentialJson);
-            if (trip.type !== 'trip_plan') return null;
-
-            const coverUrl = trip._unsplashImages?.[0]?.imageUrl || `https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800`;
-            const itineraryItems: string[] = Array.isArray(trip.itinerary) ? trip.itinerary : (typeof trip.itinerary === 'string' ? trip.itinerary.split('\n').filter((s: any) => s.trim()) : []);
-
-            return (
-                <MotiView
-                    from={{ opacity: 0, translateY: 20 }}
-                    animate={{ opacity: 1, translateY: 0 }}
-                    transition={{ type: 'timing', duration: 400 }}
-                    style={[styles.tripCard, { backgroundColor: colors.card }]}
-                >
-                    <View style={{ height: 140, width: '100%', backgroundColor: colors.border }}>
-                        <Image source={{ uri: coverUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-                        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.8)']} style={StyleSheet.absoluteFill} />
-                        <View style={[styles.tripCardBadge, { position: 'absolute', top: 8, right: 8 }]}>
-                            <Icon name="Sparkle" size={12} color="#fff" />
-                            <Text style={styles.tripCardBadgeText}>AI Plan</Text>
-                        </View>
-                        <Text style={styles.tripCardOverlayTitle} numberOfLines={2}>{trip.title}</Text>
-                    </View>
-                    <View style={styles.tripCardBody}>
-                        <View style={styles.tripCardRow}>
-                            <Icon name="MapPin" size={16} color={colors.primary} />
-                            <Text style={[styles.tripCardText, { color: colors.text }]}>{trip.fromLocation} → {trip.toLocation}</Text>
-                        </View>
-                        <View style={styles.tripCardDetailsGrid}>
-                            <View style={styles.tripCardDetail}><Icon name="Clock" size={14} color={colors.textSecondary} /><Text style={[styles.tripCardDetailText, { color: colors.textSecondary }]}>{trip.durationDays} days</Text></View>
-                            <View style={styles.tripCardDetail}><Icon name="Wallet" size={14} color={colors.textSecondary} /><Text style={[styles.tripCardDetailText, { color: colors.textSecondary }]}>₹{trip.cost}</Text></View>
-                            <View style={styles.tripCardDetail}><Icon name="Bus" size={14} color={colors.textSecondary} /><Text style={[styles.tripCardDetailText, { color: colors.textSecondary }]}>{trip.transportMode}</Text></View>
-                        </View>
-                        <Text style={[styles.tripCardDesc, { color: colors.textSecondary }]} numberOfLines={3}>{trip.description}</Text>
-                        {itineraryItems.length > 0 && (
-                            <View style={styles.itinerarySection}>
-                                <Text style={[styles.itineraryTitle, { color: colors.text }]}>📋 Itinerary</Text>
-                                {itineraryItems.slice(0, 3).map((item, idx) => (
-                                    <View key={idx} style={styles.itineraryItem}>
-                                        <View style={[styles.itineraryDot, { backgroundColor: colors.primary }]} />
-                                        <Text style={[styles.itineraryText, { color: colors.textSecondary }]} numberOfLines={2}>{item}</Text>
-                                    </View>
-                                ))}
-                            </View>
-                        )}
-                        <View style={styles.tripCardActions}>
-                            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.primary }]} onPress={() => handleCreateTrip(trip)}>
-                                <Text style={[styles.actionBtnText, { color: colors.primary }]}>✏️ Edit & Post</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.primary }]} onPress={() => handleAutoPostTrip(trip)}>
-                                <Text style={styles.actionBtnTextWhite}>🤖 Auto-Post</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </MotiView>
-            );
-        } catch { return null; }
-    };
-
-    const renderLocationRequest = () => (
-        <MotiView
-            from={{ opacity: 0, translateY: 20 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 400 }}
-            style={[styles.locationRequestCard, { backgroundColor: colors.card, borderColor: colors.primary }]}
-        >
-            <View style={styles.locationRequestIcon}>
-                <Icon name="MapPin" size={32} color={colors.primary} />
-            </View>
-            <Text style={[styles.locationRequestTitle, { color: colors.text }]}>Location Access Required</Text>
-            <Text style={[styles.locationRequestDesc, { color: colors.textSecondary }]}>
-                To find nearby petrol bunks, EV stations, and rentals, NxtVibes AI needs to know your location.
-            </Text>
-            <TouchableOpacity
-                style={[styles.locationRequestBtn, { backgroundColor: colors.primary }]}
-                onPress={async () => {
-                    setIsTyping(true);
-                    const loc = await getCurrentLocation(true);
-                    setIsTyping(false);
-
-                    if (loc) {
-                        setMessages(prev => {
-                            // Filter out the request card and any previous confirmation messages
-                            const filtered = prev.filter(m => m.text !== 'NXTVIBES_LOCATION_REQUIRED' && !m.text.includes("I have your location now"));
-                            return [
-                                {
-                                    _id: 'loc-confirmed-' + Date.now(),
-                                    text: "Great! I have your location now. Please ask your question again and I'll find the best nearby options for you! 📍",
-                                    createdAt: new Date(),
-                                    user: { _id: 'nxtvibes-ai', name: 'NxtVibes AI' }
-                                },
-                                ...filtered
-                            ];
-                        });
-                    }
-                }}
-            >
-                <Text style={styles.locationRequestBtnText}>Allow Location Access</Text>
-            </TouchableOpacity>
-        </MotiView>
-    );
-
     const renderMessage = ({ item }: { item: AIMessage }) => {
         const isUser = item.user._id === 'user';
-        if (item.text === 'NXTVIBES_LOCATION_REQUIRED') return renderLocationRequest();
-        const tripCard = !isUser && (item.text.includes('trip_plan') && item.text.includes('"type"')) ? renderTripCard(item.text) : null;
-        const showText = !tripCard;
 
         return (
             <MotiView
@@ -739,12 +409,9 @@ export default function AIPlannerScreen() {
                     </View>
                 )}
                 <View style={{ maxWidth: '100%' }}>
-                    {showText && (
-                        <View style={[styles.bubble, isUser ? { backgroundColor: colors.primary } : { backgroundColor: colors.card }, isUser ? styles.userBubble : styles.aiBubble]}>
-                            <Text style={[styles.messageText, isUser ? { color: '#fff' } : { color: colors.text }]}>{item.text}</Text>
-                        </View>
-                    )}
-                    {tripCard}
+                    <View style={[styles.bubble, isUser ? { backgroundColor: colors.primary } : { backgroundColor: colors.card }, isUser ? styles.userBubble : styles.aiBubble]}>
+                        <Text style={[styles.messageText, isUser ? { color: '#fff' } : { color: colors.text }]}>{item.text}</Text>
+                    </View>
                 </View>
             </MotiView>
         );

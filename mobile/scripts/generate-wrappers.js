@@ -6,8 +6,8 @@ const baseDir = path.join(process.cwd(), 'app');
 const groups = {
   trip: {
     '_layout.tsx': `import { Stack } from 'expo-router';\nexport default function TripLayout() {\n  return (\n    <Stack screenOptions={{ headerShown: false }}>\n      <Stack.Screen name="[id]" />\n      <Stack.Screen name="create" options={{ presentation: 'modal' }} />\n      <Stack.Screen name="edit" options={{ presentation: 'modal' }} />\n      <Stack.Screen name="my-trips" />\n      <Stack.Screen name="map" />\n      <Stack.Screen name="search" />\n    </Stack>\n  );\n}`,
-    'create.tsx': `import CreateTripScreen from '../../src/screens/CreateTripScreen';\nexport default function CreateTripRoute() { return <CreateTripScreen />; }`,
-    'edit.tsx': `import EditTripScreen from '../../src/screens/EditTripScreen';\nexport default function EditTripRoute() { return <EditTripScreen />; }`,
+    'create.tsx': `import CreateItineraryScreen from '../../src/screens/CreateItineraryScreen';\nexport default function CreateTripRoute() { return <CreateItineraryScreen />; }`,
+    'edit.tsx': `import EditItineraryScreen from '../../src/screens/EditItineraryScreen';\nexport default function EditTripRoute() { return <EditItineraryScreen />; }`,
     '[id].tsx': `import TripDetailsScreen from '../../src/screens/TripDetailsScreen';\nexport default function TripDetailsRoute() { return <TripDetailsScreen />; }`,
     'my-trips.tsx': `import MyTripsScreen from '../../src/screens/MyTripsScreen';\nexport default function MyTripsRoute() { return <MyTripsScreen />; }`,
     'map.tsx': `import MapScreen from '../../src/screens/MapScreen';\nexport default function MapRoute() { return <MapScreen />; }`,

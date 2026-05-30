@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { aiService } from '../services/AIService';
 import { showUploadNotification, completeUploadNotification, failUploadNotification } from '../utils/notifications';
 import { useTheme } from '../contexts/ThemeContext';
-import { useTripStore } from '../store/tripStore';
+import { useItineraryStore } from '../store/itineraryStore';
 import Icon from '../components/Icon';
 import {
     NeumorphicBackButton,
@@ -474,7 +474,7 @@ export default function ItineraryViewScreen() {
     const { colors, isDarkMode } = useTheme();
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const { places, setPlaces, checklist, setChecklist, notes, setNotes, tripDraft, customCategories, setCustomCategories, collaborators, setCollaborators, clearDraft } = useTripStore();
+    const { places, setPlaces, checklist, setChecklist, notes, setNotes, tripDraft, customCategories, setCustomCategories, collaborators, setCollaborators, clearDraft } = useItineraryStore();
     const [activeTab, setActiveTab] = useState<TabType>('Full Itinerary');
     const [newChecklistItem, setNewChecklistItem] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
@@ -600,29 +600,107 @@ export default function ItineraryViewScreen() {
     }, []);
 
     useEffect(() => {
-        if (tripDraft && tripDraft.mandatory_items) {
+        if (!tripDraft) return;
+
+        // Try direct fields first
+        let parsedChecklist = null;
+        let parsedNotes = null;
+        let parsedCollaborators = null;
+
+        // Checklist
+        if (tripDraft.checklist) {
+            try {
+                parsedChecklist = typeof tripDraft.checklist === 'string'
+                    ? JSON.parse(tripDraft.checklist)
+                    : tripDraft.checklist;
+            } catch (e) {
+                console.error('Failed to parse tripDraft.checklist:', e);
+            }
+        } else if (tripDraft.checklistRaw) {
+            try {
+                parsedChecklist = JSON.parse(tripDraft.checklistRaw);
+            } catch (e) {
+                console.error('Failed to parse tripDraft.checklistRaw:', e);
+            }
+        }
+
+        // Notes
+        if (tripDraft.notes) {
+            try {
+                parsedNotes = typeof tripDraft.notes === 'string'
+                    ? JSON.parse(tripDraft.notes)
+                    : tripDraft.notes;
+            } catch (e) {
+                console.error('Failed to parse tripDraft.notes:', e);
+            }
+        } else if (tripDraft.notesRaw) {
+            try {
+                parsedNotes = JSON.parse(tripDraft.notesRaw);
+            } catch (e) {
+                console.error('Failed to parse tripDraft.notesRaw:', e);
+            }
+        }
+
+        // Collaborators/Participants
+        if (tripDraft.participants) {
+            try {
+                parsedCollaborators = typeof tripDraft.participants === 'string'
+                    ? JSON.parse(tripDraft.participants)
+                    : tripDraft.participants;
+            } catch (e) {
+                console.error('Failed to parse tripDraft.participants:', e);
+            }
+        } else if (tripDraft.participantsRaw) {
+            try {
+                parsedCollaborators = JSON.parse(tripDraft.participantsRaw);
+            } catch (e) {
+                console.error('Failed to parse tripDraft.participantsRaw:', e);
+            }
+        }
+
+        // Fallback to legacy mandatory_items if direct fields are empty
+        if ((!parsedChecklist || parsedChecklist.length === 0) && tripDraft.mandatory_items) {
             try {
                 const items = typeof tripDraft.mandatory_items === 'string'
                     ? JSON.parse(tripDraft.mandatory_items)
                     : tripDraft.mandatory_items;
 
                 if (Array.isArray(items) && items.length >= 3) {
-                    const parsedChecklist = typeof items[0] === 'string' ? JSON.parse(items[0]) : items[0];
+                    parsedChecklist = typeof items[0] === 'string' ? JSON.parse(items[0]) : items[0];
                     const parsedCategories = typeof items[1] === 'string' ? JSON.parse(items[1]) : items[1];
-                    const parsedNotes = typeof items[2] === 'string' ? JSON.parse(items[2]) : items[2];
-                    // Backward compat: old format had 5 items [checklist, categories, notes, essentials, collaborators]
-                    // New format has 4 items [checklist, categories, notes, collaborators]
+                    parsedNotes = typeof items[2] === 'string' ? JSON.parse(items[2]) : items[2];
                     const collabIndex = items.length >= 5 ? 4 : 3;
-                    const parsedCollaborators = typeof items[collabIndex] === 'string' ? JSON.parse(items[collabIndex]) : items[collabIndex];
+                    parsedCollaborators = typeof items[collabIndex] === 'string' ? JSON.parse(items[collabIndex]) : items[collabIndex];
 
-                    if (Array.isArray(parsedChecklist) && parsedChecklist.length > 0 && checklist.length === 0) setChecklist(parsedChecklist);
-                    if (Array.isArray(parsedCategories) && parsedCategories.length > 0 && customCategories.length === 0) setCustomCategories(parsedCategories);
-                    if (Array.isArray(parsedNotes) && parsedNotes.length > 0 && notes.length === 0) setNotes(parsedNotes);
-                    if (Array.isArray(parsedCollaborators) && parsedCollaborators.length > 0 && collaborators.length === 0) setCollaborators(parsedCollaborators);
+                    if (Array.isArray(parsedCategories) && parsedCategories.length > 0 && customCategories.length === 0) {
+                        setCustomCategories(parsedCategories);
+                    }
                 }
             } catch (e) {
-                console.error('Failed to unpack custom itinerary details:', e);
+                console.error('Failed to unpack legacy custom itinerary details:', e);
             }
+        }
+
+        if (Array.isArray(parsedChecklist) && parsedChecklist.length > 0 && checklist.length === 0) {
+            setChecklist(parsedChecklist);
+            // Extract categories
+            const cats = [...new Set(parsedChecklist.map((item: any) => item.category))];
+            if (cats.length > 0 && customCategories.length === 0) {
+                setCustomCategories(cats);
+            }
+        }
+        if (Array.isArray(parsedNotes) && parsedNotes.length > 0 && notes.length === 0) {
+            setNotes(parsedNotes);
+        }
+        if (Array.isArray(parsedCollaborators) && parsedCollaborators.length > 0 && collaborators.length === 0) {
+            setCollaborators(parsedCollaborators);
+        }
+
+        // Map View
+        const mapData = tripDraft.itineraryMapView || (tripDraft.itinerary_map_view ? (typeof tripDraft.itinerary_map_view === 'string' ? JSON.parse(tripDraft.itinerary_map_view) : tripDraft.itinerary_map_view) : null);
+        if (mapData) {
+            if (mapData.startingCoords) setStartingCoords(mapData.startingCoords);
+            if (mapData.destinationCoords) setDestinationCoords(mapData.destinationCoords);
         }
     }, [tripDraft]);
 
@@ -757,14 +835,14 @@ export default function ItineraryViewScreen() {
 
     const handleFinalizeAction = async (bookingStatus: 'posted' | 'saved') => {
         if (!currentUser) {
-            Alert.alert('Authentication Required', 'Please log in to finalize your trip.');
+            Alert.alert('Authentication Required', 'Please log in to finalize your itinerary.');
             return;
         }
 
         // Close modal and show processing overlay
         setFinalizeModalVisible(false);
         setIsProcessing(true);
-        setProcessingStatus(bookingStatus === 'posted' ? 'Posting your trip...' : 'Saving your itinerary...');
+        setProcessingStatus('Saving your itinerary...');
 
         try {
             // 1. Fetch user's profile info
@@ -811,24 +889,14 @@ export default function ItineraryViewScreen() {
                 finalImages = ['https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800'];
             }
 
-            await showUploadNotification(0.4, 'Preparing trip data...');
-            setProcessingStatus('Preparing trip data...');
+            await showUploadNotification(0.4, 'Preparing itinerary data...');
+            setProcessingStatus('Preparing itinerary data...');
 
             // 3. Prepare itinerary arrays and fields
             const itineraryStrings = (places || []).map(p => {
                 const timeStr = p.time ? `[${p.time}] ` : '';
                 return `${timeStr}${p.name}${p.address ? ` - ${p.address}` : ''}`;
             });
-
-            const placesToVisitJSON = JSON.stringify(places || []);
-
-            // Packing checklist, categories, notes, collaborators to mandatory_items (no essentials)
-            const mandatoryItemsArray = [
-                JSON.stringify(checklist || []),
-                JSON.stringify(customCategories || []),
-                JSON.stringify(notes || []),
-                JSON.stringify(collaborators || [])
-            ];
 
             const fromDateStr = tripDraft?.fromDate ? new Date(tripDraft.fromDate).toISOString() : new Date().toISOString();
             const toDateStr = tripDraft?.toDate ? new Date(tripDraft.toDate).toISOString() : new Date().toISOString();
@@ -843,32 +911,22 @@ export default function ItineraryViewScreen() {
                 from_date: fromDateStr,
                 to_date: toDateStr,
                 duration_days: durationDays,
-                duration: tripDraft?.duration ? String(tripDraft.duration) : String(durationDays),
-                cost: parseFloat(tripDraft?.costPerPerson) || 0,
                 cost_per_person: parseFloat(tripDraft?.costPerPerson) || 0,
-                total_cost: parseFloat(tripDraft?.costPerPerson) || 0,
-                max_travelers: parseInt(tripDraft?.maxTravelers) || 10,
-                current_travelers: 1,
-                trip_type: tripDraft?.tripType || 'solo',
-                transport_mode: tripDraft?.transportMode || null,
+                travel_style: tripDraft?.travelStyle || tripDraft?.tripType || 'solo',
                 accommodation_type: tripDraft?.accommodationType || null,
-                gender_preference: tripDraft?.genderPreference || 'anyone',
-                booking_status: bookingStatus, // 'posted' or 'saved'
-                places_to_visit: [placesToVisitJSON],
-                mandatory_items: mandatoryItemsArray,
+                booking_status: 'saved', // Always 'saved', posting is removed
+                places_to_visit: places || [],
                 itinerary: itineraryStrings,
                 images: finalImages,
                 cover_image: finalImages[0] || null,
-                image_object_keys: [],
-                image_locations: [],
-                owner_display_name: userData.name || userData.display_name || currentUser.user_metadata?.full_name || 'Traveler',
-                owner_photo_url: userData.photo_url || currentUser.user_metadata?.avatar_url || null,
-                owner_username: userData.username || null,
                 participants: [currentUser.id, ...(collaborators || []).map((c: any) => c.id || c.uid || c)],
                 location: tripDraft?.toLocation || '',
                 trip_types: tripDraft?.tripTypes || [],
                 transport_modes: tripDraft?.transportModes || [],
                 accommodation_days: tripDraft?.accommodationDays ? parseInt(tripDraft.accommodationDays) : null,
+                checklist: checklist || [],
+                notes: notes || [],
+                itinerary_map_view: { startingCoords, destinationCoords, markers: [] },
                 updated_at: new Date().toISOString(),
             };
 
@@ -880,13 +938,13 @@ export default function ItineraryViewScreen() {
 
             if (tripId && tripId !== 'new-trip') {
                 const { error: updateError } = await supabase
-                    .from('trips')
+                    .from('itineraries')
                     .update(tripPayload)
                     .eq('id', tripId);
                 if (updateError) throw updateError;
             } else {
                 const { data: newTrip, error: insertError } = await supabase
-                    .from('trips')
+                    .from('itineraries')
                     .insert(tripPayload)
                     .select()
                     .single();
@@ -904,10 +962,8 @@ export default function ItineraryViewScreen() {
                     .map((c: any) => ({
                         recipient_id: c.id,
                         type: 'trip_update',
-                        title: bookingStatus === 'posted'
-                            ? 'Itinerary Published! 🎉'
-                            : 'Itinerary Saved! 📋',
-                        message: `${userData.name || userData.display_name || 'A collaborator'} has ${bookingStatus === 'posted' ? 'posted' : 'saved'} the itinerary: "${tripDraft?.title || 'Trip'}"`,
+                        title: 'Itinerary Saved! 📋',
+                        message: `${userData.name || userData.display_name || 'A collaborator'} has saved the itinerary: "${tripDraft?.title || 'Trip'}"`,
                         entity_id: tripId,
                         entity_type: 'trip',
                         actor_id: currentUser.id,
@@ -924,10 +980,8 @@ export default function ItineraryViewScreen() {
 
             // 6. Done — show completion notification and navigate
             await completeUploadNotification(
-                bookingStatus === 'posted' ? 'Trip Posted! 🎉' : 'Itinerary Saved! 📋',
-                bookingStatus === 'posted'
-                    ? `"${tripDraft?.title || 'Trip'}" is now live!`
-                    : `"${tripDraft?.title || 'Trip'}" has been saved.`
+                'Itinerary Saved! 📋',
+                `"${tripDraft?.title || 'Trip'}" has been saved.`
             );
 
             setIsProcessing(false);
@@ -1673,7 +1727,7 @@ export default function ItineraryViewScreen() {
                         style={[styles.primaryButton, { backgroundColor: colors.primary }]}
                         onPress={() => setFinalizeModalVisible(true)}
                     >
-                        <Text style={styles.buttonText}>Finalize Trip</Text>
+                        <Text style={styles.buttonText}>Save Itinerary</Text>
                     </TouchableOpacity>
                 </View>
             )}
@@ -1718,7 +1772,7 @@ export default function ItineraryViewScreen() {
                             borderWidth: 1,
                             borderColor: colors.border,
                         }}>
-                            <Icon name="PaperPlaneTilt" size={32} color={colors.primary} weight="fill" />
+                            <Icon name="FloppyDisk" size={32} color={colors.primary} weight="fill" />
                         </View>
 
                         <Text style={{
@@ -1728,7 +1782,7 @@ export default function ItineraryViewScreen() {
                             textAlign: 'center',
                             marginBottom: 8
                         }}>
-                            Finalize Itinerary
+                            Save Itinerary
                         </Text>
 
                         <Text style={{
@@ -1739,13 +1793,13 @@ export default function ItineraryViewScreen() {
                             paddingHorizontal: 10,
                             lineHeight: 20
                         }}>
-                            Choose how you would like to save this trip itinerary.
+                            Are you sure you want to save this travel itinerary? It will be stored in your saved itineraries list and you can share it with others.
                         </Text>
 
-                        {/* Option 1: Post as Trip */}
+                        {/* Option: Save Itinerary */}
                         <TouchableOpacity
                             disabled={isFinalizing}
-                            onPress={() => handleFinalizeAction('posted')}
+                            onPress={() => handleFinalizeAction('saved')}
                             style={{
                                 width: '100%',
                                 backgroundColor: colors.primary,
@@ -1764,29 +1818,9 @@ export default function ItineraryViewScreen() {
                                 <ActivityIndicator color="#ffffff" size="small" />
                             ) : (
                                 <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: 'bold' }}>
-                                    Post Itinerary as Trip
+                                    Save Itinerary
                                 </Text>
                             )}
-                        </TouchableOpacity>
-
-                        {/* Option 2: Save Itinerary */}
-                        <TouchableOpacity
-                            disabled={isFinalizing}
-                            onPress={() => handleFinalizeAction('saved')}
-                            style={{
-                                width: '100%',
-                                backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : '#f3f4f6',
-                                borderRadius: 16,
-                                paddingVertical: 16,
-                                alignItems: 'center',
-                                marginBottom: 20,
-                                borderWidth: 1,
-                                borderColor: colors.border,
-                            }}
-                        >
-                            <Text style={{ color: colors.text, fontSize: 16, fontWeight: 'bold' }}>
-                                Save Itinerary
-                            </Text>
                         </TouchableOpacity>
 
                         {/* Cancel Button */}

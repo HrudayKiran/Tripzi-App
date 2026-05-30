@@ -22,7 +22,7 @@ import { deleteTripImagesFromR2, uploadTripImageToR2 } from '../utils/imageUploa
 import { showUploadNotification, completeUploadNotification, failUploadNotification } from '../utils/notifications';
 import { syncDatabase } from '../database/sync';
 import { GestureHandlerRootView, FlatList as GHFlatList, ScrollView as GHScrollView } from 'react-native-gesture-handler';
-import { useTripStore } from '../store/tripStore';
+import { useItineraryStore } from '../store/itineraryStore';
 import Animated from 'react-native-reanimated';
 
 const SortableAny = Sortable as any;
@@ -188,7 +188,7 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
     const tripDataParam = params.tripData as string;
 
     // Store
-    const { places, setPlaces, tripDraft, setTripDraft } = useTripStore();
+    const { places, setPlaces, tripDraft, setTripDraft } = useItineraryStore();
 
     // State for Screen mode
     const [trip, setTrip] = useState<any>(null);

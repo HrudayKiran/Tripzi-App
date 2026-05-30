@@ -4,7 +4,7 @@ import { field, date, readonly } from '@nozbe/watermelondb/decorators';
 export default class Message extends Model {
   static table = 'messages';
   static associations = {
-    chats: { type: 'belongs_to', key: 'chat_id' },
+    direct_chats: { type: 'belongs_to', key: 'chat_id' },
   } as const;
 
   @field('chat_id') chatId!: string;

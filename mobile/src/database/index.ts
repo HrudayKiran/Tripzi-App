@@ -2,7 +2,7 @@ import { Database } from '@nozbe/watermelondb';
 import SQLiteAdapter from '@nozbe/watermelondb/adapters/sqlite';
 
 import schema from './schema';
-import Trip from './models/Trip';
+import Itinerary from './models/Itinerary';
 import Chat from './models/Chat';
 import GroupChat from './models/GroupChat';
 import Message from './models/Message';
@@ -22,19 +22,20 @@ setGenerator(uuidv4);
 
 const adapter = new SQLiteAdapter({
   schema,
-  // (Optional) Database name
-  dbName: 'nxtvibes_offline',
+  // (Optional) Database name - versioned to trigger automatic recreation on schema bumps
+  dbName: `nxtvibes_offline_v${schema.version}`,
   // (Recommended) If you want to use the high-performance JSI adapter on Android
   jsi: true,
   onSetUpError: error => {
     // Database failed to load
+    console.error('[Database] Adapter setup error:', error);
   }
 });
 
 export const database = new Database({
   adapter,
   modelClasses: [
-    Trip,
+    Itinerary,
     Chat,
     GroupChat,
     Message,
@@ -51,7 +52,7 @@ export const resetDatabase = async () => {
     try {
         await database.write(async () => {
             // Clear private tables
-            const chats = await database.get('chats').query().fetch();
+            const chats = await database.get('direct_chats').query().fetch();
             const groupChats = await database.get('group_chats').query().fetch();
             const messages = await database.get('messages').query().fetch();
             

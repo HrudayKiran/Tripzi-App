@@ -7,11 +7,11 @@ export default class GroupChat extends Model {
     messages: { type: 'has_many', foreignKey: 'chat_id' },
   } as const;
 
-  @field('trip_id') tripId!: string;
+  @field('itinerary_id') itineraryId!: string;
   @field('group_name') groupName!: string;
   @field('group_description') groupDescription?: string;
   @field('group_icon') groupIcon?: string;
-  @field('trip_image') tripImage?: string;
+  @field('itinerary_image') itineraryImage?: string;
   @field('participants') participantsRaw!: string; // JSON string
   @field('participant_details') participantDetailsRaw?: string; // JSON string
   @field('created_by') createdBy?: string;

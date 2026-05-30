@@ -8,7 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useTripStore } from '../store/tripStore';
+import { useItineraryStore } from '../store/itineraryStore';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { useForm, Controller } from 'react-hook-form';
@@ -93,11 +93,11 @@ const tripSchema = z.object({
 
 type TripFormData = z.infer<typeof tripSchema>;
 
-const CreateTripScreen = () => {
+const CreateItineraryScreen = () => {
     const { colors, isDarkMode } = useTheme();
     const router = useRouter();
     const params = useLocalSearchParams();
-    const { tripDraft, setTripDraft, clearDraft } = useTripStore();
+    const { tripDraft, setTripDraft, clearDraft } = useItineraryStore();
 
     useEffect(() => {
         clearDraft();
@@ -819,4 +819,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default CreateTripScreen;
+export default CreateItineraryScreen;

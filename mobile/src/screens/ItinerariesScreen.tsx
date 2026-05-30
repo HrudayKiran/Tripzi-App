@@ -8,7 +8,7 @@ import { MotiView } from 'moti';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { NeumorphicBackButton } from '../components/NeumorphicIconButtons';
 import { supabase } from '../lib/supabase';
-import { useTripStore } from '../store/tripStore';
+import { useItineraryStore } from '../store/itineraryStore';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
@@ -16,8 +16,8 @@ const { width } = Dimensions.get('window');
 const ItinerariesScreen = () => {
     const { colors, isDarkMode } = useTheme();
     const router = useRouter();
-    const { setTripDraft, setPlaces } = useTripStore();
-    const [activeTab, setActiveTab] = useState<'Shared' | 'Posted' | 'Saved'>('Shared');
+    const { setTripDraft, setPlaces } = useItineraryStore();
+    const [activeTab, setActiveTab] = useState<'Saved' | 'Shared'>('Saved');
     const [trips, setTrips] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -35,27 +35,35 @@ const ItinerariesScreen = () => {
         if (!currentUser) return;
         setLoading(true);
         try {
-            // Query all trips in the public.trips table where this user is either owner or participant
+            // Query all itineraries in the itineraries table
             const { data, error } = await supabase
-                .from('trips')
+                .from('itineraries')
                 .select('*')
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
 
-            // Filter trips based on active tab and ownership
+            // Filter itineraries based on active tab and ownership
             const filtered = (data || []).filter((t: any) => {
                 const isOwner = t.user_id === currentUser.id;
-                const isParticipant = Array.isArray(t.participants) && t.participants.includes(currentUser.id);
+                
+                // Parse participants list
+                let participantsList: string[] = [];
+                try {
+                    participantsList = Array.isArray(t.participants) 
+                        ? t.participants 
+                        : JSON.parse(t.participants || '[]');
+                } catch {
+                    participantsList = [];
+                }
+                
+                const isParticipant = participantsList.includes(currentUser.id);
                 
                 if (activeTab === 'Saved') {
                     // Saved itineraries owned by user
-                    return isOwner && t.booking_status === 'saved';
-                } else if (activeTab === 'Posted') {
-                    // Posted itineraries owned by user
-                    return isOwner && t.booking_status === 'posted';
+                    return isOwner;
                 } else {
-                    // Shared: participant is user, but user is not the owner, and booking_status is posted/saved
+                    // Shared: participant is user, but user is not the owner
                     return !isOwner && isParticipant;
                 }
             });
@@ -140,7 +148,7 @@ const ItinerariesScreen = () => {
         <View style={styles.emptyContainer}>
             <View style={[styles.emptyIconContainer, { backgroundColor: colors.card }]}>
                 <Icon 
-                    name={activeTab === 'Shared' ? 'Users' : activeTab === 'Posted' ? 'PaperPlaneTilt' : 'BookmarkSimple'} 
+                    name={activeTab === 'Shared' ? 'Users' : 'BookmarkSimple'} 
                     size={48} 
                     color={isDarkMode ? '#FFFFFF' : '#000000'} 
                 />
@@ -151,9 +159,7 @@ const ItinerariesScreen = () => {
             <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
                 {activeTab === 'Shared' 
                     ? "Itineraries shared with you by other travelers will appear here."
-                    : activeTab === 'Posted'
-                    ? "Your published trip itineraries will appear here for others to see."
-                    : "Itineraries you've saved for inspiration will appear here."}
+                    : "Itineraries you've saved will appear here."}
             </Text>
             <TouchableOpacity 
                 style={[styles.actionButton, { backgroundColor: isDarkMode ? '#FFFFFF' : '#000000' }]}
@@ -181,34 +187,6 @@ const ItinerariesScreen = () => {
                 <View style={styles.tabBarContainer}>
                     <View style={[styles.tabBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
                         <TouchableOpacity 
-                            onPress={() => setActiveTab('Shared')}
-                            style={[
-                                styles.tab, 
-                                activeTab === 'Shared' && [styles.activeTab, { backgroundColor: themeActiveBg }]
-                            ]}
-                        >
-                            <Text style={[
-                                styles.tabText, 
-                                { color: activeTab === 'Shared' ? themeActiveText : colors.textSecondary }
-                            ]}>
-                                Shared
-                            </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                            onPress={() => setActiveTab('Posted')}
-                            style={[
-                                styles.tab, 
-                                activeTab === 'Posted' && [styles.activeTab, { backgroundColor: themeActiveBg }]
-                            ]}
-                        >
-                            <Text style={[
-                                styles.tabText, 
-                                { color: activeTab === 'Posted' ? themeActiveText : colors.textSecondary }
-                            ]}>
-                                Posted
-                            </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
                             onPress={() => setActiveTab('Saved')}
                             style={[
                                 styles.tab, 
@@ -220,6 +198,20 @@ const ItinerariesScreen = () => {
                                 { color: activeTab === 'Saved' ? themeActiveText : colors.textSecondary }
                             ]}>
                                 Saved
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                            onPress={() => setActiveTab('Shared')}
+                            style={[
+                                styles.tab, 
+                                activeTab === 'Shared' && [styles.activeTab, { backgroundColor: themeActiveBg }]
+                            ]}
+                        >
+                            <Text style={[
+                                styles.tabText, 
+                                { color: activeTab === 'Shared' ? themeActiveText : colors.textSecondary }
+                            ]}>
+                                Shared
                             </Text>
                         </TouchableOpacity>
                     </View>

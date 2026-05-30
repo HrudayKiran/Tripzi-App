@@ -65,7 +65,7 @@ type TripImageItem = {
     objectKey?: string | null;
 };
 
-const EditTripScreen = () => {
+const EditItineraryScreen = () => {
     const { colors } = useTheme();
     const router = useRouter();
     const params = useLocalSearchParams();
@@ -113,8 +113,6 @@ const EditTripScreen = () => {
     const [accommodationType, setAccommodationType] = useState(initialData?.accommodationType || '');
     const [bookingStatus, setBookingStatus] = useState(initialData?.bookingStatus || '');
     const [accommodationDays, setAccommodationDays] = useState(initialData?.accommodationDays ? String(initialData.accommodationDays) : (initialData?.durationDays ? String(initialData.durationDays) : ''));
-    const [maxTravelers, setMaxTravelers] = useState(initialData?.maxTravelers ? String(initialData.maxTravelers) : '');
-    const [genderPreference, setGenderPreference] = useState(initialData?.genderPreference || 'anyone');
 
     // Description
     const [description, setDescription] = useState(initialData?.description || '');
@@ -130,7 +128,7 @@ const EditTripScreen = () => {
             const fetchTrip = async () => {
                 setFetching(true);
                 try {
-                    const { data: doc } = await supabase.from('trips').select('*').eq('id', tripId).maybeSingle();
+                    const { data: doc } = await supabase.from('itineraries').select('*').eq('id', tripId).maybeSingle();
                     if (doc) {
                         const data = doc;
                         if (data) {
@@ -162,8 +160,6 @@ const EditTripScreen = () => {
                             setAccommodationType(data.accommodation_type || '');
                             setBookingStatus(data.booking_status || '');
                             setAccommodationDays(data.accommodation_days ? String(data.accommodation_days) : '');
-                            setMaxTravelers(data.max_travelers ? String(data.max_travelers) : '');
-                            setGenderPreference(data.gender_preference || 'anyone');
                             setDescription(data.description || '');
                             setMandatoryItems(Array.isArray(data.mandatory_items) ? data.mandatory_items.join(', ') : (data.mandatory_items || ''));
                             setPlacesToVisit(Array.isArray(data.places_to_visit) ? data.places_to_visit.join(', ') : (data.places_to_visit || ''));
@@ -275,7 +271,6 @@ const EditTripScreen = () => {
         if (transportModes.length === 0) newErrors.transportModes = 'Select at least one transport mode';
         if (!costPerPerson.trim()) newErrors.costPerPerson = 'Cost per person is required';
         if (!accommodationType) newErrors.accommodationType = 'Select accommodation type';
-        if (!maxTravelers.trim()) newErrors.maxTravelers = 'Max travelers is required';
         if (!description.trim()) newErrors.description = 'Trip description is required';
 
         setErrors(newErrors);
@@ -369,15 +364,13 @@ const EditTripScreen = () => {
                 accommodation_type: accommodationType,
                 booking_status: bookingStatus,
                 accommodation_days: accommodationDays ? parseInt(accommodationDays) : null,
-                max_travelers: parseInt(maxTravelers) || 5,
-                gender_preference: genderPreference,
                 description,
                 mandatory_items: mandatoryItems.split(',').map(item => item.trim()).filter(Boolean),
                 places_to_visit: placesToVisit.split(',').map(place => place.trim()).filter(Boolean),
                 cover_image: finalImages[0],
             };
 
-            await supabase.from('trips').update(tripData).eq('id', tripId);
+            await supabase.from('itineraries').update(tripData).eq('id', tripId);
             if (removedObjectKeys.length > 0) {
                 await deleteTripImagesFromR2(removedObjectKeys, tripId);
             }
@@ -387,15 +380,15 @@ const EditTripScreen = () => {
 
             // Update chat title if exists
             try {
-                await supabase.from('chats').update({
-                    trip_title: title
-                }).eq('id', `trip_${tripId}`);
+                await supabase.from('group_chats').update({
+                    group_name: title
+                }).eq('itinerary_id', tripId);
             } catch (e) {
                 // Ignore if chat doesn't exist
             }
 
             setIsPosting(false);
-            Alert.alert('Success! 🎉', 'Your trip has been updated!');
+            Alert.alert('Success! 🎉', 'Your itinerary has been updated!');
             router.back();
         } catch (error: any) {
             if (newObjectKeys.length > 0) {
@@ -704,31 +697,6 @@ const EditTripScreen = () => {
                                         </>
                                     )
                                 }
-
-                                <Text style={[styles.label, { color: colors.text }]}>Max Travelers <Text style={styles.required}>*</Text></Text>
-                                <TextInput
-                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.maxTravelers ? '#EF4444' : colors.border }]}
-                                    placeholder="e.g., 5"
-                                    placeholderTextColor={colors.textSecondary}
-                                    value={maxTravelers}
-                                    onChangeText={setMaxTravelers}
-                                    keyboardType="numeric"
-                                />
-                                {errors.maxTravelers && <Text style={styles.errorText}>{errors.maxTravelers}</Text>}
-
-                                <Text style={[styles.label, { color: colors.text }]}>Who Can Join? <Text style={styles.required}>*</Text></Text>
-                                <View style={styles.chipGrid}>
-                                    {GENDER_PREFERENCES.map((pref) => (
-                                        <TouchableOpacity
-                                            key={pref.id}
-                                            style={[styles.chip, { backgroundColor: genderPreference === pref.id ? '#9d74f7' : colors.card, borderColor: '#9d74f7' }]}
-                                            onPress={() => setGenderPreference(pref.id)}
-                                        >
-                                            <Icon name={pref.icon as any} size={18} color={genderPreference === pref.id ? '#fff' : '#9d74f7'} />
-                                            <Text style={[styles.chipText, { color: genderPreference === pref.id ? '#fff' : colors.text }]}>{pref.label}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
 
                                 <View style={styles.divider} />
 
@@ -1093,4 +1061,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default EditTripScreen;
+export default EditItineraryScreen;

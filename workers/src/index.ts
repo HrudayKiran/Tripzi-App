@@ -6,8 +6,7 @@ import accountRoutes from './routes/account';
 import aiRoutes from './routes/ai';
 import kbRoutes from './routes/kb';
 import mediaRoutes from './routes/media';
-import tripsRoutes from './routes/trips';
-import groupsRoutes from './routes/groups';
+import groupChatsRoutes from './routes/group_chats';
 import { handleDailyTripLifecycle } from './scheduled/daily';
 
 const app = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
@@ -26,16 +25,14 @@ app.get('/', (c) => c.json({ status: 'ok', service: 'nxtvibes-workers' }));
 app.use('/account/*', requireAuth);
 app.use('/ai/*', requireAuth);
 app.use('/media/*', requireAuth);
-app.use('/trips/*', requireAuth);
-app.use('/groups/*', requireAuth);
+app.use('/group_chats/*', requireAuth);
 
 // Mount routes
 app.route('/account', accountRoutes);
 app.route('/ai', aiRoutes);
 app.route('/ai/kb', kbRoutes);
 app.route('/media', mediaRoutes);
-app.route('/trips', tripsRoutes);
-app.route('/groups', groupsRoutes);
+app.route('/group_chats', groupChatsRoutes);
 
 // Export for Cloudflare Workers
 export default {

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { Env, getSupabaseAdmin } from '../lib/supabase';
 import { createNotification, sendPushToUser } from '../lib/notifications';
 
-const groups = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
+const groupChats = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
 
 const getProfile = async (sb: any, uid: string) => {
   const { data } = await sb.from('public_profiles').select('*').eq('id', uid).maybeSingle();
@@ -29,7 +29,7 @@ const addSystemMessage = async (sb: any, chatId: string, table: string, text: st
   }).eq('id', chatId);
 };
 
-groups.post('/add-member', async (c) => {
+groupChats.post('/add-member', async (c) => {
   const callerUid = c.get('userId');
   const { chatId, memberId } = await c.req.json<{ chatId?: string; memberId?: string }>();
   if (!chatId || !memberId) return c.json({ error: 'chatId and memberId required.' }, 400);
@@ -54,7 +54,7 @@ groups.post('/add-member', async (c) => {
     recipientId: memberId,
     type: 'system',
     title: 'Added to Group',
-    message: `You were added to the group "${chat.trip_title || 'Trip'}" by ${actor?.display_name || 'an admin'}`,
+    message: `You were added to the group "${chat.group_name || 'Itinerary'}" by ${actor?.display_name || 'an admin'}`,
     entityId: chatId,
     entityType: 'chat',
     actorId: callerUid,
@@ -72,7 +72,7 @@ groups.post('/add-member', async (c) => {
   return c.json({ success: true });
 });
 
-groups.post('/remove-member', async (c) => {
+groupChats.post('/remove-member', async (c) => {
   const callerUid = c.get('userId');
   const { chatId, memberId } = await c.req.json<{ chatId?: string; memberId?: string }>();
   if (!chatId || !memberId) return c.json({ error: 'chatId and memberId required.' }, 400);
@@ -100,7 +100,7 @@ groups.post('/remove-member', async (c) => {
     recipientId: memberId,
     type: 'system',
     title: 'Removed from Group',
-    message: `You were removed from the group "${chat.trip_title || 'Trip'}"`,
+    message: `You were removed from the group "${chat.group_name || 'Itinerary'}"`,
     entityId: chatId,
     entityType: 'chat',
     actorId: callerUid,
@@ -118,7 +118,7 @@ groups.post('/remove-member', async (c) => {
   return c.json({ success: true });
 });
 
-groups.post('/leave', async (c) => {
+groupChats.post('/leave', async (c) => {
   const callerUid = c.get('userId');
   const { chatId } = await c.req.json<{ chatId?: string }>();
   if (!chatId) return c.json({ error: 'chatId is required.' }, 400);
@@ -143,7 +143,7 @@ groups.post('/leave', async (c) => {
   return c.json({ success: true });
 });
 
-groups.post('/promote-admin', async (c) => {
+groupChats.post('/promote-admin', async (c) => {
   const callerUid = c.get('userId');
   const { chatId, memberId } = await c.req.json<{ chatId?: string; memberId?: string }>();
   if (!chatId || !memberId) return c.json({ error: 'chatId and memberId required.' }, 400);
@@ -167,7 +167,7 @@ groups.post('/promote-admin', async (c) => {
     recipientId: memberId,
     type: 'system',
     title: 'Promoted to Admin',
-    message: `You are now an admin of the group "${chat.trip_title || 'Trip'}"`,
+    message: `You are now an admin of the group "${chat.group_name || 'Itinerary'}"`,
     entityId: chatId,
     entityType: 'chat',
     actorId: callerUid,
@@ -185,4 +185,4 @@ groups.post('/promote-admin', async (c) => {
   return c.json({ success: true });
 });
 
-export default groups;
+export default groupChats;

@@ -1,2 +1,2 @@
-import CreateTripScreen from '../../src/screens/CreateTripScreen';
-export default function CreateTripRoute() { return <CreateTripScreen />; }
+import CreateItineraryScreen from '../../src/screens/CreateItineraryScreen';
+export default function CreateTripRoute() { return <CreateItineraryScreen />; }
