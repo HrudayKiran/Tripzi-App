@@ -44,12 +44,12 @@
           "data": [
             {
               "scheme": "https",
-              "host": "nxtvibes.app",
+              "host": "hypermatrix.vercel.app",
               "pathPrefix": "/trip"
             },
             {
               "scheme": "https",
-              "host": "nxtvibes.app",
+              "host": "hypermatrix.vercel.app",
               "pathPrefix": "/user"
             }
           ],
@@ -75,7 +75,6 @@
     },
     "plugins": [
       "@react-native-firebase/app",
-
       "@react-native-firebase/messaging",
       "@react-native-firebase/app-check",
       "@react-native-firebase/remote-config",

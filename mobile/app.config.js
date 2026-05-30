@@ -47,17 +47,17 @@ module.exports = {
           data: [
             {
               scheme: 'https',
-              host: 'nxtvibes.app',
+              host: 'hypermatrix.vercel.app',
               pathPrefix: '/trip',
             },
             {
               scheme: 'https',
-              host: 'nxtvibes.app',
+              host: 'hypermatrix.vercel.app',
               pathPrefix: '/user',
             },
           ],
           category: ['BROWSABLE', 'DEFAULT'],
-         },
+        },
       ],
       permissions: [
         'android.permission.INTERNET',
