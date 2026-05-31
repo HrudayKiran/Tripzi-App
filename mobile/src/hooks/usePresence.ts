@@ -23,6 +23,12 @@ export const usePresence = () => {
     useEffect(() => {
         writePresence('online');
 
+        const intervalId = setInterval(() => {
+            if (AppState.currentState === 'active') {
+                writePresence('online');
+            }
+        }, 60000);
+
         const subscription = AppState.addEventListener('change', (nextState) => {
             if (nextState === 'active') {
                 writePresence('online');
@@ -35,6 +41,7 @@ export const usePresence = () => {
         });
 
         return () => {
+            clearInterval(intervalId);
             subscription.remove();
             writePresence('offline');
         };

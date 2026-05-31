@@ -29,3 +29,21 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false,
   },
 });
+
+/**
+ * Checks for the presence of a persistent Supabase session in MMKV synchronously.
+ * This is used to make immediate routing decisions on startup without waiting
+ * for asynchronous authentication checks.
+ */
+export function hasSessionSync(): boolean {
+  try {
+    const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\.supabase/)?.[1] || '';
+    const storageKey = `sb-${projectRef}-auth-token`;
+    const sessionStr = storage.getString(storageKey);
+    if (!sessionStr) return false;
+    const parsed = JSON.parse(sessionStr);
+    return !!(parsed && (parsed.currentSession || parsed.access_token));
+  } catch (e) {
+    return false;
+  }
+}

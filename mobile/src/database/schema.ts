@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-  version: 8,
+  version: 9,
   tables: [
     tableSchema({
       name: 'profiles',
@@ -50,6 +50,7 @@ export default appSchema({
       name: 'direct_chats',
       columns: [
         { name: 'participants', type: 'string' }, // JSON string (array of IDs)
+        { name: 'participant_details', type: 'string', isOptional: true }, // JSON string
         { name: 'last_message', type: 'string', isOptional: true },
         { name: 'last_message_at', type: 'number', isOptional: true },
         { name: 'unread_count', type: 'string', isOptional: true }, // JSON string (map of UID -> count)

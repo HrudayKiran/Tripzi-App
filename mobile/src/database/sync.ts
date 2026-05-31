@@ -3,6 +3,7 @@ import { database } from './index';
 import { supabase } from '../lib/supabase';
 import { Q } from '@nozbe/watermelondb';
 import { createMMKV } from 'react-native-mmkv';
+import { parsePostgresDateToMs, parsePostgresDateToMsOrNull } from '../utils/date';
 
 const storage = createMMKV();
 const LAST_SYNC_USER_KEY = 'last_sync_user_id';
@@ -45,7 +46,7 @@ export async function syncDatabase() {
   }
 
   isSyncing = true;
-  console.log('[Sync] Starting synchronization...');
+  if (__DEV__) console.log('[Sync] Starting synchronization...');
 
   try {
     await synchronize({
@@ -58,7 +59,7 @@ export async function syncDatabase() {
         
         let actualLastPulledAt = lastPulledAt;
         if (user && user.id !== lastSyncUserId) {
-            console.log(`[Sync] User switched from ${lastSyncUserId} to ${user.id}. Forcing full pull.`);
+            if (__DEV__) console.log(`[Sync] User switched from ${lastSyncUserId} to ${user.id}. Forcing full pull.`);
             actualLastPulledAt = null;
         }
 
@@ -68,7 +69,7 @@ export async function syncDatabase() {
         const lastPulledAtDate = adjustedLastPulledAt ? new Date(adjustedLastPulledAt).toISOString() : null;
 
         if (adjustedLastPulledAt) {
-            console.log(`[Sync] Adjusted pull timestamp with 10s lookback: ${lastPulledAtDate}`);
+            if (__DEV__) console.log(`[Sync] Adjusted pull timestamp with 10s lookback: ${lastPulledAtDate}`);
         }
 
         // 1. Pull Itineraries
@@ -84,7 +85,7 @@ export async function syncDatabase() {
                 console.error('[Sync] Error pulling itineraries:', itinerariesError);
             } else {
                 itinerariesData = iData || [];
-                console.log(`[Sync] Pulled ${itinerariesData.length} itineraries.`);
+                if (__DEV__) console.log(`[Sync] Pulled ${itinerariesData.length} itineraries.`);
             }
         }
 
@@ -103,7 +104,7 @@ export async function syncDatabase() {
                 console.error('[Sync] Error pulling own profile:', ownProfileError);
             } else if (ownProfile) {
                 profilesData.push(ownProfile);
-                console.log('[Sync] Pulled current user\'s own profile.');
+                if (__DEV__) console.log('[Sync] Pulled current user\'s own profile.');
             }
         }
 
@@ -119,7 +120,7 @@ export async function syncDatabase() {
             }))].filter(uid => uid !== user?.id);
             
             if (uniqueUserIds.length > 0) {
-                console.log(`[Sync] Fetching profiles for ${uniqueUserIds.length} unique collaborators...`);
+                if (__DEV__) console.log(`[Sync] Fetching profiles for ${uniqueUserIds.length} unique collaborators...`);
                 
                 for (let i = 0; i < uniqueUserIds.length; i += 50) {
                     const chunk = uniqueUserIds.slice(i, i + 50);
@@ -136,7 +137,7 @@ export async function syncDatabase() {
                 }
             }
         }
-        console.log(`[Sync] Pulled ${profilesData.length} total profiles.`);
+        if (__DEV__) console.log(`[Sync] Pulled ${profilesData.length} total profiles.`);
 
         // 3. Pull Chats & Messages (Conditional on Auth)
         let chatsData: any[] = [];
@@ -144,7 +145,7 @@ export async function syncDatabase() {
         let messagesData: any[] = [];
 
         if (user) {
-            console.log(`[Sync] User authenticated (${user.id}), pulling private data...`);
+            if (__DEV__) console.log(`[Sync] User authenticated (${user.id}), pulling private data...`);
             
             // Pull direct chats
             const { data: cData, error: chatsError } = await supabase.from('direct_chats')
@@ -156,7 +157,7 @@ export async function syncDatabase() {
                 console.error('[Sync] Error pulling chats:', chatsError);
             } else {
                 chatsData = cData || [];
-                console.log(`[Sync] Pulled ${chatsData.length} direct chats.`);
+                if (__DEV__) console.log(`[Sync] Pulled ${chatsData.length} direct chats.`);
             }
 
             // Pull group chats
@@ -169,7 +170,7 @@ export async function syncDatabase() {
                 console.error('[Sync] Error pulling group chats:', groupChatsError);
             } else {
                 groupChatsData = gcData || [];
-                console.log(`[Sync] Pulled ${groupChatsData.length} group chats.`);
+                if (__DEV__) console.log(`[Sync] Pulled ${groupChatsData.length} group chats.`);
             }
 
             const allChatIds = [...chatsData.map(c => c.id), ...groupChatsData.map(c => c.id)];
@@ -184,7 +185,7 @@ export async function syncDatabase() {
                   console.error('[Sync] Error pulling messages:', messagesError);
               } else {
                   messagesData = mData || [];
-                  console.log(`[Sync] Pulled ${messagesData.length} messages.`);
+                  if (__DEV__) console.log(`[Sync] Pulled ${messagesData.length} messages.`);
               }
             }
         }
@@ -216,8 +217,8 @@ export async function syncDatabase() {
           checklist: Array.isArray(t.checklist) ? JSON.stringify(t.checklist) : (t.checklist || null),
           notes: Array.isArray(t.notes) ? JSON.stringify(t.notes) : (t.notes || null),
           itinerary_map_view: t.itinerary_map_view ? (typeof t.itinerary_map_view === 'string' ? t.itinerary_map_view : JSON.stringify(t.itinerary_map_view)) : null,
-          created_at: new Date(t.created_at).getTime(),
-          updated_at: new Date(t.updated_at).getTime(),
+          created_at: parsePostgresDateToMs(t.created_at),
+          updated_at: parsePostgresDateToMs(t.updated_at),
         });
 
         const mapProfile = (p: any) => ({
@@ -228,17 +229,22 @@ export async function syncDatabase() {
           bio: p.bio,
           push_notifications_enabled: p.push_notifications_enabled ?? false,
           save_to_gallery: p.save_to_gallery ?? false,
-          created_at: new Date(p.created_at).getTime(),
-          updated_at: new Date(p.updated_at).getTime(),
+          created_at: parsePostgresDateToMs(p.created_at),
+          updated_at: parsePostgresDateToMs(p.updated_at),
         });
 
         const mapChat = (c: any) => ({
           id: c.id,
           participants: Array.isArray(c.participants) ? JSON.stringify(c.participants) : (c.participants || null),
+          participant_details: c.participant_details ? JSON.stringify(c.participant_details) : null,
           last_message: c.last_message ? JSON.stringify(c.last_message) : null,
+          last_message_at: parsePostgresDateToMsOrNull(c.last_message_at),
           unread_count: c.unread_count ? JSON.stringify(c.unread_count) : null,
-          created_at: new Date(c.created_at).getTime(),
-          updated_at: new Date(c.updated_at).getTime(),
+          cleared_at: c.cleared_at ? JSON.stringify(c.cleared_at) : null,
+          deleted_for: c.deleted_by ? JSON.stringify(c.deleted_by) : null,
+          typing: c.typing ? JSON.stringify(c.typing) : null,
+          created_at: parsePostgresDateToMs(c.created_at),
+          updated_at: parsePostgresDateToMs(c.updated_at),
         });
 
         const mapGroupChat = (c: any) => ({
@@ -256,8 +262,11 @@ export async function syncDatabase() {
           admins: Array.isArray(c.admins) ? JSON.stringify(c.admins) : (c.admins || null),
           last_message: c.last_message ? JSON.stringify(c.last_message) : null,
           unread_count: c.unread_count ? JSON.stringify(c.unread_count) : null,
-          created_at: new Date(c.created_at).getTime(),
-          updated_at: new Date(c.updated_at).getTime(),
+          cleared_at: c.cleared_at ? JSON.stringify(c.cleared_at) : null,
+          deleted_for: c.deleted_by ? JSON.stringify(c.deleted_by) : null,
+          typing: c.typing ? JSON.stringify(c.typing) : null,
+          created_at: parsePostgresDateToMs(c.created_at),
+          updated_at: parsePostgresDateToMs(c.updated_at),
         });
 
         const mapMessage = (m: any) => ({
@@ -275,12 +284,12 @@ export async function syncDatabase() {
           status: m.status,
           read_by: m.read_by ? (typeof m.read_by === 'string' ? m.read_by : JSON.stringify(m.read_by)) : null,
           delivered_to: m.delivered_to ? (typeof m.delivered_to === 'string' ? m.delivered_to : JSON.stringify(m.delivered_to)) : null,
-          edited_at: m.edited_at ? new Date(m.edited_at).getTime() : null,
+          edited_at: parsePostgresDateToMsOrNull(m.edited_at),
           deleted_for: m.deleted_for ? (typeof m.deleted_for === 'string' ? m.deleted_for : JSON.stringify(m.deleted_for)) : null,
-          deleted_for_everyone_at: m.deleted_for_everyone_at ? new Date(m.deleted_for_everyone_at).getTime() : null,
+          deleted_for_everyone_at: parsePostgresDateToMsOrNull(m.deleted_for_everyone_at),
           mentions: m.mentions ? (typeof m.mentions === 'string' ? m.mentions : JSON.stringify(m.mentions)) : null,
-          created_at: new Date(m.created_at).getTime(),
-          updated_at: new Date(m.updated_at).getTime(),
+          created_at: parsePostgresDateToMs(m.created_at),
+          updated_at: parsePostgresDateToMs(m.updated_at),
         });
 
         // Map all records and deduplicate by ID to prevent SQLite UNIQUE constraint crashes
@@ -361,6 +370,12 @@ export async function syncDatabase() {
           if (typeof result.unread_count === 'string') {
               try { result.unread_count = JSON.parse(result.unread_count); } catch(e) {}
           }
+          if (typeof result.cleared_at === 'string') {
+              try { result.cleared_at = JSON.parse(result.cleared_at); } catch(e) {}
+          }
+          if (typeof result.participant_details === 'string') {
+              try { result.participant_details = JSON.parse(result.participant_details); } catch(e) {}
+          }
 
           return result;
         };
@@ -371,13 +386,25 @@ export async function syncDatabase() {
           if (created.length > 0) {
             console.log(`[Sync] Pushing ${created.length} new itineraries...`);
             const { error } = await supabase.from('itineraries').insert(created.map(prepareForSupabase));
-            if (error) console.error('[Sync] Error pushing new itineraries:', error);
+            if (error) {
+              console.error('[Sync] Error pushing new itineraries:', error);
+              const isPermanentError = error.code === '42501' || error.code?.startsWith('23') || error.code?.startsWith('42');
+              if (!isPermanentError) {
+                throw new Error(`Failed to push new itineraries: ${error.message}`);
+              }
+            }
           }
           if (updated.length > 0) {
             console.log(`[Sync] Pushing ${updated.length} updated itineraries...`);
             for (const record of updated) {
               const { error } = await supabase.from('itineraries').update(prepareForSupabase(record)).eq('id', record.id);
-              if (error) console.error(`[Sync] Error updating itinerary ${record.id}:`, error);
+              if (error) {
+                console.error(`[Sync] Error updating itinerary ${record.id}:`, error);
+                const isPermanentError = error.code === '42501' || error.code?.startsWith('23') || error.code?.startsWith('42');
+                if (!isPermanentError) {
+                  throw new Error(`Failed to update itinerary ${record.id}: ${error.message}`);
+                }
+              }
             }
           }
         }
@@ -388,7 +415,44 @@ export async function syncDatabase() {
           if (created.length > 0) {
             console.log(`[Sync] Pushing ${created.length} new messages...`);
             const { error } = await supabase.from('messages').insert(created.map(prepareForSupabase));
-            if (error) console.error('[Sync] Error pushing new messages:', error);
+            if (error) {
+              console.error('[Sync] Error pushing new messages:', error);
+              
+              const isPermanentError = error.code === '42501' || error.code?.startsWith('23') || error.code?.startsWith('42');
+              if (isPermanentError) {
+                // Try pushing them one by one to save the valid ones and isolate the bad ones
+                console.log('[Sync] Retrying messages push individually to isolate failures...');
+                const failedIds: string[] = [];
+                
+                for (const msg of created) {
+                  const { error: singleError } = await supabase.from('messages').insert([prepareForSupabase(msg)]);
+                  if (singleError) {
+                    console.error(`[Sync] Permanent failure on message ${msg.id}:`, singleError);
+                    if (singleError.code === '42501' || singleError.code?.startsWith('23') || singleError.code?.startsWith('42')) {
+                      failedIds.push(msg.id);
+                    }
+                  }
+                }
+                
+                if (failedIds.length > 0) {
+                  try {
+                    await database.write(async () => {
+                      const collection = database.get('messages');
+                      const records = await collection.query(Q.where('id', Q.oneOf(failedIds))).fetch();
+                      const batch = records.map(r => r.prepareDestroyPermanently());
+                      if (batch.length > 0) {
+                        await database.batch(...batch);
+                      }
+                    });
+                    console.log(`[Sync] Successfully deleted ${failedIds.length} failed messages locally.`);
+                  } catch (dbErr) {
+                    console.error('[Sync] Failed to delete failed messages locally:', dbErr);
+                  }
+                }
+              } else {
+                throw new Error(`Failed to push messages: ${error.message}`);
+              }
+            }
           }
         }
       },
@@ -399,7 +463,7 @@ export async function syncDatabase() {
     if (finalUser) {
       storage.set(LAST_SYNC_USER_KEY, finalUser.id);
     }
-    console.log('[Sync] Synchronization completed successfully.');
+    if (__DEV__) console.log('[Sync] Synchronization completed successfully.');
   } catch (error: any) {
     // Don't re-throw concurrent sync errors — they're expected and harmless
     if (error?.message?.includes('Concurrent synchronization')) {
@@ -438,8 +502,8 @@ export async function syncCurrentUserProfile(): Promise<void> {
       bio: profile.bio,
       push_notifications_enabled: profile.push_notifications_enabled ?? false,
       save_to_gallery: profile.save_to_gallery ?? false,
-      created_at: new Date(profile.created_at).getTime(),
-      updated_at: new Date(profile.updated_at).getTime(),
+      created_at: parsePostgresDateToMs(profile.created_at),
+      updated_at: parsePostgresDateToMs(profile.updated_at),
     };
 
     const { created, updated } = await splitCreatedUpdated('profiles', [mapped]);
@@ -473,7 +537,7 @@ export async function syncCurrentUserProfile(): Promise<void> {
       await database.batch(...batch);
     });
 
-    console.log('[Sync] Current user profile synced locally.');
+    if (__DEV__) console.log('[Sync] Current user profile synced locally.');
   } catch (error) {
     console.error('[Sync] Failed to sync current user profile:', error);
   }

@@ -16,6 +16,9 @@ import {
     Animated,
 } from 'react-native';
 import { FlashList } from "@shopify/flash-list";
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import Reanimated, { useSharedValue, useAnimatedStyle, withTiming, runOnJS } from 'react-native-reanimated';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
 const TypedFlashList = FlashList as any;
 import { Image } from 'expo-image';
@@ -25,18 +28,21 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
-import { ChatSkeleton } from '../components/Skeletons';
+import { ChatSkeleton, AvatarSkeleton, TextSkeleton } from '../components/Skeletons';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
 import { useChatMessagesQuery, ChatMessage, ReplyTo } from '../hooks/useChatMessagesQuery';
 import { useChatsQuery } from '../hooks/useChatsQuery';
 import { getPublicProfilesByIds } from '../utils/publicProfiles';
 import { getBooleanPreference, PREFERENCE_KEYS } from '../utils/preferences';
-import * as Haptics from 'expo-haptics';
+// Haptics removed from keystrokes for performance (H5)
 import DefaultAvatar from '../components/DefaultAvatar';
 import LocationPickerModal from '../components/LocationPickerModal';
 import LiveLocationMapModal from '../components/LiveLocationMapModal';
 import { supabase } from '../lib/supabase';
+import { database } from '../database';
+import { Q } from '@nozbe/watermelondb';
+import MessageContextMenu from '../components/MessageContextMenu';
 import { uploadDirectChatImageToR2, uploadGroupChatImageToR2 } from '../utils/imageUpload';
 import { format, isToday, isYesterday, isSameDay, differenceInMinutes, addMinutes } from 'date-fns';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -47,6 +53,169 @@ const GOOGLE_MAPS_SEARCH_URL = 'https://www.google.com/maps/search/?api=1&query=
 
 const formatLocationCoordinates = (latitude: number, longitude: number) =>
     `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+
+const ZoomableImage = ({ uri, onClose }: { uri: string; onClose: () => void }) => {
+    const scale = useSharedValue(1);
+    const savedScale = useSharedValue(1);
+
+    const translateX = useSharedValue(0);
+    const translateY = useSharedValue(0);
+    const savedTranslateX = useSharedValue(0);
+    const savedTranslateY = useSharedValue(0);
+
+    const pinchGesture = Gesture.Pinch()
+        .onUpdate((event) => {
+            scale.value = savedScale.value * event.scale;
+        })
+        .onEnd(() => {
+            if (scale.value < 1) {
+                scale.value = withTiming(1);
+                savedScale.value = 1;
+            } else if (scale.value > 5) {
+                scale.value = withTiming(5);
+                savedScale.value = 5;
+            } else {
+                savedScale.value = scale.value;
+            }
+        });
+
+    const panGesture = Gesture.Pan()
+        .onUpdate((event) => {
+            if (scale.value > 1) {
+                translateX.value = savedTranslateX.value + event.translationX;
+                translateY.value = savedTranslateY.value + event.translationY;
+            }
+        })
+        .onEnd(() => {
+            if (scale.value > 1) {
+                savedTranslateX.value = translateX.value;
+                savedTranslateY.value = translateY.value;
+            } else {
+                translateX.value = withTiming(0);
+                translateY.value = withTiming(0);
+                savedTranslateX.value = 0;
+                savedTranslateY.value = 0;
+            }
+        });
+
+    const doubleTapGesture = Gesture.Tap()
+        .numberOfTaps(2)
+        .onEnd(() => {
+            if (scale.value > 1) {
+                scale.value = withTiming(1);
+                savedScale.value = 1;
+                translateX.value = withTiming(0);
+                translateY.value = withTiming(0);
+                savedTranslateX.value = 0;
+                savedTranslateY.value = 0;
+            } else {
+                scale.value = withTiming(2.5);
+                savedScale.value = 2.5;
+            }
+        });
+
+    const singleTapGesture = Gesture.Tap()
+        .numberOfTaps(1)
+        .requireExternalGestureToFail(doubleTapGesture)
+        .onEnd(() => {
+            if (scale.value === 1) {
+                runOnJS(onClose)();
+            }
+        });
+
+    const composedGesture = Gesture.Simultaneous(
+        pinchGesture,
+        panGesture,
+        Gesture.Exclusive(doubleTapGesture, singleTapGesture)
+    );
+
+    const animatedStyle = useAnimatedStyle(() => {
+        return {
+            transform: [
+                { scale: scale.value },
+                { translateX: translateX.value / scale.value },
+                { translateY: translateY.value / scale.value },
+            ] as any,
+        };
+    });
+
+    return (
+        <GestureHandlerRootView style={{ flex: 1, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+            <GestureDetector gesture={composedGesture}>
+                <Reanimated.Image
+                    source={{ uri }}
+                    style={[{ width: '100%', height: '100%' }, animatedStyle as any]}
+                    resizeMode="contain"
+                />
+            </GestureDetector>
+        </GestureHandlerRootView>
+    );
+};
+
+const InlineMap = ({
+    latitude,
+    longitude,
+    isLive,
+    children,
+    onPress,
+    style,
+}: {
+    latitude: number;
+    longitude: number;
+    isLive?: boolean;
+    children?: React.ReactNode;
+    onPress?: () => void;
+    style?: any;
+}) => {
+    const [mapReady, setMapReady] = useState(false);
+    const { colors, isDarkMode } = useTheme();
+    const shimmerAnim = useRef(new Animated.Value(0.3)).current;
+
+    useEffect(() => {
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(shimmerAnim, {
+                    toValue: 0.8,
+                    duration: 800,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(shimmerAnim, {
+                    toValue: 0.3,
+                    duration: 800,
+                    useNativeDriver: true,
+                }),
+            ])
+        ).start();
+    }, [shimmerAnim]);
+
+    return (
+        <View style={[style, { overflow: 'hidden', position: 'relative' }]}>
+            <MapView
+                provider={PROVIDER_GOOGLE}
+                style={[StyleSheet.absoluteFillObject, { opacity: mapReady ? 1 : 0 }]}
+                liteMode={Platform.OS === 'android'}
+                initialRegion={{
+                    latitude,
+                    longitude,
+                    latitudeDelta: 0.005,
+                    longitudeDelta: 0.005,
+                }}
+                onMapReady={() => setMapReady(true)}
+                onPress={onPress}
+            >
+                {children}
+            </MapView>
+            {!mapReady && (
+                <View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDarkMode ? '#222' : '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
+                    <Animated.View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDarkMode ? '#333' : '#F3F4F6', opacity: shimmerAnim }]} />
+                    <View style={{ position: 'absolute', justifyContent: 'center', alignItems: 'center' }}>
+                        <Icon name="MapPin" size={32} color={colors.primary} style={{ opacity: 0.6 }} />
+                    </View>
+                </View>
+            )}
+        </View>
+    );
+};
 
 const ChatScreen = () => {
     const queryClient = useQueryClient();
@@ -72,12 +241,12 @@ const ChatScreen = () => {
     }, []);
     const chat = chats.find((c) => c.id === chatId);
     const isGroupChat = isGroupParam || chat?.type === 'group';
-    const chatCollection = routeCollectionName || (isGroupChat ? 'group_chats' : 'chats');
+    const chatCollection = routeCollectionName || (isGroupChat ? 'group_chats' : 'direct_chats');
     const clearedAt = currentUser ? chat?.clearedAt?.[currentUser.id] : undefined;
 
 
     const chatType = chatCollection === 'group_chats' ? 'group' : 'direct';
-    const { messages, loading, sendMessage, markAsRead } = useChatMessagesQuery(chatId, chatType);
+    const { messages, loading, sendMessage, markAsRead, loadMoreMessages, hasMore } = useChatMessagesQuery(chatId, chatType, clearedAt);
     const [inputText, setInputText] = useState('');
     const [sending, setSending] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -112,6 +281,11 @@ const ChatScreen = () => {
     const [showLiveMap, setShowLiveMap] = useState(false);
     const locationSubscription = useRef<Location.LocationSubscription | null>(null);
     const [activeSharersCount, setActiveSharersCount] = useState(0);
+    const [activeSharers, setActiveSharers] = useState<any[]>([]);
+    const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+    const [showLiveDurationModal, setShowLiveDurationModal] = useState(false);
+    const [selectedDuration, setSelectedDuration] = useState(15);
+    const [durationDropdownOpen, setDurationDropdownOpen] = useState(false);
 
     // Typing indicator state
     const [isTyping, setIsTyping] = useState(false);
@@ -184,7 +358,7 @@ const ChatScreen = () => {
     }, [chat]);
 
     // Get chat details
-    const otherParticipantUid = chat?.participants.find((uid) => uid !== currentUser?.id) || otherUserId;
+    const otherParticipantUid = currentUser ? (chat?.participants.find((uid) => uid !== currentUser.id) || otherUserId) : otherUserId;
     const otherParticipant = chat?.participantDetails?.[otherParticipantUid || ''];
 
     const displayName = chat?.type === 'group'
@@ -246,9 +420,10 @@ const ChatScreen = () => {
         }
     }, [chatId, messages.length, markAsRead]);
 
-    // Scroll to bottom on new messages
+    // Scroll to bottom on new messages (only if user is near the bottom)
+    const isNearBottom = useRef(true);
     useEffect(() => {
-        if (messages.length > 0) {
+        if (messages.length > 0 && isNearBottom.current) {
             setTimeout(() => {
                 flatListRef.current?.scrollToEnd({ animated: true });
             }, 100);
@@ -264,16 +439,28 @@ const ChatScreen = () => {
             if (data.photo_url) setLivePhoto(data.photo_url);
             const presence = typeof data.presence === 'string' ? data.presence.toLowerCase() : '';
             const lastSeenValue = data.last_seen_at;
-            
-            if (presence === 'online') { 
-                setLastSeenText('online'); 
-                return; 
+
+            // Enforce offline timeout override if last_seen_at is older than 2 minutes (120000ms)
+            let finalPresence = presence;
+            if (lastSeenValue) {
+                try {
+                    const ts = new Date(lastSeenValue);
+                    const diffMs = Date.now() - ts.getTime();
+                    if (diffMs > 120000) {
+                        finalPresence = 'offline';
+                    }
+                } catch {}
             }
-            if (presence === 'away') { 
-                setLastSeenText('away'); 
-                return; 
+
+            if (finalPresence === 'online') {
+                setLastSeenText('online');
+                return;
             }
-            
+            if (finalPresence === 'away') {
+                setLastSeenText('away');
+                return;
+            }
+
             if (lastSeenValue) {
                 try {
                     const ts = new Date(lastSeenValue);
@@ -282,11 +469,11 @@ const ChatScreen = () => {
                     else if (diffMs < 60 * 60 * 1000) setLastSeenText(`last seen ${Math.floor(diffMs / 60000)} min ago`);
                     else if (diffMs < 24 * 60 * 60 * 1000) setLastSeenText(`last seen ${Math.floor(diffMs / 3600000)}h ago`);
                     else setLastSeenText(`last seen ${format(ts, 'MMM d, h:mm a')}`);
-                } catch { 
-                    setLastSeenText(presence === 'offline' ? 'offline' : ''); 
+                } catch {
+                    setLastSeenText(finalPresence === 'offline' ? 'offline' : '');
                 }
-            } else { 
-                setLastSeenText(presence === 'offline' ? 'offline' : (presence || '')); 
+            } else {
+                setLastSeenText(finalPresence === 'offline' ? 'offline' : (finalPresence || ''));
             }
         };
         loadPresence();
@@ -425,17 +612,25 @@ const ChatScreen = () => {
         const fetchActiveSharers = async () => {
             const { data, error } = await supabase
                 .from('live_shares')
-                .select('*')
+                .select(`
+                    id, chat_id, chat_type, user_id, latitude, longitude, is_active, expires_at, updated_at, heading,
+                    profiles:user_id (
+                        name,
+                        photo_url
+                    )
+                `)
                 .eq('chat_id', chatId)
                 .eq('is_active', true)
-                .gt('updated_at', new Date(Date.now() - 3600000).toISOString());
+                .gt('expires_at', new Date().toISOString());
 
             if (error) return;
 
-            setActiveSharersCount(data?.length || 0);
+            const list = data || [];
+            setActiveSharers(list);
+            setActiveSharersCount(list.length);
 
             if (currentUser) {
-                const myShare = data?.find(s => s.user_id === currentUser.id);
+                const myShare = list.find(s => s.user_id === currentUser.id);
                 if (myShare && !isSharingLive) {
                     setIsSharingLive(true);
                     startLiveLocationHeaderResume();
@@ -449,7 +644,7 @@ const ChatScreen = () => {
         fetchActiveSharers();
 
         return () => { supabase.removeChannel(channel); };
-    }, [chatId, currentUser]);
+    }, [chatId, currentUser, isSharingLive]);
 
     const startLiveLocationHeaderResume = async () => {
         // Silently resume watcher if permissions allow
@@ -500,18 +695,9 @@ const ChatScreen = () => {
         }
     }, [chatId, currentUser, isTyping, chatCollection]);
 
-    // Handle text input
-    const handleTextChange = async (text: string) => {
+    // Handle text input — H5: removed haptics from keystrokes for performance
+    const handleTextChange = (text: string) => {
         setInputText(text);
-
-        try {
-            const hapticsEnabled = await getBooleanPreference(PREFERENCE_KEYS.hapticsEnabled, true);
-            if (hapticsEnabled) {
-                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }
-        } catch {
-            // Ignore
-        }
 
         // Mention logic
         if (chat?.type === 'group') {
@@ -588,10 +774,13 @@ const ChatScreen = () => {
         }
 
         try {
-            await sendMessage(textToSend, replyingTo || undefined, mentions);
+            const result = await sendMessage(textToSend, replyingTo || undefined, mentions);
             setReplyingTo(null);
-        } catch (error) {
-
+            if (result && result.status === 'pending') {
+                Alert.alert('Offline Mode', 'Your message has been saved locally and will be sent automatically when you are back online.');
+            }
+        } catch (error: any) {
+            Alert.alert('Error', error?.message || 'Failed to send message.');
             setInputText(textToSend); // Restore on error
         } finally {
             setSending(false);
@@ -637,6 +826,30 @@ const ChatScreen = () => {
 
     const sendImageMessage = async (imageUri: string) => {
         if (!currentUser || !chatId) return;
+
+        // Fetch name for optimistic message
+        const { data: userData } = await supabase.from('profiles').select('name').eq('id', currentUser.id).maybeSingle();
+        const uData: any = userData || {};
+        const senderName = uData.name || currentUser.user_metadata?.full_name || 'User';
+
+        // Optimistic Update
+        const tempId = `temp-${Date.now()}`;
+        queryClient.setQueryData<ChatMessage[]>(['messages', chatId], (old) => {
+            const list = old || [];
+            return [...list, {
+                id: tempId,
+                senderId: currentUser.id,
+                senderName: senderName,
+                type: 'image',
+                mediaUrl: imageUri,
+                status: 'pending',
+                readBy: {},
+                deliveredTo: [],
+                deletedFor: [],
+                createdAt: new Date(),
+            }];
+        });
+
         setUploading(true);
 
         try {
@@ -645,10 +858,6 @@ const ChatScreen = () => {
             const { success, url, error: uploadError } = await uploadFn(imageUri, currentUser.id, chatId);
             if (!success || !url) throw new Error(uploadError || 'Upload failed');
             const downloadUrl = url;
-
-            const { data: userData } = await supabase.from('profiles').select('name').eq('id', currentUser.id).maybeSingle();
-            const uData: any = userData || {};
-            const senderName = uData.name || currentUser.user_metadata?.full_name || 'User';
 
             await supabase.from('messages').insert({
                 chat_id: chatId,
@@ -664,24 +873,24 @@ const ChatScreen = () => {
 
             const parentTable = isGroup ? 'group_chats' : 'direct_chats';
 
-            // Get chat data to find participants and existing unread_count
+            // M5: Use RPC for atomic unread count increment
             const { data: chatData } = await supabase
                 .from(parentTable)
-                .select('participants, unread_count')
+                .select('participants')
                 .eq('id', chatId)
                 .maybeSingle();
 
-            let newUnread: any = {};
             if (chatData) {
                 const participants = chatData.participants || [];
-                const currentUnread = chatData.unread_count || {};
-                participants.forEach((pId: string) => {
+                for (const pId of participants) {
                     if (pId !== currentUser.id) {
-                        newUnread[pId] = (currentUnread[pId] || 0) + 1;
-                    } else {
-                        newUnread[pId] = 0;
+                        await supabase.rpc('increment_unread_count', {
+                            p_chat_id: chatId,
+                            p_chat_type: isGroup ? 'group' : 'direct',
+                            p_user_id: pId,
+                        });
                     }
-                });
+                }
             }
 
             await supabase
@@ -694,16 +903,15 @@ const ChatScreen = () => {
                         created_at: new Date().toISOString(),
                         type: 'image',
                     },
-                    unread_count: newUnread,
                     updated_at: new Date().toISOString(),
                 })
                 .eq('id', chatId);
 
-            // Invalidate React Query Cache to render immediately for sender
-            queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
-
         } catch (error) {
             Alert.alert('Error', 'Failed to send image.');
+            queryClient.setQueryData<ChatMessage[]>(['messages', chatId], (old) => {
+                return (old || []).filter(m => m.id !== tempId);
+            });
         } finally {
             setUploading(false);
         }
@@ -718,25 +926,30 @@ const ChatScreen = () => {
         return true;
     };
 
-    const updateLiveShareCoordinates = async (coords: { latitude: number; longitude: number; heading?: number | null }) => {
+    const updateLiveShareCoordinates = async (coords: { latitude: number; longitude: number; heading?: number | null }, expiresAt?: string) => {
         if (!currentUser || !chatId) {
             return;
         }
 
         try {
             const isGroup = chat?.type === 'group';
+            const payload: any = {
+                chat_id: chatId,
+                chat_type: isGroup ? 'group' : 'direct',
+                user_id: currentUser.id,
+                latitude: coords.latitude,
+                longitude: coords.longitude,
+                heading: coords.heading ?? null,
+                is_active: true,
+                updated_at: new Date().toISOString(),
+            };
+            if (expiresAt) {
+                payload.expires_at = expiresAt;
+            }
+
             await supabase
                 .from('live_shares')
-                .upsert({
-                    chat_id: chatId,
-                    chat_type: isGroup ? 'group' : 'direct',
-                    user_id: currentUser.id,
-                    latitude: coords.latitude,
-                    longitude: coords.longitude,
-                    heading: coords.heading ?? null,
-                    is_active: true,
-                    updated_at: new Date().toISOString(),
-                }, { onConflict: 'chat_id,user_id' });
+                .upsert(payload, { onConflict: 'chat_id,user_id' });
         } catch (error) {
             // Error updating live location
         }
@@ -801,6 +1014,28 @@ const ChatScreen = () => {
             const isGroup = chat?.type === 'group';
             const senderName = userData?.name || currentUser.user_metadata?.full_name || 'User';
 
+            // Optimistic Update
+            const tempId = `temp-${Date.now()}`;
+            queryClient.setQueryData<ChatMessage[]>(['messages', chatId], (old) => {
+                const list = old || [];
+                return [...list, {
+                    id: tempId,
+                    senderId: currentUser.id,
+                    senderName: senderName,
+                    type: 'location',
+                    location: {
+                        latitude: locationData.coords.latitude,
+                        longitude: locationData.coords.longitude,
+                        address: address,
+                    },
+                    status: 'pending',
+                    readBy: {},
+                    deliveredTo: [],
+                    deletedFor: [],
+                    createdAt: new Date(),
+                }];
+            });
+
             await supabase.from('messages').insert({
                 chat_id: chatId,
                 chat_type: isGroup ? 'group' : 'direct',
@@ -820,24 +1055,24 @@ const ChatScreen = () => {
 
             const parentTable = isGroup ? 'group_chats' : 'direct_chats';
 
-            // Get chat data to find participants and existing unread_count
+            // M5: Use RPC for atomic unread count increment
             const { data: chatData } = await supabase
                 .from(parentTable)
-                .select('participants, unread_count')
+                .select('participants')
                 .eq('id', chatId)
                 .maybeSingle();
 
-            let newUnread: any = {};
             if (chatData) {
                 const participants = chatData.participants || [];
-                const currentUnread = chatData.unread_count || {};
-                participants.forEach((pId: string) => {
+                for (const pId of participants) {
                     if (pId !== currentUser.id) {
-                        newUnread[pId] = (currentUnread[pId] || 0) + 1;
-                    } else {
-                        newUnread[pId] = 0;
+                        await supabase.rpc('increment_unread_count', {
+                            p_chat_id: chatId,
+                            p_chat_type: isGroup ? 'group' : 'direct',
+                            p_user_id: pId,
+                        });
                     }
-                });
+                }
             }
 
             await supabase
@@ -850,13 +1085,9 @@ const ChatScreen = () => {
                         created_at: new Date().toISOString(),
                         type: 'location',
                     },
-                    unread_count: newUnread,
                     updated_at: new Date().toISOString(),
                 })
                 .eq('id', chatId);
-
-            // Invalidate React Query Cache to render immediately for sender
-            queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
 
         } catch (error) {
             Alert.alert('Error', 'Failed to get location.');
@@ -890,11 +1121,97 @@ const ChatScreen = () => {
                                 accuracy: Location.Accuracy.Balanced,
                             });
 
-                            await updateLiveShareCoordinates(initialLocation.coords);
+                            const expiresAt = new Date(Date.now() + durationMinutes * 60000).toISOString();
+
+                            await updateLiveShareCoordinates(initialLocation.coords, expiresAt);
                             startLocationWatcher();
 
-                        } catch (error) {
+                            // Send a live location message to the chat
+                            const userDoc = await supabase.from('profiles').select('name').eq('id', currentUser.id).maybeSingle();
+                            const userData: any = userDoc?.data || {};
+                            const isGroup = chat?.type === 'group';
+                            const senderName = userData?.name || currentUser.user_metadata?.full_name || 'User';
 
+                            // Optimistic update for live location
+                            const tempId = `temp-${Date.now()}`;
+                            queryClient.setQueryData<ChatMessage[]>(['messages', chatId], (old) => {
+                                const list = old || [];
+                                return [...list, {
+                                    id: tempId,
+                                    senderId: currentUser.id,
+                                    senderName: senderName,
+                                    type: 'location',
+                                    location: {
+                                        latitude: initialLocation.coords.latitude,
+                                        longitude: initialLocation.coords.longitude,
+                                        isLive: true,
+                                        expires_at: expiresAt,
+                                        duration: durationMinutes,
+                                    },
+                                    status: 'pending',
+                                    readBy: {},
+                                    deliveredTo: [],
+                                    deletedFor: [],
+                                    createdAt: new Date(),
+                                }];
+                            });
+
+                            await supabase.from('messages').insert({
+                                chat_id: chatId,
+                                chat_type: isGroup ? 'group' : 'direct',
+                                sender_id: currentUser.id,
+                                sender_name: senderName,
+                                type: 'location',
+                                location: {
+                                    latitude: initialLocation.coords.latitude,
+                                    longitude: initialLocation.coords.longitude,
+                                    isLive: true,
+                                    expires_at: expiresAt,
+                                    duration: durationMinutes,
+                                },
+                                status: 'sent',
+                                read_by: {},
+                                delivered_to: [],
+                                deleted_for: [],
+                            });
+
+                            const parentTable = isGroup ? 'group_chats' : 'direct_chats';
+
+                            // M5: Use RPC for atomic unread count increment
+                            const { data: chatData } = await supabase
+                                .from(parentTable)
+                                .select('participants')
+                                .eq('id', chatId)
+                                .maybeSingle();
+
+                            if (chatData) {
+                                const participants = chatData.participants || [];
+                                for (const pId of participants) {
+                                    if (pId !== currentUser.id) {
+                                        await supabase.rpc('increment_unread_count', {
+                                            p_chat_id: chatId,
+                                            p_chat_type: isGroup ? 'group' : 'direct',
+                                            p_user_id: pId,
+                                        });
+                                    }
+                                }
+                            }
+
+                            await supabase
+                                .from(parentTable)
+                                .update({
+                                    last_message: {
+                                        text: '📍 Live Location',
+                                        sender_id: currentUser.id,
+                                        sender_name: senderName,
+                                        created_at: new Date().toISOString(),
+                                        type: 'location',
+                                    },
+                                    updated_at: new Date().toISOString(),
+                                })
+                                .eq('id', chatId);
+
+                        } catch (error) {
                             setIsSharingLive(false);
                         }
                     }
@@ -947,9 +1264,31 @@ const ChatScreen = () => {
             try {
                 await supabase
                     .from('live_shares')
-                    .update({ is_active: false })
+                    .update({ is_active: false, expires_at: new Date().toISOString() })
                     .eq('chat_id', chatId)
                     .eq('user_id', currentUser.id);
+
+                // Find the active live location message and set its expires_at to now
+                const { data: activeMsg } = await supabase
+                    .from('messages')
+                    .select('id, location')
+                    .eq('chat_id', chatId)
+                    .eq('sender_id', currentUser.id)
+                    .eq('type', 'location')
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                if (activeMsg && activeMsg.location) {
+                    const locObj = typeof activeMsg.location === 'string' ? JSON.parse(activeMsg.location) : activeMsg.location;
+                    if (locObj.isLive) {
+                        locObj.expires_at = new Date().toISOString();
+                        await supabase
+                            .from('messages')
+                            .update({ location: locObj })
+                            .eq('id', activeMsg.id);
+                    }
+                }
             } catch (error) {
                 // Error stopping live sharing
             }
@@ -975,6 +1314,25 @@ const ChatScreen = () => {
     };
 
 
+
+    const handleReplyPress = (replyToId: string) => {
+        const index = messages.findIndex(m => m.id === replyToId);
+        if (index !== -1) {
+            try {
+                flatListRef.current?.scrollToIndex({
+                    index,
+                    animated: true,
+                    viewPosition: 0.5,
+                });
+                setHighlightedMessageId(replyToId);
+                setTimeout(() => {
+                    setHighlightedMessageId(null);
+                }, 1000);
+            } catch (e) {
+                // Fallback
+            }
+        }
+    };
 
     // Long press handler
     const handleLongPress = (message: ChatMessage) => {
@@ -1012,9 +1370,10 @@ const ChatScreen = () => {
     const handleDelete = (forEveryone: boolean = false) => {
         if (!selectedMessage || !currentUser) return;
 
+        // L2: Use Date directly, no .toDate() Firestore remnant
         const canDeleteForEveryone = selectedMessage.senderId === currentUser.id &&
             selectedMessage.createdAt &&
-            differenceInMinutes(new Date(), (selectedMessage.createdAt as any).toDate ? (selectedMessage.createdAt as any).toDate() : new Date(selectedMessage.createdAt as any)) < 60;
+            differenceInMinutes(new Date(), new Date(selectedMessage.createdAt as any)) < 60;
 
         Alert.alert(
             'Delete Message',
@@ -1027,34 +1386,51 @@ const ChatScreen = () => {
                     text: 'Delete',
                     style: 'destructive',
                     onPress: async () => {
+                        // Optimistic Update
+                        queryClient.setQueryData<ChatMessage[]>(['messages', chatId], (old) => {
+                            if (!old) return [];
+                            return old.map((m) => {
+                                if (m.id === selectedMessage.id) {
+                                    if (forEveryone && canDeleteForEveryone) {
+                                        return {
+                                            ...m,
+                                            deletedForEveryoneAt: new Date(),
+                                            text: '',
+                                            mediaUrl: undefined,
+                                        };
+                                    } else {
+                                        return {
+                                            ...m,
+                                            deletedFor: [...(m.deletedFor || []), currentUser.id],
+                                        };
+                                    }
+                                }
+                                return m;
+                            });
+                        });
+
                         try {
                             if (forEveryone && canDeleteForEveryone) {
-                                await supabase
-                                    .from('messages')
-                                    .update({
-                                        deleted_for_everyone_at: new Date().toISOString(),
-                                        text: '',
-                                        media_url: null,
-                                    })
-                                    .eq('id', selectedMessage.id);
+                                // D2: Use RPC for atomic delete-for-everyone
+                                const { error: rpcError } = await supabase.rpc('delete_message_for_everyone', {
+                                    p_message_id: selectedMessage.id,
+                                    p_sender_id: currentUser.id,
+                                });
+                                if (rpcError) throw rpcError;
                             } else {
-                                const { data: msg } = await supabase
-                                    .from('messages')
-                                    .select('deleted_for')
-                                    .eq('id', selectedMessage.id)
-                                    .single();
-
-                                const deletedFor = msg?.deleted_for || [];
-                                if (!deletedFor.includes(currentUser.id)) {
-                                    deletedFor.push(currentUser.id);
-                                    await supabase
-                                        .from('messages')
-                                        .update({ deleted_for: deletedFor })
-                                        .eq('id', selectedMessage.id);
-                                }
+                                // D1: Use RPC for atomic delete-for-me (no race condition)
+                                const { error: rpcError } = await supabase.rpc('delete_message_for_user', {
+                                    p_message_id: selectedMessage.id,
+                                    p_user_id: currentUser.id,
+                                });
+                                if (rpcError) throw rpcError;
                             }
                         } catch (error) {
-                            // Error handling
+                            // D5: Proper error handling instead of silent swallowing
+                            if (__DEV__) console.error('[handleDelete] Error:', error);
+                            Alert.alert('Error', 'Failed to delete message. Please try again.');
+                            // Revert optimistic update on failure
+                            queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
                         }
                     },
                 },
@@ -1093,7 +1469,7 @@ const ChatScreen = () => {
         return 'pending';
     };
 
-    // Clear all messages in chat
+    // Clear all messages in chat — D3/C5: Fixed to use correct table + RPC
     const handleClearChat = () => {
         Alert.alert(
             'Clear Chat',
@@ -1106,15 +1482,67 @@ const ChatScreen = () => {
                     onPress: async () => {
                         try {
                             if (!currentUser || !chatId) return;
-                            const table = 'chats';
+                            const chatTypeForRpc = (chat?.type === 'group' || isGroupParam) ? 'group' : 'direct';
 
-                            const { data } = await supabase.from(table).select('cleared_at').eq('id', chatId).maybeSingle();
-                            const clearedAt = data?.cleared_at || {};
-                            clearedAt[currentUser.id] = new Date().toISOString();
+                            // Use RPC for atomic clear in the backend
+                            const { error: rpcError } = await supabase.rpc('clear_chat_for_user', {
+                                p_chat_id: chatId,
+                                p_chat_type: chatTypeForRpc,
+                                p_user_id: currentUser.id,
+                            });
+                            if (rpcError) throw rpcError;
 
-                            await supabase.from(table).update({ cleared_at: clearedAt }).eq('id', chatId);
+                            const nowStr = new Date().toISOString();
+                            const nowMs = Date.now();
+                            const parentTable = chatTypeForRpc === 'group' ? 'group_chats' : 'direct_chats';
+
+                            // Update local database immediately (cleared_at and delete local messages)
+                            try {
+                                await database.write(async () => {
+                                    // 1. Update local chat cleared_at
+                                    try {
+                                        const chatRecord = await database.get(parentTable).find(chatId);
+                                        await chatRecord.update((rec: any) => {
+                                            let currentClearedAt: Record<string, string> = {};
+                                            if (rec.clearedAtRaw) {
+                                                try {
+                                                    currentClearedAt = JSON.parse(rec.clearedAtRaw) || {};
+                                                } catch (e) {}
+                                            }
+                                            currentClearedAt[currentUser.id] = nowStr;
+                                            rec.clearedAtRaw = JSON.stringify(currentClearedAt);
+                                            rec._raw.updated_at = nowMs;
+                                        });
+                                    } catch (chatFindErr) {
+                                        if (__DEV__) console.warn('[handleClearChat] Chat record not found locally to update cleared_at');
+                                    }
+
+                                    // 2. Delete messages of this chat locally
+                                    const messagesCollection = database.get('messages');
+                                    const localMsgs = await messagesCollection.query(
+                                        Q.where('chat_id', chatId),
+                                        Q.where('created_at', Q.lte(nowMs))
+                                    ).fetch();
+
+                                    const batch = localMsgs.map(m => m.prepareDestroyPermanently());
+                                    if (batch.length > 0) {
+                                        await database.batch(...batch);
+                                    }
+                                });
+                            } catch (dbErr) {
+                                console.error('[handleClearChat] Local database write failed:', dbErr);
+                            }
+
+                            // Clear local cache
+                            queryClient.setQueryData<ChatMessage[]>(['messages', chatId], []);
+
+                            // Invalidate chats to update clearedAt immediately on UI/Cache
+                            queryClient.invalidateQueries({ queryKey: ['chats', currentUser.id] });
+                            queryClient.invalidateQueries({ queryKey: ['groupChats', currentUser.id] });
+
                             setShowChatMenu(false);
                         } catch (error) {
+                            if (__DEV__) console.error('[handleClearChat] Error:', error);
                             Alert.alert('Error', 'Failed to clear chat.');
                         }
                     },
@@ -1136,7 +1564,7 @@ const ChatScreen = () => {
         });
     };
 
-    // Handle bulk delete
+    // Handle bulk delete — using RPCs for atomic operations
     const handleBulkDelete = (forEveryone: boolean = false) => {
         if (selectedMessages.size === 0) return;
 
@@ -1151,32 +1579,57 @@ const ChatScreen = () => {
                     text: 'Delete',
                     style: 'destructive',
                     onPress: async () => {
-                        try {
-                            if (!currentUser) return;
-                            const ids = Array.from(selectedMessages);
-                            if (forEveryone) {
-                                await supabase
-                                    .from('messages')
-                                    .update({
-                                        deleted_for_everyone_at: new Date().toISOString(),
-                                        text: '',
-                                        media_url: null,
-                                    })
-                                    .in('id', ids);
-                            } else {
-                                for (const id of ids) {
-                                    const { data: msg } = await supabase.from('messages').select('deleted_for').eq('id', id).single();
-                                    const deletedFor = msg?.deleted_for || [];
-                                    if (!deletedFor.includes(currentUser.id)) {
-                                        deletedFor.push(currentUser.id);
-                                        await supabase.from('messages').update({ deleted_for: deletedFor }).eq('id', id);
+                        const ids = Array.from(selectedMessages);
+
+                        // Optimistic Update
+                        queryClient.setQueryData<ChatMessage[]>(['messages', chatId], (old) => {
+                            if (!old) return [];
+                            return old.map((m) => {
+                                if (ids.includes(m.id)) {
+                                    if (forEveryone) {
+                                        return {
+                                            ...m,
+                                            deletedForEveryoneAt: new Date(),
+                                            text: '',
+                                            mediaUrl: undefined,
+                                        };
+                                    } else {
+                                        return {
+                                            ...m,
+                                            deletedFor: [...(m.deletedFor || []), currentUser!.id],
+                                        };
                                     }
                                 }
+                                return m;
+                            });
+                        });
+
+                        try {
+                            if (!currentUser) return;
+                            if (forEveryone) {
+                                // Use RPC for each message (atomic per message)
+                                await Promise.all(ids.map(id =>
+                                    supabase.rpc('delete_message_for_everyone', {
+                                        p_message_id: id,
+                                        p_sender_id: currentUser.id,
+                                    })
+                                ));
+                            } else {
+                                // Use RPC for atomic delete-for-me
+                                await Promise.all(ids.map(id =>
+                                    supabase.rpc('delete_message_for_user', {
+                                        p_message_id: id,
+                                        p_user_id: currentUser.id,
+                                    })
+                                ));
                             }
+                        } catch (error) {
+                            if (__DEV__) console.error('[handleBulkDelete] Error:', error);
+                            Alert.alert('Error', 'Failed to delete messages.');
+                            queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+                        } finally {
                             setSelectedMessages(new Set());
                             setIsSelectionMode(false);
-                        } catch (error) {
-                            Alert.alert('Error', 'Failed to delete messages.');
                         }
                     },
                 },
@@ -1190,20 +1643,22 @@ const ChatScreen = () => {
         setSelectedMessages(new Set());
     };
 
+    // L1: Removed .toDate() Firestore remnant
     const formatMessageTime = (timestamp: any) => {
         if (!timestamp) return '';
         try {
-            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+            const date = new Date(timestamp);
             return format(date, 'h:mm a');
         } catch {
             return '';
         }
     };
 
+    // L1: Removed .toDate() Firestore remnant
     const formatDayHeader = (timestamp: any) => {
         if (!timestamp) return '';
         try {
-            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+            const date = new Date(timestamp);
             if (isToday(date)) return 'Today';
             if (isYesterday(date)) return 'Yesterday';
             return format(date, 'MMMM d, yyyy');
@@ -1212,29 +1667,31 @@ const ChatScreen = () => {
         }
     };
 
+    // L1: Removed .toDate() Firestore remnant
     const shouldShowDayHeader = (message: ChatMessage, index: number) => {
         if (index === 0) return true;
         const prevMessage = messages[index - 1];
         if (!message.createdAt || !prevMessage?.createdAt) return false;
 
-        const msgDate = (message.createdAt as any).toDate ? (message.createdAt as any).toDate() : new Date(message.createdAt as any);
-        const prevDate = (prevMessage.createdAt as any).toDate ? (prevMessage.createdAt as any).toDate() : new Date(prevMessage.createdAt as any);
+        const msgDate = new Date(message.createdAt as any);
+        const prevDate = new Date(prevMessage.createdAt as any);
 
         return !isSameDay(msgDate, prevDate);
     };
 
-    const renderStatusIcon = (status: string | null) => {
+    const renderStatusIcon = (status: string | null, customColor?: string) => {
         if (!status) return null;
 
+        const defaultColor = customColor || "rgba(255,255,255,0.7)";
         switch (status) {
             case 'pending':
-                return <Icon name="Clock" size={14} color="rgba(255,255,255,0.7)" />;
+                return <Icon name="Clock" size={14} color={defaultColor} />;
             case 'sent':
-                return <Icon name="Check" size={14} color="rgba(255,255,255,0.7)" />;
+                return <Icon name="Check" size={14} color={defaultColor} />;
             case 'delivered':
-                return <Icon name="Checks" size={14} color="rgba(255,255,255,0.7)" />;
+                return <Icon name="Checks" size={14} color={defaultColor} />;
             case 'read':
-                return <Icon name="Checks" size={14} color="#60A5FA" />;
+                return <Icon name="Checks" size={14} color="#53BDEB" />;
             default:
                 return null;
         }
@@ -1373,6 +1830,11 @@ const ChatScreen = () => {
         const showSenderAvatar = !isOwn && chat?.type === 'group';
         const senderPhoto = chat?.participantDetails?.[item.senderId]?.photoURL || undefined;
 
+        // Custom colors for own messages to avoid purple and ensure readability of blue ticks
+        const ownBubbleBg = isDarkMode ? '#005C4B' : '#D9FDD3';
+        const ownTextColor = isDarkMode ? '#FFFFFF' : '#111B21';
+        const ownTimeColor = isDarkMode ? 'rgba(255,255,255,0.6)' : 'rgba(17,27,33,0.6)';
+
         return (
             <View>
                 {showDayHeader && (
@@ -1383,161 +1845,255 @@ const ChatScreen = () => {
                     </View>
                 )}
 
-                <Pressable onLongPress={() => handleLongPress(item)} delayLongPress={300}>
-                    <View style={[
-                        styles.messageRow,
-                        isOwn && styles.ownMessageRow,
-                        showSenderAvatar && { paddingLeft: 4, alignItems: 'flex-start' }
-                    ]}>
-                        {showSenderAvatar && (
-                            <TouchableOpacity
-                                onPress={() => {
-                                    if (item.senderId) {
-                                        router.push({ pathname: '/profile/[id]', params: { id: item.senderId } });
+                <View style={[
+                    styles.messageRow,
+                    isOwn && styles.ownMessageRow,
+                    showSenderAvatar && { paddingLeft: 4, alignItems: 'flex-start' }
+                ]}>
+                    {showSenderAvatar && (
+                        <TouchableOpacity
+                            onPress={() => {
+                                if (item.senderId) {
+                                    router.push({ pathname: '/profile/[id]', params: { id: item.senderId } });
+                                }
+                            }}
+                            activeOpacity={0.7}
+                        >
+                            <DefaultAvatar
+                                uri={senderPhoto}
+                                name={item.senderName}
+                                size={32}
+                                style={{ marginRight: 8, marginTop: 2 }}
+                            />
+                        </TouchableOpacity>
+                    )}
+                    <Pressable
+                        onPress={() => {
+                            if (item.type === 'image' && item.mediaUrl) {
+                                setViewingImage(item.mediaUrl);
+                            } else if (item.type === 'location' && item.location) {
+                                if (item.location.isLive) {
+                                    const isLiveActive = item.location.expires_at && new Date(item.location.expires_at) > new Date();
+                                    if (isLiveActive) {
+                                        setShowLiveMap(true);
                                     }
-                                }}
-                                activeOpacity={0.7}
+                                } else {
+                                    openLocationInMaps(item.location.latitude, item.location.longitude);
+                                }
+                            } else if (item.type === 'trip_share' && (item as any).tripId) {
+                                router.push({ pathname: '/trip/[id]', params: { id: (item as any).tripId } });
+                            }
+                        }}
+                        onLongPress={() => handleLongPress(item)}
+                        delayLongPress={300}
+                        style={({ pressed }) => [
+                            styles.messageBubble,
+                            isOwn ? styles.ownBubble : styles.otherBubble,
+                            { backgroundColor: isOwn ? ownBubbleBg : bubbleOtherBg },
+                            shadowSoft,
+                            (item.type === 'image' || item.type === 'location') && styles.mediaBubble,
+                            pressed && { opacity: 0.85 }
+                        ]}
+                    >
+                        {item.id === highlightedMessageId && (
+                            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.1)', borderRadius: 12, zIndex: 10 }]} pointerEvents="none" />
+                        )}
+                        {showSenderAvatar && (
+                            <Text style={[styles.senderInBubbleName, { color: colors.primary }]}>
+                                {item.senderName || 'User'}
+                            </Text>
+                        )}
+                        {/* Reply preview */}
+                        {item.replyTo && (
+                            <TouchableOpacity
+                                onPress={() => handleReplyPress(item.replyTo!.messageId)}
+                                style={[styles.replyPreview, { borderLeftColor: isOwn ? (isDarkMode ? '#fff' : '#005C4B') : colors.primary }]}
                             >
-                                <DefaultAvatar
-                                    uri={senderPhoto}
-                                    name={item.senderName}
-                                    size={32}
-                                    style={{ marginRight: 8, marginTop: 2 }}
-                                />
+                                <Text style={[styles.replyName, { color: isOwn ? (isDarkMode ? 'rgba(255,255,255,0.8)' : '#005C4B') : colors.primary }]}>
+                                    Reply
+                                </Text>
+                                <Text
+                                    style={[styles.replyText, { color: isOwn ? (isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(17,27,33,0.7)') : colors.textSecondary }]}
+                                    numberOfLines={1}
+                                >
+                                    {item.replyTo.text}
+                                </Text>
                             </TouchableOpacity>
                         )}
-                        <View
-                            style={[
-                                styles.messageBubble,
-                                isOwn ? styles.ownBubble : styles.otherBubble,
-                                { backgroundColor: isOwn ? colors.primary : bubbleOtherBg },
-                                shadowSoft,
-                                (item.type === 'image' || item.type === 'location') && styles.mediaBubble,
-                            ]}
-                        >
-                            {showSenderAvatar && (
-                                <Text style={[styles.senderInBubbleName, { color: colors.primary }]}>
-                                    {item.senderName || 'User'}
-                                </Text>
-                            )}
-                            {/* Reply preview */}
-                            {item.replyTo && (
-                                <View style={[styles.replyPreview, { borderLeftColor: isOwn ? '#fff' : colors.primary }]}>
-                                    <Text style={[styles.replyName, { color: isOwn ? 'rgba(255,255,255,0.8)' : colors.primary }]}>
-                                        Reply
-                                    </Text>
-                                    <Text
-                                        style={[styles.replyText, { color: isOwn ? 'rgba(255,255,255,0.7)' : colors.textSecondary }]}
-                                        numberOfLines={1}
-                                    >
-                                        {item.replyTo.text}
-                                    </Text>
-                                </View>
-                            )}
 
-                            {/* Text content - FIXED: Was missing */}
-                            {item.text && !item.deletedForEveryoneAt && (
-                                <Text style={[
-                                    styles.messageText,
-                                    { color: isOwn ? '#fff' : colors.text, marginBottom: (item.type !== 'text') ? 4 : 0 }
-                                ]}>
-                                    {item.text}
-                                </Text>
-                            )}
+                        {/* Text content */}
+                        {item.text && !item.deletedForEveryoneAt && (
+                            <Text style={[
+                                styles.messageText,
+                                { color: isOwn ? ownTextColor : colors.text, marginBottom: (item.type !== 'text') ? 4 : 0 }
+                            ]}>
+                                {item.text}
+                            </Text>
+                        )}
 
-                            {/* Image message */}
-                            {item.type === 'image' && item.mediaUrl && (
-                                <TouchableOpacity onPress={() => setViewingImage(item.mediaUrl!)}>
+                        {/* Image message */}
+                        {item.type === 'image' && item.mediaUrl && (
+                            <Image
+                                source={{ uri: item.mediaUrl }}
+                                style={styles.messageImage}
+                                contentFit="cover"
+                                transition={200}
+                            />
+                        )}
+
+                        {/* Location message */}
+                        {item.type === 'location' && item.location && (
+                            <View style={styles.bubbleMapContainer}>
+                                {item.location.isLive ? (
+                                    (() => {
+                                        const activeShare = activeSharers.find(s => s.user_id === item.senderId);
+                                        const isLiveActive = item.location!.expires_at && new Date(item.location!.expires_at) > new Date();
+
+                                        if (isLiveActive) {
+                                            const coords = activeShare ? {
+                                                latitude: activeShare.latitude,
+                                                longitude: activeShare.longitude,
+                                            } : {
+                                                latitude: item.location!.latitude,
+                                                longitude: item.location!.longitude,
+                                            };
+                                            const markerPhoto = activeShare?.profiles?.photo_url;
+                                            const markerName = activeShare?.profiles?.name || item.senderName;
+
+                                            return (
+                                                <View style={styles.bubbleMapWrapper}>
+                                                    <InlineMap
+                                                        latitude={coords.latitude}
+                                                        longitude={coords.longitude}
+                                                        isLive={true}
+                                                        style={styles.bubbleMap}
+                                                        onPress={() => setShowLiveMap(true)}
+                                                    >
+                                                        <Marker coordinate={coords}>
+                                                            <View style={styles.bubbleMarkerContainer}>
+                                                                {markerPhoto ? (
+                                                                    <Image
+                                                                        source={{ uri: markerPhoto }}
+                                                                        style={[styles.bubbleMarkerAvatar, { borderColor: isOwn ? colors.primary : '#fff' }]}
+                                                                        contentFit="cover"
+                                                                    />
+                                                                ) : (
+                                                                    <View style={[styles.bubbleMarkerAvatar, { backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center', borderColor: '#fff' }]}>
+                                                                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>
+                                                                            {(markerName || 'U').charAt(0).toUpperCase()}
+                                                                        </Text>
+                                                                    </View>
+                                                                )}
+                                                                <View style={styles.bubbleMarkerPin} />
+                                                            </View>
+                                                        </Marker>
+                                                    </InlineMap>
+                                                    <View style={styles.bubbleMapInfo}>
+                                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' }} />
+                                                            <Text style={[styles.locationLabel, { color: isOwn ? ownTextColor : colors.text }]}>
+                                                                Live Location
+                                                            </Text>
+                                                        </View>
+                                                        <Text style={[styles.locationAddress, { color: isOwn ? ownTimeColor : colors.textSecondary }]}>
+                                                            Sharing live location...
+                                                        </Text>
+                                                        {isOwn && (
+                                                            <TouchableOpacity
+                                                                style={styles.stopLiveBubbleBtn}
+                                                                onPress={() => stopLiveSharing(true)}
+                                                            >
+                                                                <Text style={styles.stopLiveBubbleText}>Stop Sharing</Text>
+                                                            </TouchableOpacity>
+                                                        )}
+                                                    </View>
+                                                </View>
+                                            );
+                                        } else {
+                                            return (
+                                                <View style={[styles.locationContainer, { padding: 12 }]}>
+                                                    <View style={[styles.locationMapPreview, { backgroundColor: isDarkMode ? '#252525' : '#E5E7EB' }]}>
+                                                        <Icon name="Radio" size={28} color={colors.textSecondary} />
+                                                    </View>
+                                                    <View style={styles.locationInfo}>
+                                                        <Text style={[styles.locationLabel, { color: isOwn ? ownTextColor : colors.text }]}>
+                                                            Live location ended
+                                                        </Text>
+                                                        <Text style={[styles.locationAddress, { color: isOwn ? ownTimeColor : colors.textSecondary }]}>
+                                                            Sharing ended
+                                                        </Text>
+                                                    </View>
+                                                </View>
+                                            );
+                                        }
+                                    })()
+                                ) : (
+                                    <View style={styles.bubbleMapWrapper}>
+                                        <InlineMap
+                                            latitude={item.location.latitude}
+                                            longitude={item.location.longitude}
+                                            style={styles.bubbleMap}
+                                            onPress={() => openLocationInMaps(item.location!.latitude, item.location!.longitude)}
+                                        >
+                                            <Marker coordinate={{ latitude: item.location.latitude, longitude: item.location.longitude }} />
+                                        </InlineMap>
+                                        <View style={styles.bubbleMapInfo}>
+                                            <Text style={[styles.locationLabel, { color: isOwn ? ownTextColor : colors.text }]}>
+                                                📍 Shared Location
+                                            </Text>
+                                            {item.location.address && (
+                                                <Text style={[styles.locationAddress, { color: isOwn ? ownTimeColor : colors.textSecondary }]} numberOfLines={2}>
+                                                    {item.location.address}
+                                                </Text>
+                                            )}
+                                            <Text style={[styles.locationCoordinates, { color: isOwn ? ownTimeColor : colors.textSecondary }]}>
+                                                {formatLocationCoordinates(item.location.latitude, item.location.longitude)}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                )}
+                            </View>
+                        )}
+
+                        {/* Trip Share message */}
+                        {item.type === 'trip_share' && (
+                            <View style={styles.tripShareContainer}>
+                                {(item as any).tripImage && (
                                     <Image
-                                        source={{ uri: item.mediaUrl }}
-                                        style={styles.messageImage}
+                                        source={{ uri: (item as any).tripImage }}
+                                        style={styles.tripShareImage}
                                         contentFit="cover"
                                         transition={200}
                                     />
-                                </TouchableOpacity>
-                            )}
-
-                            {/* Location message */}
-                            {item.type === 'location' && item.location && (
-                                <TouchableOpacity
-                                    onPress={() => openLocationInMaps(item.location!.latitude, item.location!.longitude)}
-                                    style={styles.locationContainer}
-                                >
-                                    <View style={styles.locationMapPreview}>
-                                        <Icon name="MapPin" size={40} color={colors.primary} />
-                                    </View>
-                                    <View style={styles.locationInfo}>
-                                        <Text style={[styles.locationLabel, { color: isOwn ? '#fff' : colors.text }]}>
-                                            📍 Shared Location
-                                        </Text>
-                                        {item.location.address && (
-                                            <Text style={[styles.locationAddress, { color: isOwn ? 'rgba(255,255,255,0.8)' : colors.textSecondary }]} numberOfLines={2}>
-                                                {item.location.address}
-                                            </Text>
-                                        )}
-                                        <Text style={[styles.locationCoordinates, { color: isOwn ? 'rgba(255,255,255,0.72)' : colors.textSecondary }]}>
-                                            {formatLocationCoordinates(item.location.latitude, item.location.longitude)}
-                                        </Text>
-                                        <Text style={[styles.locationTap, { color: isOwn ? 'rgba(255,255,255,0.6)' : colors.primary }]}>
-                                            Tap to open in Google Maps
-                                        </Text>
-                                    </View>
-                                </TouchableOpacity>
-                            )}
-
-
-
-                            {/* Trip Share message */}
-                            {item.type === 'trip_share' && (
-                                <TouchableOpacity
-                                    onPress={() => {
-                                        if ((item as any).tripId) {
-                                            router.push({ pathname: '/trip/[id]', params: { id: (item as any).tripId } });
-                                        }
-                                    }}
-                                    style={styles.tripShareContainer}
-                                >
-                                    {(item as any).tripImage && (
-                                        <Image
-                                            source={{ uri: (item as any).tripImage }}
-                                            style={styles.tripShareImage}
-                                            contentFit="cover"
-                                            transition={200}
-                                        />
-                                    )}
-                                    <View style={styles.tripShareInfo}>
-                                        <Text style={[styles.tripShareLabel, { color: isOwn ? 'rgba(255,255,255,0.8)' : colors.primary }]}>
-                                            🗺️ Shared Trip
-                                        </Text>
-                                        <Text style={[styles.tripShareTitle, { color: isOwn ? '#fff' : colors.text }]} numberOfLines={2}>
-                                            {(item as any).tripTitle || 'Trip'}
-                                        </Text>
-                                        <Text style={[styles.tripShareTap, { color: isOwn ? 'rgba(255,255,255,0.6)' : colors.primary }]}>
-                                            Tap to view trip
-                                        </Text>
-                                    </View>
-                                </TouchableOpacity>
-                            )}
-
-
-
-
-
-                            {/* Timestamp and status */}
-                            <View style={styles.messageFooter}>
-                                {item.editedAt && (
-                                    <Text style={[styles.editedLabel, { color: isOwn ? 'rgba(255,255,255,0.6)' : colors.textSecondary }]}>
-                                        edited
-                                    </Text>
                                 )}
-                                <Text style={[styles.messageTime, { color: isOwn ? 'rgba(255,255,255,0.7)' : colors.textSecondary }]}>
-                                    {formatMessageTime(item.createdAt)}
-                                </Text>
-                                {isOwn && renderStatusIcon(status)}
+                                <View style={styles.tripShareInfo}>
+                                    <Text style={[styles.tripShareLabel, { color: isOwn ? (isDarkMode ? 'rgba(255,255,255,0.8)' : '#005C4B') : colors.primary }]}>
+                                        🗺️ Shared Trip
+                                    </Text>
+                                    <Text style={[styles.tripShareTitle, { color: isOwn ? ownTextColor : colors.text }]} numberOfLines={2}>
+                                        {(item as any).tripTitle || 'Trip'}
+                                    </Text>
+                                    <Text style={[styles.tripShareTap, { color: isOwn ? (isDarkMode ? 'rgba(255,255,255,0.6)' : '#005C4B') : colors.primary }]}>
+                                        Tap to view trip
+                                    </Text>
+                                </View>
                             </View>
+                        )}
+
+                        {/* Timestamp and status */}
+                        <View style={styles.messageFooter}>
+                            {item.editedAt && (
+                                <Text style={[styles.editedLabel, { color: isOwn ? ownTimeColor : colors.textSecondary }]}>
+                                    edited
+                                </Text>
+                            )}
+                            <Text style={[styles.messageTime, { color: isOwn ? ownTimeColor : colors.textSecondary }]}>
+                                {formatMessageTime(item.createdAt)}
+                            </Text>
+                            {isOwn && renderStatusIcon(status, ownTimeColor)}
                         </View>
-                    </View>
-                </Pressable>
+                    </Pressable>
+                </View>
             </View>
         );
     };
@@ -1547,12 +2103,12 @@ const ChatScreen = () => {
             <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
                 {/* Skeleton Header */}
                 <View style={[styles.header, { backgroundColor: colors.card }, shadowStyle]}>
-                    <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDarkMode ? '#2A2A2A' : '#E8E8ED' }} />
+                    <AvatarSkeleton size={36} />
                     <View style={{ marginLeft: 8, flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isDarkMode ? '#2A2A2A' : '#E8E8ED' }} />
+                        <AvatarSkeleton size={44} style={{ marginLeft: 4 }} />
                         <View style={{ marginLeft: 12 }}>
-                            <View style={{ width: 120, height: 13, borderRadius: 7, backgroundColor: isDarkMode ? '#2A2A2A' : '#E8E8ED' }} />
-                            <View style={{ width: 80, height: 10, borderRadius: 5, backgroundColor: isDarkMode ? '#2A2A2A' : '#E8E8ED', marginTop: 6 }} />
+                            <TextSkeleton width={120} height={14} />
+                            <TextSkeleton width={80} height={10} style={{ marginTop: 6 }} />
                         </View>
                     </View>
                 </View>
@@ -1560,8 +2116,8 @@ const ChatScreen = () => {
                 <ChatSkeleton />
                 {/* Skeleton Composer */}
                 <View style={[styles.composer, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, SPACING.sm) }]}>
-                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isDarkMode ? '#2A2A2A' : '#E8E8ED' }} />
-                    <View style={{ flex: 1, height: 42, borderRadius: 21, backgroundColor: isDarkMode ? '#1F1F1F' : '#EAEAEF', marginHorizontal: 8 }} />
+                    <AvatarSkeleton size={40} />
+                    <TextSkeleton width="82%" height={40} borderRadius={20} style={{ marginHorizontal: 8 }} />
                 </View>
             </SafeAreaView>
         );
@@ -1604,7 +2160,7 @@ const ChatScreen = () => {
                         <Text style={[styles.headerStatus, {
                             color: otherUserTyping ? colors.primary
                                 : lastSeenText === 'online' ? colors.success
-                                : colors.textSecondary
+                                    : colors.textSecondary
                         }]} numberOfLines={1}>
                             {otherUserTyping ? 'typing...' : (
                                 (chat?.type === 'group' || isGroupParam)
@@ -1630,37 +2186,13 @@ const ChatScreen = () => {
                 </TouchableOpacity>
             </View>
 
-            {/* Live Location Banner */}
-            {activeSharersCount > 0 && (
-                <TouchableOpacity
-                    style={[styles.liveBanner, { backgroundColor: colors.primary }]}
-                    onPress={() => setShowLiveMap(true)}
-                >
-                    <Icon name="NavigationArrow" size={20} color="#fff" />
-                    <Text style={styles.liveBannerText}>
-                        {activeSharersCount} {activeSharersCount === 1 ? 'person is' : 'people are'} sharing live location
-                    </Text>
-                    <Icon name="CaretRight" size={16} color="#fff" />
-                </TouchableOpacity>
-            )}
+            {/* Live Location Banner removed */}
 
-            {/* My Live Status */}
-            {isSharingLive && (
-                <View style={[styles.myLiveBar, { backgroundColor: '#DC2626' }]}>
-                    <Text style={styles.myLiveText}>You are sharing live location</Text>
-                    <TouchableOpacity onPress={() => stopLiveSharing(true)}>
-                        <Text style={styles.stopLiveText}>STOP</Text>
-                    </TouchableOpacity>
-                </View>
-            )}
-
-            {/* Uploading/Getting Location indicator */}
-            {(uploading || gettingLocation) && (
+            {/* Uploading indicator */}
+            {uploading && (
                 <View style={[styles.uploadingBar, { backgroundColor: colors.primary }]}>
                     <ActivityIndicator size="small" color="#fff" />
-                    <Text style={styles.uploadingText}>
-                        {gettingLocation ? 'Getting location...' : 'Sending...'}
-                    </Text>
+                    <Text style={styles.uploadingText}>Sending...</Text>
                 </View>
             )}
 
@@ -1676,11 +2208,18 @@ const ChatScreen = () => {
                     ref={flatListRef}
                     data={messages}
                     renderItem={renderMessage}
-                    keyExtractor={(item) => item.id}
+                    keyExtractor={(item: ChatMessage) => item.id}
                     contentContainerStyle={styles.messagesContent}
                     showsVerticalScrollIndicator={false}
-                    onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
                     estimatedItemSize={80}
+                    onScroll={(e: any) => {
+                        const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+                        isNearBottom.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - 150;
+                    }}
+                    onEndReached={() => {
+                        if (hasMore) loadMoreMessages();
+                    }}
+                    onEndReachedThreshold={0.3}
                 />
 
                 {/* Typing indicator */}
@@ -1759,46 +2298,19 @@ const ChatScreen = () => {
             </KeyboardAvoidingView>
 
             {/* Context Menu */}
-            <Modal visible={showContextMenu} transparent animationType="fade">
-                <Pressable
-                    style={styles.contextMenuOverlay}
-                    onPress={() => { setShowContextMenu(false); setSelectedMessage(null); }}
-                >
-                    <View style={[styles.contextMenu, { backgroundColor: isDarkMode ? '#1A1A1A' : '#FFFFFF' }, shadowStyle]}>
-                        <TouchableOpacity style={styles.contextMenuItem} onPress={handleReply}>
-                            <View style={[styles.contextMenuIcon, { backgroundColor: isDarkMode ? '#252525' : '#F0F0F3' }]}>
-                                <Icon name="ArrowUUpLeft" size={18} color={colors.primary} />
-                            </View>
-                            <Text style={[styles.contextMenuText, { color: colors.text }]}>Reply</Text>
-                        </TouchableOpacity>
-
-                        {selectedMessage?.senderId === currentUser?.id && selectedMessage?.type === 'text' && (
-                            <TouchableOpacity style={styles.contextMenuItem} onPress={handleEdit}>
-                                <View style={[styles.contextMenuIcon, { backgroundColor: isDarkMode ? '#252525' : '#F0F0F3' }]}>
-                                    <Icon name="PencilSimple" size={18} color={colors.primary} />
-                                </View>
-                                <Text style={[styles.contextMenuText, { color: colors.text }]}>Edit</Text>
-                            </TouchableOpacity>
-                        )}
-
-                        <TouchableOpacity style={styles.contextMenuItem} onPress={() => handleDelete(false)}>
-                            <View style={[styles.contextMenuIcon, { backgroundColor: isDarkMode ? '#2A1A1A' : '#FEE2E2' }]}>
-                                <Icon name="Trash" size={18} color="#EF4444" />
-                            </View>
-                            <Text style={[styles.contextMenuText, { color: '#EF4444' }]}>Delete for Me</Text>
-                        </TouchableOpacity>
-
-                        {selectedMessage?.senderId === currentUser?.id && (
-                            <TouchableOpacity style={styles.contextMenuItem} onPress={() => handleDelete(true)}>
-                                <View style={[styles.contextMenuIcon, { backgroundColor: isDarkMode ? '#2A1A1A' : '#FEE2E2' }]}>
-                                    <Icon name="Trash" size={18} color="#EF4444" />
-                                </View>
-                                <Text style={[styles.contextMenuText, { color: '#EF4444' }]}>Delete for Everyone</Text>
-                            </TouchableOpacity>
-                        )}
-                    </View>
-                </Pressable>
-            </Modal>
+            <MessageContextMenu
+                visible={showContextMenu}
+                onClose={() => { setShowContextMenu(false); setSelectedMessage(null); }}
+                selectedMessage={selectedMessage}
+                currentUserId={currentUser?.id}
+                isDarkMode={isDarkMode}
+                colors={colors}
+                shadowStyle={shadowStyle}
+                onReply={handleReply}
+                onEdit={handleEdit}
+                onDeleteForMe={() => handleDelete(false)}
+                onDeleteForEveryone={() => handleDelete(true)}
+            />
 
             {/* Chat Menu (Three-dots) */}
             <Modal visible={showChatMenu} transparent animationType="fade">
@@ -1807,7 +2319,7 @@ const ChatScreen = () => {
                     activeOpacity={1}
                     onPress={() => setShowChatMenu(false)}
                 >
-                    <View style={[styles.dropdownMenu, { backgroundColor: isDarkMode ? '#1A1A1A' : '#FFFFFF' }, shadowStyle]}>
+                    <View style={[styles.dropdownMenu, { backgroundColor: isDarkMode ? '#1A1A1A' : '#FFFFFF', top: insets.top + 52 }, shadowStyle]}>
                         <TouchableOpacity
                             style={styles.dropdownItem}
                             onPress={handleClearChat}
@@ -1894,12 +2406,7 @@ const ChatScreen = () => {
 
                         <TouchableOpacity style={styles.locationOption} onPress={() => {
                             setShowLocationOptions(false);
-                            Alert.alert('Share Live Location', 'Select duration', [
-                                { text: '15 Mins', onPress: () => startLiveSharing(15) },
-                                { text: '1 Hour', onPress: () => startLiveSharing(60) },
-                                { text: '8 Hours', onPress: () => startLiveSharing(480) },
-                                { text: 'Cancel', style: 'cancel' }
-                            ]);
+                            setShowLiveDurationModal(true);
                         }}>
                             <View style={[styles.locationOptionIcon, { backgroundColor: '#10B981' }, shadowSoft]}>
                                 <Icon name="Radio" size={22} color="#fff" />
@@ -1960,21 +2467,128 @@ const ChatScreen = () => {
                 </View>
             </Modal>
 
+            {/* Live Location Duration Modal */}
+            <Modal visible={showLiveDurationModal} transparent animationType="fade">
+                <View style={styles.editModalOverlay}>
+                    <View style={[styles.editModal, { backgroundColor: isDarkMode ? '#1C1C1E' : '#FFFFFF', padding: 20 }, shadowStyle]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' }} />
+                            <Text style={[styles.editModalTitle, { color: colors.text, marginBottom: 0 }]}>Share Live Location</Text>
+                        </View>
+                        <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 20, lineHeight: 18 }}>
+                            Select how long you want to share your live location. Participants in this chat will see your location in real-time.
+                        </Text>
+                        
+                        <View style={{ position: 'relative', zIndex: 50, marginBottom: 20 }}>
+                            <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', marginBottom: 6, letterSpacing: 0.5 }}>
+                                Duration
+                            </Text>
+                            <TouchableOpacity
+                                style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: 14,
+                                    borderRadius: 12,
+                                    borderWidth: 1,
+                                    borderColor: durationDropdownOpen ? colors.primary : (isDarkMode ? '#3A3A3C' : '#E5E7EB'),
+                                    backgroundColor: isDarkMode ? '#2C2C2E' : '#F2F2F7',
+                                }}
+                                onPress={() => setDurationDropdownOpen(!durationDropdownOpen)}
+                                activeOpacity={0.8}
+                            >
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                    <Icon name="Clock" size={20} color={colors.primary} />
+                                    <Text style={{ color: colors.text, fontWeight: '600', fontSize: 15 }}>
+                                        {selectedDuration === 15 ? '15 Minutes' : selectedDuration === 60 ? '1 Hour' : '8 Hours'}
+                                    </Text>
+                                </View>
+                                <Icon name={durationDropdownOpen ? "CaretUp" : "CaretDown"} size={16} color={colors.textSecondary} />
+                            </TouchableOpacity>
+
+                            {durationDropdownOpen && (
+                                <View style={{
+                                    marginTop: 4,
+                                    borderRadius: 12,
+                                    borderWidth: 1,
+                                    borderColor: isDarkMode ? '#3A3A3C' : '#E5E7EB',
+                                    backgroundColor: isDarkMode ? '#2C2C2E' : '#FFFFFF',
+                                    overflow: 'hidden',
+                                    shadowColor: '#000',
+                                    shadowOffset: { width: 0, height: 4 },
+                                    shadowOpacity: 0.15,
+                                    shadowRadius: 10,
+                                    elevation: 5,
+                                }}>
+                                    {[
+                                        { label: '15 Minutes', value: 15 },
+                                        { label: '1 Hour', value: 60 },
+                                        { label: '8 Hours', value: 480 },
+                                    ].map((opt) => {
+                                        const selected = selectedDuration === opt.value;
+                                        return (
+                                            <TouchableOpacity
+                                                key={opt.value}
+                                                style={{
+                                                    flexDirection: 'row',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                    padding: 14,
+                                                    backgroundColor: selected ? (isDarkMode ? 'rgba(157, 116, 247, 0.15)' : 'rgba(157, 116, 247, 0.08)') : 'transparent',
+                                                    borderBottomWidth: opt.value !== 480 ? 0.5 : 0,
+                                                    borderBottomColor: isDarkMode ? '#3A3A3C' : '#E5E7EB',
+                                                }}
+                                                onPress={() => {
+                                                    setSelectedDuration(opt.value);
+                                                    setDurationDropdownOpen(false);
+                                                }}
+                                            >
+                                                <Text style={{ color: selected ? colors.primary : colors.text, fontWeight: selected ? '600' : '400', fontSize: 14 }}>
+                                                    {opt.label}
+                                                </Text>
+                                                {selected && <Icon name="Check" size={16} color={colors.primary} />}
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
+                            )}
+                        </View>
+
+                        <View style={styles.editModalButtons}>
+                            <TouchableOpacity
+                                style={[styles.editButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: isDarkMode ? '#3A3A3C' : '#E5E7EB' }]}
+                                onPress={() => {
+                                    setDurationDropdownOpen(false);
+                                    setShowLiveDurationModal(false);
+                                }}
+                            >
+                                <Text style={[styles.editButtonText, { color: colors.textSecondary }]}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.editButton, { backgroundColor: colors.primary }, shadowSoft]}
+                                onPress={() => {
+                                    setDurationDropdownOpen(false);
+                                    setShowLiveDurationModal(false);
+                                    startLiveSharing(selectedDuration);
+                                }}
+                            >
+                                <Text style={styles.editButtonText}>Start Sharing</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
             {/* Image Viewer */}
             <Modal visible={!!viewingImage} transparent animationType="fade">
-                <Pressable style={styles.imageViewerModal} onPress={() => setViewingImage(null)}>
+                <View style={styles.imageViewerModal}>
                     <TouchableOpacity style={styles.imageViewerClose} onPress={() => setViewingImage(null)}>
                         <Icon name="X" size={28} color="#fff" />
                     </TouchableOpacity>
                     {viewingImage && (
-                        <Image
-                            source={{ uri: viewingImage }}
-                            style={styles.fullImage}
-                            contentFit="contain"
-                            transition={200}
-                        />
+                        <ZoomableImage uri={viewingImage} onClose={() => setViewingImage(null)} />
                     )}
-                </Pressable>
+                </View>
             </Modal>
 
             {/* Image Preview Modal (Before Send) */}
@@ -2136,19 +2750,19 @@ const styles = StyleSheet.create({
     // Message bubbles
     messageBubble: {
         maxWidth: '78%',
-        paddingHorizontal: 14,
-        paddingVertical: 9,
-        borderRadius: 20,
+        paddingHorizontal: 12,
+        paddingVertical: 7,
+        borderRadius: 12,
     },
     ownBubble: {
-        borderBottomRightRadius: 6,
+        borderBottomRightRadius: 2,
     },
     otherBubble: {
-        borderBottomLeftRadius: 6,
+        borderBottomLeftRadius: 2,
     },
     mediaBubble: {
-        padding: 4,
-        borderRadius: 18,
+        padding: 3,
+        borderRadius: 10,
     },
 
     // Reply preview in bubble
@@ -2177,7 +2791,7 @@ const styles = StyleSheet.create({
     messageImage: {
         width: SCREEN_WIDTH * 0.6,
         height: SCREEN_WIDTH * 0.6,
-        borderRadius: 16,
+        borderRadius: 8,
     },
 
     // Message footer
@@ -2225,7 +2839,7 @@ const styles = StyleSheet.create({
         width: 56,
         height: 56,
         backgroundColor: 'rgba(255,255,255,0.15)',
-        borderRadius: 14,
+        borderRadius: 8,
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 10,
@@ -2525,11 +3139,10 @@ const styles = StyleSheet.create({
     // Dropdown menu
     dropdownOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.3)',
+        backgroundColor: 'transparent',
     },
     dropdownMenu: {
         position: 'absolute',
-        top: 60,
         right: 16,
         minWidth: 170,
         borderRadius: 16,
@@ -2555,14 +3168,14 @@ const styles = StyleSheet.create({
 
     // Trip share
     tripShareContainer: {
-        borderRadius: 14,
+        borderRadius: 8,
         overflow: 'hidden',
         marginTop: 4,
     },
     tripShareImage: {
         width: 200,
         height: 120,
-        borderRadius: 14,
+        borderRadius: 8,
     },
     tripShareInfo: { paddingTop: 8 },
     tripShareLabel: {
@@ -2661,6 +3274,59 @@ const styles = StyleSheet.create({
     // Sender name
     senderName: { fontSize: 10, marginLeft: 16, marginBottom: 2, fontWeight: '700' },
     senderInBubbleName: { fontSize: 12, fontWeight: '700', marginBottom: 4, letterSpacing: 0.1 },
+    bubbleMapContainer: {
+        width: SCREEN_WIDTH * 0.65,
+        borderRadius: 12,
+        overflow: 'hidden',
+    },
+    bubbleMapWrapper: {
+        width: '100%',
+    },
+    bubbleMap: {
+        height: 150,
+        width: '100%',
+    },
+    bubbleMapInfo: {
+        padding: 10,
+        gap: 2,
+    },
+    stopLiveBubbleBtn: {
+        marginTop: 8,
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        backgroundColor: '#EF4444',
+        borderRadius: 6,
+        alignItems: 'center',
+    },
+    stopLiveBubbleText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
+    bubbleMarkerContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    bubbleMarkerAvatar: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        borderWidth: 2,
+    },
+    bubbleMarkerPin: {
+        width: 0,
+        height: 0,
+        backgroundColor: 'transparent',
+        borderStyle: 'solid',
+        borderLeftWidth: 4,
+        borderRightWidth: 4,
+        borderBottomWidth: 6,
+        borderLeftColor: 'transparent',
+        borderRightColor: 'transparent',
+        borderBottomColor: '#fff',
+        transform: [{ rotate: '180deg' }],
+        marginTop: -1,
+    },
 });
 
 export default ChatScreen;

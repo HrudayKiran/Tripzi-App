@@ -1,108 +1,408 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import type { MessageType, MessageStatus, ReplyTo, LocationData, ChatMessage } from '../types/chat';
+import { useCurrentUser } from './useCurrentUser';
+import { database } from '../database';
+import { Q } from '@nozbe/watermelondb';
+import Message from '../database/models/Message';
+import { parsePostgresDate, parsePostgresDateToMs, parsePostgresDateToMsOrNull } from '../utils/date';
 
-export type MessageType = 'text' | 'image' | 'video' | 'location' | 'voice' | 'system' | 'trip_share';
-export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read';
+// Re-export types from centralized location for backward compatibility
+export type { MessageType, MessageStatus, ReplyTo, LocationData, ChatMessage } from '../types/chat';
 
-export interface ReplyTo {
-    messageId: string;
-    text: string;
-    senderId: string;
+const PAGE_SIZE = 50;
+
+/**
+ * Utility to parse PostgreSQL array string literal representation (like '{a,b}')
+ * or JSON string representation into a JavaScript array of strings.
+ */
+function parsePostgresArray(val: any): string[] {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+        if (val.startsWith('{') && val.endsWith('}')) {
+            const content = val.slice(1, -1).trim();
+            if (!content) return [];
+            return content.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+        }
+        try {
+            const parsed = JSON.parse(val);
+            if (Array.isArray(parsed)) return parsed;
+        } catch (e) {}
+    }
+    return [];
 }
 
-export interface LocationData {
-    latitude: number;
-    longitude: number;
-    address?: string;
+function mapLocalMessage(m: Message): ChatMessage {
+    const parseDateSafe = (val: any) => parsePostgresDate(val);
+
+    return {
+        id: m.id,
+        senderId: m.senderId,
+        senderName: m.senderName,
+        type: m.type as MessageType,
+        text: m.text || undefined,
+        mediaUrl: m.mediaUrl || undefined,
+        mediaThumbnail: undefined,
+        location: m.locationData || undefined,
+        voiceDuration: m.voiceDuration || undefined,
+        replyTo: m.replyToData || undefined,
+        status: m.status as MessageStatus,
+        readBy: m.readByData || {},
+        deliveredTo: m.deliveredToData || [],
+        editedAt: m.editedAt ? parseDateSafe(m.editedAt) : null,
+        deletedFor: m.deletedForData || [],
+        deletedForEveryoneAt: m.deletedForEveryoneAt ? parseDateSafe(m.deletedForEveryoneAt) : null,
+        mentions: m.mentionsData || [],
+        createdAt: m.createdAt,
+    };
 }
 
-export interface ChatMessage {
-    id: string;
-    senderId: string;
-    senderName: string;
-    type: MessageType;
-    text?: string;
-    mediaUrl?: string;
-    mediaThumbnail?: string;
-    location?: LocationData;
-    voiceDuration?: number;
-    replyTo?: ReplyTo;
-    status: MessageStatus;
-    readBy: { [uid: string]: string | null };
-    deliveredTo: string[];
-    editedAt?: Date | null;
-    deletedFor: string[];
-    deletedForEveryoneAt?: Date | null;
-    mentions?: string[];
-    createdAt: Date | null;
-}
+const writeRemoteMessageToLocal = async (newRow: any) => {
+    if (!newRow) return;
+    try {
+        await database.write(async () => {
+            const collection = database.get('messages');
+            let existing: any = null;
+            try {
+                existing = await collection.find(newRow.id);
+            } catch (e) {}
+
+            const parseDateToMs = (val: any): number => {
+                return parsePostgresDateToMs(val, Date.now());
+            };
+
+            const parseDateToMsOrNull = (val: any): number | null => {
+                return parsePostgresDateToMsOrNull(val);
+            };
+
+            const stringifyIfNeeded = (val: any): string | null => {
+                if (val === undefined || val === null) return null;
+                return typeof val === 'string' ? val : JSON.stringify(val);
+            };
+
+            const stringifyArrayField = (val: any): string => {
+                return JSON.stringify(parsePostgresArray(val));
+            };
+
+            if (existing) {
+                await existing.update((rec: any) => {
+                    rec.senderId = newRow.sender_id || rec.senderId;
+                    rec.senderName = newRow.sender_name || rec.senderName;
+                    rec.type = newRow.type || rec.type;
+                    rec.text = newRow.text !== undefined ? newRow.text : rec.text;
+                    rec.mediaUrl = newRow.media_url !== undefined ? newRow.media_url : rec.mediaUrl;
+                    rec.locationRaw = newRow.location !== undefined ? stringifyIfNeeded(newRow.location) : rec.locationRaw;
+                    rec.voiceDuration = newRow.voice_duration !== undefined ? newRow.voice_duration : rec.voiceDuration;
+                    rec.replyToRaw = newRow.reply_to !== undefined ? stringifyIfNeeded(newRow.reply_to) : rec.replyToRaw;
+                    rec.status = newRow.status || rec.status;
+                    rec.readByRaw = newRow.read_by !== undefined ? stringifyIfNeeded(newRow.read_by) : rec.readByRaw;
+                    rec.deliveredToRaw = newRow.delivered_to !== undefined ? stringifyArrayField(newRow.delivered_to) : rec.deliveredToRaw;
+                    rec.deletedForRaw = newRow.deleted_for !== undefined ? stringifyArrayField(newRow.deleted_for) : rec.deletedForRaw;
+                    rec.deletedForEveryoneAt = newRow.deleted_for_everyone_at !== undefined ? parseDateToMsOrNull(newRow.deleted_for_everyone_at) : rec.deletedForEveryoneAt;
+                    rec.mentionsRaw = newRow.mentions !== undefined ? stringifyArrayField(newRow.mentions) : rec.mentionsRaw;
+                    rec._raw.updated_at = parseDateToMs(newRow.updated_at);
+                    rec.editedAt = newRow.edited_at !== undefined ? parseDateToMsOrNull(newRow.edited_at) : rec.editedAt;
+                    
+                    if (rec._raw._status === 'created') {
+                        rec._raw._status = 'synced';
+                    }
+                });
+            } else {
+                await collection.create((rec: any) => {
+                    rec._raw.id = newRow.id;
+                    rec.chatId = newRow.chat_id;
+                    rec.chatType = newRow.chat_type;
+                    rec.senderId = newRow.sender_id;
+                    rec.senderName = newRow.sender_name;
+                    rec.type = newRow.type;
+                    rec.text = newRow.text;
+                    rec.mediaUrl = newRow.media_url;
+                    rec.locationRaw = stringifyIfNeeded(newRow.location);
+                    rec.voiceDuration = newRow.voice_duration;
+                    rec.replyToRaw = stringifyIfNeeded(newRow.reply_to);
+                    rec.status = newRow.status;
+                    rec.readByRaw = stringifyIfNeeded(newRow.read_by);
+                    rec.deliveredToRaw = stringifyArrayField(newRow.delivered_to);
+                    rec.deletedForRaw = stringifyArrayField(newRow.deleted_for);
+                    rec.deletedForEveryoneAt = parseDateToMsOrNull(newRow.deleted_for_everyone_at);
+                    rec.mentionsRaw = stringifyArrayField(newRow.mentions);
+                    rec._raw.created_at = parseDateToMs(newRow.created_at);
+                    rec._raw.updated_at = parseDateToMs(newRow.updated_at);
+                    rec.editedAt = parseDateToMsOrNull(newRow.edited_at);
+                    rec._raw._status = 'synced';
+                });
+            }
+        });
+    } catch (e) {
+        console.error('[useChatMessagesQuery] Failed to write remote message to local WatermelonDB:', e);
+    }
+};
 
 export function useChatMessagesQuery(
     chatId: string | undefined,
-    chatType: 'direct' | 'group' | undefined
+    chatType: 'direct' | 'group' | undefined,
+    clearedAt?: string | Date | null
 ) {
     const queryClient = useQueryClient();
-    const [userId, setUserId] = useState<string | null>(null);
+    const { userId } = useCurrentUser();
+    const senderProfileRef = useRef<{ name: string } | null>(null);
+    const [hasMore, setHasMore] = useState(true);
 
+    // Cache sender profile at init so we don't fetch on every send
     useEffect(() => {
-        supabase.auth.getUser().then(({ data: { user } }) => setUserId(user?.id || null));
-    }, []);
+        if (!userId) return;
+        supabase.from('profiles').select('name').eq('id', userId).maybeSingle()
+            .then(({ data }) => {
+                senderProfileRef.current = data || { name: 'User' };
+            });
+    }, [userId]);
 
-    const { data: messages = [], isLoading: loading, error, refetch } = useQuery({
-        queryKey: ['messages', chatId],
+    // Force query refetch when clearedAt changes
+    useEffect(() => {
+        if (chatId) {
+            queryClient.refetchQueries({ queryKey: ['messages', chatId] });
+        }
+    }, [chatId, clearedAt, queryClient]);
+
+    const clearedAtTime = clearedAt instanceof Date
+        ? clearedAt.getTime()
+        : typeof clearedAt === 'string'
+            ? parsePostgresDate(clearedAt)?.getTime() || null
+            : null;
+
+    // Fetch messages from WatermelonDB locally
+    const { data: messages = [], isLoading: loading, error } = useQuery({
+        queryKey: ['messages', chatId, clearedAtTime],
         queryFn: async () => {
-            if (!chatId) return [];
+            if (!chatId || !userId) return [];
 
-            console.log(`[useChatMessagesQuery] Fetching messages for chat ${chatId} from Supabase...`);
-            const { data, error } = await supabase
-                .from('messages')
-                .select('*')
-                .eq('chat_id', chatId)
-                .order('created_at', { ascending: true });
+            let queryConstraints: any[] = [
+                Q.where('chat_id', chatId)
+            ];
 
-            if (error) {
-                console.error('[useChatMessagesQuery] Error fetching messages:', error);
-                throw error;
+            const clearedAtDate = parsePostgresDate(clearedAt);
+
+            if (clearedAtDate && !isNaN(clearedAtDate.getTime())) {
+                queryConstraints.push(Q.where('created_at', Q.gt(clearedAtDate.getTime())));
             }
 
-            console.log(`[useChatMessagesQuery] Fetched ${data?.length || 0} messages.`);
+            const localMessages = await database.get('messages')
+                .query(
+                    ...queryConstraints,
+                    Q.sortBy('created_at', Q.desc),
+                    Q.take(PAGE_SIZE)
+                )
+                .fetch();
 
-            // Map Supabase snake_case to camelCase
-            return (data || []).map((m: any) => ({
-                id: m.id,
-                senderId: m.sender_id,
-                senderName: m.sender_name,
-                type: m.type as MessageType,
-                text: m.text,
-                mediaUrl: m.media_url,
-                mediaThumbnail: m.media_thumbnail,
-                location: m.location ? (typeof m.location === 'string' ? JSON.parse(m.location) : m.location) : null,
-                voiceDuration: m.voice_duration,
-                replyTo: m.reply_to ? (typeof m.reply_to === 'string' ? JSON.parse(m.reply_to) : m.reply_to) : null,
-                status: m.status as MessageStatus,
-                readBy: m.read_by || {},
-                deliveredTo: m.delivered_to || [],
-                editedAt: m.edited_at ? new Date(m.edited_at) : null,
-                deletedFor: m.deleted_for || [],
-                deletedForEveryoneAt: m.deleted_for_everyone_at ? new Date(m.deleted_for_everyone_at) : null,
-                mentions: m.mentions || [],
-                createdAt: new Date(m.created_at),
-            }));
+            const messagesList = [...localMessages].reverse();
+            setHasMore(localMessages.length >= PAGE_SIZE);
+
+            return messagesList.map((m: any) => mapLocalMessage(m));
         },
-        enabled: !!chatId,
+        enabled: !!chatId && !!userId,
+        staleTime: 30_000,
     });
 
-    const sendMessageMutation = useMutation({
-        mutationFn: async ({ text, replyTo, mentions }: { text: string, replyTo?: ReplyTo, mentions?: string[] }) => {
-            if (!chatId || !userId || !text.trim() || !chatType) return;
+    // Load more (older) messages for pagination from WatermelonDB
+    const loadMoreMessages = useCallback(async () => {
+        if (!chatId || !hasMore || !userId) return;
 
-            const { data: profile } = await supabase.from('profiles').select('name').eq('id', userId).maybeSingle();
-            const senderName = profile?.name || 'User';
+        const currentMessages = queryClient.getQueryData<ChatMessage[]>(['messages', chatId]) || [];
+        if (currentMessages.length === 0) return;
 
-            const { data, error } = await supabase
+        const oldestMessage = currentMessages[0];
+        const oldestCreatedAt = oldestMessage.createdAt instanceof Date
+            ? oldestMessage.createdAt
+            : oldestMessage.createdAt
+                ? new Date(oldestMessage.createdAt)
+                : null;
+
+        if (!oldestCreatedAt || isNaN(oldestCreatedAt.getTime())) return;
+
+        let queryConstraints: any[] = [
+            Q.where('chat_id', chatId),
+            Q.where('created_at', Q.lt(oldestCreatedAt.getTime()))
+        ];
+
+        const clearedAtDate = parsePostgresDate(clearedAt);
+
+        if (clearedAtDate && !isNaN(clearedAtDate.getTime())) {
+            queryConstraints.push(Q.where('created_at', Q.gt(clearedAtDate.getTime())));
+        }
+
+        const olderLocalMessages = await database.get('messages')
+            .query(
+                ...queryConstraints,
+                Q.sortBy('created_at', Q.desc),
+                Q.take(PAGE_SIZE)
+            )
+            .fetch();
+
+        setHasMore(olderLocalMessages.length >= PAGE_SIZE);
+
+        if (olderLocalMessages.length > 0) {
+            const mapped = [...olderLocalMessages].reverse().map((m: any) => mapLocalMessage(m));
+
+            queryClient.setQueryData<ChatMessage[]>(['messages', chatId], (old) => [
+                ...mapped,
+                ...(old || []),
+            ]);
+        }
+    }, [chatId, hasMore, queryClient, clearedAt, userId]);
+
+    // Send message to local WatermelonDB then Supabase
+    const sendMessage = useCallback(async (text: string, replyTo?: ReplyTo, mentions?: string[]) => {
+        if (!chatId || !userId || !text.trim() || !chatType) {
+            throw new Error('Invalid send arguments');
+        }
+
+        const senderName = senderProfileRef.current?.name || 'User';
+
+        let localId = '';
+        try {
+            await database.write(async () => {
+                const messageRecord = await database.get('messages').create((rec: any) => {
+                    rec.chatId = chatId;
+                    rec.chatType = chatType;
+                    rec.senderId = userId;
+                    rec.senderName = senderName;
+                    rec.type = 'text';
+                    rec.text = text.trim();
+                    rec.status = 'pending';
+                    rec.replyToRaw = replyTo ? JSON.stringify(replyTo) : null;
+                    rec.mentionsRaw = JSON.stringify(mentions || []);
+                    rec.readByRaw = JSON.stringify({});
+                    rec.deliveredToRaw = JSON.stringify([]);
+                    rec.deletedForRaw = JSON.stringify([]);
+                    rec._raw.created_at = Date.now();
+                    rec._raw.updated_at = Date.now();
+                });
+                localId = messageRecord.id;
+            });
+        } catch (e) {
+            console.error('[sendMessage] Failed to create local message:', e);
+            throw new Error('Failed to save message locally.');
+        }
+
+        // Invalidate queries so UI updates immediately
+        queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+
+        // Update local parent chat's last message and reset unread count
+        const parentTable = chatType === 'group' ? 'group_chats' : 'direct_chats';
+        const collection = database.get(parentTable);
+        let chatRecord: any = null;
+        try {
+            chatRecord = await collection.find(chatId);
+        } catch (e) {
+            // Not found locally, fetch from Supabase
+            let remoteChat: any = null;
+            try {
+                const { data } = await supabase
+                    .from(parentTable)
+                    .select('*')
+                    .eq('id', chatId)
+                    .maybeSingle();
+                remoteChat = data;
+            } catch (err) {
+                console.warn('[sendMessage] Failed to fetch remote parent chat:', err);
+            }
+
+            // Write to WatermelonDB (either the remote chat details or a minimal fallback)
+            try {
+                await database.write(async () => {
+                    try {
+                        chatRecord = await collection.find(chatId);
+                    } catch (findErr) {
+                        chatRecord = await collection.create((rec: any) => {
+                            rec._raw.id = chatId;
+                            if (remoteChat) {
+                                if (chatType === 'group') {
+                                    rec.itineraryId = remoteChat.itinerary_id;
+                                    rec.groupName = remoteChat.group_name;
+                                    rec.groupDescription = remoteChat.group_description;
+                                    rec.groupIcon = remoteChat.group_icon;
+                                    rec.itineraryImage = remoteChat.itinerary_image;
+                                    rec.participantsRaw = JSON.stringify(remoteChat.participants);
+                                    rec.participantDetailsRaw = JSON.stringify(remoteChat.participant_details);
+                                    rec.createdBy = remoteChat.created_by;
+                                    rec.memberCount = remoteChat.member_count;
+                                    rec.hidden = remoteChat.hidden;
+                                    rec.adminsRaw = JSON.stringify(remoteChat.admins || []);
+                                    rec.lastMessage = JSON.stringify(remoteChat.last_message);
+                                    rec.unreadCountRaw = JSON.stringify(remoteChat.unread_count);
+                                    rec.deletedForRaw = JSON.stringify(remoteChat.deleted_by || []);
+                                    rec.clearedAtRaw = JSON.stringify(remoteChat.cleared_at || {});
+                                    rec.typingRaw = JSON.stringify(remoteChat.typing || {});
+                                } else {
+                                    rec.participantsRaw = JSON.stringify(remoteChat.participants);
+                                    rec.participantDetailsRaw = JSON.stringify(remoteChat.participant_details || {});
+                                    rec.lastMessage = JSON.stringify(remoteChat.last_message);
+                                    rec.lastMessageAt = remoteChat.last_message_at;
+                                    rec.unreadCountRaw = JSON.stringify(remoteChat.unread_count);
+                                    rec.clearedAtRaw = JSON.stringify(remoteChat.cleared_at);
+                                    rec.deletedForRaw = JSON.stringify(remoteChat.deleted_by || []);
+                                    rec.typingRaw = JSON.stringify(remoteChat.typing || {});
+                                }
+                                rec._raw.created_at = parsePostgresDateToMs(remoteChat.created_at);
+                                rec._raw.updated_at = parsePostgresDateToMs(remoteChat.updated_at);
+                            } else {
+                                // Minimal fallback fallback if fetch failed/offline
+                                rec.participantsRaw = JSON.stringify([userId]);
+                                rec.unreadCountRaw = JSON.stringify({});
+                                rec.deletedForRaw = JSON.stringify([]);
+                                rec.clearedAtRaw = JSON.stringify({});
+                                rec.typingRaw = JSON.stringify({});
+                                if (chatType === 'group') {
+                                    rec.groupName = 'Group Chat';
+                                    rec.hidden = false;
+                                    rec.adminsRaw = JSON.stringify([]);
+                                }
+                                rec._raw.created_at = Date.now();
+                                rec._raw.updated_at = Date.now();
+                            }
+                        });
+                    }
+                });
+            } catch (writeErr) {
+                console.error('[sendMessage] Failed to create parent chat locally:', writeErr);
+            }
+        }
+
+        if (chatRecord) {
+            await database.write(async () => {
+                try {
+                    await chatRecord.update((rec: any) => {
+                        rec.lastMessage = JSON.stringify({
+                            text: text.trim(),
+                            sender_id: userId,
+                            sender_name: senderName,
+                            created_at: new Date().toISOString(),
+                            type: 'text',
+                        });
+                        rec._raw.updated_at = Date.now();
+                        if (rec.unreadCountRaw) {
+                            try {
+                                const currentUnread = JSON.parse(rec.unreadCountRaw) || {};
+                                currentUnread[userId] = 0;
+                                rec.unreadCountRaw = JSON.stringify(currentUnread);
+                            } catch (e) {}
+                        }
+                    });
+                } catch (e) {
+                    console.error('[sendMessage] Failed to update parent chat fields:', e);
+                }
+            });
+        }
+        queryClient.invalidateQueries({ queryKey: [chatType === 'group' ? 'groupChats' : 'chats', userId] });
+
+        // Attempt Supabase insert in the background
+        try {
+            const { error: insertError } = await supabase
                 .from('messages')
                 .insert([{
+                    id: localId,
                     chat_id: chatId,
                     chat_type: chatType,
                     sender_id: userId,
@@ -110,35 +410,34 @@ export function useChatMessagesQuery(
                     type: 'text',
                     text: text.trim(),
                     status: 'sent',
-                    reply_to: replyTo ? JSON.stringify(replyTo) : null,
+                    reply_to: replyTo ? replyTo.messageId : null,
                     mentions: mentions || [],
-                }])
-                .select();
+                    created_at: new Date().toISOString(),
+                }]);
 
-            if (error) throw error;
+            if (insertError) throw insertError;
 
-            // Update parent table last_message and unread_count in real-time
-            const parentTable = chatType === 'group' ? 'group_chats' : 'direct_chats';
-            
+            // Increment unread count for other participants atomically in Supabase
             const { data: chatData } = await supabase
                 .from(parentTable)
-                .select('participants, unread_count')
+                .select('participants')
                 .eq('id', chatId)
                 .maybeSingle();
 
-            let newUnread: any = {};
             if (chatData) {
                 const participants = chatData.participants || [];
-                const currentUnread = chatData.unread_count || {};
-                participants.forEach((pId: string) => {
+                for (const pId of participants) {
                     if (pId !== userId) {
-                        newUnread[pId] = (currentUnread[pId] || 0) + 1;
-                    } else {
-                        newUnread[pId] = 0;
+                        await supabase.rpc('increment_unread_count', {
+                            p_chat_id: chatId,
+                            p_chat_type: chatType,
+                            p_user_id: pId,
+                        });
                     }
-                });
+                }
             }
 
+            // Update parent table in Supabase
             await supabase
                 .from(parentTable)
                 .update({
@@ -149,60 +448,83 @@ export function useChatMessagesQuery(
                         created_at: new Date().toISOString(),
                         type: 'text',
                     },
-                    unread_count: newUnread,
                     updated_at: new Date().toISOString(),
                 })
                 .eq('id', chatId);
 
-            return data;
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
-        },
-    });
+            // Update local message status to sent and mark as synced
+            await database.write(async () => {
+                try {
+                    const collection = database.get('messages');
+                    const existing = await collection.find(localId);
+                    await existing.update((rec: any) => {
+                        rec.status = 'sent';
+                        rec._raw._status = 'synced';
+                    });
+                } catch (e) {}
+            });
 
+            queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+            return { success: true, status: 'sent' };
+
+        } catch (error: any) {
+            const isPermanentError = error?.code === '42501' || error?.code?.startsWith('23') || error?.code?.startsWith('42') || error?.status === 403 || error?.status === 401;
+            
+            if (isPermanentError) {
+                console.error('[sendMessage] Permanent failure sending message:', error);
+                // Delete the local message so it doesn't get stuck in sync
+                try {
+                    await database.write(async () => {
+                        const collection = database.get('messages');
+                        const existing = await collection.find(localId);
+                        await existing.destroyPermanently();
+                    });
+                } catch (e) {}
+                
+                // Invalidate query to remove from UI
+                queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+                
+                throw new Error(error?.message || 'You do not have permission to send messages in this chat.');
+            }
+
+            console.warn('[sendMessage] Failed to send message to Supabase (offline), keeping in local queue:', error);
+            return { success: true, status: 'pending' };
+        }
+    }, [chatId, userId, chatType, queryClient]);
+
+    // Mark messages as read using batch RPC
     const markAsRead = useCallback(async () => {
         if (!chatId || !userId || !chatType) return;
-        
+
         try {
-            // First, find all messages in this chat sent by others that don't have our userId in read_by
             const { data: unreadMessages, error: fetchError } = await supabase
                 .from('messages')
                 .select('id, read_by')
                 .eq('chat_id', chatId)
                 .neq('sender_id', userId);
-                
+
             if (fetchError) throw fetchError;
-            
+
             const toUpdate = (unreadMessages || []).filter((m: any) => {
                 const readBy = m.read_by || {};
                 return !readBy[userId];
             });
-            
+
             if (toUpdate.length > 0) {
-                // For each unread message, update its read_by object to include the current user ID and mark as read
-                await Promise.all(
-                    toUpdate.map(async (m: any) => {
-                        const newReadBy = { ...(m.read_by || {}), [userId]: new Date().toISOString() };
-                        await supabase
-                            .from('messages')
-                            .update({ 
-                                read_by: newReadBy,
-                                status: 'read'
-                            })
-                            .eq('id', m.id);
-                    })
-                );
+                const messageIds = toUpdate.map((m: any) => m.id);
+                await supabase.rpc('batch_mark_as_read', {
+                    p_message_ids: messageIds,
+                    p_user_id: userId,
+                });
             }
-            
-            // Also reset the unread count for current user in the parent table (direct_chats or group_chats)
+
             const parentTable = chatType === 'group' ? 'group_chats' : 'direct_chats';
             const { data: chatData } = await supabase
                 .from(parentTable)
                 .select('unread_count')
                 .eq('id', chatId)
                 .maybeSingle();
-                
+
             if (chatData) {
                 const currentUnread = chatData.unread_count || {};
                 if (currentUnread[userId] !== 0) {
@@ -213,26 +535,68 @@ export function useChatMessagesQuery(
                         .eq('id', chatId);
                 }
             }
-            
-            // Invalidate query to refresh UI
+
             queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
-            
+
         } catch (error) {
-            console.error('[markAsRead] Error marking messages as read:', error);
+            if (__DEV__) console.error('[markAsRead] Error:', error);
         }
     }, [chatId, userId, chatType, queryClient]);
 
-    const sendMessage = useCallback(async (text: string, replyTo?: ReplyTo, mentions?: string[]) => {
-        await sendMessageMutation.mutateAsync({ text, replyTo, mentions });
-    }, [sendMessageMutation]);
-
-    // Realtime subscription
+    // Realtime channel names with random suffixes (C4)
     useEffect(() => {
         if (!chatId) return;
 
+        const randomSuffix = Math.random().toString(36).substring(2, 9);
+        const channelName = `messages-${chatId}-${randomSuffix}`;
+
+        // Remove any stale channel first (handles hot-reload / StrictMode double-mount)
+        const existing = supabase.getChannels().find(ch => ch.topic === `realtime:${channelName}`);
+        if (existing) supabase.removeChannel(existing);
+
         const channel = supabase
-            .channel(`messages-${chatId}-${Math.random().toString(36).substring(7)}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` }, () => {
+            .channel(channelName)
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'messages',
+                filter: `chat_id=eq.${chatId}`,
+            }, async (payload) => {
+                const newMsg = payload.new as any;
+                if (!newMsg) return;
+                await writeRemoteMessageToLocal(newMsg);
+                queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+            })
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'messages',
+                filter: `chat_id=eq.${chatId}`,
+            }, async (payload) => {
+                const updated = payload.new as any;
+                if (!updated) return;
+                await writeRemoteMessageToLocal(updated);
+                queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+            })
+            .on('postgres_changes', {
+                event: 'DELETE',
+                schema: 'public',
+                table: 'messages',
+                filter: `chat_id=eq.${chatId}`,
+            }, async (payload) => {
+                const deleted = payload.old as any;
+                if (!deleted?.id) return;
+                try {
+                    await database.write(async () => {
+                        const collection = database.get('messages');
+                        try {
+                            const existing = await collection.find(deleted.id);
+                            await existing.destroyPermanently();
+                        } catch (e) {}
+                    });
+                } catch (e) {
+                    console.error('[useChatMessagesQuery] Failed to delete local message:', e);
+                }
                 queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
             })
             .subscribe();
@@ -240,17 +604,24 @@ export function useChatMessagesQuery(
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [chatId, queryClient]);
+    }, [chatId, queryClient, chatType]);
+
+    // Filter out messages deleted for the current user
+    const visibleMessages = useMemo(() => {
+        if (!userId) return messages;
+        return messages.filter((m) => !m.deletedFor?.includes(userId));
+    }, [messages, userId]);
 
     return {
-        messages,
+        messages: visibleMessages,
         loading,
         error,
         sendMessage,
         markAsRead,
-        loadMoreMessages: () => {},
-        hasMore: false,
+        loadMoreMessages,
+        hasMore,
     };
 }
 
 export default useChatMessagesQuery;
+

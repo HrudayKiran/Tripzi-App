@@ -136,8 +136,10 @@ const ProfileScreen = () => {
               // Ignore sign out errors
             }
 
-            // Clear local database on logout in background
-            resetDatabase().catch(() => {});
+            // Clear local database on logout and await it to prevent data leaking
+            try {
+              await resetDatabase();
+            } catch (e) {}
 
             // Route to start screen after logout
             router.replace('/(auth)/start');

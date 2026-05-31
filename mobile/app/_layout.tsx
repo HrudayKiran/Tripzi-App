@@ -9,14 +9,24 @@ import analytics from '@react-native-firebase/analytics';
 import crashlytics from '@react-native-firebase/crashlytics';
 import perf from '@react-native-firebase/perf';
 import { DatabaseProvider } from '@nozbe/watermelondb/DatabaseProvider';
-import { database } from '../src/database';
+import { database, resetDatabase } from '../src/database';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,       // Data stays fresh for 30 seconds
+      gcTime: 10 * 60_000,     // Cache kept for 10 minutes
+      refetchOnWindowFocus: false,
+      retry: 2,
+    },
+  },
+});
 import { syncDatabase } from '../src/database/sync';
 import { useAppCheck } from '../src/hooks/useAppCheck';
 import { useRemoteConfig } from '../src/hooks/useRemoteConfig';
 import { usePresence } from '../src/hooks/usePresence';
+import { supabase } from '../src/lib/supabase';
 
 function AppNavigator() {
   usePresence();
@@ -36,6 +46,7 @@ function AppNavigator() {
   return (
     <NavigationProvider value={navigationTheme}>
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background }, animation: 'fade' }}>
+        <Stack.Screen name="index" options={{ contentStyle: { backgroundColor: colors.background } }} />
         <Stack.Screen name="(auth)" options={{ contentStyle: { backgroundColor: colors.background } }} />
         <Stack.Screen name="(tabs)" options={{ contentStyle: { backgroundColor: colors.background } }} />
         <Stack.Screen name="chat" options={{ contentStyle: { backgroundColor: colors.background } }} />
@@ -55,9 +66,27 @@ export default function RootLayout() {
   // Initialize Firebase Remote Config for version checking
   useRemoteConfig(currentVersion);
 
-  // Initial Sync
+  // Initial Sync & Login Sync Listener
   React.useEffect(() => {
+    // Initial sync on app boot
     syncDatabase().catch(() => { });
+
+    // Sync automatically when auth state transitions to SIGNED_IN
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (__DEV__) console.log('[RootLayout] User signed in or token refreshed, running syncDatabase...');
+        queryClient.clear();
+        syncDatabase().catch(() => { });
+      } else if (event === 'SIGNED_OUT') {
+        if (__DEV__) console.log('[RootLayout] User signed out, clearing private data...');
+        queryClient.clear();
+        resetDatabase().catch(() => { });
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Initialize Firebase Analytics/Crashlytics/Perf

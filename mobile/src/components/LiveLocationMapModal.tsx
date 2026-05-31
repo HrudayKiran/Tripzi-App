@@ -13,7 +13,7 @@ interface LiveLocationMapModalProps {
     onClose: () => void;
     chatId: string;
     currentUser: any;
-    collectionName?: 'chats' | 'group_chats';
+    collectionName?: 'chats' | 'group_chats' | 'direct_chats';
 }
 
 const DEFAULT_REGION = {
@@ -26,49 +26,79 @@ const DEFAULT_REGION = {
 const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectionName = 'chats' }: LiveLocationMapModalProps) => {
     const { colors } = useTheme();
     const [users, setUsers] = useState<any[]>([]);
-    const [region, setRegion] = useState<any>(DEFAULT_REGION);
+    const mapRef = React.useRef<MapView>(null);
+    const [hasAnimated, setHasAnimated] = useState(false);
 
     useEffect(() => {
-        if (!visible || !chatId) return;
+        if (!visible) {
+            setHasAnimated(false);
+            return;
+        }
+        if (!chatId) return;
 
         const loadShares = async () => {
             const { data } = await supabase
                 .from('live_shares')
-                .select('*')
+                .select(`
+                    id, chat_id, chat_type, user_id, latitude, longitude, is_active, expires_at, updated_at, heading,
+                    profiles:user_id (
+                        name,
+                        photo_url
+                    )
+                `)
                 .eq('chat_id', chatId)
                 .eq('is_active', true)
-                .gt('valid_until', new Date().toISOString());
-            const activeUsers = (data || []).filter(d => typeof d.latitude === 'number' && typeof d.longitude === 'number' && !(d.latitude === 0 && d.longitude === 0));
+                .gt('expires_at', new Date().toISOString());
+
+            const activeUsers = (data || [])
+                .map((d: any) => ({
+                    id: d.user_id,
+                    latitude: d.latitude,
+                    longitude: d.longitude,
+                    updated_at: d.updated_at,
+                    displayName: d.profiles?.name || 'User',
+                    photoURL: d.profiles?.photo_url || null,
+                }))
+                .filter(d => typeof d.latitude === 'number' && typeof d.longitude === 'number' && !(d.latitude === 0 && d.longitude === 0));
+
             setUsers(activeUsers);
-            if (activeUsers.length > 0) {
-                setRegion({ latitude: activeUsers[0].latitude, longitude: activeUsers[0].longitude, latitudeDelta: 0.01, longitudeDelta: 0.01 });
+            if (activeUsers.length > 0 && !hasAnimated) {
+                mapRef.current?.animateToRegion({
+                    latitude: activeUsers[0].latitude,
+                    longitude: activeUsers[0].longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                }, 1000);
+                setHasAnimated(true);
             }
         };
+
         loadShares();
-        const channel = supabase.channel(`live-loc-${chatId}`)
+        const randomSuffix = Math.random().toString(36).substring(2, 9);
+        const channelName = `live-loc-${chatId}-${randomSuffix}`;
+        const channel = supabase.channel(channelName)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'live_shares', filter: `chat_id=eq.${chatId}` }, () => { loadShares(); })
             .subscribe();
         return () => { supabase.removeChannel(channel); };
-    }, [visible, chatId, collectionName]);
+    }, [visible, chatId, collectionName, hasAnimated]);
 
     const focusOnUser = (user: any) => {
-        setRegion({
+        mapRef.current?.animateToRegion({
             latitude: user.latitude,
             longitude: user.longitude,
             latitudeDelta: 0.005,
             longitudeDelta: 0.005,
-        });
+        }, 1000);
     };
 
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
             <View style={styles.container}>
                 <MapView
+                    ref={mapRef}
                     provider={PROVIDER_GOOGLE}
                     style={styles.map}
                     initialRegion={DEFAULT_REGION}
-                    region={region}
-                    onRegionChangeComplete={setRegion}
                     showsUserLocation
                     showsMyLocationButton
                 >

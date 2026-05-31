@@ -27,7 +27,7 @@ import {
 import { PREFERENCE_KEYS, setBooleanPreference } from '../utils/preferences';
 import { supabase } from '../lib/supabase';
 import { workersApi } from '../lib/workersApi';
-import { database } from '../database';
+import { database, resetDatabase } from '../database';
 
 const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/;
 
@@ -124,6 +124,9 @@ const CompleteProfileScreen = () => {
         } catch (e) { }
         try {
             await supabase.auth.signOut();
+        } catch (e) { }
+        try {
+            await resetDatabase();
         } catch (e) { }
         router.replace('/(auth)/start');
     };

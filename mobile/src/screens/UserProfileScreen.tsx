@@ -108,7 +108,7 @@ const UserProfileScreen = () => {
                 const myName = profile?.name || profile?.display_name || currentUser.user_metadata?.full_name || 'User';
                 const myPhoto = profile?.photo_url || currentUser.user_metadata?.avatar_url || '';
 
-                const { data: newChat } = await supabase.from('direct_chats').insert({
+                const { data: newChat, error: insertError } = await supabase.from('direct_chats').insert({
                     participants: [currentUser.id, userId],
                     participant_details: {
                         [currentUser.id]: { displayName: myName, photoURL: myPhoto },
@@ -118,7 +118,16 @@ const UserProfileScreen = () => {
                     muted_by: [],
                     pinned_by: [],
                 }).select('id').single();
+
+                if (insertError) {
+                    throw insertError;
+                }
+
                 chatId = newChat?.id;
+            }
+
+            if (!chatId) {
+                throw new Error('Chat ID not found');
             }
 
             router.push({

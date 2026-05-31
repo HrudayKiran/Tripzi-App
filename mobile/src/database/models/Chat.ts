@@ -8,6 +8,7 @@ export default class Chat extends Model {
   } as const;
 
   @field('participants') participantsRaw!: string; // JSON string
+  @field('participant_details') participantDetailsRaw?: string; // JSON string
   @field('last_message') lastMessage?: string;
   @field('last_message_at') lastMessageAt?: number;
   @field('unread_count') unreadCountRaw?: string; // JSON string

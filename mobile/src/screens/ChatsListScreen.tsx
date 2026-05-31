@@ -294,7 +294,7 @@ const ChatsListScreen = () => {
                 const { data: profile } = await supabase.from('profiles').select('name, display_name, photo_url').eq('id', currentUser.id).maybeSingle();
                 const userData: any = profile || {};
 
-                const { data: newChat } = await supabase.from('direct_chats').insert({
+                const { data: newChat, error: insertError } = await supabase.from('direct_chats').insert({
                     participants: [currentUser.id, user.id],
                     participant_details: {
                         [currentUser.id]: {
@@ -310,7 +310,16 @@ const ChatsListScreen = () => {
                     muted_by: [],
                     pinned_by: [],
                 }).select('id').single();
+                
+                if (insertError) {
+                    throw insertError;
+                }
+                
                 chatId = newChat?.id;
+            }
+
+            if (!chatId) {
+                throw new Error('Chat ID not found');
             }
 
             setShowSearch(false);
