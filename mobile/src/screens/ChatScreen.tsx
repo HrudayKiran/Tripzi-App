@@ -20,6 +20,8 @@ import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-g
 import Reanimated, { useSharedValue, useAnimatedStyle, withTiming, runOnJS } from 'react-native-reanimated';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
+import { ImageZoom } from '@likashefqet/react-native-image-zoom';
+
 const TypedFlashList = FlashList as any;
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,6 +41,8 @@ import { getBooleanPreference, PREFERENCE_KEYS } from '../utils/preferences';
 import DefaultAvatar from '../components/DefaultAvatar';
 import LocationPickerModal from '../components/LocationPickerModal';
 import LiveLocationMapModal from '../components/LiveLocationMapModal';
+import CustomMediaPickerModal from '../components/CustomMediaPickerModal';
+import ImagePreviewModal from '../components/ImagePreviewModal';
 import { supabase } from '../lib/supabase';
 import { database } from '../database';
 import { Q } from '@nozbe/watermelondb';
@@ -54,100 +58,37 @@ const GOOGLE_MAPS_SEARCH_URL = 'https://www.google.com/maps/search/?api=1&query=
 const formatLocationCoordinates = (latitude: number, longitude: number) =>
     `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
 
+const formatEndedTime = (expiresAt: string | Date | undefined) => {
+    if (!expiresAt) return 'Sharing ended';
+    try {
+        const date = new Date(expiresAt);
+        const diffMins = differenceInMinutes(new Date(), date);
+        if (diffMins < 1) {
+            return 'Ended just now';
+        }
+        if (diffMins < 60) {
+            return `Ended ${diffMins} min ago`;
+        }
+        if (diffMins < 24 * 60) {
+            return `Ended today at ${format(date, 'h:mm a')}`;
+        }
+        return `Ended on ${format(date, 'MMM d')} at ${format(date, 'h:mm a')}`;
+    } catch (e) {
+        return 'Sharing ended';
+    }
+};
+
 const ZoomableImage = ({ uri, onClose }: { uri: string; onClose: () => void }) => {
-    const scale = useSharedValue(1);
-    const savedScale = useSharedValue(1);
-
-    const translateX = useSharedValue(0);
-    const translateY = useSharedValue(0);
-    const savedTranslateX = useSharedValue(0);
-    const savedTranslateY = useSharedValue(0);
-
-    const pinchGesture = Gesture.Pinch()
-        .onUpdate((event) => {
-            scale.value = savedScale.value * event.scale;
-        })
-        .onEnd(() => {
-            if (scale.value < 1) {
-                scale.value = withTiming(1);
-                savedScale.value = 1;
-            } else if (scale.value > 5) {
-                scale.value = withTiming(5);
-                savedScale.value = 5;
-            } else {
-                savedScale.value = scale.value;
-            }
-        });
-
-    const panGesture = Gesture.Pan()
-        .onUpdate((event) => {
-            if (scale.value > 1) {
-                translateX.value = savedTranslateX.value + event.translationX;
-                translateY.value = savedTranslateY.value + event.translationY;
-            }
-        })
-        .onEnd(() => {
-            if (scale.value > 1) {
-                savedTranslateX.value = translateX.value;
-                savedTranslateY.value = translateY.value;
-            } else {
-                translateX.value = withTiming(0);
-                translateY.value = withTiming(0);
-                savedTranslateX.value = 0;
-                savedTranslateY.value = 0;
-            }
-        });
-
-    const doubleTapGesture = Gesture.Tap()
-        .numberOfTaps(2)
-        .onEnd(() => {
-            if (scale.value > 1) {
-                scale.value = withTiming(1);
-                savedScale.value = 1;
-                translateX.value = withTiming(0);
-                translateY.value = withTiming(0);
-                savedTranslateX.value = 0;
-                savedTranslateY.value = 0;
-            } else {
-                scale.value = withTiming(2.5);
-                savedScale.value = 2.5;
-            }
-        });
-
-    const singleTapGesture = Gesture.Tap()
-        .numberOfTaps(1)
-        .requireExternalGestureToFail(doubleTapGesture)
-        .onEnd(() => {
-            if (scale.value === 1) {
-                runOnJS(onClose)();
-            }
-        });
-
-    const composedGesture = Gesture.Simultaneous(
-        pinchGesture,
-        panGesture,
-        Gesture.Exclusive(doubleTapGesture, singleTapGesture)
-    );
-
-    const animatedStyle = useAnimatedStyle(() => {
-        return {
-            transform: [
-                { scale: scale.value },
-                { translateX: translateX.value / scale.value },
-                { translateY: translateY.value / scale.value },
-            ] as any,
-        };
-    });
-
     return (
         <GestureHandlerRootView style={{ flex: 1, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-            <GestureDetector gesture={composedGesture}>
-                <Reanimated.Image
-                    source={{ uri }}
-                    style={[{ width: '100%', height: '100%' }, animatedStyle as any]}
-                    resizeMode="contain"
-                />
-            </GestureDetector>
+            <ImageZoom
+                uri={uri}
+                style={{ width: '100%', height: '100%' }}
+                minScale={1}
+                maxScale={5}
+                isSingleTapEnabled={true}
+                onSingleTap={onClose}
+            />
         </GestureHandlerRootView>
     );
 };
@@ -270,6 +211,9 @@ const ChatScreen = () => {
     // Image viewer state
     const [viewingImage, setViewingImage] = useState<string | null>(null);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [customPickerVisible, setCustomPickerVisible] = useState(false);
+    const [previewModalVisible, setPreviewModalVisible] = useState(false);
+    const [previewImages, setPreviewImages] = useState<string[]>([]);
 
     // Location state
     const [gettingLocation, setGettingLocation] = useState(false);
@@ -793,33 +737,30 @@ const ChatScreen = () => {
     const pickImage = async (useCamera: boolean = false) => {
         setShowAttachmentPicker(false);
 
+        if (!useCamera) {
+            setCustomPickerVisible(true);
+            return;
+        }
+
         try {
-            const permission = useCamera
-                ? await ImagePicker.requestCameraPermissionsAsync()
-                : await ImagePicker.requestMediaLibraryPermissionsAsync();
+            const permission = await ImagePicker.requestCameraPermissionsAsync();
 
             if (permission.status !== 'granted') {
                 Alert.alert('Permission needed', 'Please grant access to continue.');
                 return;
             }
 
-            const result = useCamera
-                ? await ImagePicker.launchCameraAsync({
-                    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                    quality: 0.8,
-                    allowsEditing: false,
-                })
-                : await ImagePicker.launchImageLibraryAsync({
-                    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                    quality: 0.8,
-                    allowsEditing: false,
-                });
+            const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                quality: 0.8,
+                allowsEditing: false,
+            });
 
             if (!result.canceled && result.assets[0]) {
-                setPreviewImage(result.assets[0].uri);
+                setPreviewImages([result.assets[0].uri]);
+                setPreviewModalVisible(true);
             }
         } catch (error) {
-
             Alert.alert('Error', 'Failed to pick image.');
         }
     };
@@ -914,6 +855,28 @@ const ChatScreen = () => {
             });
         } finally {
             setUploading(false);
+        }
+    };
+
+    const handleConfirmMediaSelection = (uris: string[]) => {
+        if (uris.length > 0) {
+            setPreviewImages(uris);
+            setPreviewModalVisible(true);
+        }
+    };
+
+    const sendMultipleImages = async (uris: string[]) => {
+        setUploading(true);
+        setPreviewModalVisible(false);
+        try {
+            for (const uri of uris) {
+                await sendImageMessage(uri);
+            }
+        } catch (error) {
+            // Handled inside sendImageMessage
+        } finally {
+            setUploading(false);
+            setPreviewImages([]);
         }
     };
 
@@ -1933,12 +1896,24 @@ const ChatScreen = () => {
 
                         {/* Image message */}
                         {item.type === 'image' && item.mediaUrl && (
-                            <Image
-                                source={{ uri: item.mediaUrl }}
-                                style={styles.messageImage}
-                                contentFit="cover"
-                                transition={200}
-                            />
+                            <View style={{ position: 'relative' }}>
+                                <Image
+                                    source={{ uri: item.mediaUrl }}
+                                    style={styles.messageImage}
+                                    contentFit="cover"
+                                    transition={200}
+                                />
+                                {item.status === 'pending' && (
+                                    <View style={[StyleSheet.absoluteFillObject, {
+                                        backgroundColor: 'rgba(0, 0, 0, 0.4)',
+                                        justifyContent: 'center',
+                                        alignItems: 'center',
+                                        borderRadius: 8,
+                                    }]}>
+                                        <ActivityIndicator size="small" color="#fff" />
+                                    </View>
+                                )}
+                            </View>
                         )}
 
                         {/* Location message */}
@@ -1971,19 +1946,16 @@ const ChatScreen = () => {
                                                     >
                                                         <Marker coordinate={coords}>
                                                             <View style={styles.bubbleMarkerContainer}>
-                                                                {markerPhoto ? (
-                                                                    <Image
-                                                                        source={{ uri: markerPhoto }}
-                                                                        style={[styles.bubbleMarkerAvatar, { borderColor: isOwn ? colors.primary : '#fff' }]}
-                                                                        contentFit="cover"
-                                                                    />
-                                                                ) : (
-                                                                    <View style={[styles.bubbleMarkerAvatar, { backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center', borderColor: '#fff' }]}>
-                                                                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>
-                                                                            {(markerName || 'U').charAt(0).toUpperCase()}
-                                                                        </Text>
-                                                                    </View>
-                                                                )}
+                                                                <DefaultAvatar
+                                                                    uri={markerPhoto}
+                                                                    name={markerName}
+                                                                    size={30}
+                                                                    style={{
+                                                                        ...styles.bubbleMarkerAvatar,
+                                                                        borderColor: isOwn ? colors.primary : '#fff',
+                                                                        borderWidth: 2
+                                                                    }}
+                                                                />
                                                                 <View style={styles.bubbleMarkerPin} />
                                                             </View>
                                                         </Marker>
@@ -2010,17 +1982,47 @@ const ChatScreen = () => {
                                                 </View>
                                             );
                                         } else {
+                                            const coords = {
+                                                latitude: item.location!.latitude,
+                                                longitude: item.location!.longitude,
+                                            };
+                                            const markerPhoto = chat?.participantDetails?.[item.senderId]?.photoURL;
+                                            const markerName = item.senderName;
+                                            const endedText = formatEndedTime(item.location!.expires_at);
+
                                             return (
-                                                <View style={[styles.locationContainer, { padding: 12 }]}>
-                                                    <View style={[styles.locationMapPreview, { backgroundColor: isDarkMode ? '#252525' : '#E5E7EB' }]}>
-                                                        <Icon name="Radio" size={28} color={colors.textSecondary} />
-                                                    </View>
-                                                    <View style={styles.locationInfo}>
-                                                        <Text style={[styles.locationLabel, { color: isOwn ? ownTextColor : colors.text }]}>
-                                                            Live location ended
-                                                        </Text>
+                                                <View style={styles.bubbleMapWrapper}>
+                                                    <InlineMap
+                                                        latitude={coords.latitude}
+                                                        longitude={coords.longitude}
+                                                        style={[styles.bubbleMap, { opacity: 0.6 }]}
+                                                        onPress={() => openLocationInMaps(coords.latitude, coords.longitude)}
+                                                    >
+                                                        <Marker coordinate={coords}>
+                                                            <View style={styles.bubbleMarkerContainer}>
+                                                                <DefaultAvatar
+                                                                    uri={markerPhoto}
+                                                                    name={markerName}
+                                                                    size={30}
+                                                                    style={{
+                                                                        ...styles.bubbleMarkerAvatar,
+                                                                        borderColor: isOwn ? colors.primary : '#fff',
+                                                                        borderWidth: 2
+                                                                    }}
+                                                                />
+                                                                <View style={styles.bubbleMarkerPin} />
+                                                            </View>
+                                                        </Marker>
+                                                    </InlineMap>
+                                                    <View style={styles.bubbleMapInfo}>
+                                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                            <Icon name="Radio" size={16} color={colors.textSecondary} />
+                                                            <Text style={[styles.locationLabel, { color: isOwn ? ownTextColor : colors.text }]}>
+                                                                Live Location Ended
+                                                            </Text>
+                                                        </View>
                                                         <Text style={[styles.locationAddress, { color: isOwn ? ownTimeColor : colors.textSecondary }]}>
-                                                            Sharing ended
+                                                            {endedText}
                                                         </Text>
                                                     </View>
                                                 </View>
@@ -2188,13 +2190,7 @@ const ChatScreen = () => {
 
             {/* Live Location Banner removed */}
 
-            {/* Uploading indicator */}
-            {uploading && (
-                <View style={[styles.uploadingBar, { backgroundColor: colors.primary }]}>
-                    <ActivityIndicator size="small" color="#fff" />
-                    <Text style={styles.uploadingText}>Sending...</Text>
-                </View>
-            )}
+
 
 
 
@@ -2263,9 +2259,10 @@ const ChatScreen = () => {
                     ]}
                 >
                     <TouchableOpacity
-                        style={[styles.attachButton, { backgroundColor: colors.card }, shadowSoft]}
-                        onPress={() => setShowAttachmentPicker(true)}
+                        style={[styles.attachButton, { backgroundColor: colors.card, opacity: uploading ? 0.5 : 1 }, shadowSoft]}
+                        onPress={() => !uploading && setShowAttachmentPicker(true)}
                         activeOpacity={0.7}
+                        disabled={uploading}
                     >
                         <Icon name="PlusCircle" size={24} color={colors.primary} />
                     </TouchableOpacity>
@@ -2274,17 +2271,18 @@ const ChatScreen = () => {
                         style={[styles.input, { backgroundColor: inputBg, color: colors.text, borderColor: isDarkMode ? '#222' : '#D8D8E0' }]}
                         value={inputText}
                         onChangeText={handleTextChange}
-                        placeholder="Type a message..."
+                        placeholder={uploading ? "Sending images..." : "Type a message..."}
                         placeholderTextColor={colors.textSecondary}
                         multiline
                         maxLength={1000}
+                        editable={!uploading}
                     />
 
                     {inputText.trim() ? (
                         <TouchableOpacity
                             style={[styles.sendButton, { backgroundColor: colors.primary }, shadowSoft]}
                             onPress={handleSend}
-                            disabled={sending}
+                            disabled={sending || uploading}
                             activeOpacity={0.7}
                         >
                             {sending ? (
@@ -2581,52 +2579,33 @@ const ChatScreen = () => {
 
             {/* Image Viewer */}
             <Modal visible={!!viewingImage} transparent animationType="fade">
-                <View style={styles.imageViewerModal}>
+                <Pressable style={styles.imageViewerModal} onPress={() => setViewingImage(null)}>
                     <TouchableOpacity style={styles.imageViewerClose} onPress={() => setViewingImage(null)}>
                         <Icon name="X" size={28} color="#fff" />
                     </TouchableOpacity>
                     {viewingImage && (
                         <ZoomableImage uri={viewingImage} onClose={() => setViewingImage(null)} />
                     )}
-                </View>
+                </Pressable>
             </Modal>
 
-            {/* Image Preview Modal (Before Send) */}
-            <Modal visible={!!previewImage} transparent animationType="slide">
-                <View style={[styles.imageViewerModal, { backgroundColor: '#000' }]}>
-                    <View style={[styles.previewHeader, { top: insets.top + 12 }]}>
-                        <Text style={styles.previewTitle}>Ready to send</Text>
-                        <Text style={styles.previewSubtitle}>Check the image before sharing it.</Text>
-                    </View>
-                    <Image
-                        source={{ uri: previewImage || '' }}
-                        style={styles.fullImage}
-                        contentFit="contain"
-                        transition={200}
-                    />
+            {/* Custom Media Picker Modal */}
+            <CustomMediaPickerModal
+                visible={customPickerVisible}
+                onClose={() => setCustomPickerVisible(false)}
+                onConfirmSelection={handleConfirmMediaSelection}
+            />
 
-                    <View style={[styles.previewActions, { bottom: Math.max(insets.bottom, 20) + 20 }]}>
-                        <TouchableOpacity
-                            style={[styles.previewButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
-                            onPress={() => setPreviewImage(null)}
-                        >
-                            <Text style={styles.previewButtonText}>Cancel</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.previewButton, { backgroundColor: colors.primary }]}
-                            onPress={() => {
-                                if (previewImage) {
-                                    sendImageMessage(previewImage);
-                                    setPreviewImage(null);
-                                }
-                            }}
-                        >
-                            <Text style={[styles.previewButtonText, { fontWeight: 'bold' }]}>Send</Text>
-                            <Icon name="PaperPlaneRight" size={16} color="#fff" style={{ marginLeft: 6 }} />
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
+            {/* Reusable Image Preview Modal */}
+            <ImagePreviewModal
+                visible={previewModalVisible}
+                initialImages={previewImages}
+                onClose={() => {
+                    setPreviewModalVisible(false);
+                    setPreviewImages([]);
+                }}
+                onSend={sendMultipleImages}
+            />
 
 
         </SafeAreaView >

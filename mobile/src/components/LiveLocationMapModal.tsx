@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions } from 'react-native';
-import { Image } from 'expo-image';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import Icon from '../components/Icon';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { formatDistanceToNow } from 'date-fns';
+import DefaultAvatar from './DefaultAvatar';
 
 interface LiveLocationMapModalProps {
     visible: boolean;
@@ -24,7 +25,8 @@ const DEFAULT_REGION = {
 };
 
 const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectionName = 'chats' }: LiveLocationMapModalProps) => {
-    const { colors } = useTheme();
+    const { colors, isDarkMode } = useTheme();
+    const insets = useSafeAreaInsets();
     const [users, setUsers] = useState<any[]>([]);
     const mapRef = React.useRef<MapView>(null);
     const [hasAnimated, setHasAnimated] = useState(false);
@@ -82,13 +84,12 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectio
         return () => { supabase.removeChannel(channel); };
     }, [visible, chatId, collectionName, hasAnimated]);
 
-    const focusOnUser = (user: any) => {
-        mapRef.current?.animateToRegion({
-            latitude: user.latitude,
-            longitude: user.longitude,
-            latitudeDelta: 0.005,
-            longitudeDelta: 0.005,
-        }, 1000);
+    const headerTop = Math.max(insets.top, 15) + 10;
+    const mapPadding = {
+        top: headerTop + 60,
+        right: 15,
+        bottom: Math.max(insets.bottom, 15) + 15,
+        left: 15,
     };
 
     return (
@@ -101,6 +102,7 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectio
                     initialRegion={DEFAULT_REGION}
                     showsUserLocation
                     showsMyLocationButton
+                    mapPadding={mapPadding}
                 >
                     {users.map(user => (
                         <Marker
@@ -110,19 +112,16 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectio
                             description={`Updated ${user.updated_at ? formatDistanceToNow(new Date(user.updated_at)) : 'just now'} ago`}
                         >
                             <View style={styles.markerContainer}>
-                                {user.photoURL ? (
-                                    <Image
-                                        source={{ uri: user.photoURL }}
-                                        style={[styles.markerImage, { borderColor: user.id === currentUser?.id ? colors.primary : '#fff' }]}
-                                        contentFit="cover"
-                                    />
-                                ) : (
-                                    <View style={[styles.markerFallback, { borderColor: user.id === currentUser?.id ? colors.primary : '#fff' }]}>
-                                        <Text style={styles.markerFallbackText}>
-                                            {(user.displayName || 'U').charAt(0).toUpperCase()}
-                                        </Text>
-                                    </View>
-                                )}
+                                <DefaultAvatar
+                                    uri={user.photoURL}
+                                    name={user.displayName}
+                                    size={40}
+                                    style={{
+                                        ...styles.markerImage,
+                                        borderColor: user.id === currentUser?.id ? colors.primary : '#fff',
+                                        borderWidth: 2
+                                    }}
+                                />
                                 <View style={styles.markerArrow} />
                             </View>
                         </Marker>
@@ -130,50 +129,13 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectio
                 </MapView>
 
                 {/* Header */}
-                <View style={styles.header}>
+                <View style={[styles.header, { top: headerTop }]}>
                     <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-                        <Icon name="X" size={24} color="#000" />
+                        <Icon name="X" size={24} color={isDarkMode ? '#fff' : '#000'} />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Live Locations</Text>
-                </View>
-
-                {/* User List Overlay */}
-                <View style={[styles.userList, { backgroundColor: colors.card }]}>
-                    <Text style={[styles.userListTitle, { color: colors.textSecondary }]}>Active Sharers ({users.length})</Text>
-                    {users.length === 0 ? (
-                        <Text style={{ padding: SPACING.md, color: colors.textSecondary }}>No one is sharing live location.</Text>
-                    ) : (
-                        users.map(user => (
-                            <TouchableOpacity
-                                key={user.id}
-                                style={styles.userRow}
-                                onPress={() => focusOnUser(user)}
-                            >
-                                {user.photoURL ? (
-                                    <Image
-                                        source={{ uri: user.photoURL }}
-                                        style={styles.listAvatar}
-                                        contentFit="cover"
-                                    />
-                                ) : (
-                                    <View style={[styles.listAvatar, styles.listAvatarFallback]}>
-                                        <Text style={styles.markerFallbackText}>
-                                            {(user.displayName || 'U').charAt(0).toUpperCase()}
-                                        </Text>
-                                    </View>
-                                )}
-                                <View style={{ flex: 1 }}>
-                                    <Text style={[styles.userName, { color: colors.text }]}>
-                                        {user.id === currentUser?.id ? 'You' : user.displayName}
-                                    </Text>
-                                    <Text style={[styles.updatedText, { color: colors.textSecondary }]}>
-                                        Last active: {user.updated_at ? formatDistanceToNow(new Date(user.updated_at)) : 'now'} ago
-                                    </Text>
-                                </View>
-                                <Icon name="NavigationArrow" size={24} color={colors.primary} />
-                            </TouchableOpacity>
-                        ))
-                    )}
+                    <Text style={[styles.headerTitle, { color: isDarkMode ? '#fff' : '#000', backgroundColor: isDarkMode ? 'rgba(30,30,30,0.85)' : 'rgba(255,255,255,0.85)' }]}>
+                        Live Locations
+                    </Text>
                 </View>
             </View>
         </Modal>
@@ -185,12 +147,12 @@ const styles = StyleSheet.create({
     map: { ...StyleSheet.absoluteFillObject },
     header: {
         position: 'absolute',
-        top: 50,
         left: 20,
         right: 20,
         flexDirection: 'row',
         alignItems: 'center',
         gap: SPACING.md,
+        zIndex: 10,
     },
     closeButton: {
         backgroundColor: '#fff',
@@ -208,33 +170,14 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: FONT_SIZE.lg,
         fontWeight: FONT_WEIGHT.bold,
-        color: '#000',
-        backgroundColor: 'rgba(255,255,255,0.8)',
         paddingHorizontal: SPACING.md,
-        paddingVertical: 4,
+        paddingVertical: 6,
         borderRadius: BORDER_RADIUS.md,
         overflow: 'hidden',
     },
     markerContainer: { alignItems: 'center' },
     markerImage: {
-        width: 40,
-        height: 40,
         borderRadius: 20,
-        borderWidth: 2,
-    },
-    markerFallback: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        borderWidth: 2,
-        backgroundColor: '#1F2937',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    markerFallbackText: {
-        color: '#fff',
-        fontSize: FONT_SIZE.sm,
-        fontWeight: FONT_WEIGHT.bold,
     },
     markerArrow: {
         width: 0,
@@ -250,38 +193,7 @@ const styles = StyleSheet.create({
         transform: [{ rotate: '180deg' }],
         marginTop: -2,
     },
-    userList: {
-        position: 'absolute',
-        bottom: 30,
-        left: 20,
-        right: 20,
-        borderRadius: BORDER_RADIUS.lg,
-        padding: SPACING.md,
-        elevation: 10,
-        maxHeight: 200,
-    },
-    userListTitle: {
-        fontSize: FONT_SIZE.xs,
-        fontWeight: FONT_WEIGHT.bold,
-        marginBottom: SPACING.sm,
-        textTransform: 'uppercase',
-    },
-    userRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: SPACING.sm,
-        gap: SPACING.sm,
-        borderBottomWidth: 0.5,
-        borderBottomColor: 'rgba(0,0,0,0.1)',
-    },
-    listAvatar: { width: 32, height: 32, borderRadius: 16 },
-    listAvatarFallback: {
-        backgroundColor: '#1F2937',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    userName: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold },
-    updatedText: { fontSize: 10 },
 });
 
 export default LiveLocationMapModal;
+
