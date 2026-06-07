@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { Env } from './lib/supabase';
+import { Env, getSupabaseAdmin } from './lib/supabase';
 import { requireAuth } from './middleware/auth';
 import accountRoutes from './routes/account';
 import aiRoutes from './routes/ai';
@@ -8,6 +8,7 @@ import kbRoutes from './routes/kb';
 import mediaRoutes from './routes/media';
 import groupChatsRoutes from './routes/group_chats';
 import { handleDailyTripLifecycle } from './scheduled/daily';
+import { deleteR2Objects } from './lib/r2';
 
 const app = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
 
@@ -43,6 +44,7 @@ export default {
     ctx.waitUntil(Promise.all([
       handleDailyTripLifecycle(env),
       cleanupExpiredChats(env),
+      cleanupDeletedMedia(env),
     ]));
   },
 };
@@ -69,6 +71,38 @@ async function cleanupExpiredChats(env: Env): Promise<void> {
       await env.DB.prepare(`DELETE FROM ai_messages WHERE conversation_id = ?`).bind(id).run();
       await env.DB.prepare(`DELETE FROM ai_conversations WHERE id = ?`).bind(id).run();
     }
+  } catch {
+    // Silently fail — cleanup will retry next day
+  }
+}
+
+/**
+ * Cleanup deleted media queue from Supabase and delete R2 assets.
+ * Runs as part of the daily cron trigger.
+ */
+async function cleanupDeletedMedia(env: Env): Promise<void> {
+  try {
+    const supabase = getSupabaseAdmin(env);
+    
+    // Fetch up to 100 media records to delete
+    const { data: mediaItems, error } = await supabase
+      .from('deleted_media')
+      .select('id, object_key')
+      .limit(100);
+
+    if (error || !mediaItems || mediaItems.length === 0) return;
+
+    const keys = mediaItems.map((item: any) => item.object_key);
+    
+    // Delete the objects from R2
+    await deleteR2Objects(env, keys);
+
+    // Remove the records from the deleted_media queue
+    const ids = mediaItems.map((item: any) => item.id);
+    await supabase
+      .from('deleted_media')
+      .delete()
+      .in('id', ids);
   } catch {
     // Silently fail — cleanup will retry next day
   }

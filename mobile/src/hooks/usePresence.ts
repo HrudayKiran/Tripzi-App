@@ -27,7 +27,7 @@ export const usePresence = () => {
             if (AppState.currentState === 'active') {
                 writePresence('online');
             }
-        }, 60000);
+        }, 20000);
 
         const subscription = AppState.addEventListener('change', (nextState) => {
             if (nextState === 'active') {

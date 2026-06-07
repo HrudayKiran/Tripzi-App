@@ -1,4 +1,4 @@
-import { View, StyleSheet, ViewStyle, ImageStyle } from 'react-native';
+import { View, StyleSheet, ViewStyle, ImageStyle, Image as StandardImage } from 'react-native';
 import { Image } from 'expo-image';
 import Icon from './Icon';
 
@@ -8,9 +8,11 @@ interface DefaultAvatarProps {
     size?: number;
     style?: ViewStyle | ImageStyle;
     isGroup?: boolean;
+    onLoad?: () => void;
+    useStandardImage?: boolean;
 }
 
-const DefaultAvatar: React.FC<DefaultAvatarProps> = ({ uri, size = 40, style, isGroup = false }) => {
+const DefaultAvatar: React.FC<DefaultAvatarProps> = ({ uri, size = 40, style, isGroup = false, onLoad, useStandardImage = false }) => {
     const isValidUrl = uri && (typeof uri === 'string') && (uri.startsWith('https://') || uri.startsWith('http://') || uri.startsWith('file://'));
 
     return (
@@ -32,12 +34,20 @@ const DefaultAvatar: React.FC<DefaultAvatarProps> = ({ uri, size = 40, style, is
                     size={size * 0.6}
                     color="#9ca3af"
                 />
+            ) : useStandardImage ? (
+                <StandardImage
+                    source={{ uri: uri! }}
+                    style={StyleSheet.absoluteFill}
+                    resizeMode="cover"
+                    onLoad={onLoad}
+                />
             ) : (
                 <Image
                     source={{ uri: uri! }}
                     style={StyleSheet.absoluteFill}
                     contentFit="cover"
                     transition={200}
+                    onLoad={onLoad}
                 />
             )}
         </View>
