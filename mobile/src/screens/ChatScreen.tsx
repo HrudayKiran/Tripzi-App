@@ -1841,7 +1841,7 @@ const ChatScreen = () => {
                         <View style={[
                             styles.messageBubble,
                             isOwn ? styles.ownBubble : styles.otherBubble,
-                            { backgroundColor: isOwn ? (isDarkMode ? '#1B2C3F' : '#E1F3FF') : (isDarkMode ? '#202023' : '#F0F0F0') },
+                            { backgroundColor: isOwn ? (isDarkMode ? '#155241ff' : '#FFF8DE') : (isDarkMode ? '#202023' : '#F0F0F0') },
                             { flexDirection: 'row', alignItems: 'center', gap: 6 }
                         ]}>
                             <Icon name="Prohibit" size={14} color={colors.textSecondary} />
@@ -1878,9 +1878,9 @@ const ChatScreen = () => {
         }
 
         // Custom colors for own messages to avoid purple and ensure readability of blue ticks
-        const ownBubbleBg = '#007AFF';
-        const ownTextColor = '#FFFFFF';
-        const ownTimeColor = 'rgba(255,255,255,0.7)';
+        const ownBubbleBg = isDarkMode ? '#155241ff' : '#FFF8DE';
+        const ownTextColor = isDarkMode ? '#F9F8F6' : '#1A1A1A';
+        const ownTimeColor = isDarkMode ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.45)';
 
         return (
             <View>
@@ -1951,13 +1951,17 @@ const ChatScreen = () => {
                         {item.replyTo && (
                             <TouchableOpacity
                                 onPress={() => handleReplyPress(item.replyTo!.messageId)}
-                                style={[styles.replyPreview, { borderLeftColor: isOwn ? 'rgba(255,255,255,0.8)' : colors.primary }]}
+                                style={[
+                                    styles.replyPreview,
+                                    { borderLeftColor: isOwn ? (isDarkMode ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.35)') : colors.primary },
+                                    isOwn && { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 4 }
+                                ]}
                             >
-                                <Text style={[styles.replyName, { color: isOwn ? 'rgba(255,255,255,0.9)' : colors.primary }]}>
+                                <Text style={[styles.replyName, { color: isOwn ? (isDarkMode ? 'rgba(255,255,255,0.9)' : colors.primary) : colors.primary }]}>
                                     Reply
                                 </Text>
                                 <Text
-                                    style={[styles.replyText, { color: isOwn ? 'rgba(255,255,255,0.7)' : colors.textSecondary }]}
+                                    style={[styles.replyText, { color: isOwn ? (isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)') : colors.textSecondary }]}
                                     numberOfLines={1}
                                 >
                                     {item.replyTo.text}
@@ -2043,11 +2047,11 @@ const ChatScreen = () => {
                                                                     size={30}
                                                                     style={{
                                                                         ...styles.bubbleMarkerAvatar,
-                                                                        borderColor: '#fff',
+                                                                        borderColor: '#25D366',
                                                                         borderWidth: 2
                                                                     }}
                                                                 />
-                                                                <View style={styles.bubbleMarkerPin} />
+                                                                <View style={[styles.bubbleMarkerPin, { borderBottomColor: '#25D366' }]} />
                                                             </View>
                                                         </View>
                                                     </View>
@@ -2099,11 +2103,11 @@ const ChatScreen = () => {
                                                                     size={30}
                                                                     style={{
                                                                         ...styles.bubbleMarkerAvatar,
-                                                                        borderColor: '#fff',
+                                                                        borderColor: '#9ca3af',
                                                                         borderWidth: 2
                                                                     }}
                                                                 />
-                                                                <View style={styles.bubbleMarkerPin} />
+                                                                <View style={[styles.bubbleMarkerPin, { borderBottomColor: '#9ca3af' }]} />
                                                             </View>
                                                         </View>
                                                     </View>
@@ -2162,13 +2166,13 @@ const ChatScreen = () => {
                                     />
                                 )}
                                 <View style={styles.tripShareInfo}>
-                                    <Text style={[styles.tripShareLabel, { color: isOwn ? 'rgba(255,255,255,0.8)' : colors.primary }]}>
+                                    <Text style={[styles.tripShareLabel, { color: isOwn ? (isDarkMode ? 'rgba(255,255,255,0.8)' : colors.primary) : colors.primary }]}>
                                         🗺️ Shared Trip
                                     </Text>
                                     <Text style={[styles.tripShareTitle, { color: isOwn ? ownTextColor : colors.text }]} numberOfLines={2}>
                                         {(item as any).tripTitle || 'Trip'}
                                     </Text>
-                                    <Text style={[styles.tripShareTap, { color: isOwn ? 'rgba(255,255,255,0.6)' : colors.primary }]}>
+                                    <Text style={[styles.tripShareTap, { color: isOwn ? (isDarkMode ? 'rgba(255,255,255,0.6)' : colors.primary) : colors.primary }]}>
                                         Tap to view trip
                                     </Text>
                                 </View>
@@ -2282,7 +2286,7 @@ const ChatScreen = () => {
                 )}
 
                 <TouchableOpacity style={styles.iconButton} activeOpacity={0.7} onPress={() => setShowChatMenu(true)}>
-                    <Icon name="DotsThreeVertical" size={20} color={colors.text} />
+                    <Icon name="DotsThreeVertical" size={20} color={colors.text} weight="bold" />
                 </TouchableOpacity>
             </View>
 

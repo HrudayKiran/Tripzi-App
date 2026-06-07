@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Platform, Image as RNImage } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
@@ -9,6 +9,7 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { formatDistanceToNow } from 'date-fns';
 import DefaultAvatar from './DefaultAvatar';
 import * as Location from 'expo-location';
+import * as FileSystem from 'expo-file-system/legacy';
 import { database } from '../database';
 
 interface LiveLocationMapModalProps {
@@ -26,21 +27,27 @@ const DEFAULT_REGION = {
     longitudeDelta: 10,
 };
 
-// Marker with profile image that handles async image loading on Android
 const UserMarker = ({ user }: { user: any }) => {
     const [tracksView, setTracksView] = useState(true);
 
+    const hasImage = !!user.localImageUri;
+    const isActive = user.isActive;
+
     useEffect(() => {
         setTracksView(true);
+        // Allow re-rasterization for a few seconds then stop to save perf
         const timer = setTimeout(() => {
             setTracksView(false);
-        }, 3000);
+        }, 4000);
         return () => clearTimeout(timer);
-    }, [user.photoURL, user.id]);
+    }, [user.localImageUri, user.id]);
+
+    // WhatsApp live location style: active users get green border, inactive/ended get gray border
+    const ringColor = isActive ? '#25D366' : '#9ca3af';
 
     return (
         <Marker
-            key={user.id}
+            key={`${user.id}_${user.localImageUri ? 'img' : 'noimg'}`}
             coordinate={{ latitude: user.latitude, longitude: user.longitude }}
             title={user.displayName}
             description={user.isActive 
@@ -50,16 +57,18 @@ const UserMarker = ({ user }: { user: any }) => {
             tracksViewChanges={tracksView}
         >
             <View style={styles.markerContainer}>
-                <View style={styles.markerImageWrapper}>
-                    <DefaultAvatar
-                        uri={user.photoURL}
-                        name={user.displayName}
-                        size={40}
-                        style={styles.markerImage}
-                        useStandardImage={true}
-                    />
+                <View style={[styles.markerImageWrapper, { borderColor: ringColor }]}>
+                    {hasImage ? (
+                        <RNImage
+                            source={{ uri: user.localImageUri }}
+                            style={styles.markerImageDirect}
+                            resizeMode="cover"
+                        />
+                    ) : (
+                        <Icon name="User" size={24} color="#9ca3af" />
+                    )}
                 </View>
-                <View style={styles.markerArrow} />
+                <View style={[styles.markerArrow, { borderBottomColor: ringColor }]} />
             </View>
         </Marker>
     );
@@ -99,7 +108,7 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectio
         if (!chatId) return;
 
         const loadShares = async () => {
-            const { data } = await supabase
+            const { data, error } = await supabase
                 .from('live_shares')
                 .select(`
                     id, chat_id, chat_type, user_id, latitude, longitude, is_active, expires_at, updated_at, heading,
@@ -110,6 +119,9 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectio
                 `)
                 .eq('chat_id', chatId)
                 .order('updated_at', { ascending: false });
+
+            console.log('[LiveLocationMap] Supabase live_shares query result:', JSON.stringify(data?.map((d: any) => ({ user_id: d.user_id, profiles: d.profiles })), null, 2));
+            if (error) console.log('[LiveLocationMap] Supabase query error:', error);
 
             const latestSharesMap = new Map<string, any>();
             (data || []).forEach((d: any) => {
@@ -144,6 +156,8 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectio
                         }
                     }
 
+                    console.log('[LiveLocationMap] Resolved user:', name, 'photoURL:', photoURL);
+
                     return {
                         id: d.user_id,
                         latitude: d.latitude,
@@ -152,13 +166,48 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectio
                         displayName: name,
                         photoURL: photoURL,
                         isActive,
+                        localImageUri: null as string | null,
                     };
                 });
 
             const resolvedUsers = await Promise.all(activeUsersPromises);
             const activeUsers = resolvedUsers.filter(d => typeof d.latitude === 'number' && typeof d.longitude === 'number' && !(d.latitude === 0 && d.longitude === 0));
 
-            setUsers(activeUsers);
+            const downloadPromises = activeUsers.map(async (user) => {
+                if (user.photoURL && (user.photoURL.startsWith('https://') || user.photoURL.startsWith('http://'))) {
+                    try {
+                        // Use a stable cache filename based on user ID
+                        const localPath = `${FileSystem.cacheDirectory}avatar_${user.id}.jpg`;
+                        // Check if already cached
+                        const info = await FileSystem.getInfoAsync(localPath);
+                        let fileUriToRead = null;
+
+                        if (info.exists) {
+                            fileUriToRead = localPath;
+                            console.log('[LiveLocationMap] Using cached avatar file for:', user.displayName);
+                        } else {
+                            const result = await FileSystem.downloadAsync(user.photoURL, localPath);
+                            if (result.status === 200) {
+                                fileUriToRead = result.uri;
+                                console.log('[LiveLocationMap] Downloaded avatar for:', user.displayName, 'to:', result.uri);
+                            }
+                        }
+
+                        if (fileUriToRead) {
+                            const base64Data = await FileSystem.readAsStringAsync(fileUriToRead, {
+                                encoding: 'base64',
+                            });
+                            user.localImageUri = `data:image/jpeg;base64,${base64Data}`;
+                            console.log('[LiveLocationMap] Loaded base64 image data for:', user.displayName);
+                        }
+                    } catch (e) {
+                        console.log('[LiveLocationMap] Failed to download or read avatar for:', user.displayName, e);
+                    }
+                }
+            });
+            await Promise.all(downloadPromises);
+
+            setUsers([...activeUsers]);
             if (activeUsers.length > 0 && !hasAnimated) {
                 mapRef.current?.animateToRegion({
                     latitude: activeUsers[0].latitude,
@@ -223,7 +272,7 @@ const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectio
                     }}
                 >
                     {users.map(user => (
-                        <UserMarker key={user.id} user={user} />
+                        <UserMarker key={`${user.id}_${user.localImageUri ? 'img' : 'noimg'}`} user={user} />
                     ))}
                 </MapView>
 
@@ -318,8 +367,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: '#fff',
+        overflow: 'hidden',
     },
-    markerImage: {
+    markerImageDirect: {
+        width: 40,
+        height: 40,
         borderRadius: 20,
     },
     nativeMyLocationButton: {
