@@ -240,8 +240,6 @@ const ItinerariesScreen = () => {
                                 renderEmptyState()
                             ) : (
                                 trips.map((trip) => {
-                                    const hasCover = trip.cover_image || (Array.isArray(trip.images) && trip.images[0]);
-                                    
                                     return (
                                         <TouchableOpacity
                                             key={trip.id}
@@ -250,19 +248,12 @@ const ItinerariesScreen = () => {
                                             style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
                                         >
                                             <View style={styles.imageContainer}>
-                                                {hasCover ? (
-                                                    <Image 
-                                                        source={{ uri: trip.cover_image || trip.images[0] }} 
-                                                        style={styles.cardImage} 
-                                                    />
-                                                ) : (
-                                                    <LinearGradient
-                                                        colors={isDarkMode ? ['#2D3436', '#0984E3'] : ['#E0E0E0', '#74B9FF']}
-                                                        style={styles.cardGradient}
-                                                    >
-                                                        <Icon name="MapTrifold" size={40} color="#FFFFFF" weight="duotone" />
-                                                    </LinearGradient>
-                                                )}
+                                                <LinearGradient
+                                                    colors={isDarkMode ? ['#2D3436', '#0984E3'] : ['#E0E0E0', '#74B9FF']}
+                                                    style={styles.cardGradient}
+                                                >
+                                                    <Icon name="MapTrifold" size={40} color="#FFFFFF" weight="duotone" />
+                                                </LinearGradient>
                                                 
                                                 {/* Overlay badge */}
                                                 <View style={styles.badgeContainer}>
@@ -280,10 +271,10 @@ const ItinerariesScreen = () => {
                                                     )}
                                                 </View>
                                             </View>
-
+ 
                                             <View style={styles.cardDetails}>
                                                 <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
-                                                    {trip.title}
+                                                    {trip.trip_title || trip.title}
                                                 </Text>
 
                                                 {/* Route location mapping */}

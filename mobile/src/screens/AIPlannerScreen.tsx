@@ -124,12 +124,44 @@ const EMPTY_STATE_SUGGESTIONS = [
     { icon: '💡', title: 'NxtVibes Features', prompt: 'How do I use NxtVibes features like joining trips or finding travel buddies?' },
     { icon: '🎒', title: 'Backpacking', prompt: 'Plan a budget backpacking trip to Rishikesh' },
 ];
+const IS_DEVELOPMENT_MODE = true;
 
 export default function AIPlannerScreen() {
     const router = useRouter();
     const params = useLocalSearchParams();
     const { colors, isDarkMode } = useTheme();
     const insets = useSafeAreaInsets();
+
+    if (IS_DEVELOPMENT_MODE) {
+        return (
+            <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+                <MotiView
+                    from={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ type: 'spring', duration: 800 }}
+                    style={{ alignItems: 'center', maxWidth: 320 }}
+                >
+                    <View style={[styles.devIconWrapper, { backgroundColor: isDarkMode ? 'rgba(168, 85, 247, 0.15)' : 'rgba(168, 85, 247, 0.08)' }]}>
+                        <Icon name="Sparkle" size={48} color="#a855f7" weight="fill" />
+                    </View>
+                    
+                    <View style={styles.devBetaBadge}>
+                        <Text style={styles.devBetaText}>COMING SOON</Text>
+                    </View>
+
+                    <Text style={[styles.devTitle, { color: colors.text }]}>AI Trip Planner</Text>
+                    
+                    <Text style={[styles.devDesc, { color: colors.textSecondary }]}>
+                        Our intelligent travel planning assistant is currently under development. Soon, you will be able to instantly draft custom day-by-day itineraries, explore personalized destination recommendations, and plan trips with friends using state-of-the-art AI.
+                    </Text>
+
+                    <Text style={[styles.devTimeline, { color: colors.primary }]}>
+                        Stay tuned for upcoming updates! ✨
+                    </Text>
+                </MotiView>
+            </View>
+        );
+    }
 
     // UI State
     const [messages, setMessages] = useState<AIMessage[]>([]);
@@ -716,5 +748,45 @@ const styles = StyleSheet.create({
     tripCardActions: { flexDirection: 'row', gap: 8, marginTop: SPACING.md },
     actionBtn: { flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
     actionBtnText: { fontSize: 13, fontWeight: '600' },
-    actionBtnTextWhite: { color: '#fff', fontSize: 13, fontWeight: '600' }
+    actionBtnTextWhite: { color: '#fff', fontSize: 13, fontWeight: '600' },
+    // Development placeholder screen styles
+    devIconWrapper: {
+        width: 96,
+        height: 96,
+        borderRadius: 48,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    devBetaBadge: {
+        backgroundColor: 'rgba(168, 85, 247, 0.15)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+        marginBottom: 16,
+    },
+    devBetaText: {
+        color: '#a855f7',
+        fontSize: 11,
+        fontWeight: '800',
+        letterSpacing: 1,
+    },
+    devTitle: {
+        fontSize: 26,
+        fontWeight: '800',
+        marginBottom: 12,
+        textAlign: 'center',
+        letterSpacing: -0.5,
+    },
+    devDesc: {
+        fontSize: 14,
+        lineHeight: 22,
+        textAlign: 'center',
+        marginBottom: 24,
+    },
+    devTimeline: {
+        fontSize: 13,
+        fontWeight: '700',
+        textAlign: 'center',
+    },
 });

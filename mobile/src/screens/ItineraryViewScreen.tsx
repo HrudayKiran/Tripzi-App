@@ -475,6 +475,7 @@ export default function ItineraryViewScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { places, setPlaces, checklist, setChecklist, notes, setNotes, tripDraft, customCategories, setCustomCategories, collaborators, setCollaborators, clearDraft } = useItineraryStore();
+    const isSolo = tripDraft?.travelStyle === 'solo' || tripDraft?.tripType === 'solo' || tripDraft?.travel_style === 'solo';
     const [activeTab, setActiveTab] = useState<TabType>('Full Itinerary');
     const [newChecklistItem, setNewChecklistItem] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
@@ -853,42 +854,6 @@ export default function ItineraryViewScreen() {
                 .maybeSingle();
             const userData: any = currentUserData || {};
 
-            // 2. Fetch Unsplash images for itinerary places
-            setProcessingStatus('Fetching place images...');
-            await showUploadNotification(0.1, 'Fetching place images...');
-
-            const orderedPlaces = [...(places || [])].sort((a, b) => a.day - b.day || a.order - b.order);
-            const placeNames = orderedPlaces.map(p => p.name).filter(Boolean);
-            let finalImages: string[] = [];
-
-            if (placeNames.length > 0) {
-                try {
-                    const unsplashResults = await aiService.fetchPlaceImages(placeNames);
-                    finalImages = unsplashResults
-                        .filter(img => img.imageUrl)
-                        .map(img => img.imageUrl);
-                } catch (imgErr) {
-                    console.error('Unsplash fetch error:', imgErr);
-                }
-            }
-
-            // Fallback to destination if no place images
-            if (finalImages.length === 0 && tripDraft?.toLocation) {
-                try {
-                    const fallbackResults = await aiService.fetchPlaceImages([tripDraft.toLocation]);
-                    finalImages = fallbackResults
-                        .filter(img => img.imageUrl)
-                        .map(img => img.imageUrl);
-                } catch (fbErr) {
-                    console.error('Fallback image fetch error:', fbErr);
-                }
-            }
-
-            // Ultimate fallback
-            if (finalImages.length === 0) {
-                finalImages = ['https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800'];
-            }
-
             await showUploadNotification(0.4, 'Preparing itinerary data...');
             setProcessingStatus('Preparing itinerary data...');
 
@@ -904,23 +869,19 @@ export default function ItineraryViewScreen() {
 
             const tripPayload = {
                 user_id: currentUser.id,
-                title: tripDraft?.title || 'My Trip Itinerary',
-                description: tripDraft?.description || '',
+                travel_style: tripDraft?.travelStyle || tripDraft?.tripType || 'solo',
+                trip_title: tripDraft?.trip_title || tripDraft?.title || 'My Trip Itinerary',
                 from_location: tripDraft?.fromLocation || null,
                 to_location: tripDraft?.toLocation || null,
                 from_date: fromDateStr,
                 to_date: toDateStr,
                 duration_days: durationDays,
                 cost_per_person: parseFloat(tripDraft?.costPerPerson) || 0,
-                travel_style: tripDraft?.travelStyle || tripDraft?.tripType || 'solo',
                 accommodation_type: tripDraft?.accommodationType || null,
                 booking_status: 'saved', // Always 'saved', posting is removed
                 places_to_visit: places || [],
                 itinerary: itineraryStrings,
-                images: finalImages,
-                cover_image: finalImages[0] || null,
                 participants: [currentUser.id, ...(collaborators || []).map((c: any) => c.id || c.uid || c)],
-                location: tripDraft?.toLocation || '',
                 trip_types: tripDraft?.tripTypes || [],
                 transport_modes: tripDraft?.transportModes || [],
                 accommodation_days: tripDraft?.accommodationDays ? parseInt(tripDraft.accommodationDays) : null,
@@ -963,7 +924,7 @@ export default function ItineraryViewScreen() {
                         recipient_id: c.id,
                         type: 'trip_update',
                         title: 'Itinerary Saved! 📋',
-                        message: `${userData.name || userData.display_name || 'A collaborator'} has saved the itinerary: "${tripDraft?.title || 'Trip'}"`,
+                        message: `${userData.name || userData.display_name || 'A collaborator'} has saved the itinerary: "${tripDraft?.trip_title || tripDraft?.title || 'Trip'}"`,
                         entity_id: tripId,
                         entity_type: 'trip',
                         actor_id: currentUser.id,
@@ -981,7 +942,7 @@ export default function ItineraryViewScreen() {
             // 6. Done — show completion notification and navigate
             await completeUploadNotification(
                 'Itinerary Saved! 📋',
-                `"${tripDraft?.title || 'Trip'}" has been saved.`
+                `"${tripDraft?.trip_title || tripDraft?.title || 'Trip'}" has been saved.`
             );
 
             setIsProcessing(false);
@@ -1534,29 +1495,31 @@ export default function ItineraryViewScreen() {
                 <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
                     <NeumorphicBackButton />
                     <View style={styles.headerTitleContainer}>
-                        <Text style={[styles.headerTitle, { color: colors.text }]}>{tripDraft?.title || 'Trip Itinerary'}</Text>
+                        <Text style={[styles.headerTitle, { color: colors.text }]}>{tripDraft?.trip_title || tripDraft?.title || 'Trip Itinerary'}</Text>
                         <Text style={[styles.headerSubtitle, { color: colors.textSecondary, fontSize: 10 }]} numberOfLines={1}>
                             {tripDraft?.fromLocation ? `${tripDraft.fromLocation.split(',')[0]} → ` : ''}{tripDraft?.toLocation?.split(',')[0] || 'Ready for adventure'}
                         </Text>
                     </View>
-                    <TouchableOpacity
-                        onPress={() => setShowUserSearch(true)}
-                        style={[
-                            styles.shareButton,
-                            styles.neumorphicButton,
-                            {
-                                backgroundColor: colors.card,
-                                shadowColor: isDarkMode ? '#000' : '#d1d9e6',
-                                width: 45,
-                                height: 45,
-                                borderRadius: 22.5,
-                                justifyContent: 'center',
-                                alignItems: 'center'
-                            }
-                        ]}
-                    >
-                        <Icon name="UserPlus" size={22} color={colors.text} />
-                    </TouchableOpacity>
+                    {!isSolo && (
+                        <TouchableOpacity
+                            onPress={() => setShowUserSearch(true)}
+                            style={[
+                                styles.shareButton,
+                                styles.neumorphicButton,
+                                {
+                                    backgroundColor: colors.card,
+                                    shadowColor: isDarkMode ? '#000' : '#d1d9e6',
+                                    width: 45,
+                                    height: 45,
+                                    borderRadius: 22.5,
+                                    justifyContent: 'center',
+                                    alignItems: 'center'
+                                }
+                            ]}
+                        >
+                            <Icon name="UserPlus" size={22} color={colors.text} />
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 {/* Collaborators Row */}

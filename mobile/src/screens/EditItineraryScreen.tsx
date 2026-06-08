@@ -1,22 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Dimensions, Platform, ActivityIndicator, KeyboardAvoidingView, Vibration, LayoutAnimation, ScrollView } from 'react-native';
-import { Image } from 'expo-image';
-import { GestureHandlerRootView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
-import { Sortable, SortableItem } from 'react-native-reanimated-dnd';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Dimensions, Platform, ActivityIndicator, KeyboardAvoidingView, ScrollView } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import * as Haptics from 'expo-haptics';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
-import { deleteItineraryImagesFromR2, uploadItineraryImageToR2 } from '../utils/imageUpload';
-
-const { width } = Dimensions.get('window');
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 
 const TRIP_TYPES = [
     { id: 'adventure', label: 'Adventure', icon: 'Compass', color: '#F59E0B' },
@@ -58,13 +51,6 @@ const GENDER_PREFERENCES = [
     { id: 'female', label: 'Female Only', icon: 'User' },
 ];
 
-type TripImageItem = {
-    id: string;
-    uri: string;
-    location: string;
-    objectKey?: string | null;
-};
-
 const EditItineraryScreen = () => {
     const { colors } = useTheme();
     const router = useRouter();
@@ -80,28 +66,14 @@ const EditItineraryScreen = () => {
         initialData = params.tripData;
     }
 
-    // Unified Image & Location state with stable IDs
-    const [title, setTitle] = useState(initialData?.title || '');
-    const [tripImages, setTripImages] = useState<TripImageItem[]>(
-        initialData?.images?.map((uri: string, i: number) => ({
-            id: `img-${Date.now()}-${i}`,
-            uri,
-            location: initialData?.imageLocations?.[i] || '',
-            objectKey: initialData?.imageObjectKeys?.[i] || null,
-        })) || []
-    );
-    const [initialImageObjectKeys, setInitialImageObjectKeys] = useState<string[]>(
-        Array.isArray(initialData?.imageObjectKeys) ?
-            initialData.imageObjectKeys.filter((key: unknown): key is string => typeof key === 'string' && key.trim().length > 0) :
-            []
-    );
+    const [tripTitle, setTripTitle] = useState(initialData?.trip_title || initialData?.title || '');
 
     // Location & Dates
-    const [fromLocation, setFromLocation] = useState(initialData?.fromLocation || '');
-    const [toLocation, setToLocation] = useState(initialData?.toLocation || initialData?.location || '');
+    const [fromLocation, setFromLocation] = useState(initialData?.from_location || initialData?.fromLocation || '');
+    const [toLocation, setToLocation] = useState(initialData?.to_location || initialData?.toLocation || '');
     const [mapsLink, setMapsLink] = useState(initialData?.mapsLink || '');
-    const [fromDate, setFromDate] = useState(initialData?.fromDate?.toDate ? initialData.fromDate.toDate() : new Date());
-    const [toDate, setToDate] = useState(initialData?.toDate?.toDate ? initialData.toDate.toDate() : new Date());
+    const [fromDate, setFromDate] = useState(initialData?.from_date ? new Date(initialData.from_date) : (initialData?.fromDate ? new Date(initialData.fromDate) : new Date()));
+    const [toDate, setToDate] = useState(initialData?.to_date ? new Date(initialData.to_date) : (initialData?.toDate ? new Date(initialData.toDate) : new Date()));
     const [showDateModal, setShowDateModal] = useState<'from' | 'to' | null>(null);
 
     // Trip Details
@@ -114,8 +86,6 @@ const EditItineraryScreen = () => {
     const [bookingStatus, setBookingStatus] = useState(initialData?.bookingStatus || '');
     const [accommodationDays, setAccommodationDays] = useState(initialData?.accommodationDays ? String(initialData.accommodationDays) : (initialData?.durationDays ? String(initialData.durationDays) : ''));
 
-    // Description
-    const [description, setDescription] = useState(initialData?.description || '');
     const [mandatoryItems, setMandatoryItems] = useState(Array.isArray(initialData?.mandatoryItems) ? initialData.mandatoryItems.join(', ') : (initialData?.mandatoryItems || ''));
     const [placesToVisit, setPlacesToVisit] = useState(Array.isArray(initialData?.placesToVisit) ? initialData.placesToVisit.join(', ') : (initialData?.placesToVisit || ''));
 
@@ -131,26 +101,11 @@ const EditItineraryScreen = () => {
                     const { data: doc } = await supabase.from('itineraries').select('*').eq('id', tripId).maybeSingle();
                     if (doc) {
                         const data = doc;
-                        if (data) {
-                            setTitle(data.title || '');
+                         if (data) {
+                            setTripTitle(data.trip_title || data.title || '');
 
-                            // Transform into object array with stable IDs
-                            const imgUris = data.images || [];
-                            const imgLocs = data.imageLocations || [];
-                            setTripImages(imgUris.map((uri: string, i: number) => ({
-                                id: `img-${tripId}-${i}`,
-                                uri,
-                                location: imgLocs[i] || '',
-                                objectKey: data.imageObjectKeys?.[i] || null,
-                            })));
-                            setInitialImageObjectKeys(
-                                Array.isArray(data.imageObjectKeys) ?
-                                    data.imageObjectKeys.filter((key: unknown): key is string => typeof key === 'string' && key.trim().length > 0) :
-                                    []
-                            );
-
-                            setFromLocation(data.fromLocation || '');
-                            setToLocation(data.toLocation || data.location || '');
+                            setFromLocation(data.from_location || data.fromLocation || '');
+                            setToLocation(data.to_location || data.toLocation || '');
                             setMapsLink(data.mapsLink || '');
                             setFromDate(data.from_date ? new Date(data.from_date) : new Date());
                             setToDate(data.to_date ? new Date(data.to_date) : new Date());
@@ -160,7 +115,6 @@ const EditItineraryScreen = () => {
                             setAccommodationType(data.accommodation_type || '');
                             setBookingStatus(data.booking_status || '');
                             setAccommodationDays(data.accommodation_days ? String(data.accommodation_days) : '');
-                            setDescription(data.description || '');
                             setMandatoryItems(Array.isArray(data.mandatory_items) ? data.mandatory_items.join(', ') : (data.mandatory_items || ''));
                             setPlacesToVisit(Array.isArray(data.places_to_visit) ? data.places_to_visit.join(', ') : (data.places_to_visit || ''));
                         }
@@ -175,36 +129,6 @@ const EditItineraryScreen = () => {
         }
     }, [tripId, initialData]);
 
-    const pickImages = async () => {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-            Alert.alert('Permission needed', 'Please grant camera roll permissions.');
-            return;
-        }
-
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [4, 5],
-            quality: 0.7,
-            allowsMultipleSelection: false,
-        });
-
-        if (!result.canceled && result.assets && result.assets.length > 0) {
-            const newImage = {
-                id: `img-new-${Date.now()}`,
-                uri: result.assets[0].uri,
-                location: '',
-                objectKey: null,
-            };
-            setTripImages(prev => [...prev, newImage].slice(0, 5));
-        }
-    };
-
-    const removeImage = (imgId: string) => {
-        setTripImages(prev => prev.filter(img => img.id !== imgId));
-    };
-
     const toggleSelection = (id: string, list: string[], setList: (val: string[]) => void) => {
         if (list.includes(id)) {
             setList(list.filter(item => item !== id));
@@ -212,24 +136,6 @@ const EditItineraryScreen = () => {
             setList([...list, id]);
         }
     };
-
-    const moveImage = (index: number, direction: 'up' | 'down') => {
-        const newIndex = direction === 'up' ? index - 1 : index + 1;
-        if (newIndex < 0 || newIndex >= tripImages.length) return;
-
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-
-        const newTripImages = [...tripImages];
-        const temp = newTripImages[index];
-        newTripImages[index] = newTripImages[newIndex];
-        newTripImages[newIndex] = temp;
-        setTripImages(newTripImages);
-
-        // Provide tacticle feedback when swapping
-        Vibration.vibrate(10);
-    };
-
-    // Simplified PanResponder moved to creation helper above
 
     const formatDate = (date: Date) => {
         return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -264,14 +170,13 @@ const EditItineraryScreen = () => {
     const validateForm = () => {
         const newErrors: { [key: string]: string } = {};
 
-        if (!title.trim()) newErrors.title = 'Trip title is required';
+        if (!tripTitle.trim()) newErrors.tripTitle = 'Trip title is required';
         if (!fromLocation.trim()) newErrors.fromLocation = 'Starting location is required';
         if (!toLocation.trim()) newErrors.toLocation = 'Destination is required';
         if (tripTypes.length === 0) newErrors.tripTypes = 'Select at least one trip type';
         if (transportModes.length === 0) newErrors.transportModes = 'Select at least one transport mode';
         if (!costPerPerson.trim()) newErrors.costPerPerson = 'Cost per person is required';
         if (!accommodationType) newErrors.accommodationType = 'Select accommodation type';
-        if (!description.trim()) newErrors.description = 'Trip description is required';
 
         setErrors(newErrors);
 
@@ -298,95 +203,31 @@ const EditItineraryScreen = () => {
         if (!currentUser) return;
 
         setIsPosting(true);
-        const newObjectKeys: string[] = [];
 
         try {
-            let uploadedImageData: Array<{ uri: string, location: string, objectKey: string | null }> = [];
-
-            for (let i = 0; i < tripImages.length; i++) {
-                const img = tripImages[i];
-                const imageUri = img.uri;
-
-                if (imageUri.startsWith('http') || imageUri.startsWith('https')) {
-                    uploadedImageData.push({
-                        uri: imageUri,
-                        location: img.location,
-                        objectKey: img.objectKey || null,
-                    });
-                    continue;
-                }
-
-                try {
-                    const uploadResult = await uploadItineraryImageToR2(imageUri, currentUser.id, tripId);
-                    if (uploadResult.success && uploadResult.url && uploadResult.objectKey) {
-                        uploadedImageData.push({
-                            uri: uploadResult.url,
-                            location: img.location,
-                            objectKey: uploadResult.objectKey,
-                        });
-                        newObjectKeys.push(uploadResult.objectKey);
-                    }
-                } catch (uploadError) {
-                    // Image upload failed
-                }
-            }
-
-            const finalImages = uploadedImageData.map(d => d.uri);
-            const finalLocations = uploadedImageData.map(d => d.location);
-            const finalObjectKeys = uploadedImageData.map(d => d.objectKey || null);
-
-            if (finalImages.length === 0) {
-                finalImages.push('https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800');
-                finalLocations.push('');
-                finalObjectKeys.push(null);
-            }
-
-            const removedObjectKeys = initialImageObjectKeys.filter((key) => !finalObjectKeys.includes(key));
-
             const tripData = {
-                title,
-                images: finalImages,
-                image_locations: finalLocations,
-                image_object_keys: finalObjectKeys,
+                trip_title: tripTitle,
                 from_location: fromLocation,
                 to_location: toLocation,
-                location: toLocation,
-                maps_link: mapsLink || generateMapsLink(toLocation),
                 from_date: fromDate.toISOString(),
                 to_date: toDate.toISOString(),
-                duration: getDuration(),
+                duration_days: Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)),
                 trip_types: tripTypes,
-                trip_type: tripTypes[0] || 'Adventure',
                 transport_modes: transportModes,
                 cost_per_person: parseFloat(costPerPerson) || 0,
-                total_cost: parseFloat(costPerPerson) || 0,
-                cost: parseFloat(costPerPerson) || 0,
                 accommodation_type: accommodationType,
-                booking_status: bookingStatus,
+                booking_status: bookingStatus || null,
                 accommodation_days: accommodationDays ? parseInt(accommodationDays) : null,
-                description,
                 mandatory_items: mandatoryItems.split(',').map(item => item.trim()).filter(Boolean),
                 places_to_visit: placesToVisit.split(',').map(place => place.trim()).filter(Boolean),
-                cover_image: finalImages[0],
             };
 
             await supabase.from('itineraries').update(tripData).eq('id', tripId);
-            if (removedObjectKeys.length > 0) {
-                await deleteItineraryImagesFromR2(removedObjectKeys, tripId);
-            }
-            setInitialImageObjectKeys(
-                finalObjectKeys.filter((key): key is string => typeof key === 'string' && key.trim().length > 0)
-            );
-
-            // Group chats are completely separate and do not link to itineraries
 
             setIsPosting(false);
             Alert.alert('Success! 🎉', 'Your itinerary has been updated!');
             router.back();
         } catch (error: any) {
-            if (newObjectKeys.length > 0) {
-                await deleteItineraryImagesFromR2(newObjectKeys, tripId);
-            }
             setIsPosting(false);
             Alert.alert('Error', `Failed to update trip: ${error?.message || 'Unknown error'}. Please try again.`);
         }
@@ -449,97 +290,13 @@ const EditItineraryScreen = () => {
 
                                 <Text style={[styles.label, { color: colors.text }]}>Trip Title <Text style={styles.required}>*</Text></Text>
                                 <TextInput
-                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.title ? '#EF4444' : colors.border }]}
+                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.tripTitle ? '#EF4444' : colors.border }]}
                                     placeholder="e.g., Mystical Ladakh Adventure"
                                     placeholderTextColor={colors.textSecondary}
-                                    value={title}
-                                    onChangeText={setTitle}
+                                    value={tripTitle}
+                                    onChangeText={setTripTitle}
                                 />
-                                {errors.title && <Text style={styles.errorText}>{errors.title}</Text>}
-
-                                <View style={styles.sectionHeaderRow}>
-                                    <Text style={[styles.label, { color: colors.text, marginTop: 0 }]}>Trip Images (Max 5)</Text>
-                                </View>
-
-                                 <Sortable
-                                      data={tripImages}
-                                      itemHeight={84}
-                                      useFlatList={false}
-                                      style={{ backgroundColor: 'transparent', height: tripImages.length * 84 }}
-                                      renderItem={({ item, id, positions, ...props }) => (
-                                         <SortableItem
-                                             key={id}
-                                             id={id}
-                                             data={item}
-                                             positions={positions}
-                                             {...props}
-                                             onDrop={(draggedId, newPosition, allPositions) => {
-                                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                                                 if (allPositions) {
-                                                     const sortedData = [...tripImages].sort((a, b) => {
-                                                         const posA = allPositions[a.id] ?? 0;
-                                                         const posB = allPositions[b.id] ?? 0;
-                                                         return posA - posB;
-                                                     });
-                                                     setTripImages(sortedData);
-                                                 }
-                                             }}
-                                         >
-                                             <View
-                                                 style={[
-                                                     styles.reorderItemVertical,
-                                                     { height: 76, marginBottom: 8 }
-                                                 ]}
-                                             >
-                                                 <View style={[styles.reorderImageVertical, { overflow: 'hidden' }]}>
-                                                     <Image
-                                                         source={{ uri: item.uri }}
-                                                         style={styles.tripImage}
-                                                         contentFit="cover"
-                                                         transition={200}
-                                                     />
-                                                 </View>
-
-                                                 <View style={styles.verticalReorderControls}>
-                                                     <View style={styles.reorderInfo}>
-                                                         <Text style={[styles.reorderIndexText, { color: colors.text }]} numberOfLines={1}>
-                                                             Long press to move
-                                                         </Text>
-                                                     </View>
-                                                     <View style={styles.reorderActionArea}>
-                                                         <View style={styles.dragHandleContainer}>
-                                                             <View style={styles.dragHandleColumn}>
-                                                                 <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                                 <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                                 <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                             </View>
-                                                             <View style={styles.dragHandleColumn}>
-                                                                 <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                                 <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                                 <View style={[styles.dragDot, { backgroundColor: colors.textSecondary }]} />
-                                                             </View>
-                                                         </View>
-                                                         <TouchableOpacity
-                                                             style={[styles.removeImage, { position: 'relative', top: 0, right: 0, marginLeft: 10, elevation: 0, backgroundColor: 'transparent' }]}
-                                                             onPress={() => removeImage(item.id)}
-                                                         >
-                                                             <Icon name="XCircle" size={24} color="#EF4444" />
-                                                         </TouchableOpacity>
-                                                     </View>
-                                                 </View>
-                                             </View>
-                                         </SortableItem>
-                                     )}
-                                 />
-
-                                {tripImages.length < 5 && (
-                                    <TouchableOpacity style={[styles.addImageButton, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10, alignSelf: 'flex-start', width: 'auto', paddingHorizontal: 20, height: 40, borderStyle: 'dashed' }]} onPress={pickImages}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                            <Icon name="Plus" size={20} color={colors.primary} />
-                                            <Text style={[styles.addImageText, { color: colors.primary, marginTop: 0, marginLeft: 5 }]}>Add Images</Text>
-                                        </View>
-                                    </TouchableOpacity>
-                                )}
+                                {errors.tripTitle && <Text style={styles.errorText}>{errors.tripTitle}</Text>}
 
                                 <View style={styles.divider} />
 
@@ -693,21 +450,8 @@ const EditItineraryScreen = () => {
 
                                 <View style={styles.divider} />
 
-                                {/* Section 5: Description */}
+                                {/* Section 5: Description & details */}
                                 <Text style={[styles.sectionHeading, { color: colors.primary }]}>Description & details</Text>
-
-                                <Text style={[styles.label, { color: colors.text }]}>Trip Description <Text style={styles.required}>*</Text></Text>
-                                <TextInput
-                                    style={[styles.textArea, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: errors.description ? '#EF4444' : colors.border }]}
-                                    placeholder="Describe your trip in detail..."
-                                    placeholderTextColor={colors.textSecondary}
-                                    value={description}
-                                    onChangeText={setDescription}
-                                    multiline
-                                    numberOfLines={6}
-                                    textAlignVertical="top"
-                                />
-                                {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
 
                                 <Text style={[styles.label, { color: colors.text }]}>Mandatory Items to Bring</Text>
                                 <TextInput
@@ -851,126 +595,7 @@ const styles = StyleSheet.create({
         fontSize: FONT_SIZE.xs,
         marginTop: SPACING.xs,
     },
-    imagesContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: SPACING.md,
-        marginTop: SPACING.sm,
-    },
-    imageWrapper: {
-        borderRadius: BORDER_RADIUS.md,
-        overflow: 'hidden',
-    },
-    tripImage: {
-        width: '100%',
-        height: '100%',
-    },
-    removeImage: {
-        position: 'absolute',
-        top: 2,
-        right: 2,
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        elevation: 2,
-    },
-    sectionHeaderRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginTop: SPACING.md,
-        marginBottom: SPACING.xs,
-    },
-    reorderToggle: {
-        fontSize: FONT_SIZE.xs,
-        fontWeight: FONT_WEIGHT.bold,
-    },
-    thumbnailWrapper: {
-        width: (width - SPACING.xl * 2 - SPACING.md * 2) / 3,
-        height: (width - SPACING.xl * 2 - SPACING.md * 2) / 3,
-        borderRadius: BORDER_RADIUS.md,
-        overflow: 'hidden',
-        position: 'relative',
-        marginBottom: SPACING.md,
-    },
-    thumbnailImageContainer: {
-        width: '100%',
-        height: '100%',
-    },
-    reorderContainerVertical: {
-        flexDirection: 'column',
-    },
-    reorderItemVertical: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: SPACING.sm,
-        backgroundColor: 'rgba(0,0,0,0.03)',
-        borderRadius: BORDER_RADIUS.md,
-        marginBottom: SPACING.sm,
-        width: '100%',
-        borderWidth: 1,
-        borderColor: BRAND.primary + '30', // Semi-transparent primary
-    },
-    reorderImageVertical: {
-        width: 60,
-        height: 60,
-        borderRadius: BORDER_RADIUS.sm,
-    },
-    verticalReorderControls: {
-        flex: 1,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingLeft: SPACING.md,
-    },
-    reorderInfo: {
-        flex: 1,
-    },
-    reorderIndexText: {
-        fontSize: FONT_SIZE.sm,
-        fontWeight: FONT_WEIGHT.bold,
-    },
-    reorderActionArea: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: SPACING.md,
-    },
-    dragHandleContainer: {
-        flexDirection: 'row',
-        gap: 2,
-        padding: 4,
-    },
-    dragHandleColumn: {
-        gap: 2,
-    },
-    dragDot: {
-        width: 4,
-        height: 4,
-        borderRadius: 2,
-        opacity: 0.6,
-    },
-    reorderButtonsRow: {
-        flexDirection: 'row',
-        gap: SPACING.sm,
-    },
-    reorderBtnSmall: {
-        padding: 8,
-        borderRadius: 20,
-        elevation: 2,
-    },
-    addImageButton: {
-        width: (width - SPACING.xl * 2 - SPACING.md * 2) / 3,
-        height: (width - SPACING.xl * 2 - SPACING.md * 2) / 3,
-        borderRadius: BORDER_RADIUS.md,
-        borderWidth: 2,
-        borderStyle: 'dashed',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    addImageText: {
-        fontSize: FONT_SIZE.xs,
-        marginTop: SPACING.xs,
-        fontWeight: FONT_WEIGHT.medium,
-    },
+
     dateRow: {
         flexDirection: 'row',
         gap: SPACING.md,

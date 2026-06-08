@@ -5,9 +5,7 @@ export default class Itinerary extends Model {
   static table = 'itineraries';
 
   @field('user_id') userId!: string;
-  @field('title') title!: string;
-  @field('description') description?: string;
-  @field('location') location!: string;
+  @field('trip_title') tripTitle!: string;
   @field('from_location') fromLocation?: string;
   @field('to_location') toLocation?: string;
   @field('from_date') fromDate!: string;
@@ -22,8 +20,6 @@ export default class Itinerary extends Model {
   @field('accommodation_days') accommodationDays?: number;
   @field('places_to_visit') placesToVisitRaw?: string; // JSON string array
   @field('itinerary') itineraryRaw?: string; // JSON string array
-  @field('cover_image') coverImage?: string;
-  @field('images') imagesRaw?: string; // JSON string array
   @field('participants') participantsRaw?: string; // JSON string array
   @field('checklist') checklistRaw?: string; // JSON string array
   @field('notes') notesRaw?: string; // JSON string array
@@ -64,13 +60,6 @@ export default class Itinerary extends Model {
     }
   }
 
-  get images(): string[] {
-    try {
-      return this.imagesRaw ? JSON.parse(this.imagesRaw) : [];
-    } catch {
-      return [];
-    }
-  }
 
   get participants(): string[] {
     try {

@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-  version: 9,
+  version: 10,
   tables: [
     tableSchema({
       name: 'profiles',
@@ -19,9 +19,7 @@ export default appSchema({
       name: 'itineraries',
       columns: [
         { name: 'user_id', type: 'string', isIndexed: true },
-        { name: 'title', type: 'string' },
-        { name: 'description', type: 'string', isOptional: true },
-        { name: 'location', type: 'string' },
+        { name: 'trip_title', type: 'string' },
         { name: 'from_location', type: 'string', isOptional: true },
         { name: 'to_location', type: 'string', isOptional: true },
         { name: 'from_date', type: 'string' },
@@ -36,8 +34,6 @@ export default appSchema({
         { name: 'accommodation_days', type: 'number', isOptional: true },
         { name: 'places_to_visit', type: 'string', isOptional: true }, // JSON string array
         { name: 'itinerary', type: 'string', isOptional: true }, // JSON string array
-        { name: 'cover_image', type: 'string', isOptional: true },
-        { name: 'images', type: 'string', isOptional: true }, // JSON string array
         { name: 'participants', type: 'string', isOptional: true }, // JSON string array
         { name: 'checklist', type: 'string', isOptional: true }, // JSON string array
         { name: 'notes', type: 'string', isOptional: true }, // JSON string array

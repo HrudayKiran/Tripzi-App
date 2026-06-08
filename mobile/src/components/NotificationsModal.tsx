@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Animated, 
 import { FlashList } from "@shopify/flash-list";
 
 const TypedFlashList = FlashList as any;
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import { NeumorphicCloseButton } from '../components/NeumorphicIconButtons';
 import { MotiView } from 'moti';
@@ -155,6 +155,7 @@ const NotificationItem = ({
 const NotificationsModal = ({ visible, onClose, onNotificationsChange }: NotificationsModalProps) => {
     const { colors, isDarkMode } = useTheme();
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const slideAnim = useRef(new Animated.Value(width)).current;
 
     // Local Mock Notification State
@@ -247,7 +248,7 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                             { transform: [{ translateX: slideAnim }] }
                         ]}
                     >
-                        <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+                        <View style={{ flex: 1, paddingTop: insets.top }}>
                             {/* Header */}
                             <View style={[styles.header, { borderBottomColor: colors.border }]}>
                                 <View style={styles.headerLeft}>
@@ -334,7 +335,7 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                                     </Text>
                                 </View>
                             )}
-                        </SafeAreaView>
+                        </View>
                     </Animated.View>
                 </View>
             </GestureHandlerRootView>

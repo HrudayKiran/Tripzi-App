@@ -79,7 +79,7 @@ const WelcomeScreen = () => {
                             transition={{ type: 'timing', duration: 800, delay: 800 }}
                             style={styles.description}
                         >
-                            Join trips with amazing people, make new friends, and explore the world together. Your next adventure starts here.
+                            Chat with travel buddies, plan group itineraries, and explore the world together. Your next adventure starts here.
                         </MotiText>
                     </View>
 

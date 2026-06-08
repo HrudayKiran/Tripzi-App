@@ -194,9 +194,7 @@ export async function syncDatabase() {
         const mapItinerary = (t: any) => ({
           id: t.id,
           user_id: t.user_id,
-          title: t.title,
-          description: t.description,
-          location: t.location,
+          trip_title: t.trip_title,
           from_location: t.from_location,
           to_location: t.to_location,
           from_date: t.from_date,
@@ -211,8 +209,6 @@ export async function syncDatabase() {
           accommodation_days: t.accommodation_days,
           places_to_visit: Array.isArray(t.places_to_visit) ? JSON.stringify(t.places_to_visit) : (t.places_to_visit || null),
           itinerary: Array.isArray(t.itinerary) ? JSON.stringify(t.itinerary) : (t.itinerary || null),
-          cover_image: t.cover_image,
-          images: Array.isArray(t.images) ? JSON.stringify(t.images) : (t.images || null),
           participants: Array.isArray(t.participants) ? JSON.stringify(t.participants) : (t.participants || null),
           checklist: Array.isArray(t.checklist) ? JSON.stringify(t.checklist) : (t.checklist || null),
           notes: Array.isArray(t.notes) ? JSON.stringify(t.notes) : (t.notes || null),
@@ -334,7 +330,7 @@ export async function syncDatabase() {
           
           // List of fields that are arrays in Supabase but strings in WatermelonDB
           const arrayFields = [
-              'places_to_visit', 'itinerary', 'images', 
+              'places_to_visit', 'itinerary', 
               'participants', 'trip_types', 'transport_modes', 'read_by', 'delivered_to', 
               'deleted_for', 'mentions', 'checklist', 'notes'
           ];

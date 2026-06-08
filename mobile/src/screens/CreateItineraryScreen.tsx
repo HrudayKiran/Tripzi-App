@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Platform, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Platform, KeyboardAvoidingView, Keyboard } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
@@ -59,7 +59,7 @@ const TRIP_FLOW_TYPES = [
 ];
 
 const tripSchema = z.object({
-    title: z.string().min(1, 'Trip title is required'),
+    trip_title: z.string().min(1, 'Trip title is required'),
     fromLocation: z.string().min(1, 'Starting location is required'),
     toLocation: z.string().min(1, 'Destination is required'),
     fromDate: z.date({ message: 'Start date is required' }),
@@ -126,7 +126,7 @@ const CreateItineraryScreen = () => {
     const { control, handleSubmit, formState: { errors: formErrors }, setValue, watch, trigger } = useForm<TripFormData>({
         resolver: zodResolver(tripSchema),
         defaultValues: {
-            title: initialData?.title || '',
+            trip_title: initialData?.trip_title || initialData?.title || '',
             fromLocation: initialData?.fromLocation || '',
             toLocation: initialData?.toLocation || '',
             fromDate: initialData?.fromDate 
@@ -269,7 +269,7 @@ const CreateItineraryScreen = () => {
                                                             key={type.id}
                                                             style={{ alignItems: 'center', width: 80 }}
                                                             onPress={() => {
-                                                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                                                try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch (e) {}
                                                                 if (value === type.id) {
                                                                     onChange(null); // Deselect
                                                                 } else {
@@ -309,7 +309,7 @@ const CreateItineraryScreen = () => {
                                                             key={type.id}
                                                             style={{ alignItems: 'center', width: 80 }}
                                                             onPress={() => {
-                                                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                                                try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch (e) {}
                                                                 if (value === type.id) {
                                                                     onChange(null); // Deselect
                                                                 } else {
@@ -358,10 +358,10 @@ const CreateItineraryScreen = () => {
                                     <Text style={[styles.label, { color: colors.text, marginTop: 0 }]}>Trip Title <Text style={styles.required}>*</Text></Text>
                                     <Controller
                                         control={control}
-                                        name="title"
+                                        name="trip_title"
                                         render={({ field: { onChange, onBlur, value } }) => (
                                             <TextInput
-                                                style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: formErrors.title ? '#EF4444' : colors.border }]}
+                                                style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: formErrors.trip_title ? '#EF4444' : colors.border }]}
                                                 placeholder="e.g., Mystical Ladakh Adventure"
                                                 placeholderTextColor={colors.textSecondary}
                                                 onBlur={onBlur}
@@ -370,7 +370,7 @@ const CreateItineraryScreen = () => {
                                             />
                                         )}
                                     />
-                                    {formErrors.title && <Text style={styles.errorText}>{formErrors.title.message}</Text>}
+                                    {formErrors.trip_title && <Text style={styles.errorText}>{formErrors.trip_title.message}</Text>}
                                     {/* Section 2: Location & Dates */}
                                     <Text style={[styles.sectionHeading, { color: colors.primary, marginTop: SPACING.xl }]}>Location & Dates</Text>
 
@@ -670,8 +670,11 @@ const CreateItineraryScreen = () => {
                                     <TouchableOpacity
                                         style={[styles.stepButton, styles.neumorphicButton, { backgroundColor: isDarkMode ? '#000' : '#fff', width: '48%' }]}
                                         onPress={() => {
-                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                            setStep(s => s - 1);
+                                            try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch (e) {}
+                                            Keyboard.dismiss();
+                                            setTimeout(() => {
+                                                setStep(s => s - 1);
+                                            }, 50);
                                         }}
                                     >
                                         <Text style={{ color: isDarkMode ? '#fff' : '#000', fontWeight: 'bold' }}>Back</Text>
@@ -682,14 +685,19 @@ const CreateItineraryScreen = () => {
                                         <TouchableOpacity
                                             style={[styles.stepButton, styles.neumorphicButton, { backgroundColor: isDarkMode ? '#fff' : '#000', width: step === 1 ? 200 : '48%' }]}
                                             onPress={async () => {
-                                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                                try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch (e) {}
+                                                Keyboard.dismiss();
                                                 let fieldsToValidate: any[] = [];
                                                 if (step === 1) fieldsToValidate = ['tripType'];
                                                 if (step === 2) fieldsToValidate = ['title', 'fromLocation', 'toLocation', 'fromDate', 'toDate'];
                                                 if (step === 3) fieldsToValidate = ['tripTypes', 'transportModes', 'costPerPerson'];
 
                                                 const isValid = await trigger(fieldsToValidate);
-                                                if (isValid) setStep(s => s + 1);
+                                                if (isValid) {
+                                                    setTimeout(() => {
+                                                        setStep(s => s + 1);
+                                                    }, 50);
+                                                }
                                             }}
                                         >
                                             <Text style={{ color: isDarkMode ? '#000' : '#fff', fontWeight: 'bold' }}>Next</Text>

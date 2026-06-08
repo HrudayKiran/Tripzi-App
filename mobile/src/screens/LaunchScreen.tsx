@@ -26,7 +26,7 @@ const LaunchScreen = () => {
         // If not logged in, show splash animation then go to welcome
         const anim = Animated.timing(progress, {
           toValue: 1,
-          duration: 3500,
+          duration: 1000,
           useNativeDriver: false,
           easing: Easing.out(Easing.cubic),
         });
