@@ -67,7 +67,7 @@ account.post('/delete', async (c) => {
   await supabase.from('feature_requests').delete().eq('user_id', userId);
 
   // 6. Delete notifications and push tokens
-  await supabase.from('notifications').delete().eq('user_id', userId);
+  await supabase.from('notifications').delete().eq('recipient_id', userId);
   await supabase.from('push_tokens').delete().eq('user_id', userId);
 
   // 7. Delete messages authored by user
@@ -90,10 +90,100 @@ account.post('/delete', async (c) => {
   // 10. Delete profile (triggers public_profiles cleanup via trigger)
   await supabase.from('profiles').delete().eq('id', userId);
 
-  // 11. Delete Supabase Auth user
+  // 11. Clean up D1 AI chat history
+  try {
+    const { results: conversations } = await c.env.DB.prepare(
+      `SELECT id FROM ai_conversations WHERE user_id = ?`
+    ).bind(userId).all();
+
+    for (const conv of conversations || []) {
+      await c.env.DB.prepare(`DELETE FROM ai_messages WHERE conversation_id = ?`).bind(conv.id).run();
+    }
+    await c.env.DB.prepare(`DELETE FROM ai_conversations WHERE user_id = ?`).bind(userId).run();
+  } catch (e) {
+    console.error('D1 AI cleanup error:', e);
+  }
+
+  // 12. Delete Supabase Auth user
   const { error: authError } = await supabase.auth.admin.deleteUser(userId);
   if (authError) {
     console.error('Error deleting auth user:', authError);
+  }
+
+  return c.json({ success: true });
+});
+
+/**
+ * POST /account/push-token
+ * Body: { token: string, deviceInfo?: string }
+ * Registers or updates an FCM push token for the current user.
+ */
+account.post('/push-token', async (c) => {
+  const userId = c.get('userId');
+  const body = await c.req.json<{ token: string; deviceInfo?: string }>();
+
+  if (!body.token || typeof body.token !== 'string') {
+    return c.json({ error: 'A valid token is required.' }, 400);
+  }
+
+  const supabase = getSupabaseAdmin(c.env);
+
+  // Upsert — if this token already exists for this user, update timestamp.
+  // If the token exists for a DIFFERENT user (account switch), reassign it.
+  const { error: deleteOldError } = await supabase
+    .from('push_tokens')
+    .delete()
+    .eq('token', body.token)
+    .neq('user_id', userId);
+
+  if (deleteOldError) {
+    console.error('Error cleaning old token mapping:', deleteOldError);
+  }
+
+  const { error } = await supabase
+    .from('push_tokens')
+    .upsert(
+      {
+        user_id: userId,
+        token: body.token,
+        device_info: body.deviceInfo || null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,token' }
+    );
+
+  if (error) {
+    console.error('Error saving push token:', error);
+    return c.json({ error: 'Failed to save push token.' }, 500);
+  }
+
+  return c.json({ success: true });
+});
+
+/**
+ * DELETE /account/push-token
+ * Body: { token: string }
+ * Removes an FCM push token on logout.
+ */
+account.delete('/push-token', async (c) => {
+  const userId = c.get('userId');
+  const body = await c.req.json<{ token: string }>();
+
+  if (!body.token || typeof body.token !== 'string') {
+    return c.json({ error: 'A valid token is required.' }, 400);
+  }
+
+  const supabase = getSupabaseAdmin(c.env);
+
+  const { error } = await supabase
+    .from('push_tokens')
+    .delete()
+    .eq('user_id', userId)
+    .eq('token', body.token);
+
+  if (error) {
+    console.error('Error deleting push token:', error);
+    return c.json({ error: 'Failed to delete push token.' }, 500);
   }
 
   return c.json({ success: true });

@@ -6,6 +6,9 @@ export type Env = {
   SUPABASE_SERVICE_ROLE_KEY: string;
   SUPABASE_JWT_SECRET: string;
 
+  // Admin
+  ADMIN_USER_IDS: string;
+
   // AI Providers
   GROQ_API_KEY: string;
   TAVILY_API_KEY: string;
@@ -36,7 +39,16 @@ export type Env = {
   // Cloudflare AI Gateway
   CF_ACCOUNT_ID: string;
   AI_GATEWAY_SLUG: string;
+
+  // Rate Limiting bindings
+  AI_RATE_LIMITER: RateLimit;
+  MEDIA_RATE_LIMITER: RateLimit;
+  GLOBAL_RATE_LIMITER: RateLimit;
 };
+
+interface RateLimit {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
 
 let supabaseAdmin: SupabaseClient | null = null;
 

@@ -8,6 +8,7 @@
 
 import { Hono } from 'hono';
 import { Env } from '../lib/supabase';
+import { requireAdmin } from '../middleware/auth';
 import { ZillizClient } from '../lib/zilliz';
 import { generateEmbedding } from '../lib/rag';
 import { KNOWLEDGE_BASE } from '../data/knowledge-base';
@@ -19,7 +20,7 @@ const kb = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
  * Ingests the seed knowledge base into Zilliz Cloud.
  * Chunks text → generates embeddings via Workers AI → stores in Zilliz.
  */
-kb.post('/ingest', async (c) => {
+kb.post('/ingest', requireAdmin, async (c) => {
   try {
     const zilliz = new ZillizClient(c.env.ZILLIZ_ENDPOINT, c.env.ZILLIZ_API_KEY);
 

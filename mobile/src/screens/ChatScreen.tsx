@@ -53,6 +53,8 @@ import { uploadDirectChatImageToR2, uploadGroupChatImageToR2 } from '../utils/im
 import { format, isToday, isYesterday, isSameDay, differenceInMinutes, addMinutes } from 'date-fns';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
+import { useActiveChatStore } from '../store/activeChatStore';
+import { workersApi } from '../lib/workersApi';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GOOGLE_MAPS_SEARCH_URL = 'https://www.google.com/maps/search/?api=1&query=';
@@ -371,6 +373,13 @@ const ChatScreen = () => {
             </View>
         );
     };
+
+    // Track active chat for notification suppression (skip banner if already viewing this chat)
+    const { setActiveChatId, clearActiveChatId } = useActiveChatStore();
+    useEffect(() => {
+        if (chatId) setActiveChatId(chatId);
+        return () => clearActiveChatId();
+    }, [chatId]);
 
     // Mark messages as read when entering chat or when new messages arrive
     useEffect(() => {
@@ -886,6 +895,17 @@ const ChatScreen = () => {
                 })
                 .eq('id', chatId);
 
+            // Send push notification to other participants (fire-and-forget)
+            workersApi('/chat/send-notification', {
+                method: 'POST',
+                body: {
+                    chatId,
+                    chatType: isGroup ? 'group' : 'direct',
+                    senderName,
+                    messagePreview: '📷 Photo',
+                },
+            }).catch(() => {});
+
         } catch (error) {
             Alert.alert('Error', 'Failed to send image.');
             queryClient.setQueryData<ChatMessage[]>(['messages', chatId], (old) => {
@@ -1090,6 +1110,17 @@ const ChatScreen = () => {
                 })
                 .eq('id', chatId);
 
+            // Send push notification to other participants (fire-and-forget)
+            workersApi('/chat/send-notification', {
+                method: 'POST',
+                body: {
+                    chatId,
+                    chatType: isGroup ? 'group' : 'direct',
+                    senderName,
+                    messagePreview: '📍 Location',
+                },
+            }).catch(() => {});
+
         } catch (error) {
             Alert.alert('Error', 'Failed to get location.');
         } finally {
@@ -1211,6 +1242,17 @@ const ChatScreen = () => {
                                     updated_at: new Date().toISOString(),
                                 })
                                 .eq('id', chatId);
+
+                            // Send push notification (fire-and-forget)
+                            workersApi('/chat/send-notification', {
+                                method: 'POST',
+                                body: {
+                                    chatId,
+                                    chatType: isGroup ? 'group' : 'direct',
+                                    senderName,
+                                    messagePreview: '📍 Live Location',
+                                },
+                            }).catch(() => {});
 
                         } catch (error) {
                             setIsSharingLive(false);

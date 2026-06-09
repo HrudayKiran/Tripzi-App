@@ -40,6 +40,13 @@ groupChats.post('/add-member', async (c) => {
   if (!chat) return c.json({ error: 'Chat not found.' }, 404);
 
   const participants = Array.isArray(chat.participants) ? chat.participants : [];
+  const admins = Array.isArray(chat.admins) ? chat.admins : [];
+
+  // Authorization: only creator or admins can add members
+  if (chat.created_by !== callerUid && !admins.includes(callerUid)) {
+    return c.json({ error: 'Only the group creator or admins can add members.' }, 403);
+  }
+
   if (participants.includes(memberId)) return c.json({ success: true, skipped: 'already_member' });
 
   const [actor, member] = await Promise.all([getProfile(sb, callerUid), getProfile(sb, memberId)]);
@@ -67,7 +74,8 @@ groupChats.post('/add-member', async (c) => {
   await sendPushToUser(sb, c.env.FIREBASE_SERVICE_ACCOUNT_JSON, memberId, {
     title: notifPayload.title,
     body: notifPayload.message,
-    data: { screen: 'ChatRoom', chatId, type: 'group' }
+    data: { deepLinkRoute: '/chat/room', deepLinkParams: JSON.stringify({ chatId, type: 'group' }) },
+    channelId: 'chat_messages',
   });
 
   return c.json({ success: true });
@@ -85,6 +93,13 @@ groupChats.post('/remove-member', async (c) => {
 
   // Note: For now we allow creator to remove, but we should check if caller is creator or participant
   const participants = Array.isArray(chat.participants) ? chat.participants : [];
+  const admins = Array.isArray(chat.admins) ? chat.admins : [];
+
+  // Authorization: only creator or admins can remove members
+  if (chat.created_by !== callerUid && !admins.includes(callerUid)) {
+    return c.json({ error: 'Only the group creator or admins can remove members.' }, 403);
+  }
+
   if (!participants.includes(memberId)) return c.json({ success: true, skipped: 'not_member' });
 
   const [actor, member] = await Promise.all([getProfile(sb, callerUid), getProfile(sb, memberId)]);
@@ -113,7 +128,8 @@ groupChats.post('/remove-member', async (c) => {
   await sendPushToUser(sb, c.env.FIREBASE_SERVICE_ACCOUNT_JSON, memberId, {
     title: notifPayload.title,
     body: notifPayload.message,
-    data: { screen: 'ChatList' }
+    data: { deepLinkRoute: '/chat/list' },
+    channelId: 'system',
   });
 
   return c.json({ success: true });
@@ -180,7 +196,8 @@ groupChats.post('/promote-admin', async (c) => {
   await sendPushToUser(sb, c.env.FIREBASE_SERVICE_ACCOUNT_JSON, memberId, {
     title: notifPayload.title,
     body: notifPayload.message,
-    data: { screen: 'ChatRoom', chatId, type: 'group' }
+    data: { deepLinkRoute: '/chat/room', deepLinkParams: JSON.stringify({ chatId, type: 'group' }) },
+    channelId: 'system',
   });
 
   return c.json({ success: true });
@@ -219,7 +236,8 @@ groupChats.post('/demote-admin', async (c) => {
   await sendPushToUser(sb, c.env.FIREBASE_SERVICE_ACCOUNT_JSON, memberId, {
     title: notifPayload.title,
     body: notifPayload.message,
-    data: { screen: 'ChatRoom', chatId, type: 'group' }
+    data: { deepLinkRoute: '/chat/room', deepLinkParams: JSON.stringify({ chatId, type: 'group' }) },
+    channelId: 'system',
   });
 
   return c.json({ success: true });

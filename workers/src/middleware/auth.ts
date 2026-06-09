@@ -1,8 +1,10 @@
 import { Context, Next } from 'hono';
-import { Env } from '../lib/supabase';
+import { Env, getSupabaseAdmin } from '../lib/supabase';
 
 /**
- * Middleware that verifies the Supabase JWT from the Authorization header.
+ * Middleware that verifies the Supabase JWT by calling supabase.auth.getUser().
+ * This validates the token server-side against Supabase Auth, handling key rotation
+ * (ECC P-256, HS256) automatically.
  * Sets `c.set('userId', ...)` on success.
  */
 export const requireAuth = async (c: Context<{ Bindings: Env; Variables: { userId: string } }>, next: Next) => {
@@ -14,35 +16,40 @@ export const requireAuth = async (c: Context<{ Bindings: Env; Variables: { userI
   const token = authHeader.slice(7);
 
   try {
-    // Decode the JWT payload (Supabase JWTs are standard JWTs)
-    const parts = token.split('.');
-    if (parts.length !== 3) {
-      return c.json({ error: 'Invalid token format' }, 401);
+    // Use Supabase Admin to verify the JWT server-side
+    // This handles key rotation (ECC P-256 + Legacy HS256) automatically
+    const supabase = getSupabaseAdmin(c.env);
+    const { data, error } = await supabase.auth.getUser(token);
+
+    if (error || !data?.user) {
+      return c.json({ error: 'Invalid or expired token' }, 401);
     }
 
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-
-    // Check expiration
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-      return c.json({ error: 'Token expired' }, 401);
-    }
-
-    // Check issuer matches our Supabase project
-    const env = c.env;
-    const expectedIssuer = `${env.SUPABASE_URL}/auth/v1`;
-    if (payload.iss !== expectedIssuer) {
-      return c.json({ error: 'Invalid token issuer' }, 401);
-    }
-
-    // Extract the user ID from the `sub` claim
-    const userId = payload.sub;
-    if (!userId) {
-      return c.json({ error: 'Token missing user ID' }, 401);
-    }
-
-    c.set('userId', userId);
+    c.set('userId', data.user.id);
     await next();
   } catch (error) {
     return c.json({ error: 'Invalid token' }, 401);
   }
+};
+
+/**
+ * Admin-only middleware.
+ * Checks if the authenticated user's ID is in the ADMIN_USER_IDS env var (comma-separated).
+ * Must be used AFTER requireAuth.
+ */
+export const requireAdmin = async (c: Context<{ Bindings: Env; Variables: { userId: string } }>, next: Next) => {
+  const userId = c.get('userId');
+  const adminIds = (c.env as any).ADMIN_USER_IDS;
+
+  if (!adminIds) {
+    return c.json({ error: 'Admin access not configured.' }, 403);
+  }
+
+  const adminList = adminIds.split(',').map((id: string) => id.trim());
+
+  if (!adminList.includes(userId)) {
+    return c.json({ error: 'Admin access required.' }, 403);
+  }
+
+  await next();
 };

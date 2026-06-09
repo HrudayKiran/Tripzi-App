@@ -16,7 +16,7 @@ export const handleDailyTripLifecycle = async (env: Env) => {
   try {
     const { data: startingItineraries } = await sb
       .from('itineraries')
-      .select('id, title, user_id, participants')
+      .select('id, trip_title, user_id, participants')
       .gte('from_date', todayStr)
       .lt('from_date', new Date(now.getTime() + 86400000).toISOString().split('T')[0]);
 
@@ -37,14 +37,16 @@ export const handleDailyTripLifecycle = async (env: Env) => {
           recipientId: uid,
           type: 'trip_started',
           title: '🎉 Your itinerary starts today!',
-          message: `"${itin.title || 'Itinerary'}" begins today. Have an amazing journey!`,
+          message: `"${itin.trip_title || 'Itinerary'}" begins today. Have an amazing journey!`,
           entityId: itin.id,
           entityType: 'itinerary',
           deepLinkRoute: 'ItineraryView',
         });
         await sendPushToUser(sb, env.FIREBASE_SERVICE_ACCOUNT_JSON, uid, {
           title: '🎉 Your itinerary starts today!',
-          body: `"${itin.title || 'Itinerary'}" begins today!`,
+          body: `"${itin.trip_title || 'Itinerary'}" begins today!`,
+          data: { deepLinkRoute: '/trip/itinerary-view', deepLinkParams: JSON.stringify({ id: itin.id }) },
+          channelId: 'trip_updates',
         });
       }
     }

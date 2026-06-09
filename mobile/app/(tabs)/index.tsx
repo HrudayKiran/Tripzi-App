@@ -7,6 +7,7 @@ import Icon from '../../src/components/Icon';
 import AppLogo from '../../src/components/AppLogo';
 import { NeumorphicIconButton } from '../../src/components/NeumorphicIconButtons';
 import NotificationsModal from '../../src/components/NotificationsModal';
+import { useNotificationStore } from '../../src/store/notificationStore';
 import DefaultAvatar from '../../src/components/DefaultAvatar';
 import { MotiView, MotiText } from 'moti';
 import * as Haptics from 'expo-haptics';
@@ -28,7 +29,7 @@ export default function HomeRoute() {
   const router = useRouter();
   const { colors, isDarkMode } = useTheme();
   const [showNotifications, setShowNotifications] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(2);
+  const unreadCount = useNotificationStore((s) => s.unreadCount);
 
   const handlePressOption = async (route: string) => {
     try {
@@ -376,7 +377,6 @@ export default function HomeRoute() {
       <NotificationsModal
         visible={showNotifications}
         onClose={() => setShowNotifications(false)}
-        onNotificationsChange={(count) => setUnreadCount(count)}
       />
     </SafeAreaView>
   );

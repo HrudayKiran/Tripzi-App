@@ -7,6 +7,7 @@ import { database } from '../database';
 import { Q } from '@nozbe/watermelondb';
 import Message from '../database/models/Message';
 import { parsePostgresDate, parsePostgresDateToMs, parsePostgresDateToMsOrNull } from '../utils/date';
+import { workersApi } from '../lib/workersApi';
 
 // Re-export types from centralized location for backward compatibility
 export type { MessageType, MessageStatus, ReplyTo, LocationData, ChatMessage } from '../types/chat';
@@ -465,6 +466,20 @@ export function useChatMessagesQuery(
             });
 
             queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+
+            // Send push notification to other participants (fire-and-forget)
+            workersApi('/chat/send-notification', {
+              method: 'POST',
+              body: {
+                chatId,
+                chatType,
+                senderName,
+                messagePreview: text.trim(),
+              },
+            }).catch(() => {
+              // Push notification failure should never block the user
+            });
+
             return { success: true, status: 'sent' };
 
         } catch (error: any) {

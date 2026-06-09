@@ -17,6 +17,7 @@ interface PushPayload {
   title: string;
   body: string;
   data?: Record<string, string>;
+  channelId?: string; // Android notification channel
 }
 
 export const createNotification = async (
@@ -87,7 +88,7 @@ export const sendPushToUser = async (
                 android: {
                   priority: 'high',
                   notification: {
-                    channel_id: 'default',
+                    channel_id: payload.channelId || 'chat_messages',
                     sound: 'default',
                   },
                 },

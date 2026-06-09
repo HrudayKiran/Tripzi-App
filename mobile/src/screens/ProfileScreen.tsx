@@ -10,6 +10,8 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import DefaultAvatar from '../components/DefaultAvatar';
 import { resetDatabase, database } from '../database';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { unregisterPushToken, cancelAllScheduledNotifications } from '../services/notificationService';
+import { clearBadgeCount } from '../services/notificationChannels';
 
 
 const ProfileScreen = () => {
@@ -124,6 +126,21 @@ const ProfileScreen = () => {
           text: 'Logout',
           style: 'destructive',
           onPress: async () => {
+            // Unregister push token BEFORE signing out (needs auth header)
+            try {
+              await unregisterPushToken();
+            } catch (e) {
+              // Don't block logout if this fails
+            }
+
+            // Cancel all scheduled local notifications & clear badge
+            try {
+              await cancelAllScheduledNotifications();
+              await clearBadgeCount();
+            } catch (e) {
+              // Don't block logout if this fails
+            }
+
             try {
               await GoogleSignin.signOut();
             } catch (error: any) {

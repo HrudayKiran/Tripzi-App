@@ -1,16 +1,18 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Animated, Linking } from 'react-native';
+import React, { useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Animated } from 'react-native';
 import { FlashList } from "@shopify/flash-list";
 
 const TypedFlashList = FlashList as any;
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Icon from '../components/Icon';
-import { NeumorphicCloseButton } from '../components/NeumorphicIconButtons';
+import Icon from './Icon';
+import { NeumorphicCloseButton } from './NeumorphicIconButtons';
 import { MotiView } from 'moti';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles';
 import { useRouter } from 'expo-router';
+import { supabase } from '../lib/supabase';
+import { useNotificationStore, Notification } from '../store/notificationStore';
 
 const { width } = Dimensions.get('window');
 
@@ -29,25 +31,13 @@ export type NotificationType =
     | 'system'
     | 'action_required';
 
-export interface AppNotification {
-    id: string;
-    type: NotificationType;
-    title: string;
-    message: string;
-    read: boolean;
-    deepLinkRoute?: string;
-    deepLinkParams?: Record<string, any>;
-    createdAt: Date;
-}
-
 type NotificationsModalProps = {
     visible: boolean;
     onClose: () => void;
-    onNotificationsChange?: (count: number) => void;
 };
 
 // Map notification types to icons and colors
-const getNotificationStyle = (type: NotificationType): { icon: string; color: string } => {
+const getNotificationStyle = (type: NotificationType | string): { icon: string; color: string } => {
     switch (type) {
         case 'message':
             return { icon: 'Envelope', color: '#9d74f7' };
@@ -78,8 +68,8 @@ const getNotificationStyle = (type: NotificationType): { icon: string; color: st
 };
 
 // Format relative time
-const getTimeAgo = (date: Date): string => {
-    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+const getTimeAgo = (dateString: string): string => {
+    const seconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
     if (seconds < 60) return 'Just now';
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
@@ -93,12 +83,12 @@ const NotificationItem = ({
     onDelete,
     colors
 }: {
-    notification: AppNotification;
+    notification: Notification;
     onPress: () => void;
     onDelete: () => void;
     colors: any;
 }) => {
-    const { icon, color } = getNotificationStyle(notification.type);
+    const { icon, color } = getNotificationStyle(notification.type || 'system');
     const swipeableRef = useRef<Swipeable>(null);
 
     const renderRightActions = () => (
@@ -125,7 +115,7 @@ const NotificationItem = ({
                 style={[
                     styles.notificationItem,
                     { backgroundColor: colors.card },
-                    !notification.read && { borderLeftWidth: 3, borderLeftColor: color }
+                    !notification.is_read && { borderLeftWidth: 3, borderLeftColor: color }
                 ]}
                 onPress={onPress}
                 activeOpacity={0.7}
@@ -141,10 +131,10 @@ const NotificationItem = ({
                         {notification.message}
                     </Text>
                     <Text style={[styles.notificationTime, { color: colors.textSecondary }]}>
-                        {getTimeAgo(notification.createdAt)}
+                        {getTimeAgo(notification.created_at)}
                     </Text>
                 </View>
-                {!notification.read && (
+                {!notification.is_read && (
                     <View style={[styles.unreadDot, { backgroundColor: color }]} />
                 )}
             </TouchableOpacity>
@@ -152,41 +142,109 @@ const NotificationItem = ({
     );
 };
 
-const NotificationsModal = ({ visible, onClose, onNotificationsChange }: NotificationsModalProps) => {
+const NotificationsModal = ({ visible, onClose }: NotificationsModalProps) => {
     const { colors, isDarkMode } = useTheme();
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const slideAnim = useRef(new Animated.Value(width)).current;
+    const {
+        notifications,
+        unreadCount,
+        setNotifications,
+        markAsRead,
+        markAllAsRead,
+        deleteNotification,
+        setLoading,
+        isLoading,
+    } = useNotificationStore();
 
-    // Local Mock Notification State
-    const [notifications, setNotifications] = useState<AppNotification[]>([
-        {
-            id: '1',
-            type: 'system',
-            title: 'Welcome to Tripzi! ✈️',
-            message: 'Create manual group chats or ask AI to generate custom trip itineraries.',
-            read: false,
-            createdAt: new Date(Date.now() - 3 * 60 * 1000), // 3 mins ago
-        },
-        {
-            id: '2',
-            type: 'trip_update',
-            title: 'AI Planner Draft Ready ✨',
-            message: 'Your personalized AI itinerary generator complete. Tap AI Planner to view.',
-            read: false,
-            createdAt: new Date(Date.now() - 15 * 60 * 1000), // 15 mins ago
-        },
-        {
-            id: '3',
-            type: 'message',
-            title: 'Group Chat Available 👥',
-            message: 'Start chat and invite collaborators to organize plans together.',
-            read: true,
-            createdAt: new Date(Date.now() - 120 * 60 * 1000), // 2 hours ago
+    // Fetch notifications from Supabase when modal opens
+    const fetchNotifications = useCallback(async () => {
+        try {
+            setLoading(true);
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            const { data, error } = await supabase
+                .from('notifications')
+                .select('*')
+                .eq('recipient_id', user.id)
+                .order('created_at', { ascending: false })
+                .limit(50);
+
+            if (error) {
+                console.error('[Notifications] Fetch error:', error.message);
+                return;
+            }
+
+            if (data) {
+                setNotifications(data.map(n => ({
+                    id: n.id,
+                    title: n.title,
+                    message: n.message,
+                    is_read: n.is_read,
+                    created_at: n.created_at,
+                    type: n.type,
+                    deep_link_route: n.deep_link_route,
+                    deep_link_params: n.deep_link_params,
+                    actor_name: n.actor_name,
+                })));
+            }
+        } catch (e) {
+            console.error('[Notifications] Unexpected fetch error:', e);
+        } finally {
+            setLoading(false);
         }
-    ]);
+    }, [setNotifications, setLoading]);
 
-    const unreadCount = notifications.filter(n => !n.read).length;
+    // Realtime subscription for new notifications
+    useEffect(() => {
+        if (!visible) return;
+
+        fetchNotifications();
+
+        // Subscribe to realtime inserts for current user
+        let channel: any = null;
+        const setupRealtime = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            channel = supabase
+                .channel(`notifications-${user.id}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'notifications',
+                        filter: `recipient_id=eq.${user.id}`,
+                    },
+                    (payload: any) => {
+                        if (payload.new) {
+                            const n = payload.new;
+                            useNotificationStore.getState().addNotification({
+                                id: n.id,
+                                title: n.title,
+                                message: n.message,
+                                is_read: n.is_read,
+                                created_at: n.created_at,
+                                type: n.type,
+                                deep_link_route: n.deep_link_route,
+                                deep_link_params: n.deep_link_params,
+                                actor_name: n.actor_name,
+                            });
+                        }
+                    }
+                )
+                .subscribe();
+        };
+
+        setupRealtime();
+
+        return () => {
+            if (channel) supabase.removeChannel(channel);
+        };
+    }, [visible, fetchNotifications]);
 
     useEffect(() => {
         if (visible) {
@@ -206,34 +264,48 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
         }
     }, [visible]);
 
-    // Report notification count changes
-    useEffect(() => {
-        onNotificationsChange?.(unreadCount);
-    }, [unreadCount]);
+    const handleNotificationPress = async (notification: Notification) => {
+        // Mark as read in Supabase + local store
+        if (!notification.is_read) {
+            markAsRead(notification.id);
+            supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('id', notification.id)
+                .then();
+        }
 
-    const handleNotificationPress = async (notification: AppNotification) => {
-        // Mark as read locally
-        setNotifications(prev =>
-            prev.map(n => (n.id === notification.id ? { ...n, read: true } : n))
-        );
-
-        if (notification.deepLinkRoute) {
+        if (notification.deep_link_route) {
             onClose();
             setTimeout(() => {
                 router.push({
-                    pathname: notification.deepLinkRoute as any,
-                    params: notification.deepLinkParams as any,
+                    pathname: notification.deep_link_route as any,
+                    params: notification.deep_link_params as any,
                 });
             }, 300);
         }
     };
 
-    const handleDeleteNotification = (notificationId: string) => {
-        setNotifications(prev => prev.filter(n => n.id !== notificationId));
+    const handleDeleteNotification = async (notificationId: string) => {
+        deleteNotification(notificationId);
+        supabase
+            .from('notifications')
+            .delete()
+            .eq('id', notificationId)
+            .then();
     };
 
-    const markAllAsRead = () => {
-        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    const handleMarkAllAsRead = async () => {
+        markAllAsRead();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('recipient_id', user.id)
+                .eq('is_read', false)
+                .then();
+        }
     };
 
     return (
@@ -279,7 +351,7 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                                         {unreadCount > 0 && (
                                             <TouchableOpacity
                                                 style={styles.markAllButton}
-                                                onPress={markAllAsRead}
+                                                onPress={handleMarkAllAsRead}
                                                 activeOpacity={0.7}
                                             >
                                                 <Icon name="Checks" size={16} color={colors.primary} />

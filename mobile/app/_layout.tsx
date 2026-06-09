@@ -27,6 +27,17 @@ import { useAppCheck } from '../src/hooks/useAppCheck';
 import { useRemoteConfig } from '../src/hooks/useRemoteConfig';
 import { usePresence } from '../src/hooks/usePresence';
 import { supabase } from '../src/lib/supabase';
+import { useNotificationStore } from '../src/store/notificationStore';
+import {
+  registerPushToken,
+  unregisterPushToken,
+  setupTokenRefreshListener,
+  setupForegroundHandler,
+  setupNotificationTapHandler,
+  handleInitialNotification,
+} from '../src/services/notificationService';
+import { createNotificationChannels, clearBadgeCount } from '../src/services/notificationChannels';
+import ErrorBoundary from '../src/components/ErrorBoundary';
 
 function AppNavigator() {
   usePresence();
@@ -66,8 +77,14 @@ export default function RootLayout() {
   // Initialize Firebase Remote Config for version checking
   useRemoteConfig(currentVersion);
 
-  // Initial Sync & Login Sync Listener
+  // Initial Sync & Login Sync Listener + Notification Setup
   React.useEffect(() => {
+    // Create notification channels on app startup (idempotent, required for Android 8+)
+    createNotificationChannels().catch(() => { });
+
+    // Clear badge count when app opens
+    clearBadgeCount().catch(() => { });
+
     // Initial sync on app boot
     syncDatabase().catch(() => { });
 
@@ -77,15 +94,29 @@ export default function RootLayout() {
         if (__DEV__) console.log('[RootLayout] User signed in or token refreshed, running syncDatabase...');
         queryClient.clear();
         syncDatabase().catch(() => { });
+
+        // Register FCM push token with backend (only on SIGNED_IN, not TOKEN_REFRESHED)
+        // Delay to let Activity fully mount — Android 13+ needs Activity ready for permission dialog
+        if (event === 'SIGNED_IN') {
+          setTimeout(() => {
+            registerPushToken().catch(() => { });
+          }, 2000);
+        }
       } else if (event === 'SIGNED_OUT') {
         if (__DEV__) console.log('[RootLayout] User signed out, clearing private data...');
+        // Unregister push token before clearing data (fire-and-forget)
+        unregisterPushToken().catch(() => { });
         queryClient.clear();
         resetDatabase().catch(() => { });
       }
     });
 
+    // Setup FCM token refresh listener
+    const unsubTokenRefresh = setupTokenRefreshListener();
+
     return () => {
       subscription.unsubscribe();
+      unsubTokenRefresh();
     };
   }, []);
 
@@ -105,17 +136,84 @@ export default function RootLayout() {
     initFirebase();
   }, []);
 
+  // Foreground push notification handler + tap handlers
+  React.useEffect(() => {
+    const { showToast } = useNotificationStore.getState();
+
+    // Show in-app toast when push arrives while app is open
+    const unsubForeground = setupForegroundHandler(showToast);
+
+    // Navigate when user taps a notification from background state
+    const unsubTap = setupNotificationTapHandler((route, params) => {
+      // Use setTimeout to ensure navigation is ready
+      setTimeout(() => {
+        try {
+          const router = require('expo-router').router;
+          router.push({ pathname: route as any, params });
+        } catch (e) {
+          if (__DEV__) console.error('[Notifications] Navigation error:', e);
+        }
+      }, 500);
+    });
+
+    // Check if app was opened from killed state via notification tap
+    handleInitialNotification((route, params) => {
+      try {
+        const router = require('expo-router').router;
+        router.push({ pathname: route as any, params });
+      } catch (e) {
+        if (__DEV__) console.error('[Notifications] Initial navigation error:', e);
+      }
+    });
+
+    // Handle Notifee foreground events (user taps system notification while app is open)
+    let unsubNotifee: (() => void) | undefined;
+    try {
+      const notifee = require('@notifee/react-native').default;
+      const { EventType } = require('@notifee/react-native');
+      unsubNotifee = notifee.onForegroundEvent(({ type, detail }: any) => {
+        if (type === EventType.PRESS && detail?.notification?.data) {
+          const data = detail.notification.data as Record<string, string>;
+          if (data.deepLinkRoute) {
+            let params: Record<string, any> | undefined;
+            if (data.deepLinkParams) {
+              try { params = JSON.parse(data.deepLinkParams); } catch {}
+            }
+            setTimeout(() => {
+              try {
+                const router = require('expo-router').router;
+                router.push({ pathname: data.deepLinkRoute as any, params });
+              } catch {}
+            }, 300);
+          }
+          // Clear badge when user interacts with notification
+          clearBadgeCount().catch(() => {});
+        }
+      });
+    } catch {
+      // Notifee not available
+    }
+
+    return () => {
+      unsubForeground();
+      unsubTap();
+      unsubNotifee?.();
+    };
+  }, []);
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <DatabaseProvider database={database}>
-        <ThemeProvider>
-          <NetworkProvider>
-            <AppNavigator />
-            <OfflineBanner />
-            <NotificationToast />
-          </NetworkProvider>
-        </ThemeProvider>
-      </DatabaseProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <DatabaseProvider database={database}>
+          <ThemeProvider>
+            <NetworkProvider>
+              <AppNavigator />
+              <OfflineBanner />
+              <NotificationToast />
+            </NetworkProvider>
+          </ThemeProvider>
+        </DatabaseProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
