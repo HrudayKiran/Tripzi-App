@@ -1,40 +1,116 @@
 import { getMessaging } from '@react-native-firebase/messaging';
-import { Platform } from 'react-native';
+import { Platform, PermissionsAndroid } from 'react-native';
 import { workersApi } from '../lib/workersApi';
 
 /**
  * Central notification service.
  * Manages FCM token lifecycle, foreground notifications, and deep linking.
+ *
+ * Permission strategy:
+ * - Android 12 and below: Notifications auto-granted, no dialog needed
+ * - Android 13+ (API 33+): Uses PermissionsAndroid.request(POST_NOTIFICATIONS)
+ *   which shows the native system dialog. Firebase's requestPermission() alone
+ *   does NOT reliably trigger the dialog on Android 13+.
  */
+
+// ─── Permission Helpers ──────────────────────────────────────────────
+
+/**
+ * Check if notification permission is currently granted.
+ */
+async function isNotificationPermissionGranted(): Promise<boolean> {
+  if (Platform.OS !== 'android') return true;
+
+  // Android 13+ (API 33) requires runtime POST_NOTIFICATIONS permission
+  if (Platform.Version >= 33) {
+    const status = await PermissionsAndroid.check(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+    );
+    return status;
+  }
+
+  // Android 12 and below: notifications auto-granted
+  return true;
+}
+
+/**
+ * Request notification permission using the native Android dialog.
+ * Returns true if permission was granted, false otherwise.
+ *
+ * On Android 12 and below, returns true immediately (auto-granted).
+ * On Android 13+, shows the native POST_NOTIFICATIONS system dialog.
+ *
+ * This is the function you should call from a dedicated
+ * "Enable Notifications" prompt screen.
+ */
+export async function requestNotificationPermission(): Promise<boolean> {
+  if (Platform.OS !== 'android') return true;
+
+  // Android 12 and below: auto-granted
+  if (Platform.Version < 33) {
+    if (__DEV__) console.log('[Notifications] Android <13, permission auto-granted.');
+    return true;
+  }
+
+  // Already granted?
+  const alreadyGranted = await PermissionsAndroid.check(
+    PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+  );
+  if (alreadyGranted) {
+    if (__DEV__) console.log('[Notifications] POST_NOTIFICATIONS already granted.');
+    return true;
+  }
+
+  // Show the native system dialog
+  if (__DEV__) console.log('[Notifications] Requesting POST_NOTIFICATIONS via native dialog...');
+  try {
+    const result = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+    );
+    const granted = result === PermissionsAndroid.RESULTS.GRANTED;
+    if (__DEV__) console.log(`[Notifications] POST_NOTIFICATIONS result: ${result} (granted: ${granted})`);
+    return granted;
+  } catch (err) {
+    console.error('[Notifications] Error requesting POST_NOTIFICATIONS:', err);
+    return false;
+  }
+}
 
 // ─── Token Registration ─────────────────────────────────────────────
 
 /**
  * Gets the FCM token and registers it with our backend.
  * Call this after successful login / auth state change to SIGNED_IN.
+ *
+ * 1. Checks notification permission (requests if needed on Android 13+)
+ * 2. Gets FCM token from Firebase
+ * 3. Registers token with Workers backend
+ * 4. Updates profiles.push_notifications_enabled in Supabase
  */
 export async function registerPushToken(): Promise<void> {
   try {
-    const messaging = getMessaging();
+    // Step 1: Check/request notification permission using native Android API
+    const permissionGranted = await requestNotificationPermission();
 
-    // Check permission status — request if not yet determined
-    let authStatus = await messaging.hasPermission();
-    if (
-      authStatus !== 1 && // AUTHORIZED
-      authStatus !== 2    // PROVISIONAL
-    ) {
-      // Permission not yet granted — request it
-      if (__DEV__) console.log('[Notifications] Requesting notification permission...');
-      authStatus = await messaging.requestPermission();
-      if (
-        authStatus !== 1 &&
-        authStatus !== 2
-      ) {
-        if (__DEV__) console.log('[Notifications] Permission denied by user, skipping token registration.');
-        return;
-      }
+    if (!permissionGranted) {
+      if (__DEV__) console.log('[Notifications] Permission denied, skipping token registration.');
+
+      // Update profile to reflect denied status
+      try {
+        const { supabase } = require('../lib/supabase');
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          await supabase.from('profiles').update({
+            push_notifications_enabled: false,
+          }).eq('id', session.user.id);
+        }
+      } catch {}
+
+      return;
     }
 
+    // Step 2: Get FCM token
+    const messaging = getMessaging();
     const token = await messaging.getToken();
     if (!token) {
       if (__DEV__) console.log('[Notifications] No FCM token available.');
@@ -43,6 +119,7 @@ export async function registerPushToken(): Promise<void> {
 
     if (__DEV__) console.log('[Notifications] FCM token obtained, registering with server...');
 
+    // Step 3: Register with backend
     await workersApi('/account/push-token', {
       method: 'POST',
       body: {
@@ -50,6 +127,17 @@ export async function registerPushToken(): Promise<void> {
         deviceInfo: `${Platform.OS} ${Platform.Version}`,
       },
     });
+
+    // Step 4: Update profile to reflect enabled notifications
+    try {
+      const { supabase } = require('../lib/supabase');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        await supabase.from('profiles').update({
+          push_notifications_enabled: true,
+        }).eq('id', session.user.id);
+      }
+    } catch {}
 
     if (__DEV__) console.log('[Notifications] Push token registered successfully.');
   } catch (error: any) {
@@ -175,7 +263,7 @@ export function setupForegroundHandler(
         data: data || {},
         android: {
           channelId: data?.channelId || 'chat_messages',
-          smallIcon: 'ic_notification',
+          smallIcon: 'ic_launcher',
           pressAction: { id: 'default' },
         },
       });
@@ -297,7 +385,7 @@ export async function scheduleTripReminder(
         },
         android: {
           channelId: 'reminders',
-          smallIcon: 'ic_notification',
+          smallIcon: 'ic_launcher',
           pressAction: { id: 'default' },
         },
       },

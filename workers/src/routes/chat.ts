@@ -33,20 +33,38 @@ chatNotifications.post('/send-notification', async (c) => {
   }
 
   const sb = getSupabaseAdmin(c.env);
-  const table = chatType === 'group' ? 'group_chats' : 'direct_chats';
 
-  // Fetch chat participants
-  const { data: chat, error: chatError } = await sb
-    .from(table)
-    .select('participants, group_name')
-    .eq('id', chatId)
-    .maybeSingle();
+  // Fetch chat participants — separate queries because direct_chats has no group_name column
+  let participants: string[] = [];
+  let groupName: string | null = null;
 
-  if (chatError || !chat) {
-    return c.json({ error: 'Chat not found.' }, 404);
+  if (chatType === 'group') {
+    const { data: chat, error: chatError } = await sb
+      .from('group_chats')
+      .select('participants, group_name')
+      .eq('id', chatId)
+      .maybeSingle();
+
+    if (chatError || !chat) {
+      console.error('[ChatNotify] Chat lookup failed:', chatError?.message || 'not found');
+      return c.json({ error: 'Chat not found.' }, 404);
+    }
+    participants = Array.isArray(chat.participants) ? chat.participants : [];
+    groupName = chat.group_name || null;
+  } else {
+    const { data: chat, error: chatError } = await sb
+      .from('direct_chats')
+      .select('participants')
+      .eq('id', chatId)
+      .maybeSingle();
+
+    if (chatError || !chat) {
+      console.error('[ChatNotify] Chat lookup failed:', chatError?.message || 'not found');
+      return c.json({ error: 'Chat not found.' }, 404);
+    }
+    participants = Array.isArray(chat.participants) ? chat.participants : [];
   }
 
-  const participants: string[] = Array.isArray(chat.participants) ? chat.participants : [];
   const recipients = participants.filter((uid: string) => uid !== senderId);
 
   if (recipients.length === 0) {
@@ -60,14 +78,14 @@ chatNotifications.post('/send-notification', async (c) => {
     : 'Sent a message';
 
   const title = chatType === 'group'
-    ? `${displayName} in ${chat.group_name || 'Group'}`
+    ? `${displayName} in ${groupName || 'Group'}`
     : displayName;
 
   const deepLinkParams = JSON.stringify({
     id: chatId,
     chatId,
     isGroupChat: String(chatType === 'group'),
-    collectionName: table,
+    collectionName: chatType === 'group' ? 'group_chats' : 'direct_chats',
   });
 
   // Send push to each recipient (fire-and-forget, don't block response)

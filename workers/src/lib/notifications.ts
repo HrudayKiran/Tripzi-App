@@ -90,6 +90,7 @@ export const sendPushToUser = async (
                   notification: {
                     channel_id: payload.channelId || 'chat_messages',
                     sound: 'default',
+                    icon: 'ic_launcher',
                   },
                 },
                 data: payload.data || {},

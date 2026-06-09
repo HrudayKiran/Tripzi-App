@@ -476,8 +476,10 @@ export function useChatMessagesQuery(
                 senderName,
                 messagePreview: text.trim(),
               },
-            }).catch(() => {
-              // Push notification failure should never block the user
+            }).then((res: any) => {
+              if (__DEV__) console.log('[sendMessage] Push notification sent:', JSON.stringify(res));
+            }).catch((err: any) => {
+              if (__DEV__) console.error('[sendMessage] Push notification failed:', err?.message || err);
             });
 
             return { success: true, status: 'sent' };

@@ -104,8 +104,8 @@ export default function RootLayout() {
         }
       } else if (event === 'SIGNED_OUT') {
         if (__DEV__) console.log('[RootLayout] User signed out, clearing private data...');
-        // Unregister push token before clearing data (fire-and-forget)
-        unregisterPushToken().catch(() => { });
+        // Note: unregisterPushToken() is called in ProfileScreen BEFORE signOut
+        // (while session is still valid). Don't call it here — session is already gone.
         queryClient.clear();
         resetDatabase().catch(() => { });
       }
