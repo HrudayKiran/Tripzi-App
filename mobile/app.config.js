@@ -1,4 +1,3 @@
-require('dotenv').config();
 
 const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
@@ -29,6 +28,7 @@ module.exports = {
       },
     },
     android: {
+      versionCode: 1,
       adaptiveIcon: {
         foregroundImage: './assets/icon.png',
         backgroundColor: '#9d74f7',
@@ -122,7 +122,6 @@ module.exports = {
           disableJsi: true,
         },
       ],
-      'expo-sqlite',
       '@react-native-community/datetimepicker',
       'expo-font',
     ],

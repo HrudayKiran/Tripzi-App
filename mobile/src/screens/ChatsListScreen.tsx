@@ -93,7 +93,20 @@ const ChatsListScreen = () => {
     const [selectedChats, setSelectedChats] = useState<Set<string>>(new Set());
     const isSelectionMode = selectedChats.size > 0;
 
-    const handleLongPress = (chatId: string) => {
+    const getOtherParticipant = useCallback(
+        (chat: Chat) => {
+            if (!currentUser) return null;
+            const otherUid = chat.participants.find((uid) => uid !== currentUser.id);
+            if (!otherUid) return null;
+            return {
+                uid: otherUid,
+                ...chat.participantDetails?.[otherUid],
+            };
+        },
+        [currentUser]
+    );
+
+    const handleLongPress = useCallback((chatId: string) => {
         const newSelected = new Set(selectedChats);
         if (newSelected.has(chatId)) {
             newSelected.delete(chatId);
@@ -101,9 +114,9 @@ const ChatsListScreen = () => {
             newSelected.add(chatId);
         }
         setSelectedChats(newSelected);
-    };
+    }, [selectedChats]);
 
-    const handlePressChat = (chat: Chat) => {
+    const handlePressChat = useCallback((chat: Chat) => {
         if (isSelectionMode) {
             handleLongPress(chat.id);
         } else {
@@ -122,9 +135,9 @@ const ChatsListScreen = () => {
                 }
             });
         }
-    };
+    }, [isSelectionMode, handleLongPress, getOtherParticipant, router]);
 
-    const handleDeleteSelected = () => {
+    const handleDeleteSelected = useCallback(() => {
         Alert.alert(
             'Delete Chat?',
             `Are you sure you want to delete ${selectedChats.size} chat${selectedChats.size > 1 ? 's' : ''}?`,
@@ -145,26 +158,13 @@ const ChatsListScreen = () => {
                 }
             ]
         );
-    };
+    }, [selectedChats, deleteChat]);
 
-    const handleCancelSelection = () => {
+    const handleCancelSelection = useCallback(() => {
         setSelectedChats(new Set());
-    };
+    }, []);
 
-    const getOtherParticipant = useCallback(
-        (chat: Chat) => {
-            if (!currentUser) return null;
-            const otherUid = chat.participants.find((uid) => uid !== currentUser.id);
-            if (!otherUid) return null;
-            return {
-                uid: otherUid,
-                ...chat.participantDetails?.[otherUid],
-            };
-        },
-        [currentUser]
-    );
-
-    const formatTime = (timestamp: any) => {
+    const formatTime = useCallback((timestamp: any) => {
         if (!timestamp) return '';
         try {
             const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -172,9 +172,9 @@ const ChatsListScreen = () => {
         } catch {
             return '';
         }
-    };
+    }, []);
 
-    const getLastMessageText = (item: Chat) => {
+    const getLastMessageText = useCallback((item: Chat) => {
         if (!item.lastMessage?.text) return 'Start a conversation';
         if (!currentUser) return item.lastMessage.text;
 
@@ -241,10 +241,10 @@ const ChatsListScreen = () => {
         }
 
         return text;
-    };
+    }, [currentUser]);
 
     // Search users
-    const handleSearch = async (query: string) => {
+    const handleSearch = useCallback(async (query: string) => {
         setSearchQuery(query);
         if (query.trim().length < 2) {
             setSearchResults([]);
@@ -267,10 +267,10 @@ const ChatsListScreen = () => {
         } finally {
             setSearching(false);
         }
-    };
+    }, [currentUser]);
 
     // Start chat with user
-    const startChatWithUser = async (user: SearchUser) => {
+    const startChatWithUser = useCallback(async (user: SearchUser) => {
         if (!currentUser) return;
         setStartingChat(true);
 
@@ -342,9 +342,9 @@ const ChatsListScreen = () => {
         } finally {
             setStartingChat(false);
         }
-    };
+    }, [currentUser, router]);
 
-    const renderChatItem = ({ item, index }: { item: Chat; index: number }) => {
+    const renderChatItem = useCallback(({ item, index }: { item: Chat; index: number }) => {
         const otherUser = item.type === 'direct' ? getOtherParticipant(item) : null;
         const displayName = item.type === 'group' ? item.groupName : otherUser?.displayName || 'User';
         const displayPhoto = item.type === 'group' ? item.groupIcon : otherUser?.photoURL;
@@ -405,9 +405,9 @@ const ChatsListScreen = () => {
                 </TouchableOpacity>
             </MotiView>
         );
-    };
+    }, [selectedChats, colors, handlePressChat, handleLongPress, getOtherParticipant, currentUser, formatTime, getLastMessageText]);
 
-    const renderSearchResult = ({ item }: { item: SearchUser }) => (
+    const renderSearchResult = useCallback(({ item }: { item: SearchUser }) => (
         <TouchableOpacity
             style={[styles.searchResultItem, { backgroundColor: colors.card }]}
             onPress={() => startChatWithUser(item)}
@@ -427,9 +427,9 @@ const ChatsListScreen = () => {
             </View>
             <Icon name="ChatTeardrop" size={20} color={colors.primary} />
         </TouchableOpacity>
-    );
+    ), [colors, startChatWithUser, startingChat]);
 
-    const renderEmptyState = () => (
+    const renderEmptyState = useCallback(() => (
         <View style={styles.emptyContainer}>
             <Icon name="ChatTeardropDots" size={80} color={colors.textSecondary} />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>No Chats Yet</Text>
@@ -437,7 +437,7 @@ const ChatsListScreen = () => {
                 Tap the search icon to find people and start chatting!
             </Text>
         </View>
-    );
+    ), [colors]);
 
 
     // Removed full-screen loading state to render skeletons inside main view

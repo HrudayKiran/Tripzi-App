@@ -7,6 +7,7 @@ import { parsePostgresDateToMs, parsePostgresDateToMsOrNull } from '../utils/dat
 
 const storage = createMMKV();
 const LAST_SYNC_USER_KEY = 'last_sync_user_id';
+const PAGE_SIZE = 1000;
 
 // Mutex to prevent concurrent synchronization
 let isSyncing = false;
@@ -75,17 +76,32 @@ export async function syncDatabase() {
         // 1. Pull Itineraries
         let itinerariesData: any[] = [];
         if (user) {
-            const { data: iData, error: itinerariesError } = await supabase
-                .from('itineraries')
-                .select('*')
-                .or(`user_id.eq.${user.id},participants.cs.{"${user.id}"}`)
-                .gt('updated_at', lastPulledAtDate || '1970-01-01');
-            
-            if (itinerariesError) {
-                console.error('[Sync] Error pulling itineraries:', itinerariesError);
-            } else {
-                itinerariesData = iData || [];
-                if (__DEV__) console.log(`[Sync] Pulled ${itinerariesData.length} itineraries.`);
+            let page = 0;
+            let hasMore = true;
+            while (hasMore) {
+                const from = page * PAGE_SIZE;
+                const to = from + PAGE_SIZE - 1;
+                const { data: iData, error: itinerariesError } = await supabase
+                    .from('itineraries')
+                    .select('*')
+                    .or(`user_id.eq.${user.id},participants.cs.{"${user.id}"}`)
+                    .gt('updated_at', lastPulledAtDate || '1970-01-01')
+                    .order('id', { ascending: true })
+                    .range(from, to);
+                
+                if (itinerariesError) {
+                    console.error('[Sync] Error pulling itineraries page:', itinerariesError);
+                    break;
+                } else {
+                    const pageData = iData || [];
+                    itinerariesData = [...itinerariesData, ...pageData];
+                    if (__DEV__) console.log(`[Sync] Pulled itineraries page ${page}: ${pageData.length} records.`);
+                    if (pageData.length < PAGE_SIZE) {
+                        hasMore = false;
+                    } else {
+                        page++;
+                    }
+                }
             }
         }
 
@@ -148,45 +164,94 @@ export async function syncDatabase() {
             if (__DEV__) console.log(`[Sync] User authenticated (${user.id}), pulling private data...`);
             
             // Pull direct chats
-            const { data: cData, error: chatsError } = await supabase.from('direct_chats')
-              .select('*')
-              .contains('participants', [user.id])
-              .gt('updated_at', lastPulledAtDate || '1970-01-01');
-            
-            if (chatsError) {
-                console.error('[Sync] Error pulling chats:', chatsError);
-            } else {
-                chatsData = cData || [];
-                if (__DEV__) console.log(`[Sync] Pulled ${chatsData.length} direct chats.`);
+            let page = 0;
+            let hasMore = true;
+            while (hasMore) {
+                const from = page * PAGE_SIZE;
+                const to = from + PAGE_SIZE - 1;
+                const { data: cData, error: chatsError } = await supabase.from('direct_chats')
+                  .select('*')
+                  .contains('participants', [user.id])
+                  .gt('updated_at', lastPulledAtDate || '1970-01-01')
+                  .order('id', { ascending: true })
+                  .range(from, to);
+                
+                if (chatsError) {
+                    console.error('[Sync] Error pulling chats:', chatsError);
+                    break;
+                } else {
+                    const pageData = cData || [];
+                    chatsData = [...chatsData, ...pageData];
+                    if (__DEV__) console.log(`[Sync] Pulled direct chats page ${page}: ${pageData.length} records.`);
+                    if (pageData.length < PAGE_SIZE) {
+                        hasMore = false;
+                    } else {
+                        page++;
+                    }
+                }
             }
 
             // Pull group chats
-            const { data: gcData, error: groupChatsError } = await supabase.from('group_chats')
-              .select('*')
-              .contains('participants', [user.id])
-              .gt('updated_at', lastPulledAtDate || '1970-01-01');
-            
-            if (groupChatsError) {
-                console.error('[Sync] Error pulling group chats:', groupChatsError);
-            } else {
-                groupChatsData = gcData || [];
-                if (__DEV__) console.log(`[Sync] Pulled ${groupChatsData.length} group chats.`);
+            page = 0;
+            hasMore = true;
+            while (hasMore) {
+                const from = page * PAGE_SIZE;
+                const to = from + PAGE_SIZE - 1;
+                const { data: gcData, error: groupChatsError } = await supabase.from('group_chats')
+                  .select('*')
+                  .contains('participants', [user.id])
+                  .gt('updated_at', lastPulledAtDate || '1970-01-01')
+                  .order('id', { ascending: true })
+                  .range(from, to);
+                
+                if (groupChatsError) {
+                    console.error('[Sync] Error pulling group chats:', groupChatsError);
+                    break;
+                } else {
+                    const pageData = gcData || [];
+                    groupChatsData = [...groupChatsData, ...pageData];
+                    if (__DEV__) console.log(`[Sync] Pulled group chats page ${page}: ${pageData.length} records.`);
+                    if (pageData.length < PAGE_SIZE) {
+                        hasMore = false;
+                    } else {
+                        page++;
+                    }
+                }
             }
 
             const allChatIds = [...chatsData.map(c => c.id), ...groupChatsData.map(c => c.id)];
             
             if (allChatIds.length > 0) {
-              const { data: mData, error: messagesError } = await supabase.from('messages')
-                .select('*')
-                .in('chat_id', allChatIds)
-                .gt('updated_at', lastPulledAtDate || '1970-01-01');
-              
-              if (messagesError) {
-                  console.error('[Sync] Error pulling messages:', messagesError);
-              } else {
-                  messagesData = mData || [];
-                  if (__DEV__) console.log(`[Sync] Pulled ${messagesData.length} messages.`);
-              }
+                const CHAT_ID_CHUNK_SIZE = 100;
+                for (let i = 0; i < allChatIds.length; i += CHAT_ID_CHUNK_SIZE) {
+                    const chatIdsChunk = allChatIds.slice(i, i + CHAT_ID_CHUNK_SIZE);
+                    let pageMsg = 0;
+                    let hasMoreMsg = true;
+                    while (hasMoreMsg) {
+                        const from = pageMsg * PAGE_SIZE;
+                        const to = from + PAGE_SIZE - 1;
+                        const { data: mData, error: messagesError } = await supabase.from('messages')
+                            .select('*')
+                            .in('chat_id', chatIdsChunk)
+                            .gt('updated_at', lastPulledAtDate || '1970-01-01')
+                            .order('id', { ascending: true })
+                            .range(from, to);
+                        
+                        if (messagesError) {
+                            console.error('[Sync] Error pulling messages page:', messagesError);
+                            break;
+                        } else {
+                            const pageData = mData || [];
+                            messagesData = [...messagesData, ...pageData];
+                            if (__DEV__) console.log(`[Sync] Pulled messages page ${pageMsg} for chat chunk: ${pageData.length} records.`);
+                            if (pageData.length < PAGE_SIZE) {
+                                hasMoreMsg = false;
+                            } else {
+                                pageMsg++;
+                            }
+                        }
+                    }
+                }
             }
         }
 

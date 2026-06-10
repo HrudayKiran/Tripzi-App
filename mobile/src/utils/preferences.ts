@@ -13,16 +13,23 @@ export const PREFERENCE_KEYS = {
     hapticsNotif: '@nxtvibes_haptics_notif',
 } as const;
 
-export const getBooleanPreference = async (
+export const getBooleanPreferenceSync = (
     key: string,
     defaultValue: boolean
-): Promise<boolean> => {
+): boolean => {
     try {
         const value = storage.getBoolean(key);
         return value !== undefined ? value : defaultValue;
     } catch {
         return defaultValue;
     }
+};
+
+export const getBooleanPreference = async (
+    key: string,
+    defaultValue: boolean
+): Promise<boolean> => {
+    return getBooleanPreferenceSync(key, defaultValue);
 };
 
 export const setBooleanPreference = async (
@@ -36,16 +43,23 @@ export const setBooleanPreference = async (
     }
 };
 
-export const getStringPreference = async (
+export const getStringPreferenceSync = (
     key: string,
     defaultValue: string | null = null
-): Promise<string | null> => {
+): string | null => {
     try {
         const value = storage.getString(key);
         return value !== undefined ? value : defaultValue;
     } catch {
         return defaultValue;
     }
+};
+
+export const getStringPreference = async (
+    key: string,
+    defaultValue: string | null = null
+): Promise<string | null> => {
+    return getStringPreferenceSync(key, defaultValue);
 };
 
 export const setStringPreference = async (

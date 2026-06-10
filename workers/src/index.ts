@@ -15,11 +15,19 @@ import { deleteR2Objects } from './lib/r2';
 const app = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
 
 // Global CORS
-app.use('*', cors({
-  origin: '*',
-  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization'],
-}));
+app.use('*', (c, next) => {
+  const originHeader = c.req.header('Origin');
+  const allowedOrigins = ['https://hypermatrix.vercel.app'];
+  const origin = (!originHeader || allowedOrigins.includes(originHeader)) ? originHeader || '*' : '';
+  
+  const corsHandler = cors({
+    origin,
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+  });
+  return corsHandler(c, next);
+});
 
 // Health check (no auth)
 app.get('/', (c) => c.json({ status: 'ok', service: 'nxtvibes-workers' }));
@@ -49,6 +57,7 @@ export default {
       handleDailyTripLifecycle(env),
       cleanupExpiredChats(env),
       cleanupDeletedMedia(env),
+      cleanupExpiredLiveShares(env),
     ]));
   },
 };
@@ -131,5 +140,30 @@ async function cleanupDeletedMedia(env: Env): Promise<void> {
     }
   } catch (e: any) {
     console.error('[Cleanup] Deleted media cleanup error:', e?.message || e);
+  }
+}
+
+/**
+ * Cleanup expired live shares from Supabase.
+ * Runs as part of the daily cron trigger.
+ */
+async function cleanupExpiredLiveShares(env: Env): Promise<void> {
+  try {
+    console.log('[Cleanup] Starting expired live shares cleanup...');
+    const supabase = getSupabaseAdmin(env);
+    const now = new Date().toISOString();
+
+    const { error } = await supabase
+      .from('live_shares')
+      .delete()
+      .lt('expires_at', now);
+
+    if (error) {
+      console.error('[Cleanup] Failed to delete expired live shares:', error.message);
+    } else {
+      console.log('[Cleanup] Expired live shares cleaned up successfully.');
+    }
+  } catch (e: any) {
+    console.error('[Cleanup] Expired live shares cleanup error:', e?.message || e);
   }
 }

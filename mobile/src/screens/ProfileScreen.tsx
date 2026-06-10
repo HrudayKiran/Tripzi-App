@@ -126,6 +126,21 @@ const ProfileScreen = () => {
           text: 'Logout',
           style: 'destructive',
           onPress: async () => {
+            // Reset profile status fields while still authenticated
+            try {
+              const { data: { user: authUser } } = await supabase.auth.getUser();
+              if (authUser) {
+                await supabase.from('profiles').update({
+                  push_notifications_enabled: false,
+                  notification_permission_status: 'not_determined',
+                  presence: 'offline',
+                  last_seen_at: new Date().toISOString(),
+                }).eq('id', authUser.id);
+              }
+            } catch (e) {
+              // Don't block logout if this fails
+            }
+
             // Unregister push token BEFORE signing out (needs auth header)
             try {
               await unregisterPushToken();
@@ -161,7 +176,7 @@ const ProfileScreen = () => {
             // Route to start screen after logout
             router.replace('/(auth)/start');
           }
-        },
+        }
       ]
     );
   };

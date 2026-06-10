@@ -25,7 +25,7 @@ const adapter = new SQLiteAdapter({
   // (Optional) Database name - versioned to trigger automatic recreation on schema bumps
   dbName: `nxtvibes_offline_v${schema.version}`,
   // (Recommended) If you want to use the high-performance JSI adapter on Android
-  jsi: true,
+  jsi: false,
   onSetUpError: error => {
     // Database failed to load
     console.error('[Database] Adapter setup error:', error);

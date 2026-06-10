@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, ActivityIndicator, RefreshControl, Image, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
@@ -10,8 +10,85 @@ import { NeumorphicBackButton } from '../components/NeumorphicIconButtons';
 import { supabase } from '../lib/supabase';
 import { useItineraryStore } from '../store/itineraryStore';
 import { LinearGradient } from 'expo-linear-gradient';
+import { FlashList } from '@shopify/flash-list';
 
+const TypedFlashList = FlashList as any;
 const { width } = Dimensions.get('window');
+
+// ─── Memoized Trip Card Component ───────────────────────────────────
+const TripCard = React.memo(({ trip, activeTab, isDarkMode, colors, onSelect, formatDate }: any) => {
+    return (
+        <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => onSelect(trip)}
+            style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
+        >
+            <View style={styles.imageContainer}>
+                <LinearGradient
+                    colors={isDarkMode ? ['#2D3436', '#0984E3'] : ['#E0E0E0', '#74B9FF']}
+                    style={styles.cardGradient}
+                >
+                    <Icon name="MapTrifold" size={40} color="#FFFFFF" weight="duotone" />
+                </LinearGradient>
+                
+                {/* Overlay badge */}
+                <View style={styles.badgeContainer}>
+                    <View style={[styles.badge, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+                        <Text style={styles.badgeText}>
+                            {trip.duration ? `${trip.duration} Days` : `${trip.duration_days || 1} Days`}
+                        </Text>
+                    </View>
+                    {trip.cost_per_person > 0 && (
+                        <View style={[styles.badge, { backgroundColor: 'rgba(0,0,0,0.6)', marginLeft: 8 }]}>
+                            <Text style={styles.badgeText}>
+                                ${trip.cost_per_person}/person
+                            </Text>
+                        </View>
+                    )}
+                </View>
+            </View>
+
+            <View style={styles.cardDetails}>
+                <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
+                    {trip.trip_title || trip.title}
+                </Text>
+
+                {/* Route location mapping */}
+                <View style={styles.routeContainer}>
+                    <Icon name="MapPin" size={16} color={colors.primary} weight="fill" />
+                    <Text style={[styles.routeText, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {trip.from_location ? `${trip.from_location.split(',')[0]} → ` : ''}
+                        {trip.to_location?.split(',')[0] || 'Ready for adventure'}
+                    </Text>
+                </View>
+
+                {/* Date Range */}
+                <View style={styles.dateContainer}>
+                    <Icon name="CalendarBlank" size={16} color={colors.textSecondary} />
+                    <Text style={[styles.dateText, { color: colors.textSecondary }]}>
+                        {formatDate(trip.from_date)} - {formatDate(trip.to_date)}
+                    </Text>
+                </View>
+
+                {/* Owner profile details row */}
+                {activeTab === 'Shared' && (
+                    <View style={[styles.ownerRow, { borderTopColor: colors.border }]}>
+                        <Image
+                            source={{ uri: trip.owner_photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&q=80' }}
+                            style={styles.ownerAvatar}
+                        />
+                        <View style={styles.ownerInfo}>
+                            <Text style={[styles.ownerLabel, { color: colors.textSecondary }]}>Shared by</Text>
+                            <Text style={[styles.ownerName, { color: colors.text }]} numberOfLines={1}>
+                                {trip.owner_display_name || 'Traveler'}
+                            </Text>
+                        </View>
+                    </View>
+                )}
+            </View>
+        </TouchableOpacity>
+    );
+});
 
 const ItinerariesScreen = () => {
     const { colors, isDarkMode } = useTheme();
@@ -88,7 +165,7 @@ const ItinerariesScreen = () => {
         fetchTrips();
     };
 
-    const handleSelectTrip = async (trip: any) => {
+    const handleSelectTrip = useCallback(async (trip: any) => {
         // Set the tripDraft in the Zustand store
         setTripDraft({
             ...trip,
@@ -136,13 +213,13 @@ const ItinerariesScreen = () => {
 
         // Navigate to /trip/view
         router.push('/trip/view');
-    };
+    }, [router, setTripDraft, setPlaces]);
 
-    const formatDate = (dateStr: string) => {
+    const formatDate = useCallback((dateStr: string) => {
         if (!dateStr) return '';
         const d = new Date(dateStr);
         return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    };
+    }, []);
 
     const renderEmptyState = () => (
         <View style={styles.emptyContainer}>
@@ -169,6 +246,19 @@ const ItinerariesScreen = () => {
             </TouchableOpacity>
         </View>
     );
+
+    const renderTripItem = useCallback(({ item }: { item: any }) => {
+        return (
+            <TripCard
+                trip={item}
+                activeTab={activeTab}
+                isDarkMode={isDarkMode}
+                colors={colors}
+                onSelect={handleSelectTrip}
+                formatDate={formatDate}
+            />
+        );
+    }, [activeTab, isDarkMode, colors, handleSelectTrip, formatDate]);
 
     const themeActiveBg = isDarkMode ? '#FFFFFF' : '#000000';
     const themeActiveText = isDarkMode ? '#000000' : '#FFFFFF';
@@ -222,101 +312,20 @@ const ItinerariesScreen = () => {
                     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                         <ActivityIndicator color={colors.primary} size="large" />
                     </View>
+                ) : trips.length === 0 ? (
+                    renderEmptyState()
                 ) : (
-                    <ScrollView 
-                        contentContainerStyle={styles.contentScroll}
+                    <TypedFlashList
+                        data={trips}
+                        renderItem={renderTripItem}
+                        keyExtractor={(item: any) => item.id}
+                        estimatedItemSize={250}
+                        contentContainerStyle={[styles.contentScroll, { paddingHorizontal: 20 }]}
                         showsVerticalScrollIndicator={false}
                         refreshControl={
                             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
                         }
-                    >
-                        <MotiView
-                            from={{ opacity: 0, translateY: 20 }}
-                            animate={{ opacity: 1, translateY: 0 }}
-                            transition={{ type: 'timing', duration: 400 }}
-                            style={{ flex: 1, paddingHorizontal: 20 }}
-                        >
-                            {trips.length === 0 ? (
-                                renderEmptyState()
-                            ) : (
-                                trips.map((trip) => {
-                                    return (
-                                        <TouchableOpacity
-                                            key={trip.id}
-                                            activeOpacity={0.9}
-                                            onPress={() => handleSelectTrip(trip)}
-                                            style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
-                                        >
-                                            <View style={styles.imageContainer}>
-                                                <LinearGradient
-                                                    colors={isDarkMode ? ['#2D3436', '#0984E3'] : ['#E0E0E0', '#74B9FF']}
-                                                    style={styles.cardGradient}
-                                                >
-                                                    <Icon name="MapTrifold" size={40} color="#FFFFFF" weight="duotone" />
-                                                </LinearGradient>
-                                                
-                                                {/* Overlay badge */}
-                                                <View style={styles.badgeContainer}>
-                                                    <View style={[styles.badge, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
-                                                        <Text style={styles.badgeText}>
-                                                            {trip.duration ? `${trip.duration} Days` : `${trip.duration_days || 1} Days`}
-                                                        </Text>
-                                                    </View>
-                                                    {trip.cost_per_person > 0 && (
-                                                        <View style={[styles.badge, { backgroundColor: 'rgba(0,0,0,0.6)', marginLeft: 8 }]}>
-                                                            <Text style={styles.badgeText}>
-                                                                ${trip.cost_per_person}/person
-                                                            </Text>
-                                                        </View>
-                                                    )}
-                                                </View>
-                                            </View>
- 
-                                            <View style={styles.cardDetails}>
-                                                <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
-                                                    {trip.trip_title || trip.title}
-                                                </Text>
-
-                                                {/* Route location mapping */}
-                                                <View style={styles.routeContainer}>
-                                                    <Icon name="MapPin" size={16} color={colors.primary} weight="fill" />
-                                                    <Text style={[styles.routeText, { color: colors.textSecondary }]} numberOfLines={1}>
-                                                        {trip.from_location ? `${trip.from_location.split(',')[0]} → ` : ''}
-                                                        {trip.to_location?.split(',')[0] || 'Ready for adventure'}
-                                                    </Text>
-                                                </View>
-
-                                                {/* Date Range */}
-                                                <View style={styles.dateContainer}>
-                                                    <Icon name="CalendarBlank" size={16} color={colors.textSecondary} />
-                                                    <Text style={[styles.dateText, { color: colors.textSecondary }]}>
-                                                        {formatDate(trip.from_date)} - {formatDate(trip.to_date)}
-                                                    </Text>
-                                                </View>
-
-                                                {/* Owner profile details row */}
-                                                {activeTab === 'Shared' && (
-                                                    <View style={[styles.ownerRow, { borderTopColor: colors.border }]}>
-                                                        <Image
-                                                            source={{ uri: trip.owner_photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&q=80' }}
-                                                            style={styles.ownerAvatar}
-                                                        />
-                                                        <View style={styles.ownerInfo}>
-                                                            <Text style={[styles.ownerLabel, { color: colors.textSecondary }]}>Shared by</Text>
-                                                            <Text style={[styles.ownerName, { color: colors.text }]} numberOfLines={1}>
-                                                                {trip.owner_display_name || 'Traveler'}
-                                                            </Text>
-                                                        </View>
-                                                    </View>
-                                                )}
-                                            </View>
-                                        </TouchableOpacity>
-                                    );
-                                })
-                            )}
-                            <View style={{ height: 40 }} />
-                        </MotiView>
-                    </ScrollView>
+                    />
                 )}
             </View>
         </SafeAreaView>
@@ -371,7 +380,7 @@ const styles = StyleSheet.create({
         fontWeight: FONT_WEIGHT.bold,
     },
     contentScroll: {
-        flexGrow: 1,
+        paddingBottom: 40,
     },
     emptyContainer: {
         flex: 1,

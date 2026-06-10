@@ -102,6 +102,7 @@ export async function registerPushToken(): Promise<void> {
         if (session) {
           await supabase.from('profiles').update({
             push_notifications_enabled: false,
+            notification_permission_status: 'denied',
           }).eq('id', session.user.id);
         }
       } catch {}
@@ -135,6 +136,7 @@ export async function registerPushToken(): Promise<void> {
       if (session) {
         await supabase.from('profiles').update({
           push_notifications_enabled: true,
+          notification_permission_status: 'granted',
         }).eq('id', session.user.id);
       }
     } catch {}
@@ -263,7 +265,7 @@ export function setupForegroundHandler(
         data: data || {},
         android: {
           channelId: data?.channelId || 'chat_messages',
-          smallIcon: 'ic_launcher',
+          smallIcon: 'ic_notification',
           pressAction: { id: 'default' },
         },
       });
@@ -385,7 +387,7 @@ export async function scheduleTripReminder(
         },
         android: {
           channelId: 'reminders',
-          smallIcon: 'ic_launcher',
+          smallIcon: 'ic_notification',
           pressAction: { id: 'default' },
         },
       },

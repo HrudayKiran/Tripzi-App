@@ -60,11 +60,64 @@ account.post('/delete', async (c) => {
   // 3. Delete owned itineraries
   await supabase.from('itineraries').delete().eq('user_id', userId);
 
-  // 5. Delete reports, feedback
-  await supabase.from('reports').delete().eq('reporter_id', userId);
+  // 5. Delete suggestions, bugs, feature requests
   await supabase.from('suggestions').delete().eq('user_id', userId);
   await supabase.from('bugs').delete().eq('user_id', userId);
   await supabase.from('feature_requests').delete().eq('user_id', userId);
+
+  // Remove user from direct_chats participants array
+  try {
+    const { data: directChats } = await supabase
+      .from('direct_chats')
+      .select('id, participants')
+      .contains('participants', [userId]);
+
+    for (const chat of directChats || []) {
+      const updatedParticipants = (chat.participants || []).filter((p: string) => p !== userId);
+      await supabase
+        .from('direct_chats')
+        .update({ participants: updatedParticipants })
+        .eq('id', chat.id);
+    }
+  } catch (e) {
+    console.error('Error cleaning direct_chats participants:', e);
+  }
+
+  // Remove user from group_chats participants array
+  try {
+    const { data: groupChats } = await supabase
+      .from('group_chats')
+      .select('id, participants')
+      .contains('participants', [userId]);
+
+    for (const chat of groupChats || []) {
+      const updatedParticipants = (chat.participants || []).filter((p: string) => p !== userId);
+      await supabase
+        .from('group_chats')
+        .update({ participants: updatedParticipants })
+        .eq('id', chat.id);
+    }
+  } catch (e) {
+    console.error('Error cleaning group_chats participants:', e);
+  }
+
+  // Remove user from itineraries participants array
+  try {
+    const { data: sharedItineraries } = await supabase
+      .from('itineraries')
+      .select('id, participants')
+      .contains('participants', [userId]);
+
+    for (const itinerary of sharedItineraries || []) {
+      const updatedParticipants = (itinerary.participants || []).filter((p: string) => p !== userId);
+      await supabase
+        .from('itineraries')
+        .update({ participants: updatedParticipants })
+        .eq('id', itinerary.id);
+    }
+  } catch (e) {
+    console.error('Error cleaning itineraries participants:', e);
+  }
 
   // 6. Delete notifications and push tokens
   await supabase.from('notifications').delete().eq('recipient_id', userId);

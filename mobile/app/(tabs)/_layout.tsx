@@ -2,23 +2,22 @@ import { Tabs, useRouter } from 'expo-router';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import Icon from '../../src/components/Icon';
 import { View, TouchableOpacity, StyleSheet, Modal, Text } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { useState } from 'react';
 import { MotiView } from 'moti';
 import * as Haptics from 'expo-haptics';
-import { getBooleanPreference, getStringPreference, PREFERENCE_KEYS } from '../../src/utils/preferences';
+import { getBooleanPreferenceSync, PREFERENCE_KEYS } from '../../src/utils/preferences';
 
 export default function TabsLayout() {
   const { colors } = useTheme();
   const router = useRouter();
 
-  const triggerTabHaptics = async () => {
+  const triggerTabHaptics = () => {
     try {
-      const hapticsEnabled = await getBooleanPreference(PREFERENCE_KEYS.hapticsEnabled, true);
-      const navHaptics = await getBooleanPreference(PREFERENCE_KEYS.hapticsNav, true);
+      const hapticsEnabled = getBooleanPreferenceSync(PREFERENCE_KEYS.hapticsEnabled, true);
+      const navHaptics = getBooleanPreferenceSync(PREFERENCE_KEYS.hapticsNav, true);
       
       if (hapticsEnabled && navHaptics) {
-        await Haptics.selectionAsync();
+        Haptics.selectionAsync().catch(() => {});
       }
     } catch (e) {
       console.error('Failed to trigger haptics:', e);

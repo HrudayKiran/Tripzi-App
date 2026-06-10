@@ -270,19 +270,19 @@ const ChatScreen = () => {
     const dayChipBg = isDarkMode ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)';
     const inputBg = isDarkMode ? '#141414' : '#EAEAEF';
 
-    const getSenderPhoto = (senderId: string) => {
+    const getSenderPhoto = useCallback((senderId: string) => {
         if (senderId === currentUserId) {
             return currentUser?.user_metadata?.avatar_url || currentUser?.user_metadata?.photoURL || null;
         }
         return chat?.participantDetails?.[senderId]?.photoURL || null;
-    };
+    }, [currentUserId, currentUser, chat]);
 
-    const getSenderName = (senderId: string, fallbackName?: string) => {
+    const getSenderName = useCallback((senderId: string, fallbackName?: string) => {
         if (senderId === currentUserId) {
             return currentUser?.user_metadata?.full_name || 'You';
         }
         return chat?.participantDetails?.[senderId]?.displayName || fallbackName || 'User';
-    };
+    }, [currentUserId, currentUser, chat]);
 
     // Typing dot animations
     const typingAnim1 = useRef(new Animated.Value(0)).current;
@@ -409,10 +409,34 @@ const ChatScreen = () => {
             setRawLastSeen(data.last_seen_at);
         };
         loadPresence();
-        const channel = supabase.channel(`presence-${otherParticipantUid}-${Math.random().toString(36).substring(7)}`)
+
+        // Subscribe to Realtime Presence channel for the other user
+        const channel = supabase.channel('online-users');
+        channel
+            .on('presence', { event: 'sync' }, () => {
+                const presenceState = channel.presenceState();
+                const userPresences = presenceState[otherParticipantUid] as any[];
+                if (userPresences && userPresences.length > 0) {
+                    const latest = userPresences[userPresences.length - 1];
+                    setRawPresence(latest.status || 'online');
+                    if (latest.online_at) {
+                        setRawLastSeen(latest.online_at);
+                    }
+                } else {
+                    setRawPresence('offline');
+                }
+            })
+            .subscribe();
+
+        // Keep database updates channel as a secondary fallback
+        const dbChannel = supabase.channel(`presence-db-${otherParticipantUid}-${Math.random().toString(36).substring(7)}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${otherParticipantUid}` }, () => { loadPresence(); })
             .subscribe();
-        return () => { supabase.removeChannel(channel); };
+
+        return () => {
+            supabase.removeChannel(channel);
+            supabase.removeChannel(dbChannel);
+        };
     }, [otherParticipantUid, chat?.type]);
 
     // Periodic effect to recalculate presence status text based on raw presence and last seen time
@@ -1516,7 +1540,7 @@ const ChatScreen = () => {
         }
     };
 
-    const getMessageStatus = (message: ChatMessage) => {
+    const getMessageStatus = useCallback((message: ChatMessage) => {
         if (message.senderId !== currentUserId) return null;
 
         const readByOthers = Object.keys(message.readBy || {}).filter(uid => uid !== currentUserId);
@@ -1524,7 +1548,7 @@ const ChatScreen = () => {
         if (message.deliveredTo?.length > 0) return 'delivered';
         if (message.status === 'sent') return 'sent';
         return 'pending';
-    };
+    }, [currentUserId]);
 
     // Clear all messages in chat — D3/C5: Fixed to use correct table + RPC
     const handleClearChat = () => {
@@ -1695,13 +1719,13 @@ const ChatScreen = () => {
     };
 
     // Cancel selection mode
-    const cancelSelectionMode = () => {
+    const cancelSelectionMode = useCallback(() => {
         setIsSelectionMode(false);
         setSelectedMessages(new Set());
-    };
+    }, []);
 
     // L1: Removed .toDate() Firestore remnant
-    const formatMessageTime = (timestamp: any) => {
+    const formatMessageTime = useCallback((timestamp: any) => {
         if (!timestamp) return '';
         try {
             const date = new Date(timestamp);
@@ -1709,10 +1733,10 @@ const ChatScreen = () => {
         } catch {
             return '';
         }
-    };
+    }, []);
 
     // L1: Removed .toDate() Firestore remnant
-    const formatDayHeader = (timestamp: any) => {
+    const formatDayHeader = useCallback((timestamp: any) => {
         if (!timestamp) return '';
         try {
             const date = new Date(timestamp);
@@ -1722,10 +1746,10 @@ const ChatScreen = () => {
         } catch {
             return '';
         }
-    };
+    }, []);
 
     // L1: Removed .toDate() Firestore remnant
-    const shouldShowDayHeader = (message: ChatMessage, index: number) => {
+    const shouldShowDayHeader = useCallback((message: ChatMessage, index: number) => {
         if (index === 0) return true;
         const prevMessage = messages[index - 1];
         if (!message.createdAt || !prevMessage?.createdAt) return false;
@@ -1734,9 +1758,9 @@ const ChatScreen = () => {
         const prevDate = new Date(prevMessage.createdAt as any);
 
         return !isSameDay(msgDate, prevDate);
-    };
+    }, [messages]);
 
-    const renderStatusIcon = (status: string | null, customColor?: string) => {
+    const renderStatusIcon = useCallback((status: string | null, customColor?: string) => {
         if (!status) return null;
 
         const defaultColor = customColor || "rgba(255,255,255,0.7)";
@@ -1752,7 +1776,7 @@ const ChatScreen = () => {
             default:
                 return null;
         }
-    };
+    }, []);
 
     const getSystemMessageText = useCallback((text: string | undefined) => {
         if (!text || !currentUser || !chat) return text || '';
@@ -1836,7 +1860,7 @@ const ChatScreen = () => {
         return translated;
     }, [currentUser, chat]);
 
-    const renderMessage = ({ item, index }: { item: ChatMessage; index: number }) => {
+    const renderMessage = useCallback(({ item, index }: { item: ChatMessage; index: number }) => {
         const resolvedUserId = currentUserId || currentUser?.id || null;
         const isOwn = !!resolvedUserId && item.senderId === resolvedUserId;
         if (__DEV__) {
@@ -2242,7 +2266,37 @@ const ChatScreen = () => {
                 </View>
             </View>
         );
-    };
+    }, [
+        currentUserId,
+        currentUser,
+        chat,
+        isDarkMode,
+        shouldShowDayHeader,
+        getMessageStatus,
+        colors,
+        dayChipBg,
+        formatDayHeader,
+        router,
+        getSystemMessageText,
+        bubbleOtherBg,
+        shadowSoft,
+        highlightedMessageId,
+        formatMessageTime,
+        activeSharers,
+        renderStatusIcon,
+        getSenderPhoto,
+        getSenderName,
+        viewingImage,
+    ]);
+
+    const handleScroll = useCallback((e: any) => {
+        const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+        isNearBottom.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - 150;
+    }, []);
+
+    const handleEndReached = useCallback(() => {
+        if (hasMore) loadMoreMessages();
+    }, [hasMore, loadMoreMessages]);
 
     if (loading || loadingAuth) {
         return (
@@ -2353,13 +2407,8 @@ const ChatScreen = () => {
                     contentContainerStyle={styles.messagesContent}
                     showsVerticalScrollIndicator={false}
                     estimatedItemSize={80}
-                    onScroll={(e: any) => {
-                        const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
-                        isNearBottom.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - 150;
-                    }}
-                    onEndReached={() => {
-                        if (hasMore) loadMoreMessages();
-                    }}
+                    onScroll={handleScroll}
+                    onEndReached={handleEndReached}
                     onEndReachedThreshold={0.3}
                 />
 
