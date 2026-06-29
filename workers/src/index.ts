@@ -17,9 +17,9 @@ const app = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
 // Global CORS
 app.use('*', (c, next) => {
   const originHeader = c.req.header('Origin');
-  const allowedOrigins = ['https://hypermatrix.vercel.app'];
+  const allowedOrigins = ['https://nxtvibes.vercel.app'];
   const origin = (!originHeader || allowedOrigins.includes(originHeader)) ? originHeader || '*' : '';
-  
+
   const corsHandler = cors({
     origin,
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -102,7 +102,7 @@ async function cleanupDeletedMedia(env: Env): Promise<void> {
   try {
     console.log('[Cleanup] Starting deleted media cleanup...');
     const supabase = getSupabaseAdmin(env);
-    
+
     // Fetch up to 100 media records to delete
     const { data: mediaItems, error } = await supabase
       .from('deleted_media')
@@ -121,7 +121,7 @@ async function cleanupDeletedMedia(env: Env): Promise<void> {
 
     console.log(`[Cleanup] Processing ${mediaItems.length} deleted media items...`);
     const keys = mediaItems.map((item: any) => item.object_key);
-    
+
     // Delete the objects from R2
     await deleteR2Objects(env, keys);
     console.log(`[Cleanup] Deleted ${keys.length} R2 objects.`);

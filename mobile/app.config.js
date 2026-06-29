@@ -31,7 +31,7 @@ module.exports = {
       versionCode: 1,
       adaptiveIcon: {
         foregroundImage: './assets/icon.png',
-        backgroundColor: '#9d74f7',
+        backgroundColor: '#fafafa',
       },
       package: 'com.nxtvibes.mobile',
       googleServicesFile: './google-services.json',
@@ -47,12 +47,12 @@ module.exports = {
           data: [
             {
               scheme: 'https',
-              host: 'hypermatrix.vercel.app',
+              host: 'nxtvibes.vercel.app',
               pathPrefix: '/trip',
             },
             {
               scheme: 'https',
-              host: 'hypermatrix.vercel.app',
+              host: 'nxtvibes.vercel.app',
               pathPrefix: '/user',
             },
           ],

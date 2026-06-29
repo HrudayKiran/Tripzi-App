@@ -44,12 +44,12 @@
           "data": [
             {
               "scheme": "https",
-              "host": "hypermatrix.vercel.app",
+              "host": "nxtvibes.vercel.app",
               "pathPrefix": "/trip"
             },
             {
               "scheme": "https",
-              "host": "hypermatrix.vercel.app",
+              "host": "nxtvibes.vercel.app",
               "pathPrefix": "/user"
             }
           ],
