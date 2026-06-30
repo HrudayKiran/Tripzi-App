@@ -13,7 +13,7 @@ interface AppLogoProps {
 const AppLogo = ({ size = 80, style, showDot = true, showGlow = false }: AppLogoProps) => {
     // HTML uses rounded-3xl for 112px (h-28). 1.5rem = 24px. 24/112 ~= 0.21
     const borderRadius = size * 0.22;
-    const iconSize = size * 0.85; // slightly larger for the visual image logo
+    const iconSize = size * 1.3; // slightly larger for the visual image logo
 
     return (
         <View style={[styles.container, { width: size, height: size }, style]}>

@@ -10,24 +10,12 @@ import { getBooleanPreference, PREFERENCE_KEYS } from '../utils/preferences';
 import * as Haptics from 'expo-haptics';
 
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, STATUS } from '../styles';
-import { supabase } from '../lib/supabase';
+import { supabase, getProviderSync } from '../lib/supabase';
 
 const SettingsScreen = () => {
     const router = useRouter();
     const { colors, themeMode, setThemeMode } = useTheme();
-    const [currentUser, setCurrentUser] = React.useState<any>(null);
-
-    useFocusEffect(
-        useCallback(() => {
-            const loadSettings = async () => {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (!user) return;
-                setCurrentUser(user);
-            };
-
-            loadSettings();
-        }, [])
-    );
+    const provider = getProviderSync();
 
     return (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top']}>
@@ -101,14 +89,33 @@ const SettingsScreen = () => {
                     </View>
 
                     {/* Account Section */}
+                    {provider !== 'google' && (
+                        <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                            <TouchableOpacity
+                                style={styles.settingRow}
+                                onPress={() => router.push('/profile/change-password')}
+                                activeOpacity={0.7}
+                            >
+                                <View style={styles.settingInfo}>
+                                    <Text style={[styles.settingText, { color: colors.text }]}>Change Password</Text>
+                                    <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
+                                        Update your account password
+                                    </Text>
+                                </View>
+                                <Icon name="CaretRight" size={20} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
                     <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+
                         <TouchableOpacity
                             style={styles.dangerRow}
                             onPress={() => router.push('/profile/delete-account')}
                             activeOpacity={0.7}
                         >
                             <View style={styles.settingInfo}>
-                                <Text style={[styles.dangerText, styles.sectionTitle, { color: STATUS.errorDark }]}>Delete Account</Text>
+                                <Text style={[styles.dangerText, styles.sectionTitle, { color: STATUS.errorDark, marginBottom: SPACING.xs }]}>Delete Account</Text>
                                 <Text style={[styles.settingDescription, { color: STATUS.error }]}>
                                     Permanently remove your account and data
                                 </Text>
@@ -185,6 +192,17 @@ const styles = StyleSheet.create({
     themeText: {
         fontSize: FONT_SIZE.sm,
         fontWeight: FONT_WEIGHT.semibold,
+    },
+    settingRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: SPACING.sm,
+    },
+    settingText: {
+        fontSize: FONT_SIZE.md,
+        fontWeight: FONT_WEIGHT.semibold,
+        marginBottom: SPACING.xs,
     },
     dangerRow: {
         flexDirection: 'row',

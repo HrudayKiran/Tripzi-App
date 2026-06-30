@@ -12,7 +12,7 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, NE
 const TAWKTO_PROPERTY_ID = process.env.EXPO_PUBLIC_TAWKTO_PROPERTY_ID || '';
 const TAWKTO_WIDGET_ID = process.env.EXPO_PUBLIC_TAWKTO_WIDGET_ID || '';
 
-const SUPPORT_EMAIL = 'support@nxtvibes.app';
+const SUPPORT_EMAIL = 'nxtvibes.app@gmail.com';
 
 import { useRouter } from 'expo-router';
 import { NeumorphicBackButton } from '../components/NeumorphicIconButtons';

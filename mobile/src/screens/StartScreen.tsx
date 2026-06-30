@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ToastAndroid, Platform, Dimensions, ActivityIndicator, TextInput, KeyboardAvoidingView, ScrollView, Keyboard, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ToastAndroid, Platform, Dimensions, ActivityIndicator, TextInput, KeyboardAvoidingView, ScrollView, Keyboard, TouchableWithoutFeedback, BackHandler } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
@@ -16,6 +16,7 @@ import { z } from 'zod';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('screen');
 const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/;
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{6,}$/;
 
 // Zod Validation Schemas
 const loginSchema = z.object({
@@ -32,7 +33,7 @@ const signupSchema = z.object({
     message: "Please select your gender."
   }),
   email: z.string().trim().email({ message: "Invalid email address." }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters." }),
+  password: z.string().regex(PASSWORD_REGEX, { message: "Password must have uppercase, lowercase, number, and symbol." }),
 });
 
 const forgotEmailSchema = z.object({
@@ -44,14 +45,14 @@ const forgotOtpSchema = z.object({
 });
 
 const forgotNewSchema = z.object({
-  newPassword: z.string().min(6, { message: "Password must be at least 6 characters." }),
+  newPassword: z.string().regex(PASSWORD_REGEX, { message: "Password must have uppercase, lowercase, number, and symbol." }),
   confirmPassword: z.string(),
 }).refine((data) => data.newPassword === data.confirmPassword, {
   message: "Passwords do not match.",
   path: ["confirmPassword"],
 });
 
-type AuthMode = 'landing' | 'login' | 'signup' | 'forgot-email' | 'forgot-otp' | 'forgot-new';
+type AuthMode = 'landing' | 'login' | 'signup' | 'signup-otp' | 'forgot-email' | 'forgot-otp' | 'forgot-new';
 
 const StartScreen = () => {
   const { colors } = useTheme();
@@ -61,6 +62,28 @@ const StartScreen = () => {
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<AuthMode>('landing');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  useEffect(() => {
+    const onBackPress = () => {
+      if (mode === 'login' || mode === 'signup' || mode === 'forgot-email') {
+        changeMode('landing');
+        return true;
+      } else if (mode === 'forgot-otp') {
+        changeMode('forgot-email');
+        return true;
+      } else if (mode === 'signup-otp') {
+        changeMode('login');
+        return true;
+      } else if (mode === 'forgot-new') {
+        changeMode('forgot-otp');
+        return true;
+      }
+      return false;
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [mode]);
   
   // Form Fields
   const [email, setEmail] = useState('');
@@ -397,11 +420,42 @@ const StartScreen = () => {
         showToast('Registration successful! 🎉');
         router.replace('/(tabs)');
       } else {
-        Alert.alert('Verification Required', 'A verification email has been sent. Please verify your email to log in.');
-        changeMode('login');
+        showToast('Verification code sent to your email.');
+        changeMode('signup-otp');
       }
     } catch (err: any) {
       Alert.alert('Registration Failed', err.message || 'Something went wrong during sign up.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Sign up: Verify OTP Code
+  const handleVerifySignupOtp = async () => {
+    setErrors({});
+    const result = forgotOtpSchema.safeParse({ otpCode });
+    if (!result.success) {
+      setErrors({ otpCode: result.error.issues[0].message });
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: email.trim(),
+        token: otpCode.trim(),
+        type: 'signup',
+      });
+      if (error) throw error;
+      
+      const session = data?.session;
+      if (session) {
+        showToast('Registration successful! 🎉');
+        router.replace('/(tabs)');
+      } else {
+         Alert.alert('Error', 'Verification failed or session not established.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Verification failed. Double check the code.');
     } finally {
       setLoading(false);
     }
@@ -745,6 +799,46 @@ const StartScreen = () => {
     </MotiView>
   );
 
+  const renderSignupOtpForm = () => (
+    <MotiView
+      from={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ type: 'timing', duration: 400 }}
+      style={styles.formContainer}
+    >
+      <Text style={styles.formTitle}>Confirm Your Email</Text>
+      <Text style={styles.formSubtitle}>Enter the verification code sent to {email}</Text>
+
+      <View style={styles.inputGroup}>
+        <Text style={styles.inputLabel}>Verification Code</Text>
+        <View style={styles.inputWrapper}>
+          <Icon name="Key" size={20} color="rgba(255,255,255,0.6)" style={styles.inputIconLeft} />
+          <TextInput
+            style={[styles.formInput, errors.otpCode && styles.inputError]}
+            placeholder="Enter 6-digit code"
+            placeholderTextColor="rgba(255,255,255,0.4)"
+            keyboardType="number-pad"
+            autoCapitalize="none"
+            value={otpCode}
+            onChangeText={(val) => {
+              setOtpCode(val);
+              if (errors.otpCode) setErrors(prev => ({ ...prev, otpCode: '' }));
+            }}
+          />
+        </View>
+        {errors.otpCode ? <Text style={styles.fieldErrorText}>{errors.otpCode}</Text> : null}
+      </View>
+
+      <TouchableOpacity 
+        style={styles.submitBtn}
+        onPress={handleVerifySignupOtp}
+        disabled={loading}
+      >
+        {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.submitBtnText}>Verify & Login</Text>}
+      </TouchableOpacity>
+    </MotiView>
+  );
+
   const renderForgotOtpForm = () => (
     <MotiView
       from={{ opacity: 0, scale: 0.95 }}
@@ -871,7 +965,7 @@ const StartScreen = () => {
                   transition={{ type: 'timing', duration: 1000, delay: 300 }}
                   style={styles.logoSection}
                 >
-                  <AppLogo size={96} showDot={false} />
+                  <AppLogo size={96} showDot={false} style={{ marginTop: 40 }} />
                   <View style={styles.textContainer}>
                     <Text style={styles.appName}>NxtVibes</Text>
                     <Text style={styles.tagline}>CONNECT. PLAN. TRAVEL.</Text>
@@ -962,6 +1056,7 @@ const StartScreen = () => {
                 {mode === 'signup' && renderSignupForm()}
                 {mode === 'forgot-email' && renderForgotEmailForm()}
                 {mode === 'forgot-otp' && renderForgotOtpForm()}
+                {mode === 'signup-otp' && renderSignupOtpForm()}
                 {mode === 'forgot-new' && renderForgotNewForm()}
               </ScrollView>
             )}
@@ -996,11 +1091,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 24,
   },
   textContainer: {
     alignItems: 'center',
-    marginTop: 24,
+    marginTop: 12,
   },
   appName: {
     fontSize: 56,

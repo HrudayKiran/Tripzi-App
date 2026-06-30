@@ -47,3 +47,21 @@ export function hasSessionSync(): boolean {
     return false;
   }
 }
+
+/**
+ * Retrieves the user's auth provider synchronously from MMKV.
+ * Useful for rendering components immediately without flicker.
+ */
+export function getProviderSync(): string | null {
+  try {
+    const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\.supabase/)?.[1] || '';
+    const storageKey = `sb-${projectRef}-auth-token`;
+    const sessionStr = storage.getString(storageKey);
+    if (!sessionStr) return null;
+    const parsed = JSON.parse(sessionStr);
+    const user = parsed?.currentSession?.user || parsed?.user;
+    return user?.app_metadata?.provider || null;
+  } catch (e) {
+    return null;
+  }
+}
