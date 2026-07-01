@@ -69,7 +69,7 @@ export const CustomMediaPickerModal: React.FC<CustomMediaPickerModalProps> = ({
                 setHasPermission(false);
                 Alert.alert(
                     'Permission Denied',
-                    'Tripzi needs access to your gallery to pick images. Please grant permission in Settings.'
+                    'NxtVibes needs access to your gallery to pick images. Please grant permission in Settings.'
                 );
                 onClose();
             }
@@ -225,8 +225,8 @@ export const CustomMediaPickerModal: React.FC<CustomMediaPickerModalProps> = ({
                                     </Text>
                                 </TouchableOpacity>
                             )}
-                             style={{ maxHeight: SCREEN_WIDTH * 0.9 }}
-                             showsVerticalScrollIndicator={false}
+                            style={{ maxHeight: SCREEN_WIDTH * 0.9 }}
+                            showsVerticalScrollIndicator={false}
                         />
                     </View>
                 )}

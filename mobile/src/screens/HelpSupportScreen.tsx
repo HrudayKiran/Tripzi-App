@@ -56,6 +56,10 @@ const HelpSupportScreen = () => {
     Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`);
   };
 
+  const openWebsite = () => {
+    Linking.openURL('https://nxtvibes.vercel.app/');
+  };
+
   // tawk.to Direct Chat Link URL
   const chatUrl = `https://tawk.to/chat/${TAWKTO_PROPERTY_ID}/${TAWKTO_WIDGET_ID}`;
 
@@ -101,6 +105,14 @@ const HelpSupportScreen = () => {
               bgColor={colors.background !== '#FFFFFF' ? '#333333' : '#F3F4F6'}
               colors={colors}
               onPress={openLiveChat}
+            />
+            <ContactCard
+              icon="Globe"
+              label="Website"
+              iconColor={colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000'}
+              bgColor={colors.background !== '#FFFFFF' ? '#333333' : '#F3F4F6'}
+              colors={colors}
+              onPress={openWebsite}
             />
           </MotiView>
 
