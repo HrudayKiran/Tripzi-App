@@ -44,6 +44,7 @@ export type Env = {
   AI_RATE_LIMITER: RateLimit;
   MEDIA_RATE_LIMITER: RateLimit;
   GLOBAL_RATE_LIMITER: RateLimit;
+  PUBLIC_RATE_LIMITER: RateLimit;
 };
 
 interface RateLimit {

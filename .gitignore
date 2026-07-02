@@ -32,3 +32,6 @@ functions/.env.*
 
 # Specific secrets
 scripts/service-account.json
+
+# Agents Customizations
+.agents/

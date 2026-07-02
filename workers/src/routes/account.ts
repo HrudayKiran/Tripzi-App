@@ -4,25 +4,45 @@ import { deleteR2Prefix } from '../lib/r2';
 
 const account = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
 
+const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/;
+
 /**
  * GET /account/check-username/:username
+ * Authenticated — used on CompleteProfileScreen and EditProfileScreen.
+ * Sanitizes input, normalizes to lowercase, and excludes the caller's own
+ * username so editing to the same username returns { available: true }.
  */
 account.get('/check-username/:username', async (c) => {
-  const username = c.req.param('username');
+  const callerId = c.get('userId');
+  const raw = c.req.param('username');
+
+  // Sanitize and normalize
+  const username = raw.trim().toLowerCase();
+
+  if (!USERNAME_REGEX.test(username)) {
+    return c.json(
+      { error: 'Invalid username format. Use 3-20 chars: lowercase letters, numbers, underscore.' },
+      400
+    );
+  }
+
   const supabase = getSupabaseAdmin(c.env);
-  
+
   const { data, error } = await supabase
     .from('profiles')
     .select('id')
     .eq('username', username)
+    .neq('id', callerId)   // exclude caller's own record
     .maybeSingle();
-  
+
   if (error) {
+    console.error('[CheckUsername] Supabase error:', error.message);
     return c.json({ error: 'Database error' }, 500);
   }
-  
+
   return c.json({ available: !data });
 });
+
 
 /**
  * POST /account/delete

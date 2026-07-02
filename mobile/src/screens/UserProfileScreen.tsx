@@ -216,8 +216,6 @@ const UserProfileScreen = () => {
                         </View>
                     </View>
 
-                    {user.bio ? <Text style={[styles.bioText, { color: colors.text }]}>{user.bio}</Text> : null}
-
                     {currentUser && !isOwnProfile && (
                         <View style={styles.actionButtonsContainer}>
                             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.primary }]} onPress={handleMessage}>
@@ -288,7 +286,6 @@ const styles = StyleSheet.create({
     nameRow: { flexDirection: 'row', alignItems: 'center' },
     displayName: { fontSize: 20, fontWeight: '700' },
     displayUsername: { fontSize: 14, marginTop: 2 },
-    bioText: { marginTop: 16, fontSize: 15, lineHeight: 22 },
     actionButtonsContainer: { flexDirection: 'row', gap: 12, marginTop: 24 },
     primaryBtn: { flex: 1, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
     primaryBtnText: { fontSize: 15, fontWeight: '600' },

@@ -49,7 +49,6 @@ const EditProfileScreen = () => {
     const [user, setUser] = useState<any>(null);
     const [name, setName] = useState('');
     const [username, setUsername] = useState('');
-    const [bio, setBio] = useState('');
     const [profileImage, setProfileImage] = useState<string | null>(null);
     const [profileImageObjectKey, setProfileImageObjectKey] = useState<string | null>(null);
     const [checkingUsername, setCheckingUsername] = useState(false);
@@ -82,7 +81,6 @@ const EditProfileScreen = () => {
                     setUser({ id: user.id, ...lp, displayName, email: user.email });
                     setName(displayName);
                     setUsername(lp.username || '');
-                    setBio(lp.bio || '');
                     setProfileImage(lp.photo_url || user.user_metadata?.avatar_url || null);
                     setLoading(false);
                 }
@@ -102,7 +100,6 @@ const EditProfileScreen = () => {
                 setUser({ id: user.id, ...profile, displayName, email: user.email });
                 setName(displayName);
                 setUsername(profile.username || '');
-                setBio(profile.bio || '');
                 setProfileImage(profile.photo_url || user.user_metadata?.avatar_url || null);
                 setProfileImageObjectKey(profile.photo_object_key || null);
             }
@@ -138,7 +135,10 @@ const EditProfileScreen = () => {
             setUsernameError('');
             setUsernameOk(false);
             try {
-                const response = await workersApi(`/account/check-username/${value}`, { method: 'GET' });
+                const response = await workersApi(
+                    `/account/check-username/${encodeURIComponent(value.toLowerCase().trim())}`,
+                    { method: 'GET' }
+                );
                 
                 if (!active) return;
 
@@ -158,7 +158,7 @@ const EditProfileScreen = () => {
 
         };
 
-        timeout = setTimeout(run, 150);
+        timeout = setTimeout(run, 350);
         return () => {
 
             active = false;
@@ -281,7 +281,6 @@ const EditProfileScreen = () => {
                     await localProfile.update((profile: any) => {
                         profile.name = name.trim();
                         profile.username = sanitized;
-                        profile.bio = bio.trim();
                         profile.photo_url = profileImage || null;
                         profile.updated_at = Date.now();
                     });
@@ -291,7 +290,6 @@ const EditProfileScreen = () => {
                         profile._raw.id = currentUser.id;
                         profile.name = name.trim();
                         profile.username = sanitized;
-                        profile.bio = bio.trim();
                         profile.photo_url = profileImage || null;
                         profile.push_notifications_enabled = false;
                         profile.save_to_gallery = false;
@@ -304,11 +302,9 @@ const EditProfileScreen = () => {
         }
 
 
-        // 2. Fire and forget the remote updates (Supabase) in background
         supabase.from('profiles').update({
             name: name.trim(),
             username: sanitized,
-            bio: bio.trim(),
             photo_url: profileImage || null,
             photo_object_key: profileImageObjectKey || null,
         }).eq('id', currentUser.id).then(({ error }) => {
@@ -368,11 +364,6 @@ const EditProfileScreen = () => {
                             </View>
                         ))}
 
-                        {/* Bio Input Skeleton */}
-                        <View style={styles.skeletonFormGroup}>
-                            <SkeletonBlock style={styles.skeletonLabel} />
-                            <SkeletonBlock style={styles.skeletonBioInput} />
-                        </View>
 
                         {/* Save Button Skeleton */}
                         <SkeletonBlock style={styles.skeletonSaveButton} />
@@ -458,16 +449,6 @@ const EditProfileScreen = () => {
                         <Text style={styles.okText}>Username available</Text>
                     ) : null}
 
-                    <Text style={[styles.label, { color: colors.textSecondary }]}>Bio</Text>
-                    <TextInput
-                        style={[styles.input, styles.bioInput, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                        value={bio}
-                        onChangeText={setBio}
-                        placeholder="Tell people about yourself..."
-                        placeholderTextColor={colors.textSecondary}
-                        multiline
-                        maxLength={150}
-                    />
 
                     <TouchableOpacity onPress={handleSave} disabled={!canSave} style={styles.saveWrap}>
                         <View
@@ -537,10 +518,7 @@ const styles = StyleSheet.create({
     readOnlyInput: {
         opacity: 0.9,
     },
-    bioInput: {
-        minHeight: 100,
-        textAlignVertical: 'top',
-    },
+
     hintText: {
         fontSize: FONT_SIZE.xs,
         marginTop: SPACING.xs,
@@ -597,10 +575,7 @@ const styles = StyleSheet.create({
         height: 52,
         borderRadius: BORDER_RADIUS.md,
     },
-    skeletonBioInput: {
-        height: 100,
-        borderRadius: BORDER_RADIUS.md,
-    },
+
     skeletonSaveButton: {
         height: 56,
         borderRadius: BORDER_RADIUS.lg,

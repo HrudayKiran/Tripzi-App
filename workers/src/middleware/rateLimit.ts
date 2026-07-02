@@ -73,3 +73,31 @@ export const mediaRateLimit = async (
 
   await next();
 };
+
+/**
+ * Public rate limiter — 10 requests per 60 seconds per IP address.
+ * Applied to /public/* routes (unauthenticated endpoints).
+ * Uses CF-Connecting-IP so each device is limited independently.
+ * Prevents scrapers from enumerating usernames or blocking all sign-ups.
+ */
+export const publicRateLimit = async (
+  c: Context<{ Bindings: Env }>,
+  next: Next
+) => {
+  const limiter = c.env.PUBLIC_RATE_LIMITER;
+  if (!limiter) {
+    // Gracefully skip if binding not configured (e.g., local dev)
+    await next();
+    return;
+  }
+
+  // Use client IP — each device gets its own limit
+  const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? 'unknown';
+  const { success } = await limiter.limit({ key: ip });
+
+  if (!success) {
+    return c.json({ error: 'Too many requests. Please slow down.' }, 429);
+  }
+
+  await next();
+};

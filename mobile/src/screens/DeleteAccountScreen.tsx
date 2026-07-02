@@ -101,7 +101,7 @@ const DeleteAccountScreen = () => {
                             </Text>
                             
                             <View style={styles.bulletList}>
-                                <Text style={[styles.bulletItem, { color: colors.textSecondary }]}>• Profile information (Name, Username, Bio, Photo)</Text>
+                                <Text style={[styles.bulletItem, { color: colors.textSecondary }]}>• Profile information (Name, Username, Photo)</Text>
                                 <Text style={[styles.bulletItem, { color: colors.textSecondary }]}>• Trips you have created or joined</Text>
                                 <Text style={[styles.bulletItem, { color: colors.textSecondary }]}>• Photos and media uploaded to trips</Text>
                                 <Text style={[styles.bulletItem, { color: colors.textSecondary }]}>• Chats and messages</Text>

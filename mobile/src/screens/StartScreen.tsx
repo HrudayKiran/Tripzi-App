@@ -113,12 +113,17 @@ const StartScreen = () => {
   const changeMode = (newMode: AuthMode) => {
     setErrors({});
     
-    // Clear fields if moving to/from landing, or switching between login and signup
+    const isForgotMode = (m: AuthMode) => m.startsWith('forgot-');
+    
+    // Clear fields if moving to/from landing, switching between login/signup,
+    // or entering/exiting the forgot password flow.
     if (
       newMode === 'landing' || 
       mode === 'landing' || 
       (mode === 'login' && newMode === 'signup') || 
-      (mode === 'signup' && newMode === 'login')
+      (mode === 'signup' && newMode === 'login') ||
+      (isForgotMode(mode) && !isForgotMode(newMode)) ||
+      (!isForgotMode(mode) && newMode === 'forgot-email')
     ) {
       setEmail('');
       setPassword('');
@@ -185,7 +190,11 @@ const StartScreen = () => {
       });
       setUsernameOk(false);
       try {
-        const response = await workersApi(`/account/check-username/${value}`, { method: 'GET' });
+        // Use the public (unauthenticated) endpoint — no session exists during sign-up
+        const response = await workersApi(
+          `/public/check-username/${encodeURIComponent(value)}`,
+          { method: 'GET', isPublic: true }
+        );
         if (!active) return;
         if (response.available) {
           setUsernameOk(true);

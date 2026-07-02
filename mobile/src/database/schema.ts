@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-  version: 10,
+  version: 11,
   tables: [
     tableSchema({
       name: 'profiles',
@@ -9,7 +9,6 @@ export default appSchema({
         { name: 'name', type: 'string' },
         { name: 'username', type: 'string', isOptional: true },
         { name: 'photo_url', type: 'string', isOptional: true },
-        { name: 'bio', type: 'string', isOptional: true },
         { name: 'push_notifications_enabled', type: 'boolean' },
         { name: 'save_to_gallery', type: 'boolean' },
         { name: 'updated_at', type: 'number' },

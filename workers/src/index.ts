@@ -2,13 +2,14 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { Env, getSupabaseAdmin } from './lib/supabase';
 import { requireAuth } from './middleware/auth';
-import { globalRateLimit, aiRateLimit, mediaRateLimit } from './middleware/rateLimit';
+import { globalRateLimit, aiRateLimit, mediaRateLimit, publicRateLimit } from './middleware/rateLimit';
 import accountRoutes from './routes/account';
 import aiRoutes from './routes/ai';
 import kbRoutes from './routes/kb';
 import mediaRoutes from './routes/media';
 import groupChatsRoutes from './routes/group_chats';
 import chatNotificationRoutes from './routes/chat';
+import publicRoutes from './routes/public';
 import { handleDailyTripLifecycle } from './scheduled/daily';
 import { deleteR2Objects } from './lib/r2';
 
@@ -32,6 +33,9 @@ app.use('*', (c, next) => {
 // Health check (no auth)
 app.get('/', (c) => c.json({ status: 'ok', service: 'nxtvibes-workers' }));
 
+// Public routes — no auth, IP rate limited (must be before auth middleware)
+app.use('/public/*', publicRateLimit);
+
 // All authenticated routes — auth first, then rate limiting
 app.use('/account/*', requireAuth, globalRateLimit);
 app.use('/ai/*', requireAuth, aiRateLimit);
@@ -40,6 +44,7 @@ app.use('/group_chats/*', requireAuth, globalRateLimit);
 app.use('/chat/*', requireAuth, globalRateLimit);
 
 // Mount routes
+app.route('/public', publicRoutes);
 app.route('/account', accountRoutes);
 app.route('/ai', aiRoutes);
 app.route('/ai/kb', kbRoutes);

@@ -5,22 +5,43 @@ const WORKERS_URL = process.env.EXPO_PUBLIC_WORKERS_URL!;
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Makes an authenticated request to the Cloudflare Workers API.
- * Automatically attaches the current Supabase session JWT.
- * Implements a 15-second timeout and up to 2 retries with exponential backoff on transient errors.
+ * Makes a request to the Cloudflare Workers API.
+ *
+ * By default (isPublic: false), attaches the current Supabase session JWT
+ * and throws 'Not authenticated' if no session exists.
+ *
+ * When isPublic: true, skips the session check and omits the Authorization
+ * header — use this for unauthenticated endpoints like /public/check-username
+ * during the sign-up flow before a session exists.
+ *
+ * Implements a 15-second timeout and up to 2 retries with exponential backoff
+ * on transient errors.
  */
 export const workersApi = async <T = any>(
   path: string,
   options: {
     method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
     body?: Record<string, unknown>;
+    isPublic?: boolean;
   } = {}
 ): Promise<T> => {
-  const { method = 'POST', body } = options;
+  const { method = 'POST', body, isPublic = false } = options;
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.access_token) {
-    throw new Error('Not authenticated');
+  // Build authorization header only for authenticated requests
+  let authorizationHeader: string | undefined;
+  if (!isPublic) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      throw new Error('Not authenticated');
+    }
+    authorizationHeader = `Bearer ${session.access_token}`;
+  }
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (authorizationHeader) {
+    headers['Authorization'] = authorizationHeader;
   }
 
   const maxAttempts = 3;
@@ -35,10 +56,7 @@ export const workersApi = async <T = any>(
     try {
       const response = await fetch(`${WORKERS_URL}${path}`, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
+        headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });

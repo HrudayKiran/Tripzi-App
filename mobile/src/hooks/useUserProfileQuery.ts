@@ -36,7 +36,6 @@ export function useUserProfileQuery(userId: string | undefined, isOwnProfile: bo
                         email: user.email,
                         photoURL: meta.avatar_url || null,
                         photoObjectKey: null,
-                        bio: '',
                     };
                 }
             }

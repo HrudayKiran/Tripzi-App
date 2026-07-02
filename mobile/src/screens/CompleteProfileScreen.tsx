@@ -40,7 +40,6 @@ const CompleteProfileScreen = () => {
     const routeParams = useLocalSearchParams();
     const [fullName, setFullName] = useState('');
     const [username, setUsername] = useState('');
-    const [bio, setBio] = useState('');
     const [gender, setGender] = useState<'male' | 'female' | null>(null);
     const [checkingUsername, setCheckingUsername] = useState(false);
     const [usernameError, setUsernameError] = useState('');
@@ -81,8 +80,11 @@ const CompleteProfileScreen = () => {
             setUsernameError('');
             setUsernameOk(false);
             try {
-                // Check username availability via Worker
-                const response = await workersApi(`/account/check-username/${value}`, { method: 'GET' });
+                // Check username availability via authenticated Worker endpoint
+                const response = await workersApi(
+                  `/account/check-username/${encodeURIComponent(value.toLowerCase().trim())}`,
+                  { method: 'GET' }
+                );
                 
                 if (!active) return;
 
@@ -166,7 +168,6 @@ const CompleteProfileScreen = () => {
                     name: fullName.trim(),
                     username: sanitizeUsername(username.trim()),
                     gender,
-                    bio: bio.trim(),
                     photo_url: user.user_metadata?.avatar_url || null,
                     last_login_at: new Date().toISOString(),
                 });
@@ -188,7 +189,6 @@ const CompleteProfileScreen = () => {
                         profile._raw.id = user.id; // Set ID explicitly to match Supabase
                         profile.name = fullName.trim();
                         profile.username = sanitizeUsername(username.trim());
-                        profile.bio = bio.trim();
                         profile.photo_url = user.user_metadata?.avatar_url || null;
                         profile.push_notifications_enabled = false;
                         profile.save_to_gallery = false;
@@ -296,19 +296,6 @@ const CompleteProfileScreen = () => {
                             </View>
                         </View>
 
-                        {/* Bio */}
-                        <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: colors.textSecondary }]}>Bio (Optional)</Text>
-                            <TextInput
-                                style={[styles.input, styles.bioInput, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                                value={bio}
-                                onChangeText={setBio}
-                                placeholder="Write a short bio..."
-                                placeholderTextColor={colors.textSecondary}
-                                multiline
-                                maxLength={150}
-                            />
-                        </View>
 
                         {/* Terms */}
                         <View style={styles.termsContainer}>
@@ -415,10 +402,7 @@ const styles = StyleSheet.create({
         position: 'absolute',
         right: SPACING.md,
     },
-    bioInput: {
-        minHeight: 100,
-        textAlignVertical: 'top',
-    },
+
     errorText: {
         fontSize: FONT_SIZE.xs,
         color: STATUS.error,

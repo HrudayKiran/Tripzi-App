@@ -7,7 +7,6 @@ export default class Profile extends Model {
   @field('name') name!: string;
   @field('username') username?: string;
   @field('photo_url') photoUrl?: string;
-  @field('bio') bio?: string;
   @field('push_notifications_enabled') pushNotificationsEnabled!: boolean;
   @field('save_to_gallery') saveToGallery!: boolean;
   
