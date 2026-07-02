@@ -12,6 +12,8 @@ import Icon from '../components/Icon';
 import { supabase } from '../lib/supabase';
 import { workersApi } from '../lib/workersApi';
 import { useRouter } from 'expo-router';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('screen');
@@ -30,7 +32,7 @@ const signupSchema = z.object({
     message: "Username must be 3-20 characters (lowercase letters, numbers, and underscores only)."
   }),
   gender: z.enum(['male', 'female']).nullable().refine((val) => val !== null, {
-    message: "Please select your gender."
+    message: 'Please select your gender.',
   }),
   email: z.string().trim().email({ message: "Invalid email address." }),
   password: z.string().regex(PASSWORD_REGEX, { message: "Password must have uppercase, lowercase, number, and symbol." }),
@@ -41,7 +43,11 @@ const forgotEmailSchema = z.object({
 });
 
 const forgotOtpSchema = z.object({
-  otpCode: z.string().trim().min(1, { message: "Verification code is required." }),
+  otpCode: z
+    .string()
+    .trim()
+    .min(1, { message: 'Verification code is required.' })
+    .regex(/^\d{6}$/, { message: 'Enter the 6-digit code from your email.' }),
 });
 
 const forgotNewSchema = z.object({
@@ -61,8 +67,38 @@ const StartScreen = () => {
   // App States
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<AuthMode>('landing');
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  
+  const [activeEmail, setActiveEmail] = useState('');
+  const [checkingUsername, setCheckingUsername] = useState(false);
+  const [usernameOk, setUsernameOk] = useState(false);
+  // Rate-limit: track last OTP submit time to prevent rapid re-submissions
+  const lastOtpSubmitRef = React.useRef<number>(0);
+
+  // React Hook Form setups
+  const { control: loginControl, handleSubmit: handleLoginSubmit, reset: resetLogin, formState: { errors: loginErrors } } = useForm({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { email: '', password: '' }
+  });
+
+  const { control: signupControl, handleSubmit: handleSignupSubmit, reset: resetSignup, watch: watchSignup, setError: setSignupError, clearErrors: clearSignupErrors, formState: { errors: signupErrors } } = useForm({
+    resolver: zodResolver(signupSchema),
+    defaultValues: { fullName: '', username: '', gender: null as 'male' | 'female' | null, email: '', password: '' }
+  });
+
+  const { control: forgotEmailControl, handleSubmit: handleForgotEmailSubmit, reset: resetForgotEmail, formState: { errors: forgotEmailErrors } } = useForm({
+    resolver: zodResolver(forgotEmailSchema),
+    defaultValues: { email: '' }
+  });
+
+  const { control: otpControl, handleSubmit: handleOtpSubmit, reset: resetOtp, formState: { errors: otpErrors } } = useForm({
+    resolver: zodResolver(forgotOtpSchema),
+    defaultValues: { otpCode: '' }
+  });
+
+  const { control: forgotNewControl, handleSubmit: handleForgotNewSubmit, reset: resetForgotNew, formState: { errors: forgotNewErrors } } = useForm({
+    resolver: zodResolver(forgotNewSchema),
+    defaultValues: { newPassword: '', confirmPassword: '' }
+  });
+
   useEffect(() => {
     const onBackPress = () => {
       if (mode === 'login' || mode === 'signup' || mode === 'forgot-email') {
@@ -72,7 +108,7 @@ const StartScreen = () => {
         changeMode('forgot-email');
         return true;
       } else if (mode === 'signup-otp') {
-        changeMode('login');
+        changeMode('signup');
         return true;
       } else if (mode === 'forgot-new') {
         changeMode('forgot-otp');
@@ -84,23 +120,6 @@ const StartScreen = () => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => subscription.remove();
   }, [mode]);
-  
-  // Form Fields
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  
-  // Sign up fields
-  const [fullName, setFullName] = useState('');
-  const [username, setUsername] = useState('');
-  const [gender, setGender] = useState<'male' | 'female' | null>(null);
-  const [checkingUsername, setCheckingUsername] = useState(false);
-  const [usernameOk, setUsernameOk] = useState(false);
-
-  // Forgot password fields
-  const [resetEmail, setResetEmail] = useState('');
-  const [otpCode, setOtpCode] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
 
   const showToast = (message: string) => {
     if (Platform.OS === 'android') {
@@ -111,12 +130,8 @@ const StartScreen = () => {
   };
 
   const changeMode = (newMode: AuthMode) => {
-    setErrors({});
-    
     const isForgotMode = (m: AuthMode) => m.startsWith('forgot-');
     
-    // Clear fields if moving to/from landing, switching between login/signup,
-    // or entering/exiting the forgot password flow.
     if (
       newMode === 'landing' || 
       mode === 'landing' || 
@@ -125,16 +140,13 @@ const StartScreen = () => {
       (isForgotMode(mode) && !isForgotMode(newMode)) ||
       (!isForgotMode(mode) && newMode === 'forgot-email')
     ) {
-      setEmail('');
-      setPassword('');
-      setFullName('');
-      setUsername('');
-      setGender(null);
+      resetLogin();
+      resetSignup();
+      resetForgotEmail();
+      resetOtp();
+      resetForgotNew();
       setUsernameOk(false);
-      setResetEmail('');
-      setOtpCode('');
-      setNewPassword('');
-      setConfirmPassword('');
+      setActiveEmail('');
     }
     
     setMode(newMode);
@@ -154,6 +166,8 @@ const StartScreen = () => {
     });
   }, []);
 
+  const watchUsername = watchSignup('username');
+
   // Debounced Username availability check during Sign-up
   useEffect(() => {
     if (mode !== 'signup') return;
@@ -162,32 +176,21 @@ const StartScreen = () => {
     let timeout: any;
 
     const run = async () => {
-      const value = username.trim().toLowerCase();
+      const value = (watchUsername || '').trim().toLowerCase();
       if (!value) {
-        setErrors(prev => {
-          const updated = { ...prev };
-          delete updated.username;
-          return updated;
-        });
+        clearSignupErrors('username');
         setUsernameOk(false);
         return;
       }
 
       if (!USERNAME_REGEX.test(value)) {
-        setErrors(prev => ({
-          ...prev,
-          username: 'Use 3-20 chars: lowercase letters, numbers, underscore'
-        }));
+        setSignupError('username', { message: 'Use 3-20 chars: lowercase letters, numbers, underscore' });
         setUsernameOk(false);
         return;
       }
 
       setCheckingUsername(true);
-      setErrors(prev => {
-        const updated = { ...prev };
-        delete updated.username;
-        return updated;
-      });
+      clearSignupErrors('username');
       setUsernameOk(false);
       try {
         // Use the public (unauthenticated) endpoint — no session exists during sign-up
@@ -199,12 +202,12 @@ const StartScreen = () => {
         if (response.available) {
           setUsernameOk(true);
         } else {
-          setErrors(prev => ({ ...prev, username: 'Username is already taken' }));
+          setSignupError('username', { message: 'Username is already taken' });
           setUsernameOk(false);
         }
       } catch (error) {
         if (!active) return;
-        setErrors(prev => ({ ...prev, username: 'Could not validate username. Try again.' }));
+        setSignupError('username', { message: 'Could not validate username. Try again.' });
         setUsernameOk(false);
       } finally {
         if (active) {
@@ -218,7 +221,7 @@ const StartScreen = () => {
       active = false;
       clearTimeout(timeout);
     };
-  }, [username, mode]);
+  }, [watchUsername, mode]);
 
   // Unified Google Auth Handler (Sign In OR Sign Up)
   const handleGoogleLogin = async () => {
@@ -262,15 +265,13 @@ const StartScreen = () => {
         throw new Error('Authentication failed. Please try again.');
       }
 
-      // Check if user has a profile in Supabase
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, name, username')
-        .eq('id', user.id)
-        .maybeSingle();
+      // 1. Check if user has explicitly completed profile before
+      const isCompletedMetadata = user.user_metadata?.profile_completed === true;
+      // 2. Check if the auth account was created in the last 15 seconds (brand new signup)
+      const isNewSignup = Date.now() - new Date(user.created_at).getTime() < 15000;
 
-      if (profile && profile.name && profile.username) {
-        // Existing user with complete profile → Go to App
+      if (!isNewSignup && isCompletedMetadata) {
+        // Safe path: Existing completed user
         supabase
           .from('profiles')
           .update({ last_login_at: new Date().toISOString() })
@@ -280,15 +281,39 @@ const StartScreen = () => {
         showToast('Welcome back! 🎉');
         router.replace('/(tabs)');
       } else {
-        // New user or incomplete profile → Go to profile completion
-        router.push({
-          pathname: '/(auth)/complete-profile',
-          params: {
-            email: googleEmail,
-            displayName: googleDisplayName,
-            photoURL: googlePhotoURL,
-          }
-        });
+        // Check database profile to handle existing users without metadata flag
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, name, username, gender')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        // If it's a new signup, or they don't have username/gender completed
+        const isActuallyCompleted = profile && profile.name && profile.username && profile.gender;
+
+        if (isActuallyCompleted && !isNewSignup) {
+          // Sync metadata so we bypass query next time
+          await supabase.auth.updateUser({ data: { profile_completed: true } });
+          
+          supabase
+            .from('profiles')
+            .update({ last_login_at: new Date().toISOString() })
+            .eq('id', user.id)
+            .then(() => {});
+
+          showToast('Welcome back! 🎉');
+          router.replace('/(tabs)');
+        } else {
+          // Route to complete-profile
+          router.push({
+            pathname: '/(auth)/complete-profile',
+            params: {
+              email: googleEmail,
+              displayName: googleDisplayName,
+              photoURL: googlePhotoURL,
+            }
+          });
+        }
       }
 
     } catch (error: any) {
@@ -307,28 +332,17 @@ const StartScreen = () => {
   };
 
   // Email & Password Login Handler
-  const handleEmailLogin = async () => {
-    setErrors({});
-    const result = loginSchema.safeParse({ email, password });
-    if (!result.success) {
-      const newErrors: Record<string, string> = {};
-      result.error.issues.forEach((issue) => {
-        const path = issue.path[0];
-        if (path !== undefined) newErrors[String(path)] = issue.message;
-      });
-      setErrors(newErrors);
-      return;
-    }
+  const handleEmailLogin = async (data: any) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: password,
+      const { data: authData, error } = await supabase.auth.signInWithPassword({
+        email: data.email.trim(),
+        password: data.password,
       });
 
       if (error) throw error;
 
-      const user = data?.user;
+      const user = authData?.user;
       if (!user) throw new Error('Failed to sign in.');
 
       // Check if user has a profile
@@ -365,40 +379,24 @@ const StartScreen = () => {
   };
 
   // Email & Password Sign Up Handler
-  const handleEmailRegister = async () => {
-    setErrors({});
-    const valUsername = username.trim().toLowerCase();
-    const result = signupSchema.safeParse({
-      fullName,
-      username: valUsername,
-      gender,
-      email,
-      password
-    });
-    if (!result.success) {
-      const newErrors: Record<string, string> = {};
-      result.error.issues.forEach((issue) => {
-        const path = issue.path[0];
-        if (path !== undefined) newErrors[String(path)] = issue.message;
-      });
-      setErrors(newErrors);
-      return;
-    }
+  const handleEmailRegister = async (data: any) => {
+    const valUsername = data.username.trim().toLowerCase();
     if (!usernameOk) {
-      setErrors(prev => ({ ...prev, username: 'Please choose a valid and available username.' }));
+      setSignupError('username', { message: 'Please choose a valid and available username.' });
       return;
     }
 
     setLoading(true);
     try {
       const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: email.trim(),
-        password: password,
+        email: data.email.trim(),
+        password: data.password,
         options: {
           data: {
-            name: fullName.trim(),
+            name: data.fullName.trim(),
             username: valUsername,
-            gender: gender,
+            gender: data.gender,
+            profile_completed: true,
           }
         }
       });
@@ -414,10 +412,10 @@ const StartScreen = () => {
           .from('profiles')
           .insert({
             id: user.id,
-            email: email.trim(),
-            name: fullName.trim(),
+            email: data.email.trim(),
+            name: data.fullName.trim(),
             username: valUsername,
-            gender: gender,
+            gender: data.gender,
             last_login_at: new Date().toISOString(),
           });
       } catch (profileErr) {
@@ -429,6 +427,7 @@ const StartScreen = () => {
         showToast('Registration successful! 🎉');
         router.replace('/(tabs)');
       } else {
+        setActiveEmail(data.email.trim());
         showToast('Verification code sent to your email.');
         changeMode('signup-otp');
       }
@@ -440,48 +439,45 @@ const StartScreen = () => {
   };
 
   // Sign up: Verify OTP Code
-  const handleVerifySignupOtp = async () => {
-    setErrors({});
-    const result = forgotOtpSchema.safeParse({ otpCode });
-    if (!result.success) {
-      setErrors({ otpCode: result.error.issues[0].message });
+  const handleVerifySignupOtp = async (data: any) => {
+    // Client-side rate limit: prevent submitting more than once every 5 seconds
+    const now = Date.now();
+    if (now - lastOtpSubmitRef.current < 5000) {
+      Alert.alert('Please wait', 'Please wait a moment before trying again.');
       return;
     }
+    lastOtpSubmitRef.current = now;
+
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        email: email.trim(),
-        token: otpCode.trim(),
+      const { data: authData, error } = await supabase.auth.verifyOtp({
+        email: activeEmail,
+        token: data.otpCode.trim(),
         type: 'signup',
       });
       if (error) throw error;
       
-      const session = data?.session;
+      const session = authData?.session;
       if (session) {
         showToast('Registration successful! 🎉');
         router.replace('/(tabs)');
       } else {
-         Alert.alert('Error', 'Verification failed or session not established.');
+        Alert.alert('Error', 'Verification failed or session not established.');
       }
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Verification failed. Double check the code.');
+      Alert.alert('Verification Failed', err.message || 'Double-check the code and try again.');
     } finally {
       setLoading(false);
     }
   };
 
   // Forgot Password: Send OTP Code
-  const handleSendResetCode = async () => {
-    setErrors({});
-    const result = forgotEmailSchema.safeParse({ email: resetEmail });
-    if (!result.success) {
-      setErrors({ resetEmail: result.error.issues[0].message });
-      return;
-    }
+  const handleSendResetCode = async (data: any) => {
     setLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim());
+      const { error } = await supabase.auth.resetPasswordForEmail(data.email.trim());
       if (error) throw error;
+      setActiveEmail(data.email.trim());
       showToast('Reset code sent to your email!');
       changeMode('forgot-otp');
     } catch (err: any) {
@@ -492,18 +488,20 @@ const StartScreen = () => {
   };
 
   // Forgot Password: Verify OTP Code
-  const handleVerifyResetCode = async () => {
-    setErrors({});
-    const result = forgotOtpSchema.safeParse({ otpCode });
-    if (!result.success) {
-      setErrors({ otpCode: result.error.issues[0].message });
+  const handleVerifyResetCode = async (data: any) => {
+    // Client-side rate limit: prevent submitting more than once every 5 seconds
+    const now = Date.now();
+    if (now - lastOtpSubmitRef.current < 5000) {
+      Alert.alert('Please wait', 'Please wait a moment before trying again.');
       return;
     }
+    lastOtpSubmitRef.current = now;
+
     setLoading(true);
     try {
       const { error } = await supabase.auth.verifyOtp({
-        email: resetEmail.trim(),
-        token: otpCode.trim(),
+        email: activeEmail,
+        token: data.otpCode.trim(),
         type: 'recovery',
       });
       if (error) throw error;
@@ -511,29 +509,18 @@ const StartScreen = () => {
       showToast('Code verified! Enter new password.');
       changeMode('forgot-new');
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Verification failed. Double check the code.');
+      Alert.alert('Verification Failed', err.message || 'Double-check the code and try again.');
     } finally {
       setLoading(false);
     }
   };
 
   // Forgot Password: Save New Password
-  const handleUpdatePassword = async () => {
-    setErrors({});
-    const result = forgotNewSchema.safeParse({ newPassword, confirmPassword });
-    if (!result.success) {
-      const newErrors: Record<string, string> = {};
-      result.error.issues.forEach((issue) => {
-        const path = issue.path[0];
-        if (path !== undefined) newErrors[String(path)] = issue.message;
-      });
-      setErrors(newErrors);
-      return;
-    }
+  const handleUpdatePassword = async (data: any) => {
     setLoading(true);
     try {
       const { error } = await supabase.auth.updateUser({
-        password: newPassword,
+        password: data.newPassword,
       });
       if (error) throw error;
       
@@ -541,12 +528,13 @@ const StartScreen = () => {
         {
           text: 'OK',
           onPress: () => {
-            setEmail(resetEmail);
-            setPassword('');
-            setResetEmail('');
-            setOtpCode('');
-            setNewPassword('');
-            setConfirmPassword('');
+            resetLogin({ email: activeEmail, password: '' });
+            resetSignup();
+            resetForgotEmail();
+            resetOtp();
+            resetForgotNew();
+            setUsernameOk(false);
+            setActiveEmail('');
             changeMode('login');
           }
         }
@@ -572,17 +560,26 @@ const StartScreen = () => {
         <Text style={styles.inputLabel}>Email Address</Text>
         <View style={styles.inputWrapper}>
           <Icon name="Envelope" size={20} color="rgba(255,255,255,0.6)" style={styles.inputIconLeft} />
-          <TextInput
-            style={[styles.formInput, errors.email && styles.inputError]}
-            placeholder="email@example.com"
-            placeholderTextColor="rgba(255,255,255,0.4)"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            value={email}
-            onChangeText={setEmail}
+          <Controller
+            control={loginControl}
+            name="email"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                style={[styles.formInput, loginErrors.email && styles.inputError]}
+                placeholder="email@example.com"
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                textContentType="emailAddress"
+                onBlur={onBlur}
+                onChangeText={(val) => onChange(val.trim())}
+                value={value}
+              />
+            )}
           />
         </View>
-        {errors.email ? <Text style={styles.fieldErrorText}>{errors.email}</Text> : null}
+        {loginErrors.email ? <Text style={styles.fieldErrorText}>{loginErrors.email.message}</Text> : null}
       </View>
 
       <View style={styles.inputGroup}>
@@ -594,27 +591,38 @@ const StartScreen = () => {
         </View>
         <View style={styles.inputWrapper}>
           <Icon name="Lock" size={20} color="rgba(255,255,255,0.6)" style={styles.inputIconLeft} />
-          <TextInput
-            style={[styles.formInput, errors.password && styles.inputError]}
-            placeholder="Enter password"
-            placeholderTextColor="rgba(255,255,255,0.4)"
-            secureTextEntry
-            autoCapitalize="none"
-            value={password}
-            onChangeText={setPassword}
+          <Controller
+            control={loginControl}
+            name="password"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                style={[styles.formInput, loginErrors.password && styles.inputError]}
+                placeholder="Enter password"
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                secureTextEntry
+                autoCapitalize="none"
+                autoComplete="current-password"
+                textContentType="password"
+                onBlur={onBlur}
+                onChangeText={onChange}
+                value={value}
+                returnKeyType="done"
+                onSubmitEditing={handleLoginSubmit(handleEmailLogin)}
+              />
+            )}
           />
         </View>
-        {errors.password ? <Text style={styles.fieldErrorText}>{errors.password}</Text> : null}
+        {loginErrors.password ? <Text style={styles.fieldErrorText}>{loginErrors.password.message}</Text> : null}
       </View>
 
       <TouchableOpacity
         style={styles.submitBtn}
-        onPress={handleEmailLogin}
+        onPress={handleLoginSubmit(handleEmailLogin)}
         disabled={loading}
         activeOpacity={0.9}
       >
         {loading ? (
-          <ActivityIndicator color={BRAND.primary} />
+          <ActivityIndicator color="#000000" />
         ) : (
           <Text style={styles.submitBtnText}>Log In</Text>
         )}
@@ -643,28 +651,42 @@ const StartScreen = () => {
         <Text style={styles.inputLabel}>Full Name</Text>
         <View style={styles.inputWrapper}>
           <Icon name="User" size={20} color="rgba(255,255,255,0.6)" style={styles.inputIconLeft} />
-          <TextInput
-            style={[styles.formInput, errors.fullName && styles.inputError]}
-            placeholder="John Doe"
-            placeholderTextColor="rgba(255,255,255,0.4)"
-            value={fullName}
-            onChangeText={setFullName}
+          <Controller
+            control={signupControl}
+            name="fullName"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                style={[styles.formInput, signupErrors.fullName && styles.inputError]}
+                placeholder="John Doe"
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                onBlur={onBlur}
+                onChangeText={onChange}
+                value={value}
+              />
+            )}
           />
         </View>
-        {errors.fullName ? <Text style={styles.fieldErrorText}>{errors.fullName}</Text> : null}
+        {signupErrors.fullName ? <Text style={styles.fieldErrorText}>{signupErrors.fullName.message}</Text> : null}
       </View>
 
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>Username</Text>
         <View style={styles.inputWrapper}>
           <Icon name="Hash" size={20} color="rgba(255,255,255,0.6)" style={styles.inputIconLeft} />
-          <TextInput
-            style={[styles.formInput, { paddingRight: 40 }, errors.username && styles.inputError]}
-            placeholder="username"
-            placeholderTextColor="rgba(255,255,255,0.4)"
-            autoCapitalize="none"
-            value={username}
-            onChangeText={(val) => setUsername(val.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase())}
+          <Controller
+            control={signupControl}
+            name="username"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                style={[styles.formInput, { paddingRight: 40 }, signupErrors.username && styles.inputError]}
+                placeholder="username"
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                autoCapitalize="none"
+                onBlur={onBlur}
+                onChangeText={(val) => onChange(val.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase())}
+                value={value}
+              />
+            )}
           />
           {checkingUsername && (
             <ActivityIndicator size="small" color={NEUTRAL.white} style={styles.inputIconRight} />
@@ -672,12 +694,12 @@ const StartScreen = () => {
           {!checkingUsername && usernameOk && (
             <Icon name="CheckCircle" size={20} color={STATUS.success} style={styles.inputIconRight} />
           )}
-          {!checkingUsername && errors.username ? (
+          {!checkingUsername && signupErrors.username ? (
             <Icon name="XCircle" size={20} color={STATUS.error} style={styles.inputIconRight} />
           ) : null}
         </View>
-        {errors.username ? (
-          <Text style={styles.fieldErrorText}>{errors.username}</Text>
+        {signupErrors.username ? (
+          <Text style={styles.fieldErrorText}>{signupErrors.username.message}</Text>
         ) : usernameOk ? (
           <Text style={styles.fieldOkText}>Username is available</Text>
         ) : null}
@@ -685,73 +707,93 @@ const StartScreen = () => {
 
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>Gender</Text>
-        <View style={[styles.genderRow, errors.gender && styles.genderErrorBorder]}>
-          <TouchableOpacity
-            style={[
-              styles.genderOption,
-              gender === 'male' && styles.genderSelected
-            ]}
-            onPress={() => setGender('male')}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.genderText, gender === 'male' && styles.genderTextSelected]}>Male</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.genderOption,
-              gender === 'female' && styles.genderSelected
-            ]}
-            onPress={() => setGender('female')}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.genderText, gender === 'female' && styles.genderTextSelected]}>Female</Text>
-          </TouchableOpacity>
-        </View>
-        {errors.gender ? <Text style={styles.fieldErrorText}>{errors.gender}</Text> : null}
+        <Controller
+          control={signupControl}
+          name="gender"
+          render={({ field: { onChange, value } }) => (
+            <View style={[styles.genderRow, signupErrors.gender && styles.genderErrorBorder]}>
+              <TouchableOpacity
+                style={[styles.genderOption, value === 'male' && styles.genderSelected]}
+                onPress={() => onChange('male')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.genderText, value === 'male' && styles.genderTextSelected]}>Male</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.genderOption, value === 'female' && styles.genderSelected]}
+                onPress={() => onChange('female')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.genderText, value === 'female' && styles.genderTextSelected]}>Female</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        />
+        {signupErrors.gender ? <Text style={styles.fieldErrorText}>{signupErrors.gender.message}</Text> : null}
       </View>
 
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>Email Address</Text>
         <View style={styles.inputWrapper}>
           <Icon name="Envelope" size={20} color="rgba(255,255,255,0.6)" style={styles.inputIconLeft} />
-          <TextInput
-            style={[styles.formInput, errors.email && styles.inputError]}
-            placeholder="email@example.com"
-            placeholderTextColor="rgba(255,255,255,0.4)"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            value={email}
-            onChangeText={setEmail}
+          <Controller
+            control={signupControl}
+            name="email"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                style={[styles.formInput, signupErrors.email && styles.inputError]}
+                placeholder="email@example.com"
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                textContentType="emailAddress"
+                onBlur={onBlur}
+                onChangeText={(val) => onChange(val.trim())}
+                value={value}
+              />
+            )}
           />
         </View>
-        {errors.email ? <Text style={styles.fieldErrorText}>{errors.email}</Text> : null}
+        {signupErrors.email ? <Text style={styles.fieldErrorText}>{signupErrors.email.message}</Text> : null}
       </View>
 
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>Password</Text>
         <View style={styles.inputWrapper}>
           <Icon name="Lock" size={20} color="rgba(255,255,255,0.6)" style={styles.inputIconLeft} />
-          <TextInput
-            style={[styles.formInput, errors.password && styles.inputError]}
-            placeholder="At least 6 characters"
-            placeholderTextColor="rgba(255,255,255,0.4)"
-            secureTextEntry
-            autoCapitalize="none"
-            value={password}
-            onChangeText={setPassword}
+          <Controller
+            control={signupControl}
+            name="password"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                style={[styles.formInput, signupErrors.password && styles.inputError]}
+                placeholder="Min 6 chars, upper, lower, number, symbol"
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                secureTextEntry
+                autoCapitalize="none"
+                autoComplete="new-password"
+                textContentType="newPassword"
+                onBlur={onBlur}
+                onChangeText={onChange}
+                value={value}
+                returnKeyType="done"
+                onSubmitEditing={handleSignupSubmit(handleEmailRegister)}
+              />
+            )}
           />
         </View>
-        {errors.password ? <Text style={styles.fieldErrorText}>{errors.password}</Text> : null}
+        {signupErrors.password ? <Text style={styles.fieldErrorText}>{signupErrors.password.message}</Text> : null}
       </View>
 
       <TouchableOpacity
         style={styles.submitBtn}
-        onPress={handleEmailRegister}
+        onPress={handleSignupSubmit(handleEmailRegister)}
         disabled={loading}
         activeOpacity={0.9}
       >
         {loading ? (
-          <ActivityIndicator color={BRAND.primary} />
+          <ActivityIndicator color="#000000" />
         ) : (
           <Text style={styles.submitBtnText}>Register</Text>
         )}
@@ -780,27 +822,38 @@ const StartScreen = () => {
         <Text style={styles.inputLabel}>Email Address</Text>
         <View style={styles.inputWrapper}>
           <Icon name="Envelope" size={20} color="rgba(255,255,255,0.6)" style={styles.inputIconLeft} />
-          <TextInput
-            style={[styles.formInput, errors.resetEmail && styles.inputError]}
-            placeholder="email@example.com"
-            placeholderTextColor="rgba(255,255,255,0.4)"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            value={resetEmail}
-            onChangeText={setResetEmail}
+          <Controller
+            control={forgotEmailControl}
+            name="email"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                style={[styles.formInput, forgotEmailErrors.email && styles.inputError]}
+                placeholder="email@example.com"
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                textContentType="emailAddress"
+                returnKeyType="done"
+                onSubmitEditing={handleForgotEmailSubmit(handleSendResetCode)}
+                onBlur={onBlur}
+                onChangeText={(val) => onChange(val.trim())}
+                value={value}
+              />
+            )}
           />
         </View>
-        {errors.resetEmail ? <Text style={styles.fieldErrorText}>{errors.resetEmail}</Text> : null}
+        {forgotEmailErrors.email ? <Text style={styles.fieldErrorText}>{forgotEmailErrors.email.message}</Text> : null}
       </View>
 
       <TouchableOpacity
         style={styles.submitBtn}
-        onPress={handleSendResetCode}
+        onPress={handleForgotEmailSubmit(handleSendResetCode)}
         disabled={loading}
         activeOpacity={0.9}
       >
         {loading ? (
-          <ActivityIndicator color={BRAND.primary} />
+          <ActivityIndicator color="#000000" />
         ) : (
           <Text style={styles.submitBtnText}>Send Reset Code</Text>
         )}
@@ -816,34 +869,42 @@ const StartScreen = () => {
       style={styles.formContainer}
     >
       <Text style={styles.formTitle}>Confirm Your Email</Text>
-      <Text style={styles.formSubtitle}>Enter the verification code sent to {email}</Text>
+      <Text style={styles.formSubtitle}>Enter the verification code sent to {activeEmail}</Text>
 
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>Verification Code</Text>
         <View style={styles.inputWrapper}>
           <Icon name="Key" size={20} color="rgba(255,255,255,0.6)" style={styles.inputIconLeft} />
-          <TextInput
-            style={[styles.formInput, errors.otpCode && styles.inputError]}
-            placeholder="Enter 6-digit code"
-            placeholderTextColor="rgba(255,255,255,0.4)"
-            keyboardType="number-pad"
-            autoCapitalize="none"
-            value={otpCode}
-            onChangeText={(val) => {
-              setOtpCode(val);
-              if (errors.otpCode) setErrors(prev => ({ ...prev, otpCode: '' }));
-            }}
+          <Controller
+            control={otpControl}
+            name="otpCode"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                style={[styles.formInput, otpErrors.otpCode && styles.inputError]}
+                placeholder="Enter 6-digit code"
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                keyboardType="number-pad"
+                autoCapitalize="none"
+                maxLength={6}
+                onBlur={onBlur}
+                onChangeText={(val) => onChange(val.replace(/[^0-9]/g, ''))}
+                value={value}
+                returnKeyType="done"
+                onSubmitEditing={handleOtpSubmit(handleVerifySignupOtp)}
+              />
+            )}
           />
         </View>
-        {errors.otpCode ? <Text style={styles.fieldErrorText}>{errors.otpCode}</Text> : null}
+        {otpErrors.otpCode ? <Text style={styles.fieldErrorText}>{otpErrors.otpCode.message}</Text> : null}
       </View>
 
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.submitBtn}
-        onPress={handleVerifySignupOtp}
+        onPress={handleOtpSubmit(handleVerifySignupOtp)}
         disabled={loading}
+        activeOpacity={0.9}
       >
-        {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.submitBtnText}>Verify & Login</Text>}
+        {loading ? <ActivityIndicator color="#000000" /> : <Text style={styles.submitBtnText}>Verify & Login</Text>}
       </TouchableOpacity>
     </MotiView>
   );
@@ -856,33 +917,43 @@ const StartScreen = () => {
       style={styles.formContainer}
     >
       <Text style={styles.formTitle}>Verification Code</Text>
-      <Text style={styles.formSubtitle}>Enter the verification code sent to {resetEmail}</Text>
+      <Text style={styles.formSubtitle}>Enter the 6-digit code sent to {activeEmail}</Text>
 
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>Verification Code</Text>
         <View style={styles.inputWrapper}>
           <Icon name="Key" size={20} color="rgba(255,255,255,0.6)" style={styles.inputIconLeft} />
-          <TextInput
-            style={[styles.formInput, errors.otpCode && styles.inputError]}
-            placeholder="Enter code"
-            placeholderTextColor="rgba(255,255,255,0.4)"
-            keyboardType="number-pad"
-            autoCapitalize="none"
-            value={otpCode}
-            onChangeText={setOtpCode}
+          <Controller
+            control={otpControl}
+            name="otpCode"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                style={[styles.formInput, otpErrors.otpCode && styles.inputError]}
+                placeholder="Enter 6-digit code"
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                keyboardType="number-pad"
+                autoCapitalize="none"
+                maxLength={6}
+                onBlur={onBlur}
+                onChangeText={(val) => onChange(val.replace(/[^0-9]/g, ''))}
+                value={value}
+                returnKeyType="done"
+                onSubmitEditing={handleOtpSubmit(handleVerifyResetCode)}
+              />
+            )}
           />
         </View>
+        {otpErrors.otpCode ? <Text style={styles.fieldErrorText}>{otpErrors.otpCode.message}</Text> : null}
       </View>
-      {errors.otpCode ? <Text style={styles.fieldErrorText}>{errors.otpCode}</Text> : null}
 
       <TouchableOpacity
         style={styles.submitBtn}
-        onPress={handleVerifyResetCode}
+        onPress={handleOtpSubmit(handleVerifyResetCode)}
         disabled={loading}
         activeOpacity={0.9}
       >
         {loading ? (
-          <ActivityIndicator color={BRAND.primary} />
+          <ActivityIndicator color="#000000" />
         ) : (
           <Text style={styles.submitBtnText}>Verify Code</Text>
         )}
@@ -904,44 +975,64 @@ const StartScreen = () => {
         <Text style={styles.inputLabel}>New Password</Text>
         <View style={styles.inputWrapper}>
           <Icon name="Lock" size={20} color="rgba(255,255,255,0.6)" style={styles.inputIconLeft} />
-          <TextInput
-            style={[styles.formInput, errors.newPassword && styles.inputError]}
-            placeholder="At least 6 characters"
-            placeholderTextColor="rgba(255,255,255,0.4)"
-            secureTextEntry
-            autoCapitalize="none"
-            value={newPassword}
-            onChangeText={setNewPassword}
+          <Controller
+            control={forgotNewControl}
+            name="newPassword"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                style={[styles.formInput, forgotNewErrors.newPassword && styles.inputError]}
+                placeholder="Min 6 chars, upper, lower, number, symbol"
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                secureTextEntry
+                autoCapitalize="none"
+                autoComplete="new-password"
+                textContentType="newPassword"
+                onBlur={onBlur}
+                onChangeText={onChange}
+                value={value}
+              />
+            )}
           />
         </View>
-        {errors.newPassword ? <Text style={styles.fieldErrorText}>{errors.newPassword}</Text> : null}
+        {forgotNewErrors.newPassword ? <Text style={styles.fieldErrorText}>{forgotNewErrors.newPassword.message}</Text> : null}
       </View>
 
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>Confirm Password</Text>
         <View style={styles.inputWrapper}>
           <Icon name="Lock" size={20} color="rgba(255,255,255,0.6)" style={styles.inputIconLeft} />
-          <TextInput
-            style={[styles.formInput, errors.confirmPassword && styles.inputError]}
-            placeholder="Confirm new password"
-            placeholderTextColor="rgba(255,255,255,0.4)"
-            secureTextEntry
-            autoCapitalize="none"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
+          <Controller
+            control={forgotNewControl}
+            name="confirmPassword"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                style={[styles.formInput, forgotNewErrors.confirmPassword && styles.inputError]}
+                placeholder="Confirm new password"
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                secureTextEntry
+                autoCapitalize="none"
+                autoComplete="new-password"
+                textContentType="newPassword"
+                returnKeyType="done"
+                onSubmitEditing={handleForgotNewSubmit(handleUpdatePassword)}
+                onBlur={onBlur}
+                onChangeText={onChange}
+                value={value}
+              />
+            )}
           />
         </View>
-        {errors.confirmPassword ? <Text style={styles.fieldErrorText}>{errors.confirmPassword}</Text> : null}
+        {forgotNewErrors.confirmPassword ? <Text style={styles.fieldErrorText}>{forgotNewErrors.confirmPassword.message}</Text> : null}
       </View>
 
       <TouchableOpacity
         style={styles.submitBtn}
-        onPress={handleUpdatePassword}
+        onPress={handleForgotNewSubmit(handleUpdatePassword)}
         disabled={loading}
         activeOpacity={0.9}
       >
         {loading ? (
-          <ActivityIndicator color={BRAND.primary} />
+          <ActivityIndicator color="#000000" />
         ) : (
           <Text style={styles.submitBtnText}>Update Password</Text>
         )}
@@ -958,11 +1049,15 @@ const StartScreen = () => {
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.container}>
           {/* Fixed Background Gradient (never resizes or shifts when keyboard opens) */}
-          <LinearGradient
-            colors={[...BRAND.authGradient]}
-            locations={[0, 0.4, 1]}
-            style={styles.backgroundGradient}
-          />
+          {mode === 'landing' ? (
+            <LinearGradient
+              colors={[...BRAND.authGradient]}
+              locations={[0, 0.4, 1]}
+              style={styles.backgroundGradient}
+            />
+          ) : (
+            <View style={[styles.backgroundGradient, { backgroundColor: '#000000' }]} />
+          )}
 
           <SafeAreaView style={styles.safeArea}>
             {mode === 'landing' ? (
@@ -994,10 +1089,12 @@ const StartScreen = () => {
                     onPress={handleGoogleLogin}
                     activeOpacity={0.9}
                     disabled={loading}
+                    accessibilityLabel="Continue with Google"
+                    accessibilityRole="button"
                   >
                     <View style={styles.iconContainer}>
                       <Image
-                        source={{ uri: 'https://www.google.com/images/branding/googleg/1x/googleg_standard_color_128dp.png' }}
+                        source={require('../../assets/google_logo.png')}
                         style={styles.googleLogo}
                         contentFit="contain"
                       />
@@ -1011,6 +1108,8 @@ const StartScreen = () => {
                     onPress={() => changeMode('login')}
                     activeOpacity={0.9}
                     disabled={loading}
+                    accessibilityLabel="Sign in with Email"
+                    accessibilityRole="button"
                   >
                     <View style={styles.iconContainer}>
                       <Icon name="Envelope" size={22} color={NEUTRAL.white} />
@@ -1024,6 +1123,8 @@ const StartScreen = () => {
                     onPress={() => changeMode('signup')}
                     activeOpacity={0.9}
                     disabled={loading}
+                    accessibilityLabel="Create a new account"
+                    accessibilityRole="button"
                   >
                     <Text style={styles.signupButtonText}>Create an Account</Text>
                   </TouchableOpacity>
@@ -1047,8 +1148,10 @@ const StartScreen = () => {
                   onPress={() => {
                     if (mode === 'login' || mode === 'signup') {
                       changeMode('landing');
+                    } else if (mode === 'signup-otp') {
+                      changeMode('signup');
                     } else if (mode === 'forgot-email') {
-                      changeMode('login');
+                      changeMode('landing');
                     } else if (mode === 'forgot-otp') {
                       changeMode('forgot-email');
                     } else if (mode === 'forgot-new') {
@@ -1225,11 +1328,11 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#0F0F0F',
     borderRadius: 24,
     padding: 24,
     borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderColor: '#FFFFFF',
     gap: 20,
   },
   formTitle: {
@@ -1250,7 +1353,7 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.8)',
+    color: '#FFFFFF',
   },
   inputWrapper: {
     flexDirection: 'row',
@@ -1270,9 +1373,9 @@ const styles = StyleSheet.create({
   },
   formInput: {
     width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#000000',
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: '#333333',
     borderRadius: 16,
     paddingVertical: 14,
     paddingLeft: 48,
@@ -1281,7 +1384,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   forgotPasswordLink: {
-    color: 'rgba(255,255,255,0.8)',
+    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
     textDecorationLine: 'underline',
@@ -1301,7 +1404,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   submitBtnText: {
-    color: NEUTRAL.dark,
+    color: NEUTRAL.black,
     fontSize: 18,
     fontWeight: '700',
   },
@@ -1328,9 +1431,9 @@ const styles = StyleSheet.create({
   },
   genderOption: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#000000',
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: '#333333',
     borderRadius: 16,
     paddingVertical: 14,
     alignItems: 'center',
@@ -1346,25 +1449,25 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   genderTextSelected: {
-    color: NEUTRAL.dark,
+    color: NEUTRAL.black,
   },
   fieldErrorText: {
     fontSize: 12,
-    color: STATUS.error,
+    color: '#FF3333',
     marginTop: 4,
     paddingLeft: 4,
   },
   fieldOkText: {
     fontSize: 12,
-    color: STATUS.success,
+    color: '#22C55E',
     marginTop: 4,
     paddingLeft: 4,
   },
   inputError: {
-    borderColor: STATUS.error,
+    borderColor: '#FF3333',
   },
   genderErrorBorder: {
-    borderColor: STATUS.error,
+    borderColor: '#FF3333',
     borderWidth: 1.5,
     borderRadius: 16,
     padding: 2,

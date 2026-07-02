@@ -1,20 +1,21 @@
 import React, { useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Animated } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Animated, ScrollView } from 'react-native';
 import { FlashList } from "@shopify/flash-list";
-
-const TypedFlashList = FlashList as any;
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from './Icon';
 import { NeumorphicCloseButton } from './NeumorphicIconButtons';
 import { MotiView } from 'moti';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { useNotificationStore, Notification } from '../store/notificationStore';
 
 const { width } = Dimensions.get('window');
+
+// Bypasses the FlashList TypeScript configuration constraints in this workspace environment
+const TypedFlashList = FlashList as any;
 
 export type NotificationType =
     | 'message'
@@ -74,6 +75,39 @@ const getTimeAgo = (dateString: string): string => {
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
     return `${Math.floor(seconds / 86400)}d ago`;
+};
+
+// Premium Skeleton Loader Item Component
+const NotificationSkeletonItem = ({ colors, isDarkMode }: { colors: any; isDarkMode: boolean }) => {
+    const skeletonBg = isDarkMode ? '#1E293B' : '#E5E7EB';
+    
+    return (
+        <MotiView
+            from={{ opacity: 0.4 }}
+            animate={{ opacity: 1 }}
+            transition={{
+                type: 'timing',
+                duration: 900,
+                loop: true,
+            }}
+            style={[styles.notificationItem, { backgroundColor: colors.card }]}
+        >
+            {/* Left side circular avatar/icon skeleton */}
+            <View style={[styles.notificationIcon, { backgroundColor: skeletonBg }]} />
+            
+            {/* Right side text skeleton stacks */}
+            <View style={styles.notificationContent}>
+                {/* Title */}
+                <View style={[styles.skeletonLine, { backgroundColor: skeletonBg, width: '45%', height: 14, marginBottom: 10 }]} />
+                {/* Body line 1 */}
+                <View style={[styles.skeletonLine, { backgroundColor: skeletonBg, width: '90%', height: 11, marginBottom: 6 }]} />
+                {/* Body line 2 */}
+                <View style={[styles.skeletonLine, { backgroundColor: skeletonBg, width: '60%', height: 11, marginBottom: 10 }]} />
+                {/* Time */}
+                <View style={[styles.skeletonLine, { backgroundColor: skeletonBg, width: '20%', height: 9 }]} />
+            </View>
+        </MotiView>
+    );
 };
 
 // Notification Item Component with Swipe-to-Delete
@@ -147,6 +181,10 @@ const NotificationsModal = ({ visible, onClose }: NotificationsModalProps) => {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const slideAnim = useRef(new Animated.Value(width)).current;
+
+    // Cache the current user ID after first resolution — avoids repeated network calls
+    const userIdRef = useRef<string | null>(null);
+
     const {
         notifications,
         unreadCount,
@@ -158,17 +196,37 @@ const NotificationsModal = ({ visible, onClose }: NotificationsModalProps) => {
         isLoading,
     } = useNotificationStore();
 
+    /**
+     * Resolves the current user ID using getSession() (cached — no network round trip).
+     * Falls back to getUser() only if session is missing.
+     */
+    const resolveUserId = useCallback(async (): Promise<string | null> => {
+        if (userIdRef.current) return userIdRef.current;
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.id) {
+            userIdRef.current = session.user.id;
+            return session.user.id;
+        }
+        // Fallback: verify with server in case session is stale
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.id) {
+            userIdRef.current = user.id;
+            return user.id;
+        }
+        return null;
+    }, []);
+
     // Fetch notifications from Supabase when modal opens
     const fetchNotifications = useCallback(async () => {
         try {
             setLoading(true);
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+            const userId = await resolveUserId();
+            if (!userId) return;
 
             const { data, error } = await supabase
                 .from('notifications')
                 .select('*')
-                .eq('recipient_id', user.id)
+                .eq('recipient_id', userId)
                 .order('created_at', { ascending: false })
                 .limit(50);
 
@@ -195,31 +253,34 @@ const NotificationsModal = ({ visible, onClose }: NotificationsModalProps) => {
         } finally {
             setLoading(false);
         }
-    }, [setNotifications, setLoading]);
+    }, [setNotifications, setLoading, resolveUserId]);
 
-    // Realtime subscription for new notifications
+    // Fetch + realtime subscription — fixed race condition with isMounted guard
     useEffect(() => {
         if (!visible) return;
 
-        fetchNotifications();
+        let isMounted = true;
+        let channel: ReturnType<typeof supabase.channel> | null = null;
 
-        // Subscribe to realtime inserts for current user
-        let channel: any = null;
-        const setupRealtime = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+        const setupAndSubscribe = async () => {
+            await fetchNotifications();
+            if (!isMounted) return;
+
+            const userId = await resolveUserId();
+            if (!userId || !isMounted) return;
 
             channel = supabase
-                .channel(`notifications-${user.id}`)
+                .channel(`notifications-${userId}`)
                 .on(
                     'postgres_changes',
                     {
                         event: 'INSERT',
                         schema: 'public',
                         table: 'notifications',
-                        filter: `recipient_id=eq.${user.id}`,
+                        filter: `recipient_id=eq.${userId}`,
                     },
                     (payload: any) => {
+                        if (!isMounted) return;
                         if (payload.new) {
                             const n = payload.new;
                             useNotificationStore.getState().addNotification({
@@ -239,13 +300,15 @@ const NotificationsModal = ({ visible, onClose }: NotificationsModalProps) => {
                 .subscribe();
         };
 
-        setupRealtime();
+        setupAndSubscribe();
 
         return () => {
+            isMounted = false;
             if (channel) supabase.removeChannel(channel);
         };
-    }, [visible, fetchNotifications]);
+    }, [visible, fetchNotifications, resolveUserId]);
 
+    // Slide animation
     useEffect(() => {
         if (visible) {
             slideAnim.setValue(width);
@@ -265,13 +328,19 @@ const NotificationsModal = ({ visible, onClose }: NotificationsModalProps) => {
     }, [visible]);
 
     const handleNotificationPress = async (notification: Notification) => {
-        // Mark as read in Supabase + local store
         if (!notification.is_read) {
+            const userId = await resolveUserId();
+            if (!userId) return;
+
+            // Optimistic local update
             markAsRead(notification.id);
+
+            // Sync to Supabase — explicit ownership guard as defence-in-depth (RLS also enforces this)
             supabase
                 .from('notifications')
                 .update({ is_read: true })
                 .eq('id', notification.id)
+                .eq('recipient_id', userId)
                 .then();
         }
 
@@ -287,25 +356,35 @@ const NotificationsModal = ({ visible, onClose }: NotificationsModalProps) => {
     };
 
     const handleDeleteNotification = async (notificationId: string) => {
+        const userId = await resolveUserId();
+        if (!userId) return;
+
+        // Optimistic local removal
         deleteNotification(notificationId);
+
+        // Sync to Supabase — explicit ownership guard as defence-in-depth (RLS also enforces this)
         supabase
             .from('notifications')
             .delete()
             .eq('id', notificationId)
+            .eq('recipient_id', userId)
             .then();
     };
 
     const handleMarkAllAsRead = async () => {
+        const userId = await resolveUserId();
+        if (!userId) return;
+
+        // Optimistic local update
         markAllAsRead();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-            supabase
-                .from('notifications')
-                .update({ is_read: true })
-                .eq('recipient_id', user.id)
-                .eq('is_read', false)
-                .then();
-        }
+
+        // Sync to Supabase
+        supabase
+            .from('notifications')
+            .update({ is_read: true })
+            .eq('recipient_id', userId)
+            .eq('is_read', false)
+            .then();
     };
 
     return (
@@ -341,7 +420,23 @@ const NotificationsModal = ({ visible, onClose }: NotificationsModalProps) => {
                                 />
                             </View>
 
-                            {notifications.length > 0 ? (
+                            {/* Loading / Content Render Decision */}
+                            {isLoading ? (
+                                <ScrollView 
+                                    style={styles.loadingScroll}
+                                    contentContainerStyle={styles.content}
+                                    showsVerticalScrollIndicator={false}
+                                >
+                                    <View style={styles.skeletonActionRow}>
+                                        <View style={[styles.skeletonLine, { backgroundColor: isDarkMode ? '#1E293B' : '#E5E7EB', width: '30%', height: 10 }]} />
+                                    </View>
+                                    <NotificationSkeletonItem colors={colors} isDarkMode={isDarkMode} />
+                                    <NotificationSkeletonItem colors={colors} isDarkMode={isDarkMode} />
+                                    <NotificationSkeletonItem colors={colors} isDarkMode={isDarkMode} />
+                                    <NotificationSkeletonItem colors={colors} isDarkMode={isDarkMode} />
+                                    <NotificationSkeletonItem colors={colors} isDarkMode={isDarkMode} />
+                                </ScrollView>
+                            ) : notifications.length > 0 ? (
                                 <>
                                     {/* Action buttons */}
                                     <View style={styles.actionRow}>
@@ -423,10 +518,11 @@ const styles = StyleSheet.create({
     headerLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
     headerIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
     title: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold },
-    closeButton: { width: TOUCH_TARGET.min, height: TOUCH_TARGET.min, justifyContent: 'center', alignItems: 'center' },
     badge: { backgroundColor: '#EF4444', paddingHorizontal: SPACING.sm, paddingVertical: 2, borderRadius: 10, minWidth: 20, alignItems: 'center' },
     badgeText: { color: '#fff', fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold },
-    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    loadingScroll: { flex: 1 },
+    skeletonActionRow: { paddingVertical: SPACING.md, marginBottom: SPACING.xs },
+    skeletonLine: { borderRadius: BORDER_RADIUS.sm },
     actionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.xl, paddingVertical: SPACING.sm },
     hintText: { fontSize: FONT_SIZE.xs },
     markAllButton: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },

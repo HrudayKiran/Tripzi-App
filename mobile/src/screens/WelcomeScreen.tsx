@@ -20,7 +20,7 @@ const WelcomeScreen = () => {
     const router = useRouter();
 
     const handleNext = () => {
-        router.push('/(auth)/start');
+        router.replace('/(auth)/start');
     };
 
     return (
@@ -28,9 +28,12 @@ const WelcomeScreen = () => {
             {/* Background Image */}
             <Image
                 source={{ uri: HERO_IMAGE }}
+                defaultSource={require('../../assets/ladakh_bike_trip.png')}
                 style={StyleSheet.absoluteFillObject}
                 contentFit="cover"
                 transition={500}
+                accessibilityLabel="Travelers exploring the world together"
+                accessibilityRole="image"
             />
 
             {/* Gradient Overlay for Readability */}
@@ -94,6 +97,8 @@ const WelcomeScreen = () => {
                             style={[styles.button, { backgroundColor: colors.primary }]}
                             onPress={handleNext}
                             activeOpacity={0.8}
+                            accessibilityLabel="Join the Journey — get started with NxtVibes"
+                            accessibilityRole="button"
                         >
                             <Text style={styles.buttonText}>Join the Journey</Text>
                         </TouchableOpacity>

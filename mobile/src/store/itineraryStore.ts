@@ -26,19 +26,55 @@ export type CustomNote = {
     order: number;
 };
 
+export type Collaborator = {
+    id: string;
+    name?: string;
+    username?: string;
+    photo_url?: string;
+};
+
+/** Mirrors the WatermelonDB Itinerary model fields relevant to the draft store. */
+export type TripDraft = {
+    id: string;
+    user_id?: string;
+    trip_title?: string;
+    from_location?: string;
+    to_location?: string;
+    from_date?: string;
+    to_date?: string;
+    duration_days?: number;
+    travel_style?: string;
+    trip_types?: string;          // JSON string
+    transport_modes?: string;     // JSON string
+    cost_per_person?: number;
+    accommodation_type?: string;
+    booking_status?: string;
+    accommodation_days?: number;
+    places_to_visit?: string;     // JSON string
+    itinerary?: string;           // JSON string
+    participants?: string;        // JSON string
+    checklist?: string;           // JSON string
+    notes?: string;               // JSON string
+    itinerary_map_view?: string;  // JSON string
+    created_at?: number;
+    updated_at?: number;
+    // Allow extra fields from WatermelonDB Model
+    [key: string]: unknown;
+};
+
 interface ItineraryState {
     places: StructuredPlace[];
-    tripDraft: any | null; // Keeps reference to active itinerary draft record
+    tripDraft: TripDraft | null;
     checklist: ChecklistItem[];
     customCategories: string[];
     notes: CustomNote[];
-    collaborators: any[];
+    collaborators: Collaborator[];
     setPlaces: (places: StructuredPlace[]) => void;
-    setTripDraft: (draft: any) => void;
+    setTripDraft: (draft: TripDraft | null) => void;
     setChecklist: (checklist: ChecklistItem[]) => void;
     setCustomCategories: (categories: string[]) => void;
     setNotes: (notes: CustomNote[]) => void;
-    setCollaborators: (collaborators: any[]) => void;
+    setCollaborators: (collaborators: Collaborator[]) => void;
     clearDraft: () => void;
 }
 

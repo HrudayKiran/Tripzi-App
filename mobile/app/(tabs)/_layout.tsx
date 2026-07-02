@@ -1,8 +1,7 @@
 import { Tabs, useRouter } from 'expo-router';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import Icon from '../../src/components/Icon';
-import { View, TouchableOpacity, StyleSheet, Modal, Text } from 'react-native';
-import { useState } from 'react';
+import { View } from 'react-native';
 import { MotiView } from 'moti';
 import * as Haptics from 'expo-haptics';
 import { getBooleanPreferenceSync, PREFERENCE_KEYS } from '../../src/utils/preferences';
@@ -82,17 +81,10 @@ export default function TabsLayout() {
             },
           }}
         />
+        {/* AI Planner tab is hidden until the feature is production-ready */}
         <Tabs.Screen
           name="ai-planner"
-          options={{
-            title: 'AI Planner',
-            tabBarIcon: ({ color, size }: { color: string; size: number }) => <Icon name="Sparkle" size={size + 2} color={color} />,
-          }}
-          listeners={{
-            tabPress: () => {
-              triggerTabHaptics();
-            },
-          }}
+          options={{ href: null }}
         />
 
         <Tabs.Screen
@@ -124,49 +116,3 @@ export default function TabsLayout() {
   );
 }
 
-const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  createModalContent: {
-    width: '100%',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
-    gap: 16,
-  },
-  createModalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  createOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 16,
-    gap: 16,
-  },
-  createOptionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  createOptionText: {
-    flex: 1,
-  },
-  createOptionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  createOptionDesc: {
-    fontSize: 12,
-  },
-});

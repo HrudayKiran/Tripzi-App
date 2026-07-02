@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 import AppLogo from '../components/AppLogo';
 import { MotiView } from 'moti';
 import { BRAND, NEUTRAL } from '../styles';
+import Constants from 'expo-constants';
 
 
 const LaunchScreen = () => {
@@ -16,6 +17,7 @@ const LaunchScreen = () => {
 
   useEffect(() => {
     isMountedRef.current = true;
+    let anim: Animated.CompositeAnimation | null = null;
 
     // Check session immediately
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -24,7 +26,7 @@ const LaunchScreen = () => {
         router.replace('/(tabs)');
       } else if (isMountedRef.current) {
         // If not logged in, show splash animation then go to welcome
-        const anim = Animated.timing(progress, {
+        anim = Animated.timing(progress, {
           toValue: 1,
           duration: 1000,
           useNativeDriver: false,
@@ -37,10 +39,16 @@ const LaunchScreen = () => {
           }
         });
       }
+    }).catch(() => {
+      // Network error or Supabase unreachable — send user to welcome screen
+      if (isMountedRef.current) {
+        router.replace('/(auth)/welcome');
+      }
     });
 
     return () => {
       isMountedRef.current = false;
+      anim?.stop();
     };
   }, []);
 
@@ -99,7 +107,7 @@ const LaunchScreen = () => {
               ]}
             />
           </View>
-          <Text style={styles.versionText}>v1.0.0</Text>
+          <Text style={styles.versionText}>v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
         </View>
 
       </LinearGradient>

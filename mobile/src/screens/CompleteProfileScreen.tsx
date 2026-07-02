@@ -8,31 +8,29 @@ import {
     ScrollView,
     Alert,
     ActivityIndicator,
-    Modal,
     Platform,
     KeyboardAvoidingView,
-    Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
-import {
-    requestNotificationPermission,
-    syncNotificationPreference,
-} from '../utils/notificationPermissions';
-import { PREFERENCE_KEYS, setBooleanPreference } from '../utils/preferences';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, STATUS } from '../styles';
 import { supabase } from '../lib/supabase';
 import { workersApi } from '../lib/workersApi';
 import { database, resetDatabase } from '../database';
+import Profile from '../database/models/Profile';
 
 const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/;
+const FULL_NAME_MAX_LENGTH = 60;
 
+const sanitizeUsername = (value: string): string =>
+    value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
 
-const sanitizeUsername = (value: string): string => value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
+const sanitizeFullName = (value: string): string =>
+    // Strip control characters, leading/trailing whitespace, cap at max length
+    value.replace(/[\x00-\x1F\x7F]/g, '').slice(0, FULL_NAME_MAX_LENGTH);
 
 const CompleteProfileScreen = () => {
     const { colors, isDarkMode } = useTheme();
@@ -44,7 +42,6 @@ const CompleteProfileScreen = () => {
     const [checkingUsername, setCheckingUsername] = useState(false);
     const [usernameError, setUsernameError] = useState('');
     const [usernameOk, setUsernameOk] = useState(false);
-    const [agreedToTerms, setAgreedToTerms] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
     const pendingEmail = typeof routeParams?.email === 'string' ? routeParams.email : '';
@@ -60,7 +57,7 @@ const CompleteProfileScreen = () => {
 
     useEffect(() => {
         let active = true;
-        let timeout: any;
+        let timeout: ReturnType<typeof setTimeout>;
 
         const run = async () => {
             const value = sanitizeUsername(username.trim());
@@ -82,10 +79,10 @@ const CompleteProfileScreen = () => {
             try {
                 // Check username availability via authenticated Worker endpoint
                 const response = await workersApi(
-                  `/account/check-username/${encodeURIComponent(value.toLowerCase().trim())}`,
-                  { method: 'GET' }
+                    `/account/check-username/${encodeURIComponent(value.toLowerCase().trim())}`,
+                    { method: 'GET' }
                 );
-                
+
                 if (!active) return;
 
                 if (response.available) {
@@ -103,7 +100,6 @@ const CompleteProfileScreen = () => {
                     setCheckingUsername(false);
                 }
             }
-
         };
 
         timeout = setTimeout(run, 350);
@@ -114,22 +110,14 @@ const CompleteProfileScreen = () => {
     }, [username]);
 
     const canSubmit = useMemo(() => {
-        return !!fullName.trim() && !!gender && usernameOk && agreedToTerms && !checkingUsername && !submitting;
-    }, [fullName, gender, usernameOk, agreedToTerms, checkingUsername, submitting]);
+        return !!fullName.trim() && !!gender && usernameOk && !checkingUsername && !submitting;
+    }, [fullName, gender, usernameOk, checkingUsername, submitting]);
 
     const resetToStart = async () => {
-        try {
-            await GoogleSignin.revokeAccess();
-        } catch (e) { }
-        try {
-            await GoogleSignin.signOut();
-        } catch (e) { }
-        try {
-            await supabase.auth.signOut();
-        } catch (e) { }
-        try {
-            await resetDatabase();
-        } catch (e) { }
+        try { await GoogleSignin.revokeAccess(); } catch (e) { }
+        try { await GoogleSignin.signOut(); } catch (e) { }
+        try { await supabase.auth.signOut(); } catch (e) { }
+        try { await resetDatabase(); } catch (e) { }
         router.replace('/(auth)/start');
     };
 
@@ -138,16 +126,16 @@ const CompleteProfileScreen = () => {
             Alert.alert('Missing Field', 'Full name is required.');
             return;
         }
+        if (fullName.trim().length > FULL_NAME_MAX_LENGTH) {
+            Alert.alert('Name Too Long', `Full name must be ${FULL_NAME_MAX_LENGTH} characters or less.`);
+            return;
+        }
         if (!USERNAME_REGEX.test(sanitizeUsername(username.trim())) || !usernameOk) {
             Alert.alert('Invalid Username', 'Please choose an available username.');
             return;
         }
         if (!gender) {
             Alert.alert('Missing Field', 'Please select gender.');
-            return;
-        }
-        if (!agreedToTerms) {
-            Alert.alert('Required', 'You must agree to the Terms and Privacy Policy to continue.');
             return;
         }
 
@@ -159,14 +147,17 @@ const CompleteProfileScreen = () => {
                 throw new Error('Session expired. Please sign in again.');
             }
 
-            // Create profile in Supabase
+            const finalName = sanitizeFullName(fullName.trim());
+            const finalUsername = sanitizeUsername(username.trim());
+
+            // Create or update profile in Supabase
             const { error: profileError } = await supabase
                 .from('profiles')
                 .upsert({
                     id: user.id,
                     email: user.email || pendingEmail,
-                    name: fullName.trim(),
-                    username: sanitizeUsername(username.trim()),
+                    name: finalName,
+                    username: finalUsername,
                     gender,
                     photo_url: user.user_metadata?.avatar_url || null,
                     last_login_at: new Date().toISOString(),
@@ -181,23 +172,39 @@ const CompleteProfileScreen = () => {
                 throw new Error(profileError.message || 'Failed to create profile.');
             }
 
-            // Write to WatermelonDB immediately
-            try {
-                await database.write(async () => {
-                    await database.get('profiles').create((profile: any) => {
+            // Sync user metadata to mark profile complete on the auth side
+            await supabase.auth.updateUser({
+                data: { profile_completed: true }
+            });
 
-                        profile._raw.id = user.id; // Set ID explicitly to match Supabase
-                        profile.name = fullName.trim();
-                        profile.username = sanitizeUsername(username.trim());
-                        profile.photo_url = user.user_metadata?.avatar_url || null;
-                        profile.push_notifications_enabled = false;
-                        profile.save_to_gallery = false;
-                        profile.updated_at = Date.now();
-                    });
+            // Write to WatermelonDB — upsert: update if exists, create if not
+            try {
+                const existingRecords = await database.get<Profile>('profiles').query().fetch();
+                const existingProfile = existingRecords.find(p => p.id === user.id);
+
+                await database.write(async () => {
+                    if (existingProfile) {
+                        // Update existing record
+                        await existingProfile.update((p: Profile) => {
+                            p.name = finalName;
+                            p.username = finalUsername;
+                            p.photoUrl = user.user_metadata?.avatar_url || null;
+                        });
+                    } else {
+                        // Create new record
+                        await database.get<Profile>('profiles').create((p: Profile) => {
+                            (p as any)._raw.id = user.id;
+                            p.name = finalName;
+                            p.username = finalUsername;
+                            p.photoUrl = user.user_metadata?.avatar_url || null;
+                            p.pushNotificationsEnabled = false;
+                            p.saveToGallery = false;
+                        });
+                    }
                 });
             } catch (dbError) {
-                console.error('Failed to write to WatermelonDB:', dbError);
-                // We still proceed as the server has the data
+                // Non-fatal: server has the data, local DB will sync on next pull
+                console.error('[CompleteProfile] WatermelonDB write error:', dbError);
             }
 
             router.replace('/(tabs)');
@@ -233,9 +240,13 @@ const CompleteProfileScreen = () => {
                             <TextInput
                                 style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
                                 value={fullName}
-                                onChangeText={setFullName}
+                                onChangeText={(v) => setFullName(sanitizeFullName(v))}
                                 placeholder="John Doe"
                                 placeholderTextColor={colors.textSecondary}
+                                maxLength={FULL_NAME_MAX_LENGTH}
+                                autoComplete="name"
+                                textContentType="name"
+                                returnKeyType="next"
                             />
                         </View>
 
@@ -244,13 +255,20 @@ const CompleteProfileScreen = () => {
                             <Text style={[styles.label, { color: colors.textSecondary }]}>Username</Text>
                             <View style={styles.usernameInputWrapper}>
                                 <TextInput
-                                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: usernameError ? STATUS.error : colors.border, flex: 1 }]}
+                                    style={[styles.input, {
+                                        backgroundColor: colors.inputBackground,
+                                        color: colors.text,
+                                        borderColor: usernameError ? STATUS.error : usernameOk ? STATUS.success : colors.border,
+                                        flex: 1,
+                                    }]}
                                     value={username}
                                     onChangeText={(value) => setUsername(sanitizeUsername(value))}
                                     autoCapitalize="none"
+                                    autoCorrect={false}
                                     maxLength={20}
                                     placeholder="username"
                                     placeholderTextColor={colors.textSecondary}
+                                    returnKeyType="done"
                                 />
                                 {checkingUsername && (
                                     <ActivityIndicator size="small" color={colors.primary} style={styles.inputIcon} />
@@ -280,6 +298,9 @@ const CompleteProfileScreen = () => {
                                         gender === 'male' && [styles.genderSelected, { borderColor: isDarkMode ? '#FFFFFF' : '#000000', backgroundColor: isDarkMode ? '#FFFFFF' : '#000000' }],
                                     ]}
                                     onPress={() => setGender('male')}
+                                    accessibilityLabel="Select Male"
+                                    accessibilityRole="button"
+                                    accessibilityState={{ selected: gender === 'male' }}
                                 >
                                     <Text style={[styles.genderText, { color: gender === 'male' ? (isDarkMode ? '#000000' : '#FFFFFF') : colors.text }]}>Male</Text>
                                 </TouchableOpacity>
@@ -290,38 +311,22 @@ const CompleteProfileScreen = () => {
                                         gender === 'female' && [styles.genderSelected, { borderColor: isDarkMode ? '#FFFFFF' : '#000000', backgroundColor: isDarkMode ? '#FFFFFF' : '#000000' }],
                                     ]}
                                     onPress={() => setGender('female')}
+                                    accessibilityLabel="Select Female"
+                                    accessibilityRole="button"
+                                    accessibilityState={{ selected: gender === 'female' }}
                                 >
                                     <Text style={[styles.genderText, { color: gender === 'female' ? (isDarkMode ? '#000000' : '#FFFFFF') : colors.text }]}>Female</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
 
-
-                        {/* Terms */}
-                        <View style={styles.termsContainer}>
-                            <TouchableOpacity
-                                style={styles.checkbox}
-                                onPress={() => setAgreedToTerms(!agreedToTerms)}
-                                activeOpacity={0.7}
-                            >
-                                <Icon
-                                    name={agreedToTerms ? 'CheckSquare' : 'Square'}
-                                    size={22}
-                                    color={agreedToTerms ? colors.primary : colors.textSecondary}
-                                />
-                            </TouchableOpacity>
-                            <Text style={[styles.termsText, { color: colors.textSecondary }]}>
-                                I agree to the{' '}
-                                <Text style={{ color: colors.primary }} onPress={() => router.push('/profile/terms')}>Terms</Text>
-                                {' '}and{' '}
-                                <Text style={{ color: colors.primary }} onPress={() => router.push('/profile/privacy')}>Privacy Policy</Text>
-                            </Text>
-                        </View>
-
                         {/* Submit */}
                         <TouchableOpacity
                             disabled={!canSubmit}
                             onPress={handleSubmit}
+                            accessibilityLabel="Continue to the app"
+                            accessibilityRole="button"
+                            accessibilityState={{ disabled: !canSubmit }}
                             style={[
                                 styles.submitBtn,
                                 {
@@ -335,7 +340,7 @@ const CompleteProfileScreen = () => {
                                 }
                             ]}
                         >
-                            <View style={styles.submitGradient}>
+                            <View style={styles.submitInner}>
                                 {submitting ? (
                                     <ActivityIndicator color={isDarkMode ? '#000000' : '#FFFFFF'} />
                                 ) : (
@@ -402,7 +407,6 @@ const styles = StyleSheet.create({
         position: 'absolute',
         right: SPACING.md,
     },
-
     errorText: {
         fontSize: FONT_SIZE.xs,
         color: STATUS.error,
@@ -431,31 +435,17 @@ const styles = StyleSheet.create({
         fontSize: FONT_SIZE.md,
         fontWeight: FONT_WEIGHT.semibold,
     },
-    termsContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: SPACING.sm,
-    },
-    checkbox: {
-        marginRight: SPACING.sm,
-    },
-    termsText: {
-        flex: 1,
-        fontSize: FONT_SIZE.sm,
-        lineHeight: 20,
-    },
     submitBtn: {
         borderRadius: BORDER_RADIUS.lg,
         overflow: 'hidden',
         marginTop: SPACING.md,
     },
-    submitGradient: {
+    submitInner: {
         paddingVertical: SPACING.lg,
         alignItems: 'center',
         justifyContent: 'center',
     },
     submitText: {
-        color: NEUTRAL.white,
         fontSize: FONT_SIZE.md,
         fontWeight: FONT_WEIGHT.bold,
     },

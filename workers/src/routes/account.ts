@@ -58,6 +58,7 @@ account.post('/delete', async (c) => {
   }
 
   const supabase = getSupabaseAdmin(c.env);
+  const stepErrors: string[] = [];
 
   // 1. Fetch user profile before deletion
   const { data: profile } = await supabase
@@ -66,8 +67,8 @@ account.post('/delete', async (c) => {
     .eq('id', userId)
     .maybeSingle();
 
-  // 2. Store in deleted_users
-  await supabase.from('deleted_users').insert({
+  // 2. Archive in deleted_users — CRITICAL: abort if this fails to prevent data loss without audit trail
+  const { error: archiveError } = await supabase.from('deleted_users').insert({
     user_id: userId,
     email: profile?.email || null,
     name: profile?.name || null,
@@ -77,15 +78,25 @@ account.post('/delete', async (c) => {
     profile_snapshot: profile || {},
   });
 
+  if (archiveError) {
+    console.error('[Delete] ABORT: Failed to archive user before deletion:', archiveError.message);
+    return c.json({ error: 'Failed to archive user data. Deletion aborted for safety.' }, 500);
+  }
+
   // 3. Delete owned itineraries
-  await supabase.from('itineraries').delete().eq('user_id', userId);
+  try {
+    const { error } = await supabase.from('itineraries').delete().eq('user_id', userId);
+    if (error) stepErrors.push(`Step 3 (itineraries): ${error.message}`);
+  } catch (e: any) { stepErrors.push(`Step 3 (itineraries): ${e?.message}`); }
 
-  // 5. Delete suggestions, bugs, feature requests
-  await supabase.from('suggestions').delete().eq('user_id', userId);
-  await supabase.from('bugs').delete().eq('user_id', userId);
-  await supabase.from('feature_requests').delete().eq('user_id', userId);
+  // 4. Delete suggestions, bugs, feature requests
+  try {
+    await supabase.from('suggestions').delete().eq('user_id', userId);
+    await supabase.from('bugs').delete().eq('user_id', userId);
+    await supabase.from('feature_requests').delete().eq('user_id', userId);
+  } catch (e: any) { stepErrors.push(`Step 4 (feedback): ${e?.message}`); }
 
-  // Remove user from direct_chats participants array
+  // 5. Remove user from direct_chats participants array
   try {
     const { data: directChats } = await supabase
       .from('direct_chats')
@@ -94,16 +105,11 @@ account.post('/delete', async (c) => {
 
     for (const chat of directChats || []) {
       const updatedParticipants = (chat.participants || []).filter((p: string) => p !== userId);
-      await supabase
-        .from('direct_chats')
-        .update({ participants: updatedParticipants })
-        .eq('id', chat.id);
+      await supabase.from('direct_chats').update({ participants: updatedParticipants }).eq('id', chat.id);
     }
-  } catch (e) {
-    console.error('Error cleaning direct_chats participants:', e);
-  }
+  } catch (e: any) { stepErrors.push(`Step 5 (direct_chats): ${e?.message}`); }
 
-  // Remove user from group_chats participants array
+  // 6. Remove user from group_chats participants array
   try {
     const { data: groupChats } = await supabase
       .from('group_chats')
@@ -112,16 +118,11 @@ account.post('/delete', async (c) => {
 
     for (const chat of groupChats || []) {
       const updatedParticipants = (chat.participants || []).filter((p: string) => p !== userId);
-      await supabase
-        .from('group_chats')
-        .update({ participants: updatedParticipants })
-        .eq('id', chat.id);
+      await supabase.from('group_chats').update({ participants: updatedParticipants }).eq('id', chat.id);
     }
-  } catch (e) {
-    console.error('Error cleaning group_chats participants:', e);
-  }
+  } catch (e: any) { stepErrors.push(`Step 6 (group_chats): ${e?.message}`); }
 
-  // Remove user from itineraries participants array
+  // 7. Remove user from itineraries participants array
   try {
     const { data: sharedItineraries } = await supabase
       .from('itineraries')
@@ -130,40 +131,43 @@ account.post('/delete', async (c) => {
 
     for (const itinerary of sharedItineraries || []) {
       const updatedParticipants = (itinerary.participants || []).filter((p: string) => p !== userId);
-      await supabase
-        .from('itineraries')
-        .update({ participants: updatedParticipants })
-        .eq('id', itinerary.id);
+      await supabase.from('itineraries').update({ participants: updatedParticipants }).eq('id', itinerary.id);
     }
-  } catch (e) {
-    console.error('Error cleaning itineraries participants:', e);
-  }
+  } catch (e: any) { stepErrors.push(`Step 7 (itineraries participants): ${e?.message}`); }
 
-  // 6. Delete notifications and push tokens
-  await supabase.from('notifications').delete().eq('recipient_id', userId);
-  await supabase.from('push_tokens').delete().eq('user_id', userId);
+  // 8. Delete notifications and push tokens
+  try {
+    await supabase.from('notifications').delete().eq('recipient_id', userId);
+    await supabase.from('push_tokens').delete().eq('user_id', userId);
+  } catch (e: any) { stepErrors.push(`Step 8 (notifications/tokens): ${e?.message}`); }
 
-  // 7. Delete messages authored by user
-  await supabase.from('messages').delete().eq('sender_id', userId);
+  // 9. Delete messages authored by user
+  try {
+    const { error } = await supabase.from('messages').delete().eq('sender_id', userId);
+    if (error) stepErrors.push(`Step 9 (messages): ${error.message}`);
+  } catch (e: any) { stepErrors.push(`Step 9 (messages): ${e?.message}`); }
 
-  // 8. Delete live shares
-  await supabase.from('live_shares').delete().eq('user_id', userId);
+  // 10. Delete live shares
+  try {
+    await supabase.from('live_shares').delete().eq('user_id', userId);
+  } catch (e: any) { stepErrors.push(`Step 10 (live_shares): ${e?.message}`); }
 
-  // 9. Clean up R2 storage
+  // 11. Clean up R2 storage
   try {
     await deleteR2Prefix(c.env, `profiles/${userId}/`);
     await deleteR2Prefix(c.env, `direct_chats/${userId}/`);
     await deleteR2Prefix(c.env, `group_chats/${userId}/`);
     await deleteR2Prefix(c.env, `itineraries/${userId}/`);
     await deleteR2Prefix(c.env, `trips/${userId}/`);
-  } catch (e) {
-    console.error('R2 cleanup error:', e);
-  }
+  } catch (e: any) { stepErrors.push(`Step 11 (R2): ${e?.message}`); }
 
-  // 10. Delete profile (triggers public_profiles cleanup via trigger)
-  await supabase.from('profiles').delete().eq('id', userId);
+  // 12. Delete profile (triggers public_profiles cleanup via DB trigger)
+  try {
+    const { error } = await supabase.from('profiles').delete().eq('id', userId);
+    if (error) stepErrors.push(`Step 12 (profiles): ${error.message}`);
+  } catch (e: any) { stepErrors.push(`Step 12 (profiles): ${e?.message}`); }
 
-  // 11. Clean up D1 AI chat history
+  // 13. Clean up D1 AI chat history
   try {
     const { results: conversations } = await c.env.DB.prepare(
       `SELECT id FROM ai_conversations WHERE user_id = ?`
@@ -173,17 +177,22 @@ account.post('/delete', async (c) => {
       await c.env.DB.prepare(`DELETE FROM ai_messages WHERE conversation_id = ?`).bind(conv.id).run();
     }
     await c.env.DB.prepare(`DELETE FROM ai_conversations WHERE user_id = ?`).bind(userId).run();
-  } catch (e) {
-    console.error('D1 AI cleanup error:', e);
-  }
+  } catch (e: any) { stepErrors.push(`Step 13 (D1): ${e?.message}`); }
 
-  // 12. Delete Supabase Auth user
+  // 14. Delete Supabase Auth user — final step
   const { error: authError } = await supabase.auth.admin.deleteUser(userId);
   if (authError) {
-    console.error('Error deleting auth user:', authError);
+    console.error('[Delete] Step 14: Failed to delete auth user:', authError.message);
+    stepErrors.push(`Step 14 (auth): ${authError.message}`);
   }
 
-  return c.json({ success: true });
+  if (stepErrors.length > 0) {
+    console.warn(`[Delete] User ${userId} deleted with ${stepErrors.length} non-fatal step error(s):`, stepErrors);
+  } else {
+    console.log(`[Delete] User ${userId} fully deleted.`);
+  }
+
+  return c.json({ success: true, warnings: stepErrors.length > 0 ? stepErrors : undefined });
 });
 
 /**

@@ -31,7 +31,7 @@ module.exports = {
       versionCode: 1,
       adaptiveIcon: {
         foregroundImage: './assets/icon.png',
-        backgroundColor: '#fafafa',
+        backgroundColor: '#9d74f7',
       },
       package: 'com.nxtvibes.mobile',
       googleServicesFile: './google-services.json',
@@ -77,7 +77,6 @@ module.exports = {
       'expo-router',
       'expo-image',
       '@react-native-firebase/app',
-
       '@react-native-firebase/messaging',
       '@react-native-firebase/app-check',
       '@react-native-firebase/crashlytics',
