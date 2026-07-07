@@ -28,7 +28,6 @@ const WelcomeScreen = () => {
             {/* Background Image */}
             <Image
                 source={{ uri: HERO_IMAGE }}
-                defaultSource={require('../../assets/ladakh_bike_trip.png')}
                 style={StyleSheet.absoluteFillObject}
                 contentFit="cover"
                 transition={500}

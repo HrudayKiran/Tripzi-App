@@ -1,13 +1,13 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import { NeumorphicBackButton } from '../components/NeumorphicIconButtons';
 import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { getBooleanPreference, PREFERENCE_KEYS } from '../utils/preferences';
-import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
+
+
 
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, STATUS } from '../styles';
 import { supabase, getProviderSync } from '../lib/supabase';

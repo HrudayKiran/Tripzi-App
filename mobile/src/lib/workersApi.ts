@@ -16,6 +16,9 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  *
  * Implements a 15-second timeout and up to 2 retries with exponential backoff
  * on transient errors.
+ *
+ * Firebase Performance Monitoring records HTTP metrics for every request
+ * in production builds (no-op in __DEV__).
  */
 export const workersApi = async <T = any>(
   path: string,
@@ -44,6 +47,18 @@ export const workersApi = async <T = any>(
     headers['Authorization'] = authorizationHeader;
   }
 
+  // Firebase Performance HTTP metric (production only — no-op in dev)
+  let perfMetric: any = null;
+  if (!__DEV__) {
+    try {
+      const perf = require('@react-native-firebase/perf').default;
+      perfMetric = await perf().newHttpMetric(`${WORKERS_URL}${path}`, method);
+      await perfMetric.start();
+    } catch {
+      // Perf must never block the request
+    }
+  }
+
   const maxAttempts = 3;
   let attempt = 0;
   let lastError: any = null;
@@ -62,6 +77,15 @@ export const workersApi = async <T = any>(
       });
 
       clearTimeout(id);
+
+      // Record Perf metric on first successful response
+      if (perfMetric) {
+        try {
+          perfMetric.setResponseCode(response.status);
+          await perfMetric.stop();
+          perfMetric = null;
+        } catch {}
+      }
 
       const data = await response.json();
 
@@ -88,6 +112,11 @@ export const workersApi = async <T = any>(
         await delay(backoffMs);
       }
     }
+  }
+
+  // Stop Perf metric on final failure
+  if (perfMetric) {
+    try { await perfMetric.stop(); } catch {}
   }
 
   throw lastError || new Error('Request failed');

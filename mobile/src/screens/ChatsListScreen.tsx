@@ -4,7 +4,6 @@ import {
     Text,
     StyleSheet,
     TouchableOpacity,
-    Image,
     ActivityIndicator,
     RefreshControl,
     TextInput,
@@ -21,11 +20,11 @@ import Icon from '../components/Icon';
 import { NeumorphicBackButton, NeumorphicSearchButton, NeumorphicIconButton } from '../components/NeumorphicIconButtons';
 import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, NEUTRAL } from '../styles';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { useChatsQuery, Chat } from '../hooks/useChatsQuery';
 import { supabase } from '../lib/supabase';
 import { formatDistanceToNow } from 'date-fns';
-import { LinearGradient } from 'expo-linear-gradient';
+
 import { searchUsersByPrefix } from '../utils/searchUsers';
 import DefaultAvatar from '../components/DefaultAvatar';
 import { ChatsListSkeleton, UserSearchListSkeleton } from '../components/Skeletons';
@@ -40,7 +39,7 @@ interface SearchUser {
 const ChatsListScreen = () => {
     const router = useRouter();
     const { colors, isDarkMode } = useTheme();
-    const { chats, loading, refreshChats, deleteChat } = useChatsQuery();
+    const { chats, loading, refreshChats, deleteChat, getOrCreateDirectChat } = useChatsQuery();
     const [refreshing, setRefreshing] = useState(false);
 
     const handleRefresh = useCallback(async () => {
@@ -56,7 +55,8 @@ const ChatsListScreen = () => {
     const [currentUser, setCurrentUser] = useState<any>(null);
 
     React.useEffect(() => {
-        supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+        // getSession() is cache-backed (no network call); getUser() makes a network round-trip
+        supabase.auth.getSession().then(({ data: { session } }) => setCurrentUser(session?.user || null));
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setCurrentUser(session?.user || null);
         });
@@ -87,7 +87,9 @@ const ChatsListScreen = () => {
 
     // Messages Settings modal
     const [showMessagesSettings, setShowMessagesSettings] = useState(false);
-    const [readReceipts, setReadReceipts] = useState(true);
+    // Tracks the dropdown's top position, measured dynamically from header layout
+    // so it aligns correctly across all screen sizes and safe-area insets.
+    const [dropdownTop, setDropdownTop] = useState(105);
 
     // Selection Mode State
     const [selectedChats, setSelectedChats] = useState<Set<string>>(new Set());
@@ -269,58 +271,19 @@ const ChatsListScreen = () => {
         }
     }, [currentUser]);
 
-    // Start chat with user
+    // Start chat — delegates entirely to the hook's getOrCreateDirectChat which
+    // handles: in-memory check → Supabase DB check → create, all atomically.
+    // This eliminates the previous duplicate Supabase fetch that could create
+    // duplicate chats in race conditions.
     const startChatWithUser = useCallback(async (user: SearchUser) => {
         if (!currentUser) return;
         setStartingChat(true);
 
         try {
-            // Check if chat already exists
-            const { data: existingChats } = await supabase
-                .from('direct_chats')
-                .select('*')
-                .contains('participants', [currentUser.id]);
-
-            let chatId = null;
-            for (const chat of (existingChats || [])) {
-                if (chat.participants.includes(user.id)) {
-                    chatId = chat.id;
-                    break;
-                }
-            }
-
-            if (!chatId) {
-                // Get current user profile
-                const { data: profile } = await supabase.from('profiles').select('name, display_name, photo_url').eq('id', currentUser.id).maybeSingle();
-                const userData: any = profile || {};
-
-                const { data: newChat, error: insertError } = await supabase.from('direct_chats').insert({
-                    participants: [currentUser.id, user.id],
-                    participant_details: {
-                        [currentUser.id]: {
-                            displayName: userData.name || userData.display_name || currentUser.user_metadata?.full_name || 'User',
-                            photoURL: userData.photo_url || currentUser.user_metadata?.avatar_url || '',
-                        },
-                        [user.id]: {
-                            displayName: user.displayName || 'User',
-                            photoURL: user.photoURL || '',
-                        },
-                    },
-                    unread_count: { [currentUser.id]: 0, [user.id]: 0 },
-                    muted_by: [],
-                    pinned_by: [],
-                }).select('id').single();
-                
-                if (insertError) {
-                    throw insertError;
-                }
-                
-                chatId = newChat?.id;
-            }
-
-            if (!chatId) {
-                throw new Error('Chat ID not found');
-            }
+            const chatId = await getOrCreateDirectChat(user.id, {
+                displayName: user.displayName || 'User',
+                photoURL: user.photoURL || '',
+            });
 
             setShowSearch(false);
             setSearchQuery('');
@@ -342,7 +305,7 @@ const ChatsListScreen = () => {
         } finally {
             setStartingChat(false);
         }
-    }, [currentUser, router]);
+    }, [currentUser, getOrCreateDirectChat, router]);
 
     const renderChatItem = useCallback(({ item, index }: { item: Chat; index: number }) => {
         const otherUser = item.type === 'direct' ? getOtherParticipant(item) : null;
@@ -460,7 +423,13 @@ const ChatsListScreen = () => {
                     </TouchableOpacity>
                 </View>
             ) : (
-                <View style={styles.header}>
+                <View
+                    style={styles.header}
+                    onLayout={(e) => {
+                        const { y, height } = e.nativeEvent.layout;
+                        setDropdownTop(y + height + 8);
+                    }}
+                >
                     <Text style={[styles.headerTitle, { color: colors.text }]}>Messages</Text>
                     <View style={styles.headerButtons}>
                         <NeumorphicSearchButton
@@ -588,7 +557,7 @@ const ChatsListScreen = () => {
                     activeOpacity={1}
                     onPress={() => setShowMessagesSettings(false)}
                 >
-                    <View style={[styles.dropdownMenu, { backgroundColor: colors.card }]}>
+                    <View style={[styles.dropdownMenu, { backgroundColor: colors.card, top: dropdownTop }]}>
                         <TouchableOpacity
                             style={styles.dropdownItem}
                             onPress={() => {
@@ -628,11 +597,7 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
+
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -645,19 +610,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
     },
-    persistentSearchBar: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginHorizontal: SPACING.xl,
-        marginBottom: SPACING.sm,
-        paddingHorizontal: SPACING.md,
-        paddingVertical: SPACING.sm,
-        borderRadius: BORDER_RADIUS.lg,
-        gap: SPACING.sm,
-    },
-    persistentSearchText: {
-        fontSize: FONT_SIZE.sm,
-    },
+
     headerTitle: {
         fontSize: FONT_SIZE.xxl,
         fontWeight: FONT_WEIGHT.bold,
@@ -666,20 +619,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: SPACING.sm,
     },
-    headerButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    searchButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
+
     listContent: {
         paddingHorizontal: SPACING.lg,
     },
@@ -698,23 +638,7 @@ const styles = StyleSheet.create({
         position: 'relative',
         marginRight: SPACING.md,
     },
-    avatar: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-    },
-    avatarPlaceholder: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    avatarText: {
-        color: '#fff',
-        fontSize: FONT_SIZE.xl,
-        fontWeight: FONT_WEIGHT.bold,
-    },
+
     chatInfo: {
         flex: 1,
     },
@@ -775,19 +699,7 @@ const styles = StyleSheet.create({
         lineHeight: 22,
         marginBottom: SPACING.lg,
     },
-    startChatButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: SPACING.xl,
-        paddingVertical: SPACING.md,
-        borderRadius: BORDER_RADIUS.lg,
-        gap: SPACING.sm,
-    },
-    startChatButtonText: {
-        color: '#fff',
-        fontSize: FONT_SIZE.md,
-        fontWeight: FONT_WEIGHT.semibold,
-    },
+
     // Search Modal
     searchModal: {
         flex: 1,
@@ -802,9 +714,7 @@ const styles = StyleSheet.create({
         paddingVertical: SPACING.sm,
         borderBottomWidth: 1,
     },
-    closeButton: {
-        padding: SPACING.sm,
-    },
+
     searchInput: {
         flex: 1,
         marginLeft: SPACING.sm,
@@ -813,15 +723,7 @@ const styles = StyleSheet.create({
         borderRadius: BORDER_RADIUS.lg,
         fontSize: FONT_SIZE.md,
     },
-    searchLoading: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    searchingText: {
-        marginTop: SPACING.md,
-        fontSize: FONT_SIZE.md,
-    },
+
     noResults: {
         flex: 1,
         justifyContent: 'center',
@@ -847,20 +749,7 @@ const styles = StyleSheet.create({
         borderRadius: BORDER_RADIUS.lg,
         marginBottom: SPACING.sm,
     },
-    searchAvatar: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        marginRight: SPACING.md,
-    },
-    searchAvatarPlaceholder: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: SPACING.md,
-    },
+
     searchUserInfo: {
         flex: 1,
     },
@@ -893,7 +782,6 @@ const styles = StyleSheet.create({
     },
     dropdownMenu: {
         position: 'absolute',
-        top: 115,
         right: SPACING.lg,
         borderRadius: BORDER_RADIUS.md,
         minWidth: 180,

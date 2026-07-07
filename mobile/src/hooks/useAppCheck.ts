@@ -27,7 +27,7 @@ export const useAppCheck = () => {
                     isTokenAutoRefreshEnabled: true,
                 });
                 
-                console.log('Firebase App Check initialized successfully.');
+                if (__DEV__) console.log('[AppCheck] Initialized successfully.');
             } catch (error) {
                 console.error('Failed to initialize Firebase App Check:', error);
             }

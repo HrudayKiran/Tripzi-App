@@ -355,6 +355,9 @@ export async function handleInitialNotification(
 /**
  * Schedule a trip reminder notification 1 day before departure.
  * Uses Notifee's trigger notification with a timestamp.
+ *
+ * On Android 12+ (API 31+), SCHEDULE_EXACT_ALARM must be granted by the user
+ * before createTriggerNotification works. This function requests it automatically.
  */
 export async function scheduleTripReminder(
   tripId: string,
@@ -364,6 +367,23 @@ export async function scheduleTripReminder(
   try {
     const notifee = require('@notifee/react-native').default;
     const { TriggerType } = require('@notifee/react-native');
+
+    // Android 12+ requires explicit SCHEDULE_EXACT_ALARM permission
+    if (Platform.OS === 'android' && Platform.Version >= 31) {
+      const settings = await notifee.getNotificationSettings();
+      // android.alarm is 1 (ENABLED) or 0 (DISABLED) — check for DISABLED
+      if (settings?.android?.alarm === 0) {
+        if (__DEV__) console.log('[Notifications] SCHEDULE_EXACT_ALARM not granted — opening Settings.');
+        // Open the special system settings page for exact alarms
+        await notifee.openAlarmPermissionSettings();
+        // Re-check after user returns from Settings
+        const updatedSettings = await notifee.getNotificationSettings();
+        if (updatedSettings?.android?.alarm === 0) {
+          if (__DEV__) console.log('[Notifications] SCHEDULE_EXACT_ALARM still not granted — skipping reminder.');
+          return null;
+        }
+      }
+    }
 
     // Schedule for 9 AM the day before departure
     const reminderDate = new Date(departureDate);
@@ -394,6 +414,9 @@ export async function scheduleTripReminder(
       {
         type: TriggerType.TIMESTAMP,
         timestamp: reminderDate.getTime(),
+        alarmManager: {
+          allowWhileIdle: true,
+        },
       }
     );
 

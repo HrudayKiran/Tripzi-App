@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Dimensions, Animated, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Animated, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NeumorphicBackButton, NeumorphicIconButton } from '../components/NeumorphicIconButtons';
 
 import Icon from '../components/Icon';
-import { MotiView } from 'moti';
+
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
@@ -13,8 +13,9 @@ import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import ProfilePictureViewer from '../components/ProfilePictureViewer';
 import DefaultAvatar from '../components/DefaultAvatar';
 import useUserProfileQuery from '../hooks/useUserProfileQuery';
+import { useChatsQuery } from '../hooks/useChatsQuery';
 
-const { width } = Dimensions.get('window');
+
 
 const UserProfileScreen = () => {
     const router = useRouter();
@@ -24,7 +25,7 @@ const UserProfileScreen = () => {
     const userId = (params.id as string) || (params.userId as string) || currentUser?.id;
 
     useEffect(() => {
-        supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+        supabase.auth.getSession().then(({ data: { session } }) => setCurrentUser(session?.user || null));
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setCurrentUser(session?.user || null);
         });
@@ -35,10 +36,10 @@ const UserProfileScreen = () => {
     const insets = useSafeAreaInsets();
     const isOwnProfile = userId === currentUser?.id;
     const { user, loading } = useUserProfileQuery(userId, isOwnProfile);
+    const { getOrCreateDirectChat } = useChatsQuery();
     const [profileImage, setProfileImage] = useState<string | null>(null);
     const [profileImageObjectKey, setProfileImageObjectKey] = useState<string | null>(null);
     const [showFullImage, setShowFullImage] = useState(false);
-    const [showCreateModal, setShowCreateModal] = useState(false);
 
     useEffect(() => {
         if (user) {
@@ -80,8 +81,11 @@ const UserProfileScreen = () => {
         lastScrollY.current = currentScrollY;
     };
 
-    const handleCreateButtonPress = () => setShowCreateModal(false);
 
+
+    // Delegates to the hook's getOrCreateDirectChat which handles
+    // in-memory check → DB check → create atomically, eliminating the
+    // race condition that caused duplicate chats.
     const handleMessage = async () => {
         if (!currentUser) {
             Alert.alert('Sign In Required', 'Please sign in to send messages.');
@@ -90,53 +94,18 @@ const UserProfileScreen = () => {
         if (!userId || !user) return;
 
         try {
-            const { data: existingChats } = await supabase
-                .from('direct_chats')
-                .select('*')
-                .contains('participants', [currentUser.id]);
-
-            let chatId = null;
-            for (const chat of (existingChats || [])) {
-                if (chat.participants && chat.participants.includes(userId)) {
-                    chatId = chat.id;
-                    break;
-                }
-            }
-
-            if (!chatId) {
-                const { data: profile } = await supabase.from('profiles').select('name, display_name, photo_url').eq('id', currentUser.id).maybeSingle();
-                const myName = profile?.name || profile?.display_name || currentUser.user_metadata?.full_name || 'User';
-                const myPhoto = profile?.photo_url || currentUser.user_metadata?.avatar_url || '';
-
-                const { data: newChat, error: insertError } = await supabase.from('direct_chats').insert({
-                    participants: [currentUser.id, userId],
-                    participant_details: {
-                        [currentUser.id]: { displayName: myName, photoURL: myPhoto },
-                        [userId]: { displayName: user.displayName || user.name || 'User', photoURL: user.photoURL || '' },
-                    },
-                    unread_count: { [currentUser.id]: 0, [userId]: 0 },
-                    muted_by: [],
-                    pinned_by: [],
-                }).select('id').single();
-
-                if (insertError) {
-                    throw insertError;
-                }
-
-                chatId = newChat?.id;
-            }
-
-            if (!chatId) {
-                throw new Error('Chat ID not found');
-            }
+            const chatId = await getOrCreateDirectChat(userId, {
+                displayName: (user as any).displayName || 'User',
+                photoURL: (user as any).photoURL || '',
+            });
 
             router.push({
                 pathname: '/chat/[id]',
                 params: {
                     id: chatId,
                     otherUserId: userId,
-                    otherUserName: user.displayName || user.name || 'User',
-                    otherUserPhoto: user.photoURL || '',
+                    otherUserName: (user as any).displayName || 'User',
+                    otherUserPhoto: (user as any).photoURL || '',
                 }
             });
         } catch (error) {
@@ -241,34 +210,6 @@ const UserProfileScreen = () => {
                 }}
             />
 
-            <Modal visible={showCreateModal} transparent animationType="fade" onRequestClose={() => setShowCreateModal(false)}>
-                <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowCreateModal(false)}>
-                    <MotiView
-                        from={{ opacity: 0, translateY: 20 }}
-                        animate={{ opacity: 1, translateY: 0 }}
-                        transition={{ type: 'timing', duration: 300 }}
-                        style={[styles.createModalContent, { backgroundColor: colors.background }]}
-                    >
-                        <Text style={[styles.createModalTitle, { color: colors.text }]}>Create New Trip ✈️</Text>
-                        <TouchableOpacity style={[styles.createOption, { backgroundColor: colors.card }]} onPress={() => { setShowCreateModal(false); router.push('/trip/create'); }}>
-                            <View style={[styles.createOptionIcon, { backgroundColor: '#E0E7FF' }]}><Icon name="PencilSimple" size={24} color="#6366F1" /></View>
-                            <View style={styles.createOptionText}>
-                                <Text style={[styles.createOptionTitle, { color: colors.text }]}>Manual Trip Planning</Text>
-                                <Text style={[styles.createOptionDesc, { color: colors.textSecondary }]}>Fill in details and add photos</Text>
-                            </View>
-                            <Icon name="CaretRight" size={20} color={colors.textSecondary} />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.createOption, { backgroundColor: colors.card }]} onPress={() => { setShowCreateModal(false); router.push('/trip/ai-planner'); }}>
-                            <View style={[styles.createOptionIcon, { backgroundColor: '#EDE9FE' }]}><Icon name="Sparkle" size={24} color="#8B5CF6" /></View>
-                            <View style={styles.createOptionText}>
-                                <Text style={[styles.createOptionTitle, { color: colors.text }]}>AI Trip Planning</Text>
-                                <Text style={[styles.createOptionDesc, { color: colors.textSecondary }]}>Let AI plan and generate images</Text>
-                            </View>
-                            <Icon name="CaretRight" size={20} color={colors.textSecondary} />
-                        </TouchableOpacity>
-                    </MotiView>
-                </TouchableOpacity>
-            </Modal>
         </View>
     );
 };
@@ -289,14 +230,7 @@ const styles = StyleSheet.create({
     actionButtonsContainer: { flexDirection: 'row', gap: 12, marginTop: 24 },
     primaryBtn: { flex: 1, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
     primaryBtnText: { fontSize: 15, fontWeight: '600' },
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-    createModalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
-    createModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
-    createOption: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, marginBottom: 12 },
-    createOptionIcon: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
-    createOptionText: { flex: 1 },
-    createOptionTitle: { fontSize: 16, fontWeight: 'bold' },
-    createOptionDesc: { fontSize: 14 },
+
 });
 
 export default UserProfileScreen;

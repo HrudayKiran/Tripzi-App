@@ -1,10 +1,7 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { useEffect, useState } from 'react';
 
 export function useUserProfileQuery(userId: string | undefined, isOwnProfile: boolean) {
-    const queryClient = useQueryClient();
-
     // Query for user profile
     const { data: userProfile, isLoading: loadingProfile, error: profileError } = useQuery({
         queryKey: ['profile', userId],
@@ -54,52 +51,9 @@ export function useUserProfileQuery(userId: string | undefined, isOwnProfile: bo
         enabled: !!userId,
     });
 
-    // Query for user trips
-    const { data: trips = [], isLoading: loadingTrips } = useQuery({
-        queryKey: ['userTrips', userId],
-        queryFn: async () => {
-            if (!userId) return [];
-
-            console.log(`[useUserProfileQuery] Fetching trips for ${userId}...`);
-            const { data, error } = await supabase
-                .from('itineraries')
-                .select('*')
-                .eq('user_id', userId)
-                .order('created_at', { ascending: false });
-
-            if (error) {
-                console.error('[useUserProfileQuery] Error fetching trips:', error);
-                throw error;
-            }
-
-            return data || [];
-        },
-        enabled: !!userId,
-    });
-
-
-
-    // Realtime subscription for itineraries
-    useEffect(() => {
-        if (!userId) return;
-
-        const channelName = `user-itineraries-${userId}-${Math.random().toString(36).substring(7)}`;
-        const channel = supabase
-            .channel(channelName)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'itineraries', filter: `user_id=eq.${userId}` }, () => {
-                queryClient.invalidateQueries({ queryKey: ['userTrips', userId] });
-            })
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, [userId, queryClient]);
-
     return {
         user: userProfile,
-        trips,
-        loading: loadingProfile || loadingTrips,
+        loading: loadingProfile,
         profileError,
     };
 }

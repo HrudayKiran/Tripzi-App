@@ -190,7 +190,7 @@ const HelpSupportScreen = () => {
               style={styles.chatCloseBtn}
               activeOpacity={0.7}
             >
-              <Icon name="ArrowsClockwise" size={22} color={NEUTRAL.white} />
+              <Icon name="ArrowClockwise" size={22} color={NEUTRAL.white} />
             </TouchableOpacity>
           </View>
 

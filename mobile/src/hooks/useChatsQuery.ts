@@ -96,9 +96,6 @@ const normalizeLocalChat = (row: any, collectionName: 'direct_chats' | 'group_ch
     }
 
     let clearedAtMap: Record<string, string> = {};
-    if (__DEV__) {
-        console.log('[normalizeLocalChat] row.id:', row.id, 'clearedAtRaw:', row.clearedAtRaw);
-    }
     if (row.clearedAtRaw) {
         try {
             clearedAtMap = JSON.parse(row.clearedAtRaw);

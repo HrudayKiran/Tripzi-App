@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import Icon from '../components/Icon';
 import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, STATUS, NEUTRAL } from '../styles';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, STATUS, NEUTRAL } from '../styles';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import DefaultAvatar from '../components/DefaultAvatar';
 import { resetDatabase, database } from '../database';
 import { useFocusEffect, useRouter } from 'expo-router';
+import Constants from 'expo-constants';
 import { unregisterPushToken, cancelAllScheduledNotifications } from '../services/notificationService';
 import { clearBadgeCount } from '../services/notificationChannels';
 
@@ -18,16 +19,20 @@ const ProfileScreen = () => {
   const router = useRouter();
   const { colors } = useTheme();
   const [user, setUser] = useState(null);
-  const [showAccountModal, setShowAccountModal] = useState(false);
-  const [switchingAccount, setSwitchingAccount] = useState(false);
+
 
   // Load profile from WatermelonDB first (instant), then subscribe to Supabase realtime
   useFocusEffect(
     React.useCallback(() => {
       let isMounted = true;
+      // Kept as let so the cleanup can remove it even if init() hasn't
+      // finished yet (e.g. user navigates away before getSession resolves).
+      let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
 
-      const loadProfile = async () => {
-        const { data: { user: authUser } } = await supabase.auth.getUser();
+      const init = async () => {
+        // getSession() is cache-backed — no network round-trip.
+        const { data: { session } } = await supabase.auth.getSession();
+        const authUser = session?.user;
         if (!authUser || !isMounted) return;
 
         // Configure Google Signin
@@ -80,38 +85,42 @@ const ProfileScreen = () => {
             photoURL: authUser.user_metadata?.avatar_url,
           });
         }
+
+        // 3. Subscribe to realtime updates scoped to THIS user's profile row.
+        //    Without the filter, any user's profile change would overwrite the
+        //    logged-in user's profile card with a stranger's data.
+        if (!isMounted) return;
+        const channelId = `profile-changes-${Math.random().toString(36).substring(2, 9)}`;
+        realtimeChannel = supabase
+          .channel(channelId)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'profiles',
+              filter: `id=eq.${authUser.id}`,
+            },
+            (payload) => {
+              if (payload.new && isMounted) {
+                const p = payload.new as any;
+                setUser({
+                  id: p.id,
+                  ...p,
+                  displayName: p.name || 'User',
+                  photoURL: p.photo_url,
+                });
+              }
+            }
+          )
+          .subscribe();
       };
 
-      loadProfile();
-
-      // Subscribe to profile changes via Supabase Realtime
-      const channelId = `profile-changes-${Math.random().toString(36).substring(2, 9)}`;
-      const channel = supabase
-        .channel(channelId)
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'profiles',
-          },
-          (payload) => {
-            if (payload.new && isMounted) {
-              const p = payload.new as any;
-              setUser({
-                id: p.id,
-                ...p,
-                displayName: p.name || 'User',
-                photoURL: p.photo_url,
-              });
-            }
-          }
-        )
-        .subscribe();
+      init();
 
       return () => {
         isMounted = false;
-        supabase.removeChannel(channel);
+        if (realtimeChannel) supabase.removeChannel(realtimeChannel);
       };
     }, [])
   );
@@ -128,14 +137,14 @@ const ProfileScreen = () => {
           onPress: async () => {
             // Reset profile status fields while still authenticated
             try {
-              const { data: { user: authUser } } = await supabase.auth.getUser();
-              if (authUser) {
+              const { data: { session } } = await supabase.auth.getSession();
+              if (session?.user) {
                 await supabase.from('profiles').update({
                   push_notifications_enabled: false,
                   notification_permission_status: 'not_determined',
                   presence: 'offline',
                   last_seen_at: new Date().toISOString(),
-                }).eq('id', authUser.id);
+                }).eq('id', session.user.id);
               }
             } catch (e) {
               // Don't block logout if this fails
@@ -237,9 +246,9 @@ const ProfileScreen = () => {
 
         {/* User Profile Card - Tappable to view full profile */}
         <TouchableOpacity
-          onPress={async () => {
-            const { data: { user: authUser } } = await supabase.auth.getUser();
-            if (authUser) router.push({ pathname: '/profile/[id]', params: { id: authUser.id } });
+          onPress={() => {
+            // user state is already loaded from WatermelonDB/Supabase — no network call needed
+            if (user && (user as any).id) router.push({ pathname: '/profile/[id]', params: { id: (user as any).id } });
           }}
           activeOpacity={0.8}
         >
@@ -266,23 +275,7 @@ const ProfileScreen = () => {
           </MotiView>
         </TouchableOpacity>
 
-        {/* My Itineraries Section */}
-        <MotiView
-          from={{ opacity: 0, translateY: 20 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 400, delay: 100 }}
-          style={styles.menuSection}
-        >
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>MY ITINERARIES</Text>
 
-          <MenuItem
-            icon="Notebook"
-            iconColor="#10B981"
-            iconBg="#D1FAE5"
-            text="Itineraries"
-            onPress={() => router.push('/trip/itineraries')}
-          />
-        </MotiView>
 
         {/* General Section */}
         <MotiView
@@ -366,7 +359,7 @@ const ProfileScreen = () => {
             showChevron={false}
             largeText
           />
-          <Text style={[styles.versionText, { color: colors.textSecondary }]}>NxtVibes Version 1.0.0</Text>
+          <Text style={[styles.versionText, { color: colors.textSecondary }]}>NxtVibes v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
         </MotiView>
 
         <View style={{ height: SPACING.sm * 2 }} />
@@ -386,13 +379,7 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.md,
   },
   headerTitle: { fontSize: FONT_SIZE.xxl, fontWeight: FONT_WEIGHT.bold },
-  settingsButton: {
-    width: TOUCH_TARGET.min,
-    height: TOUCH_TARGET.min,
-    borderRadius: TOUCH_TARGET.min / 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -415,11 +402,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
   },
   avatar: { width: 80, height: 80, borderRadius: 40 },
-  profileInfo: { flex: 1, marginLeft: SPACING.lg },
 
-  userName: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold },
-  userEmail: { fontSize: FONT_SIZE.sm, marginTop: 2 },
-  username: { fontSize: FONT_SIZE.sm, marginTop: 2 },
   viewProfileText: { fontSize: FONT_SIZE.xs, marginTop: SPACING.xs },
   menuSection: {
     marginHorizontal: SPACING.xl,
@@ -459,37 +442,7 @@ const styles = StyleSheet.create({
     marginRight: SPACING.sm,
   },
   badgeText: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold, color: STATUS.success },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: SPACING.lg,
-    borderRadius: BORDER_RADIUS.lg,
-    borderWidth: 2,
-    marginTop: SPACING.md,
-  },
-  logoutIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: BORDER_RADIUS.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: SPACING.md,
-  },
-  logoutButtonText: {
-    fontSize: FONT_SIZE.md,
-    fontWeight: FONT_WEIGHT.bold,
-  },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  accountSwitchModal: { borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, padding: SPACING.xl },
-  modalHandle: { width: 40, height: 4, backgroundColor: NEUTRAL.gray200, borderRadius: 2, alignSelf: 'center', marginBottom: SPACING.lg },
-  modalTitle: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold, textAlign: 'center', marginBottom: SPACING.xl },
-  accountCard: { flexDirection: 'row', alignItems: 'center', padding: SPACING.lg, borderRadius: BORDER_RADIUS.lg, marginBottom: SPACING.md },
-  accountAvatar: { width: 50, height: 50, borderRadius: 25, marginRight: SPACING.md },
-  accountInfo: { flex: 1 },
-  accountName: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
-  accountEmail: { fontSize: FONT_SIZE.sm },
-  addAccountBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: SPACING.lg, borderRadius: BORDER_RADIUS.lg, borderWidth: 1, borderStyle: 'dashed', marginTop: SPACING.md, gap: SPACING.sm },
-  addAccountText: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
+
   versionText: { textAlign: 'center', marginTop: SPACING.md, fontSize: FONT_SIZE.xs },
 });
 

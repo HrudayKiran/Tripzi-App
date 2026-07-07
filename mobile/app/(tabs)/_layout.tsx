@@ -81,11 +81,7 @@ export default function TabsLayout() {
             },
           }}
         />
-        {/* AI Planner tab is hidden until the feature is production-ready */}
-        <Tabs.Screen
-          name="ai-planner"
-          options={{ href: null }}
-        />
+
 
         <Tabs.Screen
           name="messages"
