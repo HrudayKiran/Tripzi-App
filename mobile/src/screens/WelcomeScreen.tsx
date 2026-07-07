@@ -1,19 +1,20 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
-import { Image } from 'expo-image';
+import LottieView from 'lottie-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MotiView, MotiText } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, BRAND, NEUTRAL } from '../styles';
 import AppLogo from '../components/AppLogo';
 import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 
 import { useRouter } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
 
-// A beautiful image representing friends traveling and having fun.
-const HERO_IMAGE = 'https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=1080&q=80';
+// A beautiful animated travel illustration representing friends traveling.
+const LOTTIE_HERO = 'https://lottie.host/2eea2965-86b8-44b7-883e-9a3146b3d919/dQobJzWoOR.lottie';
 
 const WelcomeScreen = () => {
     const { colors } = useTheme();
@@ -25,14 +26,14 @@ const WelcomeScreen = () => {
 
     return (
         <View style={styles.container}>
-            {/* Background Image */}
-            <Image
-                source={{ uri: HERO_IMAGE }}
-                style={StyleSheet.absoluteFillObject}
-                contentFit="cover"
-                transition={500}
-                accessibilityLabel="Travelers exploring the world together"
-                accessibilityRole="image"
+            <StatusBar style="light" />
+            {/* Background Lottie Animation */}
+            <LottieView
+                source={{ uri: LOTTIE_HERO }}
+                style={styles.lottieBackground}
+                autoPlay
+                loop
+                resizeMode="cover"
             />
 
             {/* Gradient Overlay for Readability */}
@@ -110,6 +111,13 @@ const WelcomeScreen = () => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
+    lottieBackground: {
+        position: 'absolute',
+        top: height * 0.30, // Start below the NxtVibes header
+        bottom: 0,
+        left: 0,
+        right: 0,
+    },
     safeArea: { flex: 1 },
     content: {
         flex: 1,
