@@ -512,10 +512,10 @@ export default function ItineraryViewScreen() {
         };
 
         if (tripDraft?.fromLocation && !startingCoords) {
-            geocodeLocation(tripDraft.fromLocation, 'starting');
+            geocodeLocation(tripDraft.fromLocation as string, 'starting');
         }
         if (tripDraft?.toLocation && !destinationCoords) {
-            geocodeLocation(tripDraft.toLocation, 'destination');
+            geocodeLocation(tripDraft.toLocation as string, 'destination');
         }
     }, [tripDraft?.fromLocation, tripDraft?.toLocation]);
 
@@ -619,7 +619,7 @@ export default function ItineraryViewScreen() {
             }
         } else if (tripDraft.checklistRaw) {
             try {
-                parsedChecklist = JSON.parse(tripDraft.checklistRaw);
+                parsedChecklist = JSON.parse(tripDraft.checklistRaw as string);
             } catch (e) {
                 console.error('Failed to parse tripDraft.checklistRaw:', e);
             }
@@ -636,7 +636,7 @@ export default function ItineraryViewScreen() {
             }
         } else if (tripDraft.notesRaw) {
             try {
-                parsedNotes = JSON.parse(tripDraft.notesRaw);
+                parsedNotes = JSON.parse(tripDraft.notesRaw as string);
             } catch (e) {
                 console.error('Failed to parse tripDraft.notesRaw:', e);
             }
@@ -653,7 +653,7 @@ export default function ItineraryViewScreen() {
             }
         } else if (tripDraft.participantsRaw) {
             try {
-                parsedCollaborators = JSON.parse(tripDraft.participantsRaw);
+                parsedCollaborators = JSON.parse(tripDraft.participantsRaw as string);
             } catch (e) {
                 console.error('Failed to parse tripDraft.participantsRaw:', e);
             }
@@ -795,9 +795,9 @@ export default function ItineraryViewScreen() {
     const allData = React.useMemo(() => {
         const data = [];
         const duration = tripDraft?.duration || Math.max(...places.map(p => p.day), 1);
-        const fromDate = tripDraft?.fromDate ? new Date(tripDraft.fromDate) : null;
+        const fromDate = tripDraft?.fromDate ? new Date(tripDraft.fromDate as string) : null;
 
-        for (let day = 1; day <= duration; day++) {
+        for (let day = 1; day <= (duration as number); day++) {
             const dayPlaces = places.filter(p => p.day === day).sort((a, b) => a.order - b.order);
             if (dayPlaces.length > 0) {
                 let dateStr = '';
@@ -863,9 +863,9 @@ export default function ItineraryViewScreen() {
                 return `${timeStr}${p.name}${p.address ? ` - ${p.address}` : ''}`;
             });
 
-            const fromDateStr = tripDraft?.fromDate ? new Date(tripDraft.fromDate).toISOString() : new Date().toISOString();
-            const toDateStr = tripDraft?.toDate ? new Date(tripDraft.toDate).toISOString() : new Date().toISOString();
-            const durationDays = tripDraft?.duration ? parseInt(tripDraft.duration) : 1;
+            const fromDateStr = tripDraft?.fromDate ? new Date(tripDraft.fromDate as string).toISOString() : new Date().toISOString();
+            const toDateStr = tripDraft?.toDate ? new Date(tripDraft.toDate as string).toISOString() : new Date().toISOString();
+            const durationDays = tripDraft?.duration ? parseInt(tripDraft.duration as string) : 1;
 
             const tripPayload = {
                 user_id: currentUser.id,
@@ -876,7 +876,7 @@ export default function ItineraryViewScreen() {
                 from_date: fromDateStr,
                 to_date: toDateStr,
                 duration_days: durationDays,
-                cost_per_person: parseFloat(tripDraft?.costPerPerson) || 0,
+                cost_per_person: parseFloat(tripDraft?.costPerPerson as string) || 0,
                 accommodation_type: tripDraft?.accommodationType || null,
                 booking_status: 'saved', // Always 'saved', posting is removed
                 places_to_visit: places || [],
@@ -884,7 +884,7 @@ export default function ItineraryViewScreen() {
                 participants: [currentUser.id, ...(collaborators || []).map((c: any) => c.id || c.uid || c)],
                 trip_types: tripDraft?.tripTypes || [],
                 transport_modes: tripDraft?.transportModes || [],
-                accommodation_days: tripDraft?.accommodationDays ? parseInt(tripDraft.accommodationDays) : null,
+                accommodation_days: tripDraft?.accommodationDays ? parseInt(tripDraft.accommodationDays as string) : null,
                 checklist: checklist || [],
                 notes: notes || [],
                 itinerary_map_view: { startingCoords, destinationCoords, markers: [] },
@@ -980,7 +980,7 @@ export default function ItineraryViewScreen() {
                     const duration = tripDraft?.duration || Math.max(...places.map(p => p.day), 1);
                     // Reorder within days
                     const finalPlaces: any[] = [];
-                    for (let day = 1; day <= duration; day++) {
+                    for (let day = 1; day <= (duration as number); day++) {
                         const dayPlaces = updatedPlaces.filter(p => p.day === day);
                         dayPlaces.forEach((p, index) => {
                             finalPlaces.push({ ...p, order: index });
@@ -1110,9 +1110,9 @@ export default function ItineraryViewScreen() {
         const duration = tripDraft?.duration || Math.max(...places.map(p => p.day), 1);
         const dayTabs = [
             { label: 'All', date: null },
-            ...Array.from({ length: duration }, (_, i) => ({
+            ...Array.from({ length: duration as number }, (_, i) => ({
                 label: `Day ${i + 1}`,
-                date: tripDraft?.fromDate ? new Date(new Date(tripDraft.fromDate).getTime() + i * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null
+                date: tripDraft?.fromDate ? new Date(new Date(tripDraft.fromDate as string).getTime() + i * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null
             }))
         ];
 
@@ -1433,13 +1433,13 @@ export default function ItineraryViewScreen() {
         const allCoords: { latitude: number, longitude: number, title?: string, description?: string, type?: string }[] = [];
 
         if (startingCoords) {
-            allCoords.push({ latitude: startingCoords.lat, longitude: startingCoords.lng, title: tripDraft?.fromLocation || 'Start', type: 'start' });
+            allCoords.push({ latitude: startingCoords.lat, longitude: startingCoords.lng, title: (tripDraft?.fromLocation as string) || 'Start', type: 'start' });
         }
 
         allCoords.push(...mapPlacesCoords);
 
         if (destinationCoords) {
-            allCoords.push({ latitude: destinationCoords.lat, longitude: destinationCoords.lng, title: tripDraft?.toLocation || 'Destination', type: 'end' });
+            allCoords.push({ latitude: destinationCoords.lat, longitude: destinationCoords.lng, title: (tripDraft?.toLocation as string) || 'Destination', type: 'end' });
         }
 
         const initialRegion = allCoords.length > 0 ? {
@@ -1495,9 +1495,9 @@ export default function ItineraryViewScreen() {
                 <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
                     <NeumorphicBackButton />
                     <View style={styles.headerTitleContainer}>
-                        <Text style={[styles.headerTitle, { color: colors.text }]}>{tripDraft?.trip_title || tripDraft?.title || 'Trip Itinerary'}</Text>
+                        <Text style={[styles.headerTitle, { color: colors.text }]}>{(tripDraft?.trip_title as string) || (tripDraft?.title as string) || 'Trip Itinerary'}</Text>
                         <Text style={[styles.headerSubtitle, { color: colors.textSecondary, fontSize: 10 }]} numberOfLines={1}>
-                            {tripDraft?.fromLocation ? `${tripDraft.fromLocation.split(',')[0]} → ` : ''}{tripDraft?.toLocation?.split(',')[0] || 'Ready for adventure'}
+                            {tripDraft?.fromLocation ? `${(tripDraft.fromLocation as string).split(',')[0]} → ` : ''}{(tripDraft?.toLocation as string)?.split(',')[0] || 'Ready for adventure'}
                         </Text>
                     </View>
                     {!isSolo && (

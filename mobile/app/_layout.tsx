@@ -35,6 +35,7 @@ import {
   setupForegroundHandler,
   setupNotificationTapHandler,
   handleInitialNotification,
+  setupPermissionWatcher,
 } from '../src/services/notificationService';
 import { createNotificationChannels, clearBadgeCount } from '../src/services/notificationChannels';
 import ErrorBoundary from '../src/components/ErrorBoundary';
@@ -143,6 +144,9 @@ export default function RootLayout() {
     // Show in-app toast when push arrives while app is open
     const unsubForeground = setupForegroundHandler(showToast);
 
+    // Watch for OS notification permission changes (e.g. user revokes from Android Settings)
+    const unsubPermissionWatcher = setupPermissionWatcher();
+
     // Navigate when user taps a notification from background state
     const unsubTap = setupNotificationTapHandler((route, params) => {
       // Use setTimeout to ensure navigation is ready
@@ -198,6 +202,7 @@ export default function RootLayout() {
       unsubForeground();
       unsubTap();
       unsubNotifee?.();
+      unsubPermissionWatcher();
     };
   }, []);
 

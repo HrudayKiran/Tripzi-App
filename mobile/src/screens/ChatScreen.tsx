@@ -55,6 +55,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useActiveChatStore } from '../store/activeChatStore';
 import { workersApi } from '../lib/workersApi';
+import { getOnlineUsersPresenceState } from '../hooks/usePresence';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GOOGLE_MAPS_SEARCH_URL = 'https://www.google.com/maps/search/?api=1&query=';
@@ -398,45 +399,26 @@ const ChatScreen = () => {
         }
     }, [messages.length]);
 
-    // Fetch last seen + live profile photo for direct chats
+    // Fetch initial presence + live profile photo for direct chats (DB only, one-time)
+    // Live updates come from the updateStatusText interval below via getOnlineUsersPresenceState().
     useEffect(() => {
         if (!otherParticipantUid || chat?.type === 'group') return;
+
         const loadPresence = async () => {
-            const { data, error } = await supabase.from('profiles').select('photo_url, presence, last_seen_at').eq('id', otherParticipantUid).maybeSingle();
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('photo_url, presence, last_seen_at')
+                .eq('id', otherParticipantUid)
+                .maybeSingle();
             if (error || !data) return;
             if (data.photo_url) setLivePhoto(data.photo_url);
             setRawPresence(typeof data.presence === 'string' ? data.presence.toLowerCase() : '');
             setRawLastSeen(data.last_seen_at);
         };
+
         loadPresence();
-
-        // Subscribe to Realtime Presence channel for the other user
-        const channel = supabase.channel('online-users');
-        channel
-            .on('presence', { event: 'sync' }, () => {
-                const presenceState = channel.presenceState();
-                const userPresences = presenceState[otherParticipantUid] as any[];
-                if (userPresences && userPresences.length > 0) {
-                    const latest = userPresences[userPresences.length - 1];
-                    setRawPresence(latest.status || 'online');
-                    if (latest.online_at) {
-                        setRawLastSeen(latest.online_at);
-                    }
-                } else {
-                    setRawPresence('offline');
-                }
-            })
-            .subscribe();
-
-        // Keep database updates channel as a secondary fallback
-        const dbChannel = supabase.channel(`presence-db-${otherParticipantUid}-${Math.random().toString(36).substring(7)}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${otherParticipantUid}` }, () => { loadPresence(); })
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-            supabase.removeChannel(dbChannel);
-        };
+        // No channel subscription — ChatScreen reads presence via getOnlineUsersPresenceState()
+        // called inside the 10-second updateStatusText interval below.
     }, [otherParticipantUid, chat?.type]);
 
     // Periodic effect to recalculate presence status text based on raw presence and last seen time
@@ -444,7 +426,16 @@ const ChatScreen = () => {
         if (!otherParticipantUid || chat?.type === 'group') return;
 
         const updateStatusText = () => {
-            let finalPresence = rawPresence;
+            // First check live Presence channel (real-time, no subscription needed)
+            const livePresence = otherParticipantUid ? getOnlineUsersPresenceState(otherParticipantUid) : null;
+            if (livePresence) {
+                // Update rawPresence/rawLastSeen from live channel state
+                setRawPresence(livePresence.status || 'online');
+                if (livePresence.online_at) setRawLastSeen(livePresence.online_at);
+            }
+
+            // Determine final presence (using latest rawPresence which may have just been updated)
+            let finalPresence = livePresence?.status ?? rawPresence;
             if (finalPresence === 'away') {
                 finalPresence = 'offline';
             }

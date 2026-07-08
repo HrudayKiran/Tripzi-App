@@ -56,14 +56,24 @@ app.route('/chat', chatNotificationRoutes);
 export default {
   fetch: app.fetch,
 
-  // Cron trigger handler — runs daily at 2:30 AM UTC (8:00 AM IST)
+  // Cron trigger handler:
+  //   "30 2 * * *"   — daily cron (trip lifecycle + AI chat cleanup + R2 cleanup)
+  //   "*/10 * * * *" — frequent cron (R2 deleted media cleanup only)
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(Promise.all([
-      handleDailyTripLifecycle(env),
-      cleanupExpiredChats(env),
-      cleanupDeletedMedia(env),
-      cleanupExpiredLiveShares(env),
-    ]));
+    const isDailyCron = event.cron === '30 2 * * *';
+    const isFrequentCron = event.cron === '*/10 * * * *';
+
+    if (isDailyCron) {
+      ctx.waitUntil(Promise.all([
+        handleDailyTripLifecycle(env),
+        cleanupExpiredChats(env),
+        cleanupDeletedMedia(env),
+        cleanupExpiredLiveShares(env),
+      ]));
+    } else if (isFrequentCron) {
+      // Only R2 cleanup runs every 10 minutes — keep daily tasks on daily cron
+      ctx.waitUntil(cleanupDeletedMedia(env));
+    }
   },
 };
 
@@ -101,17 +111,26 @@ async function cleanupExpiredChats(env: Env): Promise<void> {
 
 /**
  * Cleanup deleted media queue from Supabase and delete R2 assets.
- * Runs as part of the daily cron trigger.
+ * Runs as part of the scheduled cron trigger (every 10 minutes).
+ *
+ * Reliability guarantee:
+ * - Only processes rows WHERE processed_at IS NULL
+ * - Marks each row processed_at = NOW() AFTER confirmed R2 deletion
+ * - Per-item error handling: if R2 delete fails for one item, the row
+ *   stays in queue and is retried on the next cron run
+ * - If DB update fails after R2 delete, the next run will attempt R2 delete
+ *   again (idempotent — R2 delete on a non-existent key is a no-op)
  */
 async function cleanupDeletedMedia(env: Env): Promise<void> {
   try {
     console.log('[Cleanup] Starting deleted media cleanup...');
     const supabase = getSupabaseAdmin(env);
 
-    // Fetch up to 100 media records to delete
+    // Only fetch unprocessed rows (processed_at IS NULL)
     const { data: mediaItems, error } = await supabase
       .from('deleted_media')
       .select('id, object_key')
+      .is('processed_at', null)
       .limit(100);
 
     if (error) {
@@ -125,24 +144,36 @@ async function cleanupDeletedMedia(env: Env): Promise<void> {
     }
 
     console.log(`[Cleanup] Processing ${mediaItems.length} deleted media items...`);
-    const keys = mediaItems.map((item: any) => item.object_key);
+    let successCount = 0;
+    let failCount = 0;
 
-    // Delete the objects from R2
-    await deleteR2Objects(env, keys);
-    console.log(`[Cleanup] Deleted ${keys.length} R2 objects.`);
+    // Process each item individually for reliable per-item error handling
+    for (const item of mediaItems) {
+      try {
+        // Step 1: Delete from R2
+        await deleteR2Objects(env, [item.object_key]);
 
-    // Remove the records from the deleted_media queue
-    const ids = mediaItems.map((item: any) => item.id);
-    const { error: deleteError } = await supabase
-      .from('deleted_media')
-      .delete()
-      .in('id', ids);
+        // Step 2: Mark as processed ONLY after confirmed R2 deletion
+        const { error: updateError } = await supabase
+          .from('deleted_media')
+          .update({ processed_at: new Date().toISOString() })
+          .eq('id', item.id);
 
-    if (deleteError) {
-      console.error('[Cleanup] Failed to remove queue records:', deleteError.message);
-    } else {
-      console.log(`[Cleanup] Removed ${ids.length} records from deleted_media queue.`);
+        if (updateError) {
+          console.error(`[Cleanup] Failed to mark item ${item.id} processed:`, updateError.message);
+          // Row stays unprocessed — R2 delete was idempotent, next run will retry
+          failCount++;
+        } else {
+          successCount++;
+        }
+      } catch (itemError: any) {
+        console.error(`[Cleanup] R2 delete failed for key ${item.object_key}:`, itemError?.message || itemError);
+        // Row stays unprocessed — will be retried on next cron run
+        failCount++;
+      }
     }
+
+    console.log(`[Cleanup] Deleted media: ${successCount} succeeded, ${failCount} failed (will retry).`);
   } catch (e: any) {
     console.error('[Cleanup] Deleted media cleanup error:', e?.message || e);
   }

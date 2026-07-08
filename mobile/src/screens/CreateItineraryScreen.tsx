@@ -105,8 +105,8 @@ const CreateItineraryScreen = () => {
 
     useEffect(() => {
         if (tripDraft) {
-            if (tripDraft.fromDate) setValue('fromDate', new Date(tripDraft.fromDate));
-            if (tripDraft.toDate) setValue('toDate', new Date(tripDraft.toDate));
+            if (tripDraft.fromDate) setValue('fromDate', new Date(tripDraft.fromDate as string));
+            if (tripDraft.toDate) setValue('toDate', new Date(tripDraft.toDate as string));
         }
     }, [tripDraft?.fromDate, tripDraft?.toDate]);
 
@@ -708,7 +708,7 @@ const CreateItineraryScreen = () => {
                                         style={[styles.stepButton, styles.neumorphicButton, { backgroundColor: isDarkMode ? '#fff' : '#000', width: '48%' }]}
                                         onPress={handleSubmit((data) => {
                                             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                            setTripDraft(data); // Persist draft
+                                            setTripDraft({ id: '', ...data }); // Persist draft (id assigned on DB save)
                                             router.push({
                                                 pathname: '/trip/timeline',
                                                 params: {

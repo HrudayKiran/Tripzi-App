@@ -295,9 +295,9 @@ export default function CustomTimeline({ items: propItems }: CustomTimelineProps
             } else if (tripDraft && !trip) {
                 // Only recover from store if we don't have local trip state yet
                 setTrip(tripDraft);
-                if (tripDraft.fromLocation) geocodeLocation(tripDraft.fromLocation, 'starting');
-                if (tripDraft.toLocation) geocodeLocation(tripDraft.toLocation, 'destination');
-                const dur = getDuration(tripDraft.fromDate, tripDraft.toDate);
+                if (tripDraft.fromLocation) geocodeLocation(tripDraft.fromLocation as string, 'starting');
+                if (tripDraft.toLocation) geocodeLocation(tripDraft.toLocation as string, 'destination');
+                const dur = getDuration(tripDraft.fromDate as string, tripDraft.toDate as string);
                 setTrip((prev: any) => ({ ...prev, duration: dur }));
             }
         }

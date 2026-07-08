@@ -150,6 +150,10 @@ export function useChatMessagesQuery(
     const { userId } = useCurrentUser();
     const senderProfileRef = useRef<{ name: string } | null>(null);
     const [hasMore, setHasMore] = useState(true);
+    // Holds the active realtime channel so sendMessage can broadcast to it
+    const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+    // Dedup guard: tracks message IDs we have already handled locally (sent or received)
+    const seenMessageIdsRef = useRef<Set<string>>(new Set());
 
     // Cache sender profile at init so we don't fetch on every send
     useEffect(() => {
@@ -400,23 +404,41 @@ export function useChatMessagesQuery(
 
         // Attempt Supabase insert in the background
         try {
+            const now = new Date().toISOString();
+            const messagePayload = {
+                id: localId,
+                chat_id: chatId,
+                chat_type: chatType,
+                sender_id: userId,
+                sender_name: senderName,
+                type: 'text',
+                text: text.trim(),
+                status: 'sent',
+                reply_to: replyTo ? replyTo.messageId : null,
+                mentions: mentions || [],
+                created_at: now,
+                updated_at: now,
+                read_by: {},
+                delivered_to: [],
+                deleted_for: [],
+            };
+
             const { error: insertError } = await supabase
                 .from('messages')
-                .insert([{
-                    id: localId,
-                    chat_id: chatId,
-                    chat_type: chatType,
-                    sender_id: userId,
-                    sender_name: senderName,
-                    type: 'text',
-                    text: text.trim(),
-                    status: 'sent',
-                    reply_to: replyTo ? replyTo.messageId : null,
-                    mentions: mentions || [],
-                    created_at: new Date().toISOString(),
-                }]);
+                .insert([messagePayload]);
 
             if (insertError) throw insertError;
+
+            // Broadcast to channel so recipient gets it instantly (WhatsApp-style fast path)
+            // Sender marks their own id as seen to avoid double-processing their own broadcast
+            seenMessageIdsRef.current.add(localId);
+            if (channelRef.current) {
+                channelRef.current.send({
+                    type: 'broadcast',
+                    event: 'new_message',
+                    payload: messagePayload,
+                });
+            }
 
             // Increment unread count for other participants atomically in Supabase
             const { data: chatData } = await supabase
@@ -560,7 +582,7 @@ export function useChatMessagesQuery(
         }
     }, [chatId, userId, chatType, queryClient]);
 
-    // Realtime channel names with random suffixes (C4)
+    // Hybrid realtime: Broadcast (fast INSERT delivery) + postgres_changes (UPDATE/DELETE correctness)
     useEffect(() => {
         if (!chatId) return;
 
@@ -571,19 +593,24 @@ export function useChatMessagesQuery(
         const existing = supabase.getChannels().find(ch => ch.topic === `realtime:${channelName}`);
         if (existing) supabase.removeChannel(existing);
 
+        // Clear dedup set when switching chats
+        seenMessageIdsRef.current.clear();
+
         const channel = supabase
             .channel(channelName)
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'messages',
-                filter: `chat_id=eq.${chatId}`,
-            }, async (payload) => {
-                const newMsg = payload.new as any;
-                if (!newMsg) return;
+            // ── PRIMARY PATH: Broadcast for fast new message delivery (WhatsApp-style ~10–50ms) ──
+            // Sender broadcasts after DB insert; all recipients receive it here instantly.
+            // Sender's own broadcast is ignored via seenMessageIdsRef dedup guard.
+            .on('broadcast', { event: 'new_message' }, async (payload) => {
+                const newMsg = payload.payload as any;
+                if (!newMsg?.id) return;
+                // Dedup: skip if we have already processed this message locally (e.g. we sent it)
+                if (seenMessageIdsRef.current.has(newMsg.id)) return;
+                seenMessageIdsRef.current.add(newMsg.id);
                 await writeRemoteMessageToLocal(newMsg);
                 queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
             })
+            // ── CORRECTNESS PATH: postgres_changes for UPDATE (edits, read receipts, deletedFor) ──
             .on('postgres_changes', {
                 event: 'UPDATE',
                 schema: 'public',
@@ -595,6 +622,7 @@ export function useChatMessagesQuery(
                 await writeRemoteMessageToLocal(updated);
                 queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
             })
+            // ── CORRECTNESS PATH: postgres_changes for DELETE (delete for everyone) ──
             .on('postgres_changes', {
                 event: 'DELETE',
                 schema: 'public',
@@ -603,6 +631,7 @@ export function useChatMessagesQuery(
             }, async (payload) => {
                 const deleted = payload.old as any;
                 if (!deleted?.id) return;
+                seenMessageIdsRef.current.delete(deleted.id);
                 try {
                     await database.write(async () => {
                         const collection = database.get('messages');
@@ -616,9 +645,28 @@ export function useChatMessagesQuery(
                 }
                 queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
             })
+            // ── RECOVERY PATH: postgres_changes INSERT as fallback ──
+            // Catches messages the Broadcast missed (e.g. app was backgrounded, reconnected)
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'messages',
+                filter: `chat_id=eq.${chatId}`,
+            }, async (payload) => {
+                const newMsg = payload.new as any;
+                if (!newMsg?.id) return;
+                // Skip if already handled by Broadcast (dedup)
+                if (seenMessageIdsRef.current.has(newMsg.id)) return;
+                seenMessageIdsRef.current.add(newMsg.id);
+                await writeRemoteMessageToLocal(newMsg);
+                queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+            })
             .subscribe();
 
+        channelRef.current = channel;
+
         return () => {
+            channelRef.current = null;
             supabase.removeChannel(channel);
         };
     }, [chatId, queryClient, chatType]);

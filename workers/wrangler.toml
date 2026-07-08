@@ -3,10 +3,11 @@ main = "src/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Cron Triggers — daily trip lifecycle at 8:00 AM IST (2:30 AM UTC)
-# + daily cleanup of expired AI chats (30-day retention)
+# Cron Triggers:
+#   "30 2 * * *"   — daily at 8:00 AM IST (2:30 AM UTC) — trip lifecycle + AI chat cleanup
+#   "*/10 * * * *" — every 10 minutes — R2 deleted media cleanup (retry-safe)
 [triggers]
-crons = ["30 2 * * *"]
+crons = ["30 2 * * *", "*/10 * * * *"]
 
 # Workers AI binding (free tier: 10K neurons/day)
 [ai]

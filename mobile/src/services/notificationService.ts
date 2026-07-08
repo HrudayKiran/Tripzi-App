@@ -1,6 +1,7 @@
 import { getMessaging } from '@react-native-firebase/messaging';
-import { Platform, PermissionsAndroid } from 'react-native';
+import { Platform, PermissionsAndroid, AppState, AppStateStatus } from 'react-native';
 import { workersApi } from '../lib/workersApi';
+import { supabase } from '../lib/supabase';
 
 /**
  * Central notification service.
@@ -97,7 +98,6 @@ export async function registerPushToken(): Promise<void> {
 
       // Update profile to reflect denied status
       try {
-        const { supabase } = require('../lib/supabase');
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
           await supabase.from('profiles').update({
@@ -131,7 +131,6 @@ export async function registerPushToken(): Promise<void> {
 
     // Step 4: Update profile to reflect enabled notifications
     try {
-      const { supabase } = require('../lib/supabase');
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         await supabase.from('profiles').update({
@@ -139,7 +138,9 @@ export async function registerPushToken(): Promise<void> {
           notification_permission_status: 'granted',
         }).eq('id', session.user.id);
       }
-    } catch {}
+    } catch (e) {
+      if (__DEV__) console.warn('[Notifications] Failed to update profile push status:', e);
+    }
 
     if (__DEV__) console.log('[Notifications] Push token registered successfully.');
   } catch (error: any) {
@@ -266,6 +267,7 @@ export function setupForegroundHandler(
         android: {
           channelId: data?.channelId || 'chat_messages',
           smallIcon: 'ic_notification',
+          color: '#9d74f7',            // Brand purple — matches notification_icon_color in colors.xml
           pressAction: { id: 'default' },
         },
       });
@@ -452,4 +454,51 @@ export async function cancelAllScheduledNotifications(): Promise<void> {
   } catch (error: any) {
     if (__DEV__) console.error('[Notifications] Failed to cancel all notifications:', error?.message);
   }
+}
+
+// ─── Permission State Watcher ────────────────────────────────────────
+
+/**
+ * Watches for foreground app state transitions and syncs the OS notification
+ * permission status to the database.
+ *
+ * This catches the case where the user manually revokes notification permission
+ * from Android Settings while the app is backgrounded. On the next foreground
+ * event, the correct status is written to the DB so push token logic is accurate.
+ *
+ * Call this once from your root App component (alongside setupForegroundHandler).
+ * Returns an unsubscribe function.
+ */
+export function setupPermissionWatcher(): () => void {
+  let lastKnownGranted: boolean | null = null;
+
+  const handleAppStateChange = async (nextState: AppStateStatus) => {
+    if (nextState !== 'active') return;
+
+    try {
+      const currentlyGranted = await isNotificationPermissionGranted();
+
+      // Skip if status hasn't changed since last check
+      if (lastKnownGranted === currentlyGranted) return;
+      lastKnownGranted = currentlyGranted;
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const newStatus = currentlyGranted ? 'granted' : 'denied';
+      if (__DEV__) console.log(`[Notifications] Permission status changed → ${newStatus}, syncing to DB...`);
+
+      await supabase.from('profiles').update({
+        push_notifications_enabled: currentlyGranted,
+        notification_permission_status: newStatus,
+      }).eq('id', session.user.id);
+
+      if (__DEV__) console.log('[Notifications] Permission status synced to DB.');
+    } catch (err: any) {
+      if (__DEV__) console.warn('[Notifications] Permission watcher error:', err?.message);
+    }
+  };
+
+  const subscription = AppState.addEventListener('change', handleAppStateChange);
+  return () => subscription.remove();
 }

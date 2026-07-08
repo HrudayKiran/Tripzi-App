@@ -291,7 +291,9 @@ const EditProfileScreen = () => {
                         profile.name = name.trim();
                         profile.username = sanitized;
                         profile.photo_url = profileImage || null;
-                        profile.push_notifications_enabled = false;
+                        // push_notifications_enabled is intentionally omitted here —
+                        // WatermelonDB schema default (false) applies on create,
+                        // and the value must never be overwritten on profile edits.
                         profile.save_to_gallery = false;
                         profile.updated_at = Date.now();
                     });

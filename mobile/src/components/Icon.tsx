@@ -47,6 +47,8 @@ import { DotsSixVertical } from 'phosphor-react-native/src/icons/DotsSixVertical
 import { Download } from 'phosphor-react-native/src/icons/Download';
 import { Envelope } from 'phosphor-react-native/src/icons/Envelope';
 import { Equals } from 'phosphor-react-native/src/icons/Equals';
+import { Eye } from 'phosphor-react-native/src/icons/Eye';
+import { EyeSlash } from 'phosphor-react-native/src/icons/EyeSlash';
 import { FileText } from 'phosphor-react-native/src/icons/FileText';
 import { Flag } from 'phosphor-react-native/src/icons/Flag';
 import { FloppyDisk } from 'phosphor-react-native/src/icons/FloppyDisk';
@@ -55,6 +57,8 @@ import { Globe } from 'phosphor-react-native/src/icons/Globe';
 import { Hash } from 'phosphor-react-native/src/icons/Hash';
 import { House } from 'phosphor-react-native/src/icons/House';
 import { Image } from 'phosphor-react-native/src/icons/Image';
+import { Gps } from 'phosphor-react-native/src/icons/Gps';
+import { CircleNotch } from 'phosphor-react-native/src/icons/CircleNotch';
 import { Info } from 'phosphor-react-native/src/icons/Info';
 import { Key } from 'phosphor-react-native/src/icons/Key';
 import { Lightbulb } from 'phosphor-react-native/src/icons/Lightbulb';
@@ -80,6 +84,7 @@ import { Radio } from 'phosphor-react-native/src/icons/Radio';
 import { SignOut } from 'phosphor-react-native/src/icons/SignOut';
 import { Sparkle } from 'phosphor-react-native/src/icons/Sparkle';
 import { Star } from 'phosphor-react-native/src/icons/Star';
+import { Square } from 'phosphor-react-native/src/icons/Square';
 import { Sun } from 'phosphor-react-native/src/icons/Sun';
 import { ToggleLeft } from 'phosphor-react-native/src/icons/ToggleLeft';
 import { ToggleRight } from 'phosphor-react-native/src/icons/ToggleRight';
@@ -127,6 +132,8 @@ const ICONS = {
     Download,
     Envelope,
     Equals,
+    Eye,
+    EyeSlash,
     FileText,
     Flag,
     FloppyDisk,
@@ -135,6 +142,8 @@ const ICONS = {
     Hash,
     House,
     Image,
+    Gps,
+    CircleNotch,
     Info,
     Key,
     Lightbulb,
@@ -160,6 +169,7 @@ const ICONS = {
     SignOut,
     Sparkle,
     Star,
+    Square,
     Sun,
     ToggleLeft,
     ToggleRight,
