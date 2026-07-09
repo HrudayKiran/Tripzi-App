@@ -1,110 +1,42 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import { getStringPreference, PREFERENCE_KEYS, setStringPreference } from '../utils/preferences';
+import React, { createContext, useContext } from 'react';
+import { StatusBar } from 'expo-status-bar';
+import { useThemeStore, ThemeMode, ColorScheme } from '../store/themeStore';
+
+export type { ThemeMode, ColorScheme };
 
 type ThemeContextType = {
+    themeMode: ThemeMode;
+    setThemeMode: (mode: ThemeMode) => void;
     isDarkMode: boolean;
     toggleTheme: () => void;
     colors: ColorScheme;
 };
 
-type ColorScheme = {
-    background: string;
-    card: string;
-    text: string;
-    textSecondary: string;
-    border: string;
-    primary: string;
-    primaryLight: string;
-    secondary: string;
-    accent: string;
-    success: string;
-    warning: string;
-    error: string;
-    inputBackground: string;
-    headerBackground: string;
-    gradientStart: string;
-    gradientEnd: string;
-};
-
-const lightColors: ColorScheme = {
-    background: '#FFFFFF',
-    card: '#FFFFFF',
-    text: '#1a1a1a',
-    textSecondary: '#666666',
-    border: '#F3F4F6',
-    primary: '#9d74f7',
-    primaryLight: '#EEE6FF',
-    secondary: '#06B6D4',     // Cyan
-    accent: '#F59E0B',        // Amber
-    success: '#10B981',       // Emerald
-    warning: '#F97316',       // Orange
-    error: '#EF4444',         // Red
-    inputBackground: '#F9FAFB',
-    headerBackground: '#FFFFFF',
-    gradientStart: '#9d74f7',
-    gradientEnd: '#EC4899',   // Pink
-};
-
-const darkColors: ColorScheme = {
-    background: '#0F0F0F',
-    card: '#1A1A1A',
-    text: '#FFFFFF',
-    textSecondary: '#A0A0A0',
-    border: '#2A2A2A',
-    primary: '#9d74f7',
-    primaryLight: '#2D2145',
-    secondary: '#22D3EE',     // Light cyan
-    accent: '#FBBF24',        // Light amber
-    success: '#34D399',       // Light emerald
-    warning: '#FB923C',       // Light orange
-    error: '#F87171',         // Light red
-    inputBackground: '#1F1F1F',
-    headerBackground: '#1A1A1A',
-    gradientStart: '#9d74f7',
-    gradientEnd: '#F472B6',   // Light pink
-};
-
-const ThemeContext = createContext<ThemeContextType>({
-    isDarkMode: false,
-    toggleTheme: () => { },
-    colors: lightColors,
-});
+const ThemeContext = createContext<ThemeContextType | null>(null);
 
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
-    const [isDarkMode, setIsDarkMode] = useState(false);
-
-    useEffect(() => {
-        loadTheme();
-    }, []);
-
-    const loadTheme = async () => {
-        try {
-            const savedTheme = await getStringPreference(PREFERENCE_KEYS.theme);
-            if (savedTheme !== null) {
-                setIsDarkMode(savedTheme === 'dark');
-            }
-        } catch {
-            // Theme loading failed silently
-        }
-    };
-
-    const toggleTheme = async () => {
-        const newTheme = !isDarkMode;
-        setIsDarkMode(newTheme);
-        try {
-            await setStringPreference(PREFERENCE_KEYS.theme, newTheme ? 'dark' : 'light');
-        } catch {
-            // Theme saving failed silently
-        }
-    };
-
-    const colors = isDarkMode ? darkColors : lightColors;
+    const { themeMode, setThemeMode, isDarkMode, toggleTheme, colors } = useThemeStore();
 
     return (
-        <ThemeContext.Provider value={{ isDarkMode, toggleTheme, colors }}>
+        <ThemeContext.Provider value={{ themeMode, setThemeMode, isDarkMode, toggleTheme, colors }}>
+            <StatusBar style={isDarkMode ? 'light' : 'dark'} translucent backgroundColor="transparent" />
             {children}
         </ThemeContext.Provider>
     );
 };
 
-export const useTheme = () => useContext(ThemeContext);
+export const useTheme = () => {
+    const context = useContext(ThemeContext);
+    if (!context) {
+        // Fallback directly to the Zustand store if used outside the provider
+        const store = useThemeStore();
+        return {
+            themeMode: store.themeMode,
+            setThemeMode: store.setThemeMode,
+            isDarkMode: store.isDarkMode,
+            toggleTheme: store.toggleTheme,
+            colors: store.colors,
+        };
+    }
+    return context;
+};

@@ -42,3 +42,6 @@ yarn-error.*
 
 # secrets
 src/config/secrets.ts
+
+credentials/
+google-services.json

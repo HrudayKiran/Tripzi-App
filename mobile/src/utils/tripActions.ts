@@ -1,34 +1,38 @@
-import functions from '@react-native-firebase/functions';
-
-const callTripFunction = async <T = unknown>(
-    name: 'joinTrip' | 'leaveTrip' | 'cancelTrip' | 'deleteTrip' | 'rateTrip',
-    payload: Record<string, unknown>
-): Promise<T> => {
-    const callable = functions().httpsCallable(name);
-    const result = await callable(payload);
-    return (result?.data || {}) as T;
-};
+import { workersApi } from '../lib/workersApi';
+import * as Haptics from 'expo-haptics';
+import { getBooleanPreference, getStringPreference, PREFERENCE_KEYS } from './preferences';
 
 export const joinTrip = async (tripId: string) => {
-    return callTripFunction('joinTrip', { tripId });
+    const result = await workersApi('/trips/join', { body: { tripId } });
+    
+    try {
+        const hapticsEnabled = await getBooleanPreference(PREFERENCE_KEYS.hapticsEnabled, true);
+        const joinTripHaptics = await getBooleanPreference(PREFERENCE_KEYS.hapticsJoinTrip, true);
+        
+        if (hapticsEnabled && joinTripHaptics) {
+            const intensity = await getStringPreference(PREFERENCE_KEYS.hapticsIntensity, 'Medium');
+            
+            let style = Haptics.ImpactFeedbackStyle.Medium;
+            if (intensity === 'Light') style = Haptics.ImpactFeedbackStyle.Light;
+            if (intensity === 'Heavy') style = Haptics.ImpactFeedbackStyle.Heavy;
+            
+            await Haptics.impactAsync(style);
+        }
+    } catch (e) {
+        console.error('Failed to trigger haptics:', e);
+    }
+    
+    return result;
 };
 
 export const leaveTrip = async (tripId: string, reason: string) => {
-    return callTripFunction('leaveTrip', { tripId, reason });
+    return workersApi('/trips/leave', { body: { tripId, reason } });
 };
 
 export const cancelTrip = async (tripId: string, reason: string) => {
-    return callTripFunction('cancelTrip', { tripId, reason });
+    return workersApi('/trips/cancel', { body: { tripId, reason } });
 };
 
 export const deleteTrip = async (tripId: string, reason: string) => {
-    return callTripFunction('deleteTrip', { tripId, reason });
-};
-
-export const rateTrip = async (
-    tripId: string,
-    rating: number,
-    feedback: string
-) => {
-    return callTripFunction('rateTrip', { tripId, rating, feedback });
+    return workersApi('/trips/delete', { body: { tripId, reason } });
 };

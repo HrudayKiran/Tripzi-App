@@ -1,29 +1,33 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     TouchableOpacity,
-    FlatList,
     Image,
     ActivityIndicator,
     Alert,
     TextInput,
     Modal,
     ScrollView,
+    BackHandler,
 } from 'react-native';
+import { FlashList } from "@shopify/flash-list";
+
+const TypedFlashList = FlashList as any;
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, STATUS, NEUTRAL } from '../styles';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
-import functions from '@react-native-firebase/functions';
+import { supabase } from '../lib/supabase';
+import { workersApi } from '../lib/workersApi';
+import { uploadGroupChatImageToR2 } from '../utils/imageUpload';
 import { searchUsersByPrefix } from '../utils/searchUsers';
 import { getPublicProfilesByIds } from '../utils/publicProfiles';
 import DefaultAvatar from '../components/DefaultAvatar';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface Member {
     id: string;
@@ -39,20 +43,84 @@ interface GroupData {
     groupDescription?: string;
     participants: string[];
     createdBy: string;
-    collectionName?: 'chats' | 'group_chats';
+    collectionName?: 'group_chats';
     memberCount?: number;
     participantDetails?: { [uid: string]: { displayName?: string; photoURL?: string } };
 }
 
-const GroupInfoScreen = ({ navigation, route }) => {
-    const { chatId } = route.params;
-    const requestedCollection = route.params?.collectionName as 'chats' | 'group_chats' | undefined;
+const GroupInfoScreen = () => {
+    const router = useRouter();
+    const params = useLocalSearchParams();
+    const chatId = params.chatId as string || params.id as string;
+    const requestedCollection = 'group_chats';
     const { colors } = useTheme();
-    const currentUser = auth().currentUser;
+    const [currentUser, setCurrentUser] = useState<any>(null);
+    const [loadingAuth, setLoadingAuth] = useState(true);
 
-    const [group, setGroup] = useState<GroupData | null>(null);
-    const [members, setMembers] = useState<Member[]>([]);
-    const [loading, setLoading] = useState(true);
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data: { user } }) => {
+            setCurrentUser(user);
+            setLoadingAuth(false);
+        });
+    }, []);
+
+    const queryClient = useQueryClient();
+
+    const { data: groupData, isLoading: loadingGroup } = useQuery({
+        queryKey: ['groupChat', chatId],
+        queryFn: async () => {
+            const { data } = await supabase.from('group_chats').select('*').eq('id', chatId).maybeSingle();
+            return data;
+        },
+        enabled: !!chatId,
+    });
+
+    const { data: publicProfiles } = useQuery({
+        queryKey: ['publicProfiles', groupData?.participants],
+        queryFn: async () => {
+            if (!groupData?.participants) return new Map();
+            return getPublicProfilesByIds(groupData.participants);
+        },
+        enabled: !!groupData?.participants,
+    });
+
+    const group = groupData ? {
+        id: groupData.id,
+        collectionName: 'group_chats' as const,
+        groupName: groupData.group_name || 'Group',
+        groupIcon: groupData.group_icon || groupData.trip_image,
+        groupDescription: groupData.group_description,
+        participants: groupData.participants || [],
+        createdBy: groupData.created_by,
+        participantDetails: groupData.participant_details
+    } as GroupData : null;
+
+    const members = useMemo(() => {
+        if (!groupData || !publicProfiles) return [];
+        const admins = Array.isArray(groupData.admins) ? groupData.admins : [groupData.created_by];
+        const memberList = (groupData.participants || []).map((uid: string) => {
+            const profile = publicProfiles.get(uid);
+            const fallback = groupData.participant_details?.[uid] || {};
+            const isUserAdmin = admins.includes(uid) || groupData.created_by === uid;
+            return {
+                id: uid,
+                displayName: profile?.displayName || fallback.displayName || 'User',
+                photoURL: profile?.photoURL || fallback.photoURL || undefined,
+                role: isUserAdmin ? 'admin' : 'member',
+            };
+        });
+
+        memberList.sort((a: any, b: any) => {
+            if (a.role === 'admin' && b.role !== 'admin') return -1;
+            if (a.role !== 'admin' && b.role === 'admin') return 1;
+            return a.displayName.localeCompare(b.displayName);
+        });
+
+        return memberList;
+    }, [groupData, publicProfiles]);
+
+    const loading = loadingGroup || loadingAuth || !publicProfiles;
+
     const [editing, setEditing] = useState(false);
     const [editName, setEditName] = useState('');
     const [showAddMember, setShowAddMember] = useState(false);
@@ -60,76 +128,63 @@ const GroupInfoScreen = ({ navigation, route }) => {
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [searching, setSearching] = useState(false);
 
-    const isAdmin = group?.createdBy === currentUser?.uid;
-    const isCreator = group?.createdBy === currentUser?.uid;
+    const isCreator = group?.createdBy === currentUser?.id;
+    const isAdmin = useMemo(() => {
+        if (!currentUser || !groupData) return false;
+        const adminsList = Array.isArray(groupData.admins) ? groupData.admins : [groupData.created_by];
+        return adminsList.includes(currentUser.id) || groupData.created_by === currentUser.id;
+    }, [groupData, currentUser]);
 
     useEffect(() => {
-        loadGroup();
-    }, [chatId]);
-
-    const loadGroup = async () => {
-        try {
-            const collections: Array<'group_chats' | 'chats'> = requestedCollection
-                ? [requestedCollection, requestedCollection === 'chats' ? 'group_chats' : 'chats']
-                : ['group_chats', 'chats'];
-
-            let doc = null as any;
-            let collectionName: 'group_chats' | 'chats' | null = null;
-
-            for (const name of collections) {
-                const snapshot = await firestore().collection(name).doc(chatId).get();
-                if (snapshot.exists) {
-                    doc = snapshot;
-                    collectionName = name;
-                    break;
-                }
-            }
-
-            if (!doc || !doc.exists || !collectionName) {
-                Alert.alert('Error', 'Group not found.');
-                navigation.goBack();
-                return;
-            }
-
-            const data = { id: doc.id, collectionName, ...doc.data() } as GroupData;
-            setGroup(data);
-            setEditName(data.groupName);
-
-            // Load member details from public profile mirror.
-            const publicProfiles = await getPublicProfilesByIds(data.participants || []);
-            const memberList: Member[] = (data.participants || []).map((uid) => {
-                const profile = publicProfiles.get(uid);
-                const fallback = data.participantDetails?.[uid] || {};
-                return {
-                    id: uid,
-                    displayName: profile?.displayName || fallback.displayName || 'User',
-                    photoURL: profile?.photoURL || fallback.photoURL || undefined,
-                    role: data.createdBy === uid ? 'admin' : 'member',
-                };
-            });
-
-            // Sort: admins first, then alphabetically
-            memberList.sort((a, b) => {
-                if (a.role === 'admin' && b.role !== 'admin') return -1;
-                if (a.role !== 'admin' && b.role === 'admin') return 1;
-                return a.displayName.localeCompare(b.displayName);
-            });
-
-            setMembers(memberList);
-        } catch (error) {
-
-        } finally {
-            setLoading(false);
+        if (groupData?.group_name) {
+            setEditName(groupData.group_name);
         }
-    };
+    }, [groupData]);
+
+    useEffect(() => {
+        const backAction = () => {
+            if (showAddMember) {
+                setShowAddMember(false);
+                setSearchQuery('');
+                setSearchResults([]);
+                return true;
+            }
+            return false;
+        };
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+        return () => backHandler.remove();
+    }, [showAddMember]);
 
     const updateGroupName = async () => {
-        if (!editName.trim() || !isAdmin) return;
+        if (!editName.trim() || !isAdmin || !currentUser) return;
         try {
-            await firestore().collection(group?.collectionName || requestedCollection || 'group_chats').doc(chatId).update({
-                groupName: editName.trim(),
-            });
-            setGroup((prev) => prev ? { ...prev, groupName: editName.trim() } : null);
+            const table = 'group_chats';
+            const userProfile = publicProfiles?.get(currentUser.id);
+            const userDisplayName = userProfile?.displayName || currentUser.user_metadata?.full_name || 'Admin';
+            const systemText = `${userDisplayName} changed the group name to "${editName.trim()}"`;
+
+            await Promise.all([
+                supabase.from(table).update({
+                    group_name: editName.trim(),
+                    last_message: {
+                        text: systemText,
+                        sender_id: null,
+                        created_at: new Date().toISOString()
+                    },
+                    updated_at: new Date().toISOString()
+                }).eq('id', chatId),
+                supabase.from('messages').insert({
+                    chat_id: chatId,
+                    chat_type: 'group',
+                    sender_id: 'system',
+                    sender_name: 'System',
+                    type: 'system',
+                    text: systemText,
+                    status: 'sent'
+                })
+            ]);
+
+            queryClient.invalidateQueries({ queryKey: ['groupChat', chatId] });
             setEditing(false);
         } catch (error) {
             Alert.alert('Error', 'Failed to update group name.');
@@ -153,15 +208,36 @@ const GroupInfoScreen = ({ navigation, route }) => {
             });
 
             if (!result.canceled && result.assets[0]) {
-                const filename = `${Date.now()}_group.jpg`;
-                const storageRef = storage().ref(`groups/${currentUser.uid}/${filename}`);
-                await storageRef.putFile(result.assets[0].uri);
-                const downloadUrl = await storageRef.getDownloadURL();
+                const uploadResult = await uploadGroupChatImageToR2(result.assets[0].uri, currentUser.id, chatId);
+                if (uploadResult.success && uploadResult.url) {
+                    const table = 'group_chats';
+                    const userProfile = publicProfiles?.get(currentUser.id);
+                    const userDisplayName = userProfile?.displayName || currentUser.user_metadata?.full_name || 'Admin';
+                    const systemText = `${userDisplayName} changed this group's icon`;
 
-                await firestore().collection(group?.collectionName || requestedCollection || 'group_chats').doc(chatId).update({
-                    groupIcon: downloadUrl,
-                });
-                setGroup((prev) => prev ? { ...prev, groupIcon: downloadUrl } : null);
+                    await Promise.all([
+                        supabase.from(table).update({
+                            group_icon: uploadResult.url,
+                            last_message: {
+                                text: systemText,
+                                sender_id: null,
+                                created_at: new Date().toISOString()
+                            },
+                            updated_at: new Date().toISOString()
+                        }).eq('id', chatId),
+                        supabase.from('messages').insert({
+                            chat_id: chatId,
+                            chat_type: 'group',
+                            sender_id: 'system',
+                            sender_name: 'System',
+                            type: 'system',
+                            text: systemText,
+                            status: 'sent'
+                        })
+                    ]);
+
+                    queryClient.invalidateQueries({ queryKey: ['groupChat', chatId] });
+                }
             }
         } catch (error) {
             Alert.alert('Error', 'Failed to update group icon.');
@@ -179,7 +255,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
         try {
             const users = await searchUsersByPrefix(query, 10);
             const results = users.filter((user) =>
-                !group?.participants.includes(user.id) && user.id !== currentUser?.uid
+                !group?.participants.includes(user.id) && user.id !== currentUser?.id
             );
 
             setSearchResults(results);
@@ -193,23 +269,23 @@ const GroupInfoScreen = ({ navigation, route }) => {
     const addMember = async (user: any) => {
         if (!isAdmin || !group) return;
         try {
-                            await functions().httpsCallable('addGroupMember')({
-                                chatId,
-                                memberId: user.id,
-                                collectionName: group?.collectionName || requestedCollection || 'group_chats',
-                            });
+            await workersApi('/group_chats/add-member', { body: {
+                chatId,
+                memberId: user.id,
+                collectionName: 'group_chats',
+            } });
 
             setShowAddMember(false);
             setSearchQuery('');
             setSearchResults([]);
-            loadGroup();
+            queryClient.invalidateQueries({ queryKey: ['groupChat', chatId] });
         } catch (error) {
             Alert.alert('Error', 'Failed to add member.');
         }
     };
 
     const removeMember = (member: Member) => {
-        if (!isAdmin || member.id === currentUser?.uid) return;
+        if (!isAdmin || member.id === currentUser?.id) return;
 
         Alert.alert(
             'Remove Member',
@@ -221,13 +297,13 @@ const GroupInfoScreen = ({ navigation, route }) => {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await functions().httpsCallable('removeGroupMember')({
+                            await workersApi('/group_chats/remove-member', { body: {
                                 chatId,
                                 memberId: member.id,
-                                collectionName: group?.collectionName || requestedCollection || 'group_chats',
-                            });
+                                collectionName: 'group_chats',
+                            } });
 
-                            loadGroup();
+                            queryClient.invalidateQueries({ queryKey: ['groupChat', chatId] });
                         } catch (error) {
                             Alert.alert('Error', 'Failed to remove member.');
                         }
@@ -238,7 +314,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
     };
 
     const toggleAdmin = (member: Member) => {
-        if (!isCreator || member.id === currentUser?.uid) return;
+        if (!isCreator || member.id === currentUser?.id) return;
 
         const action = member.role === 'admin' ? 'remove as admin' : 'make admin';
         const newRole = member.role === 'admin' ? 'member' : 'admin';
@@ -252,20 +328,13 @@ const GroupInfoScreen = ({ navigation, route }) => {
                     text: 'Confirm',
                     onPress: async () => {
                         try {
-                            if (newRole === 'admin') {
-                                await functions().httpsCallable('promoteGroupAdmin')({
-                                    chatId,
-                                    memberId: member.id,
-                                    collectionName: group?.collectionName || requestedCollection || 'group_chats',
-                                });
-                            } else {
-                                await functions().httpsCallable('demoteGroupAdmin')({
-                                    chatId,
-                                    memberId: member.id,
-                                    collectionName: group?.collectionName || requestedCollection || 'group_chats',
-                                });
-                            }
-                            loadGroup();
+                            const endpoint = newRole === 'admin' ? '/group_chats/promote-admin' : '/group_chats/demote-admin';
+                            await workersApi(endpoint, { body: {
+                                chatId,
+                                memberId: member.id,
+                                collectionName: 'group_chats',
+                            } });
+                            queryClient.invalidateQueries({ queryKey: ['groupChat', chatId] });
                         } catch (error) {
                             Alert.alert('Error', 'Failed to update admin status.');
                         }
@@ -286,12 +355,12 @@ const GroupInfoScreen = ({ navigation, route }) => {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await functions().httpsCallable('leaveGroup')({
+                            await workersApi('/group_chats/leave', { body: {
                                 chatId,
-                                collectionName: group?.collectionName || requestedCollection || 'group_chats',
-                            });
+                                collectionName: 'group_chats',
+                            } });
 
-                            navigation.navigate('ChatsList');
+                            router.replace('/');
                         } catch (error) {
                             Alert.alert('Error', 'Failed to leave group.');
                         }
@@ -302,13 +371,13 @@ const GroupInfoScreen = ({ navigation, route }) => {
     };
 
     const renderMember = ({ item }: { item: Member }) => {
-        const isMe = item.id === currentUser?.uid;
+        const isMe = item.id === currentUser?.id;
 
         return (
             <TouchableOpacity
                 style={[styles.memberItem, { backgroundColor: colors.card }]}
                 onPress={() => {
-                    if (!isMe) navigation.navigate('UserProfile', { userId: item.id });
+                    if (!isMe) router.push({ pathname: '/profile/[id]', params: { id: item.id } });
                 }}
                 onLongPress={() => {
                     if (isAdmin && !isMe) {
@@ -338,7 +407,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
                         {item.role === 'admin' ? 'Admin' : 'Member'}
                     </Text>
                 </View>
-                {!isMe && <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />}
+                {!isMe && <Icon name="CaretRight" size={20} color={colors.textSecondary} />}
             </TouchableOpacity>
         );
     };
@@ -357,8 +426,8 @@ const GroupInfoScreen = ({ navigation, route }) => {
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
             {/* Header */}
             <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-                    <Ionicons name="arrow-back" size={24} color={colors.text} />
+                <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+                    <Icon name="CaretLeft" size={24} color={colors.text} />
                 </TouchableOpacity>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Group Info</Text>
             </View>
@@ -375,7 +444,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
                         />
                         {isAdmin && (
                             <View style={[styles.editIconBadge, { backgroundColor: colors.primary }]}>
-                                <Ionicons name="camera" size={14} color="#fff" />
+                                <Icon name="Camera" size={14} color="#fff" />
                             </View>
                         )}
                     </TouchableOpacity>
@@ -389,16 +458,16 @@ const GroupInfoScreen = ({ navigation, route }) => {
                                 autoFocus
                             />
                             <TouchableOpacity onPress={updateGroupName}>
-                                <Ionicons name="checkmark" size={24} color={colors.primary} />
+                                <Icon name="Check" size={24} color={colors.primary} />
                             </TouchableOpacity>
                             <TouchableOpacity onPress={() => setEditing(false)}>
-                                <Ionicons name="close" size={24} color={colors.textSecondary} />
+                                <Icon name="X" size={24} color={colors.textSecondary} />
                             </TouchableOpacity>
                         </View>
                     ) : (
                         <TouchableOpacity style={styles.nameRow} onPress={isAdmin ? () => setEditing(true) : undefined}>
                             <Text style={[styles.groupName, { color: colors.text }]}>{group?.groupName}</Text>
-                            {isAdmin && <Ionicons name="pencil" size={16} color={colors.textSecondary} style={{ marginLeft: 8 }} />}
+                            {isAdmin && <Icon name="PencilSimple" size={16} color={colors.textSecondary} style={{ marginLeft: 8 }} />}
                         </TouchableOpacity>
                     )}
 
@@ -414,7 +483,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
                             style={[styles.actionButton, { backgroundColor: colors.card }]}
                             onPress={() => setShowAddMember(true)}
                         >
-                            <Ionicons name="person-add" size={20} color={colors.primary} />
+                            <Icon name="UserPlus" size={20} color={colors.primary} />
                             <Text style={[styles.actionText, { color: colors.text }]}>Add Members</Text>
                         </TouchableOpacity>
                     )}
@@ -423,7 +492,7 @@ const GroupInfoScreen = ({ navigation, route }) => {
                         style={[styles.actionButton, { backgroundColor: colors.card }]}
                         onPress={leaveGroup}
                     >
-                        <Ionicons name="exit-outline" size={20} color="#EF4444" />
+                        <Icon name="SignOut" size={20} color="#EF4444" />
                         <Text style={[styles.actionText, { color: '#EF4444' }]}>Leave Group</Text>
                     </TouchableOpacity>
                 </View>
@@ -431,68 +500,77 @@ const GroupInfoScreen = ({ navigation, route }) => {
                 {/* Members */}
                 <View style={styles.membersSection}>
                     <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>MEMBERS</Text>
-                    <FlatList
+                    <TypedFlashList
                         data={members}
                         renderItem={renderMember}
                         keyExtractor={(item) => item.id}
                         scrollEnabled={false}
+                        estimatedItemSize={60}
                     />
                 </View>
             </ScrollView>
 
             {/* Add Member Modal */}
-            <Modal visible={showAddMember} animationType="slide" transparent>
-                <View style={[styles.modalContainer, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-                    <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
-                        <View style={styles.modalHeader}>
-                            <Text style={[styles.modalTitle, { color: colors.text }]}>Add Members</Text>
-                            <TouchableOpacity onPress={() => { setShowAddMember(false); setSearchQuery(''); setSearchResults([]); }}>
-                                <Ionicons name="close" size={24} color={colors.text} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
-                            <Ionicons name="search" size={20} color={colors.textSecondary} />
-                            <TextInput
-                                style={[styles.searchInput, { color: colors.text }]}
-                                placeholder="Search users..."
-                                placeholderTextColor={colors.textSecondary}
-                                value={searchQuery}
-                                onChangeText={handleSearch}
-                                autoFocus
-                            />
-                        </View>
-
-                        {searching ? (
-                            <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 20 }} />
-                        ) : (
-                            <FlatList
-                                data={searchResults}
-                                keyExtractor={(item) => item.id}
-                                renderItem={({ item }) => (
-                                    <TouchableOpacity
-                                        style={[styles.searchResultItem, { backgroundColor: colors.card }]}
-                                        onPress={() => addMember(item)}
-                                    >
-                                        <DefaultAvatar
-                                            uri={item.photoURL}
-                                            name={item.displayName}
-                                            size={40}
-                                        />
-                                        <Text style={[styles.searchName, { color: colors.text }]}>{item.displayName}</Text>
-                                        <Ionicons name="add-circle" size={24} color={colors.primary} />
-                                    </TouchableOpacity>
-                                )}
-                                ListEmptyComponent={
-                                    searchQuery.length > 0 ? (
-                                        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No users found</Text>
-                                    ) : null
-                                }
-                                contentContainerStyle={{ paddingTop: SPACING.md }}
-                            />
-                        )}
+            <Modal
+                visible={showAddMember}
+                animationType="slide"
+                transparent={false}
+                onRequestClose={() => {
+                    setShowAddMember(false);
+                    setSearchQuery('');
+                    setSearchResults([]);
+                }}
+            >
+                <SafeAreaView style={[styles.fullScreenModal, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+                    <View style={styles.modalHeader}>
+                        <Text style={[styles.modalTitle, { color: colors.text }]}>Add Members</Text>
+                        <TouchableOpacity onPress={() => { setShowAddMember(false); setSearchQuery(''); setSearchResults([]); }}>
+                            <Icon name="X" size={24} color={colors.text} />
+                        </TouchableOpacity>
                     </View>
-                </View>
+
+                    <View style={[styles.searchContainer, { backgroundColor: colors.card, marginBottom: SPACING.md }]}>
+                        <Icon name="MagnifyingGlass" size={20} color={colors.textSecondary} />
+                        <TextInput
+                            style={[styles.searchInput, { color: colors.text }]}
+                            placeholder="Search users..."
+                            placeholderTextColor={colors.textSecondary}
+                            value={searchQuery}
+                            onChangeText={handleSearch}
+                            autoFocus
+                        />
+                    </View>
+
+                    {searching ? (
+                        <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 20 }} />
+                    ) : (
+                        <TypedFlashList
+                            data={searchResults}
+                            keyExtractor={(item) => item.id}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity
+                                    style={[styles.searchResultItem, { backgroundColor: colors.card }]}
+                                    onPress={() => addMember(item)}
+                                >
+                                    <DefaultAvatar
+                                        uri={item.photoURL}
+                                        name={item.displayName}
+                                        size={40}
+                                    />
+                                    <Text style={[styles.searchName, { color: colors.text }]}>{item.displayName}</Text>
+                                    <Icon name="PlusCircle" size={24} color={colors.primary} />
+                                </TouchableOpacity>
+                            )}
+                            ListEmptyComponent={
+                                searchQuery.length > 0 ? (
+                                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No users found</Text>
+                                ) : null
+                            }
+                            contentContainerStyle={{ paddingTop: SPACING.md }}
+                            estimatedItemSize={60}
+                        />
+                    )}
+                </SafeAreaView>
             </Modal>
         </SafeAreaView>
     );
@@ -525,6 +603,7 @@ const styles = StyleSheet.create({
     memberInfo: { flex: 1, marginLeft: SPACING.md },
     memberName: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.medium },
     memberRole: { fontSize: FONT_SIZE.xs, marginTop: 2 },
+    fullScreenModal: { flex: 1, paddingHorizontal: SPACING.lg, paddingTop: SPACING.md },
     modalContainer: { flex: 1, justifyContent: 'flex-end' },
     modalContent: { borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, maxHeight: '80%', padding: SPACING.xl },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },

@@ -1,0 +1,1164 @@
+diff --git a/node_modules/react-native-reanimated-dnd/lib/components/Sortable.js b/node_modules/react-native-reanimated-dnd/lib/components/Sortable.js
+index 69cf235..4b19681 100644
+--- a/node_modules/react-native-reanimated-dnd/lib/components/Sortable.js
++++ b/node_modules/react-native-reanimated-dnd/lib/components/Sortable.js
+@@ -1 +1 @@
+-import React,{memo,useCallback,useMemo}from"react";import{StyleSheet}from"react-native";import Animated from"react-native-reanimated";import{GestureHandlerRootView,FlatList,ScrollView}from"react-native-gesture-handler";import{DropProvider}from"../context/DropContext";import{SortableDirection}from"../types/sortable";import{useSortableList}from"../hooks/useSortableList";import{useHorizontalSortableList}from"../hooks/useHorizontalSortableList";import{dataHash}from"./sortableUtils";const AnimatedFlatList=Animated.createAnimatedComponent(FlatList);const AnimatedScrollView=Animated.createAnimatedComponent(ScrollView);function SortableComponent({data,renderItem,direction=SortableDirection.Vertical,itemHeight,itemWidth,gap=0,paddingHorizontal=0,enableDynamicHeights=false,estimatedItemHeight=60,onHeightsMeasured,style,contentContainerStyle,itemKeyExtractor=item=>item.id,useFlatList=true}){const isDynamicHeightMode=useMemo((()=>{if(direction===SortableDirection.Horizontal){return false}if(enableDynamicHeights){return true}if(typeof itemHeight==="number"){return false}if(itemHeight===undefined){return false}return true}),[enableDynamicHeights,itemHeight,direction]);if(direction===SortableDirection.Vertical&&!isDynamicHeightMode&&!itemHeight){throw new Error("itemHeight is required when direction is vertical and not using dynamic heights")}if(direction===SortableDirection.Horizontal&&!itemWidth){throw new Error("itemWidth is required when direction is horizontal")}if(direction===SortableDirection.Horizontal){return React.createElement(HorizontalSortableContent,{data,renderItem,direction,itemWidth,gap,paddingHorizontal,style,contentContainerStyle,itemKeyExtractor,useFlatList})}return React.createElement(VerticalSortableContent,{data,renderItem,direction,itemHeight,enableDynamicHeights,estimatedItemHeight,onHeightsMeasured,style,contentContainerStyle,itemKeyExtractor,useFlatList})}function VerticalSortableContent({data,renderItem,direction,itemHeight,enableDynamicHeights,estimatedItemHeight,onHeightsMeasured,style,contentContainerStyle,itemKeyExtractor,useFlatList}){const{scrollViewRef,dropProviderRef,handleScroll,handleScrollEnd,contentHeight,getItemProps}=useSortableList({data,itemHeight,enableDynamicHeights,estimatedItemHeight,onHeightsMeasured,itemKeyExtractor});const memoizedVerticalRenderItem=useCallback((({item,index})=>{const itemProps=getItemProps(item,index);const sortableItemProps={item,index,direction:SortableDirection.Vertical,...itemProps};return renderItem(sortableItemProps)}),[getItemProps,renderItem]);return React.createElement(GestureHandlerRootView,{style:styles.flex},React.createElement(DropProvider,{ref:dropProviderRef},useFlatList?React.createElement(AnimatedFlatList,{ref:scrollViewRef,data,keyExtractor:itemKeyExtractor,renderItem:memoizedVerticalRenderItem,onScroll:handleScroll,scrollEventThrottle:16,style:[styles.scrollView,style],contentContainerStyle:[{height:contentHeight},contentContainerStyle],onScrollEndDrag:handleScrollEnd,onMomentumScrollEnd:handleScrollEnd,simultaneousHandlers:dropProviderRef,showsVerticalScrollIndicator:false}):React.createElement(AnimatedScrollView,{ref:scrollViewRef,onScroll:handleScroll,scrollEventThrottle:16,style:[styles.scrollView,style],contentContainerStyle:[{height:contentHeight},contentContainerStyle],onScrollEndDrag:handleScrollEnd,onMomentumScrollEnd:handleScrollEnd,simultaneousHandlers:dropProviderRef},data.map(((item,index)=>{const itemProps=getItemProps(item,index);const sortableItemProps={item,index,direction:SortableDirection.Vertical,...itemProps};return renderItem(sortableItemProps)})))))}function HorizontalSortableContent({data,renderItem,direction,itemWidth,gap=0,paddingHorizontal=0,style,contentContainerStyle,itemKeyExtractor,useFlatList}){const{scrollViewRef,dropProviderRef,handleScroll,handleScrollEnd,contentWidth,getItemProps}=useHorizontalSortableList({data,itemWidth,gap,paddingHorizontal,itemKeyExtractor});const memoizedHorizontalRenderItem=useCallback((({item,index})=>{const itemProps=getItemProps(item,index);const sortableItemProps={item,index,direction:SortableDirection.Horizontal,autoScrollHorizontalDirection:itemProps.autoScrollDirection,...itemProps};return renderItem(sortableItemProps)}),[getItemProps,renderItem]);return React.createElement(GestureHandlerRootView,{style:styles.flex},React.createElement(DropProvider,{ref:dropProviderRef},useFlatList?React.createElement(AnimatedFlatList,{ref:scrollViewRef,data,keyExtractor:itemKeyExtractor,horizontal:true,renderItem:memoizedHorizontalRenderItem,onScroll:handleScroll,scrollEventThrottle:16,style:[styles.scrollView,style],contentContainerStyle:[{width:contentWidth},contentContainerStyle],onScrollEndDrag:handleScrollEnd,onMomentumScrollEnd:handleScrollEnd,simultaneousHandlers:dropProviderRef,showsHorizontalScrollIndicator:false}):React.createElement(AnimatedScrollView,{ref:scrollViewRef,onScroll:handleScroll,scrollEventThrottle:16,horizontal:true,style:[styles.scrollView,style],contentContainerStyle:[{width:contentWidth},contentContainerStyle],onScrollEndDrag:handleScrollEnd,onMomentumScrollEnd:handleScrollEnd,simultaneousHandlers:dropProviderRef,showsHorizontalScrollIndicator:false},data.map(((item,index)=>{const itemProps=getItemProps(item,index);const sortableItemProps={item,index,direction:SortableDirection.Horizontal,autoScrollHorizontalDirection:itemProps.autoScrollDirection,...itemProps};return renderItem(sortableItemProps)})))))}export const Sortable=memo((({data,renderItem,...props})=>{const dataHashKey=dataHash(data);return React.createElement(SortableComponent,{data,renderItem,...props,key:dataHashKey})}));const styles=StyleSheet.create({flex:{flex:1},scrollView:{flex:1,position:"relative",backgroundColor:"white"}});
+\ No newline at end of file
++import React,{memo,useCallback,useMemo}from"react";import{StyleSheet}from"react-native";import Animated from"react-native-reanimated";import{GestureHandlerRootView,FlatList,ScrollView}from"react-native-gesture-handler";import{DropProvider}from"../context/DropContext";import{SortableDirection}from"../types/sortable";import{useSortableList}from"../hooks/useSortableList";import{useHorizontalSortableList}from"../hooks/useHorizontalSortableList";import{dataHash}from"./sortableUtils";const AnimatedFlatList=Animated.createAnimatedComponent(FlatList);const AnimatedScrollView=Animated.createAnimatedComponent(ScrollView);function SortableComponent({data,renderItem,direction=SortableDirection.Vertical,itemHeight,itemWidth,gap=0,paddingHorizontal=0,enableDynamicHeights=false,estimatedItemHeight=60,onHeightsMeasured,style,contentContainerStyle,itemKeyExtractor=item=>item.id,useFlatList=true,...scrollProps}){const isDynamicHeightMode=useMemo((()=>{if(direction===SortableDirection.Horizontal){return false}if(enableDynamicHeights){return true}if(typeof itemHeight==="number"){return false}if(itemHeight===undefined){return false}return true}),[enableDynamicHeights,itemHeight,direction]);if(direction===SortableDirection.Vertical&&!isDynamicHeightMode&&!itemHeight){throw new Error("itemHeight is required when direction is vertical and not using dynamic heights")}if(direction===SortableDirection.Horizontal&&!itemWidth){throw new Error("itemWidth is required when direction is horizontal")}if(direction===SortableDirection.Horizontal){return React.createElement(HorizontalSortableContent,{data,renderItem,direction,itemWidth,gap,paddingHorizontal,style,contentContainerStyle,itemKeyExtractor,useFlatList,...scrollProps})}return React.createElement(VerticalSortableContent,{data,renderItem,direction,itemHeight,enableDynamicHeights,estimatedItemHeight,onHeightsMeasured,style,contentContainerStyle,itemKeyExtractor,useFlatList,...scrollProps})}function VerticalSortableContent({data,renderItem,direction,itemHeight,enableDynamicHeights,estimatedItemHeight,onHeightsMeasured,style,contentContainerStyle,itemKeyExtractor,useFlatList,...scrollProps}){const{scrollViewRef,dropProviderRef,handleScroll,handleScrollEnd,contentHeight,getItemProps}=useSortableList({data,itemHeight,enableDynamicHeights,estimatedItemHeight,onHeightsMeasured,itemKeyExtractor});const memoizedVerticalRenderItem=useCallback((({item,index})=>{const itemProps=getItemProps(item,index);const sortableItemProps={item,index,direction:SortableDirection.Vertical,...itemProps};return renderItem(sortableItemProps)}),[getItemProps,renderItem]);const combinedOnScrollEndDrag=(e)=>{handleScrollEnd(e);if(scrollProps.onScrollEndDrag)scrollProps.onScrollEndDrag(e);};const combinedOnMomentumScrollEnd=(e)=>{handleScrollEnd(e);if(scrollProps.onMomentumScrollEnd)scrollProps.onMomentumScrollEnd(e);};return React.createElement(GestureHandlerRootView,{style:styles.flex},React.createElement(DropProvider,{ref:dropProviderRef},useFlatList?React.createElement(AnimatedFlatList,{ref:scrollViewRef,data,keyExtractor:itemKeyExtractor,renderItem:memoizedVerticalRenderItem,onScroll:handleScroll,scrollEventThrottle:16,style:[styles.scrollView,style],contentContainerStyle:[{height:contentHeight},contentContainerStyle],onScrollBeginDrag:scrollProps.onScrollBeginDrag,onScrollEndDrag:combinedOnScrollEndDrag,onMomentumScrollEnd:combinedOnMomentumScrollEnd,simultaneousHandlers:dropProviderRef,showsVerticalScrollIndicator:false}):React.createElement(AnimatedScrollView,{ref:scrollViewRef,onScroll:handleScroll,scrollEventThrottle:16,style:[styles.scrollView,style],contentContainerStyle:[{height:contentHeight},contentContainerStyle],onScrollBeginDrag:scrollProps.onScrollBeginDrag,onScrollEndDrag:combinedOnScrollEndDrag,onMomentumScrollEnd:combinedOnMomentumScrollEnd,simultaneousHandlers:dropProviderRef},data.map(((item,index)=>{const itemProps=getItemProps(item,index);const sortableItemProps={item,index,direction:SortableDirection.Vertical,...itemProps};return renderItem(sortableItemProps)})))))}function HorizontalSortableContent({data,renderItem,direction,itemWidth,gap=0,paddingHorizontal=0,style,contentContainerStyle,itemKeyExtractor,useFlatList}){const{scrollViewRef,dropProviderRef,handleScroll,handleScrollEnd,contentWidth,getItemProps}=useHorizontalSortableList({data,itemWidth,gap,paddingHorizontal,itemKeyExtractor});const memoizedHorizontalRenderItem=useCallback((({item,index})=>{const itemProps=getItemProps(item,index);const sortableItemProps={item,index,direction:SortableDirection.Horizontal,autoScrollHorizontalDirection:itemProps.autoScrollDirection,...itemProps};return renderItem(sortableItemProps)}),[getItemProps,renderItem]);return React.createElement(GestureHandlerRootView,{style:styles.flex},React.createElement(DropProvider,{ref:dropProviderRef},useFlatList?React.createElement(AnimatedFlatList,{ref:scrollViewRef,data,keyExtractor:itemKeyExtractor,horizontal:true,renderItem:memoizedHorizontalRenderItem,onScroll:handleScroll,scrollEventThrottle:16,style:[styles.scrollView,style],contentContainerStyle:[{width:contentWidth},contentContainerStyle],onScrollEndDrag:handleScrollEnd,onMomentumScrollEnd:handleScrollEnd,simultaneousHandlers:dropProviderRef,showsHorizontalScrollIndicator:false}):React.createElement(AnimatedScrollView,{ref:scrollViewRef,onScroll:handleScroll,scrollEventThrottle:16,horizontal:true,style:[styles.scrollView,style],contentContainerStyle:[{width:contentWidth},contentContainerStyle],onScrollEndDrag:handleScrollEnd,onMomentumScrollEnd:handleScrollEnd,simultaneousHandlers:dropProviderRef,showsHorizontalScrollIndicator:false},data.map(((item,index)=>{const itemProps=getItemProps(item,index);const sortableItemProps={item,index,direction:SortableDirection.Horizontal,autoScrollHorizontalDirection:itemProps.autoScrollDirection,...itemProps};return renderItem(sortableItemProps)})))))}export const Sortable=memo((({data,renderItem,...props})=>{const dataHashKey=dataHash(data);return React.createElement(SortableComponent,{data,renderItem,...props,key:dataHashKey})}));const styles=StyleSheet.create({flex:{flex:1},scrollView:{flex:1,position:"relative",backgroundColor:"transparent"}});
+\ No newline at end of file
+diff --git a/node_modules/react-native-reanimated-dnd/lib/components/SortableGrid.js b/node_modules/react-native-reanimated-dnd/lib/components/SortableGrid.js
+index ea84a5f..49f22a2 100644
+--- a/node_modules/react-native-reanimated-dnd/lib/components/SortableGrid.js
++++ b/node_modules/react-native-reanimated-dnd/lib/components/SortableGrid.js
+@@ -1 +1 @@
+-import React,{memo,useCallback}from"react";import{StyleSheet,View}from"react-native";import Animated from"react-native-reanimated";import{GestureHandlerRootView,ScrollView}from"react-native-gesture-handler";import{DropProvider}from"../context/DropContext";import{GridOrientation,GridStrategy}from"../types/grid";import{useGridSortableList}from"../hooks/useGridSortableList";const AnimatedScrollView=Animated.createAnimatedComponent(ScrollView);function SortableGridComponent({data,renderItem,dimensions,orientation=GridOrientation.Vertical,strategy=GridStrategy.Insert,style,contentContainerStyle,itemKeyExtractor=item=>item.id,scrollEnabled=true}){if(!dimensions.itemWidth||!dimensions.itemHeight){throw new Error("SortableGrid requires itemWidth and itemHeight in dimensions")}if(orientation===GridOrientation.Vertical&&!dimensions.columns){throw new Error("SortableGrid requires columns in dimensions when orientation is vertical")}if(orientation===GridOrientation.Horizontal&&!dimensions.rows){throw new Error("SortableGrid requires rows in dimensions when orientation is horizontal")}const{scrollViewRef,dropProviderRef,handleScroll,handleScrollEnd,contentWidth,contentHeight,getItemProps}=useGridSortableList({data,dimensions,orientation,strategy,itemKeyExtractor});const renderGridItems=useCallback((()=>data.map(((item,index)=>{const itemProps=getItemProps(item,index);const renderItemProps={item,index,...itemProps};return renderItem(renderItemProps)}))),[data,getItemProps,renderItem]);return React.createElement(GestureHandlerRootView,{style:styles.flex},React.createElement(DropProvider,{ref:dropProviderRef},React.createElement(AnimatedScrollView,{ref:scrollViewRef,onScroll:handleScroll,scrollEventThrottle:16,scrollEnabled,style:[styles.scrollView,style],contentContainerStyle,onScrollEndDrag:handleScrollEnd,onMomentumScrollEnd:handleScrollEnd,simultaneousHandlers:dropProviderRef,showsVerticalScrollIndicator:false,showsHorizontalScrollIndicator:false},React.createElement(View,{style:{width:contentWidth,height:contentHeight,position:"relative"}},renderGridItems()))))}export const SortableGrid=memo((({data,renderItem,...props})=>React.createElement(SortableGridComponent,{data,renderItem,...props})));const styles=StyleSheet.create({flex:{flex:1},scrollView:{flex:1,position:"relative"}});
+\ No newline at end of file
++import React,{memo,useCallback}from"react";import{StyleSheet,View}from"react-native";import Animated from"react-native-reanimated";import{GestureHandlerRootView,ScrollView}from"react-native-gesture-handler";import{DropProvider}from"../context/DropContext";import{GridOrientation,GridStrategy}from"../types/grid";import{useGridSortableList}from"../hooks/useGridSortableList";import{dataHash}from"./sortableUtils";const AnimatedScrollView=Animated.createAnimatedComponent(ScrollView);function SortableGridComponent({data,renderItem,dimensions,orientation=GridOrientation.Vertical,strategy=GridStrategy.Insert,style,contentContainerStyle,itemKeyExtractor=item=>item.id,scrollEnabled=true,...scrollProps}){if(!dimensions.itemWidth||!dimensions.itemHeight){throw new Error("SortableGrid requires itemWidth and itemHeight in dimensions")}if(orientation===GridOrientation.Vertical&&!dimensions.columns){throw new Error("SortableGrid requires columns in dimensions when orientation is vertical")}if(orientation===GridOrientation.Horizontal&&!dimensions.rows){throw new Error("SortableGrid requires rows in dimensions when orientation is horizontal")}const{scrollViewRef,dropProviderRef,handleScroll,handleScrollEnd,contentWidth,contentHeight,getItemProps}=useGridSortableList({data,dimensions,orientation,strategy,itemKeyExtractor});const renderGridItems=useCallback((()=>data.map(((item,index)=>{const itemProps=getItemProps(item,index);const renderItemProps={item,index,...itemProps};return renderItem(renderItemProps)}))),[data,getItemProps,renderItem]);const combinedOnScroll=handleScroll;const combinedOnScrollEndDrag=(e)=>{handleScrollEnd(e);if(scrollProps.onScrollEndDrag)scrollProps.onScrollEndDrag(e);};const combinedOnMomentumScrollEnd=(e)=>{handleScrollEnd(e);if(scrollProps.onMomentumScrollEnd)scrollProps.onMomentumScrollEnd(e);};return React.createElement(GestureHandlerRootView,{style:styles.flex},React.createElement(DropProvider,{ref:dropProviderRef},React.createElement(AnimatedScrollView,{ref:scrollViewRef,onScroll:handleScroll,scrollEventThrottle:16,scrollEnabled,style:[styles.scrollView,style],contentContainerStyle,onScrollBeginDrag:scrollProps.onScrollBeginDrag,onScrollEndDrag:combinedOnScrollEndDrag,onMomentumScrollEnd:combinedOnMomentumScrollEnd,simultaneousHandlers:dropProviderRef,showsVerticalScrollIndicator:false,showsHorizontalScrollIndicator:false},React.createElement(View,{style:{width:contentWidth,height:contentHeight,position:"relative"}},renderGridItems()))))}export const SortableGrid=memo((({data,renderItem,...props})=>{const dataHashKey=dataHash(data);return React.createElement(SortableGridComponent,{data,renderItem,...props,key:dataHashKey})}));const styles=StyleSheet.create({flex:{flex:1},scrollView:{flex:1,position:"relative"}});
+\ No newline at end of file
+diff --git a/node_modules/react-native-reanimated-dnd/lib/hooks/useGridSortable.js b/node_modules/react-native-reanimated-dnd/lib/hooks/useGridSortable.js
+index 8ad7758..e745757 100644
+--- a/node_modules/react-native-reanimated-dnd/lib/hooks/useGridSortable.js
++++ b/node_modules/react-native-reanimated-dnd/lib/hooks/useGridSortable.js
+@@ -1 +1,254 @@
+-import{useCallback,useState,useRef}from"react";import{useAnimatedReaction,useAnimatedStyle,useSharedValue,withSpring,withTiming}from"react-native-reanimated";import{Gesture}from"react-native-gesture-handler";import{scheduleOnRN}from"react-native-worklets";import{GridScrollDirection,GridOrientation,GridStrategy}from"../types/grid";import{setGridPosition,setGridAutoScroll,calculateGridContentDimensions}from"../utils/gridCalculations";export function useGridSortable(options){const{id,positions,scrollY,scrollX,autoScrollDirection,itemsCount,dimensions,orientation,strategy=GridStrategy.Insert,containerWidth=500,containerHeight=500,activationDelay,onMove,onDragStart,onDrop,onDragging,isBeingRemoved=false}=options;const[isMoving,setIsMoving]=useState(false);const[hasHandle,setHasHandle]=useState(false);const registerHandle=useCallback((registered=>{setHasHandle(registered)}),[]);const movingSV=useSharedValue(false);const currentOverItemId=useSharedValue(null);const onDraggingLastCallTimestamp=useSharedValue(0);const THROTTLE_INTERVAL=50;const initialPositionRef=useRef(null);if(initialPositionRef.current===null){const posArr=positions.get();const pos=posArr===null||posArr===void 0?void 0:posArr[id];initialPositionRef.current=pos?{x:pos.x,y:pos.y}:{x:0,y:0}}const initialPosition=initialPositionRef.current;const positionX=useSharedValue(initialPosition.x);const positionY=useSharedValue(initialPosition.y);const topValue=useSharedValue(initialPosition.y);const leftValue=useSharedValue(initialPosition.x);const targetScrollY=useSharedValue(0);const targetScrollX=useSharedValue(0);const initialItemContentX=useSharedValue(0);const initialItemContentY=useSharedValue(0);const initialFingerAbsoluteX=useSharedValue(0);const initialFingerAbsoluteY=useSharedValue(0);const initialScrollY=useSharedValue(0);const initialScrollX=useSharedValue(0);const calculatedContainerHeight=useRef(containerHeight).current;const calculatedContainerWidth=useRef(containerWidth).current;useAnimatedReaction((()=>({x:positionX.value,y:positionY.value})),((current,previous)=>{var _a;if(!movingSV.value){return}if(previous!==null&&current.x===previous.x&&current.y===previous.y){return}const{itemWidth,itemHeight,columnGap=0,rowGap=0,columns=3}=dimensions;const clampedColumn=Math.min(Math.max(0,Math.round(current.x/(itemWidth+columnGap))),(orientation===GridOrientation.Vertical?columns:Infinity)-1);const clampedRow=Math.floor(current.y/(itemHeight+rowGap));let targetIndex;if(orientation===GridOrientation.Vertical){targetIndex=clampedRow*columns+clampedColumn}else{const rows=(_a=dimensions.rows)!==null&&_a!==void 0?_a:3;targetIndex=clampedColumn*rows+clampedRow}targetIndex=Math.max(0,Math.min(targetIndex,itemsCount-1));let newOverItemId=null;const positionsValue=positions.value;for(const itemId in positionsValue){if(positionsValue[itemId].index===targetIndex&&itemId!==id){newOverItemId=itemId;break}}if(currentOverItemId.value!==newOverItemId){currentOverItemId.value=newOverItemId}if(onDragging){const now=Date.now();if(now-onDraggingLastCallTimestamp.value>THROTTLE_INTERVAL){scheduleOnRN(onDragging,id,newOverItemId,Math.round(current.x),Math.round(current.y));onDraggingLastCallTimestamp.value=now}}topValue.value=current.y;leftValue.value=current.x;setGridPosition(current.x,current.y,scrollX.value,scrollY.value,itemsCount,positions,id,dimensions,orientation,strategy);setGridAutoScroll(current.x,current.y,scrollX.value,scrollY.value,calculatedContainerWidth,calculatedContainerHeight,dimensions.itemHeight,autoScrollDirection)}),[movingSV,dimensions,itemsCount,positions,id,orientation,strategy,onDragging,scrollX,scrollY,autoScrollDirection,currentOverItemId,topValue,leftValue,onDraggingLastCallTimestamp]);useAnimatedReaction((()=>positions.value[id]),((currentPosition,previousPosition)=>{if(currentPosition!==null&&currentPosition!==undefined&&previousPosition!==null&&previousPosition!==undefined){if(currentPosition.x!==previousPosition.x||currentPosition.y!==previousPosition.y){if(!movingSV.value){topValue.value=withSpring(currentPosition.y);leftValue.value=withSpring(currentPosition.x);if(onMove){scheduleOnRN(onMove,id,previousPosition.index,currentPosition.index)}}}}}),[movingSV]);useAnimatedReaction((()=>autoScrollDirection.value),((scrollDirection,previousValue)=>{if(scrollDirection!==null&&previousValue!==null&&scrollDirection!==previousValue){const{width:contentWidth,height:contentHeight}=calculateGridContentDimensions(itemsCount,dimensions,orientation);const maxScrollY=Math.max(0,contentHeight-calculatedContainerHeight);const maxScrollX=Math.max(0,contentWidth-calculatedContainerWidth);const hasUp=scrollDirection===GridScrollDirection.Up||scrollDirection===GridScrollDirection.UpLeft||scrollDirection===GridScrollDirection.UpRight;const hasDown=scrollDirection===GridScrollDirection.Down||scrollDirection===GridScrollDirection.DownLeft||scrollDirection===GridScrollDirection.DownRight;const hasLeft=scrollDirection===GridScrollDirection.Left||scrollDirection===GridScrollDirection.UpLeft||scrollDirection===GridScrollDirection.DownLeft;const hasRight=scrollDirection===GridScrollDirection.Right||scrollDirection===GridScrollDirection.UpRight||scrollDirection===GridScrollDirection.DownRight;if(hasUp){targetScrollY.value=scrollY.value;targetScrollY.value=withTiming(0,{duration:1500})}else if(hasDown){targetScrollY.value=scrollY.value;targetScrollY.value=withTiming(maxScrollY,{duration:1500})}else{targetScrollY.value=scrollY.value}if(hasLeft){targetScrollX.value=scrollX.value;targetScrollX.value=withTiming(0,{duration:1500})}else if(hasRight){targetScrollX.value=scrollX.value;targetScrollX.value=withTiming(maxScrollX,{duration:1500})}else{targetScrollX.value=scrollX.value}if(scrollDirection===GridScrollDirection.None){targetScrollY.value=scrollY.value;targetScrollX.value=scrollX.value}}}));useAnimatedReaction((()=>({y:targetScrollY.value,x:targetScrollX.value})),((target,previous)=>{if(previous===null){return}if(movingSV.value){if(target.y!==previous.y){scrollY.value=target.y}if(target.x!==previous.x){scrollX.value=target.x}}}),[movingSV]);const createPanGesture=()=>Gesture.Pan().activateAfterLongPress(activationDelay!==null&&activationDelay!==void 0?activationDelay:200).shouldCancelWhenOutside(false).onStart((event=>{"worklet";const currentPos=positions.value[id];if(!currentPos){return}initialItemContentX.value=currentPos.x;initialItemContentY.value=currentPos.y;initialFingerAbsoluteX.value=event.absoluteX;initialFingerAbsoluteY.value=event.absoluteY;initialScrollY.value=scrollY.value;initialScrollX.value=scrollX.value;positionX.value=initialItemContentX.value;positionY.value=initialItemContentY.value;movingSV.value=true;scheduleOnRN(setIsMoving,true);if(onDragStart){scheduleOnRN(onDragStart,id,currentPos.index)}})).onUpdate((event=>{"worklet";const fingerDxScreen=event.absoluteX-initialFingerAbsoluteX.value;const fingerDyScreen=event.absoluteY-initialFingerAbsoluteY.value;const scrollDeltaY=scrollY.value-initialScrollY.value;const scrollDeltaX=scrollX.value-initialScrollX.value;positionX.value=initialItemContentX.value+fingerDxScreen+scrollDeltaX;positionY.value=initialItemContentY.value+fingerDyScreen+scrollDeltaY})).onFinalize((()=>{"worklet";const finishPos=positions.value[id];if(finishPos){topValue.value=withTiming(finishPos.y);leftValue.value=withTiming(finishPos.x)}movingSV.value=false;scheduleOnRN(setIsMoving,false);autoScrollDirection.value=GridScrollDirection.None;if(onDrop&&finishPos){const positionsCopy={...positions.value};scheduleOnRN(onDrop,id,finishPos.index,positionsCopy)}currentOverItemId.value=null}));const panGestureHandler=createPanGesture().enabled(!hasHandle);const handlePanGestureHandler=createPanGesture();const animatedStyle=useAnimatedStyle((()=>{"worklet";if(isBeingRemoved){return{position:"absolute",top:topValue.value,left:leftValue.value,width:dimensions.itemWidth,height:dimensions.itemHeight,zIndex:0,opacity:withTiming(0,{duration:250}),transform:[{scale:withTiming(.5,{duration:250})}]}}return{position:"absolute",top:topValue.value,left:leftValue.value,width:dimensions.itemWidth,height:dimensions.itemHeight,zIndex:movingSV.value?1e3:0,shadowColor:"black",shadowOpacity:withSpring(movingSV.value?.2:0),shadowRadius:10,transform:[{scale:withSpring(movingSV.value?1.05:1)}]}}),[movingSV,isBeingRemoved,dimensions]);return{animatedStyle,panGestureHandler,handlePanGestureHandler,isMoving,hasHandle,registerHandle}}
+\ No newline at end of file
++import { useCallback, useState, useRef } from "react";
++import { useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
++import { Gesture } from "react-native-gesture-handler";
++import { scheduleOnRN } from "react-native-worklets";
++import { GridScrollDirection, GridOrientation, GridStrategy } from "../types/grid";
++import { setGridPosition, setGridAutoScroll, calculateGridContentDimensions } from "../utils/gridCalculations";
++
++export function useGridSortable(options) {
++  const {
++    id,
++    positions,
++    scrollY,
++    scrollX,
++    autoScrollDirection,
++    isDragging,
++    itemsCount,
++    dimensions,
++    orientation,
++    strategy = GridStrategy.Insert,
++    containerWidth = 500,
++    containerHeight = 500,
++    activationDelay,
++    onMove,
++    onDragStart,
++    onDrop,
++    onDragging,
++    isBeingRemoved = false
++  } = options;
++
++  const [isMoving, setIsMoving] = useState(false);
++  const [hasHandle, setHasHandle] = useState(false);
++  const registerHandle = useCallback(registered => {
++    setHasHandle(registered);
++  }, []);
++
++  const movingSV = useSharedValue(false);
++  const currentOverItemId = useSharedValue(null);
++  const onDraggingLastCallTimestamp = useSharedValue(0);
++  const THROTTLE_INTERVAL = 50;
++
++  const initialPositionRef = useRef(null);
++  if (initialPositionRef.current === null) {
++    const posArr = positions.get();
++    const pos = posArr === null || posArr === void 0 ? void 0 : posArr[id];
++    console.log("[useGridSortable] id:", id, "posArr:", posArr, "pos:", pos);
++    initialPositionRef.current = pos ? { x: pos.x, y: pos.y } : { x: 0, y: 0 };
++  }
++
++  const initialPosition = initialPositionRef.current;
++  const positionX = useSharedValue(initialPosition.x);
++  const positionY = useSharedValue(initialPosition.y);
++  const topValue = useSharedValue(initialPosition.y);
++  const leftValue = useSharedValue(initialPosition.x);
++  const targetScrollY = useSharedValue(0);
++  const targetScrollX = useSharedValue(0);
++  const initialItemContentX = useSharedValue(0);
++  const initialItemContentY = useSharedValue(0);
++  const initialFingerAbsoluteX = useSharedValue(0);
++  const initialFingerAbsoluteY = useSharedValue(0);
++  const initialScrollY = useSharedValue(0);
++  const initialScrollX = useSharedValue(0);
++  const calculatedContainerHeight = useRef(containerHeight).current;
++  const calculatedContainerWidth = useRef(containerWidth).current;
++
++  useAnimatedReaction(() => ({ x: positionX.value, y: positionY.value }), (current, previous) => {
++    var _a;
++    if (!movingSV.value) { return; }
++    if (previous !== null && current.x === previous.x && current.y === previous.y) { return; }
++    const { itemWidth, itemHeight, columnGap = 0, rowGap = 0, columns = 3 } = dimensions;
++    const clampedColumn = Math.min(Math.max(0, Math.round(current.x / (itemWidth + columnGap))), (orientation === GridOrientation.Vertical ? columns : Infinity) - 1);
++    const clampedRow = Math.floor(current.y / (itemHeight + rowGap));
++    let targetIndex;
++    if (orientation === GridOrientation.Vertical) {
++      targetIndex = clampedRow * columns + clampedColumn;
++    } else {
++      const rows = (_a = dimensions.rows) !== null && _a !== void 0 ? _a : 3;
++      targetIndex = clampedColumn * rows + clampedRow;
++    }
++    targetIndex = Math.max(0, Math.min(targetIndex, itemsCount - 1));
++    let newOverItemId = null;
++    const positionsValue = positions.value;
++    for (const itemId in positionsValue) {
++      if (positionsValue[itemId].index === targetIndex && itemId !== id) {
++        newOverItemId = itemId;
++        break;
++      }
++    }
++    if (currentOverItemId.value !== newOverItemId) {
++      currentOverItemId.value = newOverItemId;
++    }
++    if (onDragging) {
++      const now = Date.now();
++      if (now - onDraggingLastCallTimestamp.value > THROTTLE_INTERVAL) {
++        scheduleOnRN(onDragging, id, newOverItemId, Math.round(current.x), Math.round(current.y));
++        onDraggingLastCallTimestamp.value = now;
++      }
++    }
++    topValue.value = current.y;
++    leftValue.value = current.x;
++    setGridPosition(current.x, current.y, scrollX.value, scrollY.value, itemsCount, positions, id, dimensions, orientation, strategy);
++    setGridAutoScroll(current.x, current.y, scrollX.value, scrollY.value, calculatedContainerWidth, calculatedContainerHeight, dimensions.itemHeight, autoScrollDirection);
++  }, [movingSV, dimensions, itemsCount, positions, id, orientation, strategy, onDragging, scrollX, scrollY, autoScrollDirection, currentOverItemId, topValue, leftValue, onDraggingLastCallTimestamp]);
++
++  useAnimatedReaction(() => positions.value[id], (currentPosition, previousPosition) => {
++    console.log("[useGridSortable UI Reaction] id:", id, "currentPosition:", currentPosition, "previousPosition:", previousPosition);
++    if (currentPosition !== null && currentPosition !== undefined) {
++      if (!movingSV.value) {
++        if (previousPosition === null || previousPosition === undefined) {
++          console.log("[useGridSortable UI Reaction] Setting initial position for:", id, "x:", currentPosition.x, "y:", currentPosition.y);
++          topValue.value = currentPosition.y;
++          leftValue.value = currentPosition.x;
++        } else if (currentPosition.x !== previousPosition.x || currentPosition.y !== previousPosition.y) {
++          console.log("[useGridSortable UI Reaction] Springing to position for:", id, "x:", currentPosition.x, "y:", currentPosition.y);
++          topValue.value = withSpring(currentPosition.y);
++          leftValue.value = withSpring(currentPosition.x);
++          if (onMove) {
++            scheduleOnRN(onMove, id, previousPosition.index, currentPosition.index);
++          }
++        }
++      }
++    }
++  }, [movingSV]);
++
++  useAnimatedReaction(() => autoScrollDirection.value, (scrollDirection, previousValue) => {
++    if (scrollDirection !== null && previousValue !== null && scrollDirection !== previousValue) {
++      const { width: contentWidth, height: contentHeight } = calculateGridContentDimensions(itemsCount, dimensions, orientation);
++      const maxScrollY = Math.max(0, contentHeight - calculatedContainerHeight);
++      const maxScrollX = Math.max(0, contentWidth - calculatedContainerWidth);
++      const hasUp = scrollDirection === GridScrollDirection.Up || scrollDirection === GridScrollDirection.UpLeft || scrollDirection === GridScrollDirection.UpRight;
++      const hasDown = scrollDirection === GridScrollDirection.Down || scrollDirection === GridScrollDirection.DownLeft || scrollDirection === GridScrollDirection.DownRight;
++      const hasLeft = scrollDirection === GridScrollDirection.Left || scrollDirection === GridScrollDirection.UpLeft || scrollDirection === GridScrollDirection.DownLeft;
++      const hasRight = scrollDirection === GridScrollDirection.Right || scrollDirection === GridScrollDirection.UpRight || scrollDirection === GridScrollDirection.DownRight;
++      if (hasUp) {
++        targetScrollY.value = scrollY.value;
++        targetScrollY.value = withTiming(0, { duration: 1500 });
++      } else if (hasDown) {
++        targetScrollY.value = scrollY.value;
++        targetScrollY.value = withTiming(maxScrollY, { duration: 1500 });
++      } else {
++        targetScrollY.value = scrollY.value;
++      }
++      if (hasLeft) {
++        targetScrollX.value = scrollX.value;
++        targetScrollX.value = withTiming(0, { duration: 1500 });
++      } else if (hasRight) {
++        targetScrollX.value = scrollX.value;
++        targetScrollX.value = withTiming(maxScrollX, { duration: 1500 });
++      } else {
++        targetScrollX.value = scrollX.value;
++      }
++      if (scrollDirection === GridScrollDirection.None) {
++        targetScrollY.value = scrollY.value;
++        targetScrollX.value = scrollX.value;
++      }
++    }
++  });
++
++  useAnimatedReaction(() => ({ y: targetScrollY.value, x: targetScrollX.value }), (target, previous) => {
++    if (previous === null) { return; }
++    if (movingSV.value) {
++      if (target.y !== previous.y) { scrollY.value = target.y; }
++      if (target.x !== previous.x) { scrollX.value = target.x; }
++    }
++  }, [movingSV]);
++
++  const createPanGesture = (isHandle = false) => {
++    let gesture = Gesture.Pan();
++    if (!isHandle) {
++      gesture = gesture.activateAfterLongPress(activationDelay !== null && activationDelay !== undefined ? activationDelay : 200);
++    }
++    return gesture.shouldCancelWhenOutside(false).onStart(event => {
++      "worklet";
++      if (isDragging) { isDragging.value = true; }
++      const currentPos = positions.value[id];
++      if (!currentPos) { return; }
++      initialItemContentX.value = currentPos.x;
++      initialItemContentY.value = currentPos.y;
++      initialFingerAbsoluteX.value = event.absoluteX;
++      initialFingerAbsoluteY.value = event.absoluteY;
++      initialScrollY.value = scrollY.value;
++      initialScrollX.value = scrollX.value;
++      positionX.value = initialItemContentX.value;
++      positionY.value = initialItemContentY.value;
++      movingSV.value = true;
++      scheduleOnRN(setIsMoving, true);
++      if (onDragStart) {
++        scheduleOnRN(onDragStart, id, currentPos.index);
++      }
++    }).onUpdate(event => {
++      "worklet";
++      const fingerDxScreen = event.absoluteX - initialFingerAbsoluteX.value;
++      const fingerDyScreen = event.absoluteY - initialFingerAbsoluteY.value;
++      const scrollDeltaY = scrollY.value - initialScrollY.value;
++      const scrollDeltaX = scrollX.value - initialScrollX.value;
++      positionX.value = initialItemContentX.value + fingerDxScreen + scrollDeltaX;
++      positionY.value = initialItemContentY.value + fingerDyScreen + scrollDeltaY;
++    }).onFinalize(() => {
++      "worklet";
++      if (isDragging) { isDragging.value = false; }
++      const finishPos = positions.value[id];
++      if (finishPos) {
++        topValue.value = withTiming(finishPos.y);
++        leftValue.value = withTiming(finishPos.x);
++      }
++      movingSV.value = false;
++      scheduleOnRN(setIsMoving, false);
++      autoScrollDirection.value = GridScrollDirection.None;
++      if (onDrop && finishPos) {
++        const positionsCopy = { ...positions.value };
++        scheduleOnRN(onDrop, id, finishPos.index, positionsCopy);
++      }
++      currentOverItemId.value = null;
++    });
++  };
++
++  const panGestureHandler = createPanGesture(false).enabled(!hasHandle);
++  const handlePanGestureHandler = createPanGesture(true);
++  const animatedStyle = useAnimatedStyle(() => {
++    "worklet";
++    if (isBeingRemoved) {
++      return {
++        position: "absolute",
++        top: topValue.value,
++        left: leftValue.value,
++        width: dimensions.itemWidth,
++        height: dimensions.itemHeight,
++        zIndex: 0,
++        opacity: withTiming(0, { duration: 250 }),
++        transform: [{ scale: withTiming(0.5, { duration: 250 }) }]
++      };
++    }
++    return {
++      position: "absolute",
++      top: topValue.value,
++      left: leftValue.value,
++      width: dimensions.itemWidth,
++      height: dimensions.itemHeight,
++      zIndex: movingSV.value ? 1000 : 0,
++      shadowColor: "black",
++      shadowOpacity: withSpring(movingSV.value ? 0.2 : 0),
++      shadowRadius: 10,
++      transform: [{ scale: withSpring(movingSV.value ? 1.05 : 1) }]
++    };
++  }, [movingSV, isBeingRemoved, dimensions]);
++
++  return {
++    animatedStyle,
++    panGestureHandler,
++    handlePanGestureHandler,
++    isMoving,
++    hasHandle,
++    registerHandle
++  };
++}
+\ No newline at end of file
+diff --git a/node_modules/react-native-reanimated-dnd/lib/hooks/useGridSortableList.js b/node_modules/react-native-reanimated-dnd/lib/hooks/useGridSortableList.js
+index 5cbd3ec..5e0c74f 100644
+--- a/node_modules/react-native-reanimated-dnd/lib/hooks/useGridSortableList.js
++++ b/node_modules/react-native-reanimated-dnd/lib/hooks/useGridSortableList.js
+@@ -1 +1,106 @@
+-import{useRef,useCallback,useEffect}from"react";import{scrollTo,useAnimatedReaction,useAnimatedRef,useAnimatedScrollHandler,useSharedValue}from"react-native-reanimated";import{GridScrollDirection,GridOrientation,GridStrategy}from"../types/grid";import{listToGridObject,calculateGridContentDimensions}from"../utils/gridCalculations";export function useGridSortableList(options){const{data,dimensions,orientation=GridOrientation.Vertical,strategy=GridStrategy.Insert,itemKeyExtractor=item=>item.id}=options;if(__DEV__){data.forEach(((item,index)=>{const id=itemKeyExtractor(item,index);if(typeof id!=="string"||!id){console.error(`[react-native-reanimated-dnd] Grid item at index ${index} has invalid id: ${id}. `+`Each item must have a unique string id property.`)}}))}const positions=useSharedValue(listToGridObject(data,dimensions,orientation));const scrollY=useSharedValue(0);const scrollX=useSharedValue(0);const autoScrollDirection=useSharedValue(GridScrollDirection.None);const scrollViewRef=useAnimatedRef();const dropProviderRef=useRef(null);useEffect((()=>{positions.value=listToGridObject(data,dimensions,orientation)}),[data.length,data.map((d=>itemKeyExtractor(d,0))).join(","),dimensions.columns,dimensions.rows,dimensions.itemWidth,dimensions.itemHeight,dimensions.rowGap,dimensions.columnGap,orientation]);useAnimatedReaction((()=>scrollY.value),(scrolling=>{scrollTo(scrollViewRef,scrollX.value,scrolling,false)}));useAnimatedReaction((()=>scrollX.value),(scrolling=>{scrollTo(scrollViewRef,scrolling,scrollY.value,false)}));const handleScroll=useAnimatedScrollHandler((event=>{scrollY.value=event.contentOffset.y;scrollX.value=event.contentOffset.x}));const scrollTimeoutRef=useRef(null);const handleScrollEnd=useCallback((()=>{if(scrollTimeoutRef.current){clearTimeout(scrollTimeoutRef.current)}scrollTimeoutRef.current=setTimeout((()=>{var _a;(_a=dropProviderRef.current)===null||_a===void 0?void 0:_a.requestPositionUpdate()}),50)}),[]);const{width:contentWidth,height:contentHeight}=calculateGridContentDimensions(data.length,dimensions,orientation);const getItemProps=useCallback(((item,index)=>{const id=itemKeyExtractor(item,index);return{id,positions,scrollY,scrollX,autoScrollDirection,itemsCount:data.length,dimensions,orientation,strategy}}),[data.length,dimensions,orientation,strategy,itemKeyExtractor,positions,scrollY,scrollX,autoScrollDirection]);return{positions,scrollY,scrollX,autoScrollDirection,scrollViewRef,dropProviderRef,handleScroll,handleScrollEnd,contentWidth,contentHeight,getItemProps}}
+\ No newline at end of file
++import { useRef, useCallback, useEffect } from "react";
++import { scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
++import { GridScrollDirection, GridOrientation, GridStrategy } from "../types/grid";
++import { listToGridObject, calculateGridContentDimensions } from "../utils/gridCalculations";
++
++export function useGridSortableList(options) {
++  const {
++    data,
++    dimensions,
++    orientation = GridOrientation.Vertical,
++    strategy = GridStrategy.Insert,
++    itemKeyExtractor = item => item.id
++  } = options;
++
++  if (__DEV__) {
++    data.forEach((item, index) => {
++      const id = itemKeyExtractor(item, index);
++      if (typeof id !== "string" || !id) {
++        console.error(`[react-native-reanimated-dnd] Grid item at index ${index} has invalid id: ${id}. Each item must have a unique string id property.`);
++      }
++    });
++  }
++
++  const positions = useSharedValue(listToGridObject(data, dimensions, orientation));
++  const scrollY = useSharedValue(0);
++  const scrollX = useSharedValue(0);
++  const autoScrollDirection = useSharedValue(GridScrollDirection.None);
++  const isDragging = useSharedValue(false);
++  const scrollViewRef = useAnimatedRef();
++  const dropProviderRef = useRef(null);
++
++  useEffect(() => {
++    positions.value = listToGridObject(data, dimensions, orientation);
++  }, [
++    data.length,
++    data.map(d => itemKeyExtractor(d, 0)).join(","),
++    dimensions.columns,
++    dimensions.rows,
++    dimensions.itemWidth,
++    dimensions.itemHeight,
++    dimensions.rowGap,
++    dimensions.columnGap,
++    orientation
++  ]);
++
++  useAnimatedReaction(() => scrollY.value, scrolling => {
++    if (isDragging.value) {
++      scrollTo(scrollViewRef, scrollX.value, scrolling, false);
++    }
++  });
++
++  useAnimatedReaction(() => scrollX.value, scrolling => {
++    if (isDragging.value) {
++      scrollTo(scrollViewRef, scrolling, scrollY.value, false);
++    }
++  });
++
++  const handleScroll = useAnimatedScrollHandler(event => {
++    scrollY.value = event.contentOffset.y;
++    scrollX.value = event.contentOffset.x;
++  });
++
++  const scrollTimeoutRef = useRef(null);
++  const handleScrollEnd = useCallback(() => {
++    if (scrollTimeoutRef.current) {
++      clearTimeout(scrollTimeoutRef.current);
++    }
++    scrollTimeoutRef.current = setTimeout(() => {
++      var _a;
++      (_a = dropProviderRef.current) === null || _a === void 0 ? void 0 : _a.requestPositionUpdate();
++    }, 50);
++  }, []);
++
++  const { width: contentWidth, height: contentHeight } = calculateGridContentDimensions(data.length, dimensions, orientation);
++
++  const getItemProps = useCallback((item, index) => {
++    const id = itemKeyExtractor(item, index);
++    return {
++      id,
++      positions,
++      scrollY,
++      scrollX,
++      autoScrollDirection,
++      isDragging,
++      itemsCount: data.length,
++      dimensions,
++      orientation,
++      strategy
++    };
++  }, [data.length, dimensions, orientation, strategy, itemKeyExtractor, positions, scrollY, scrollX, autoScrollDirection, isDragging]);
++
++  return {
++    positions,
++    scrollY,
++    scrollX,
++    autoScrollDirection,
++    isDragging,
++    scrollViewRef,
++    dropProviderRef,
++    handleScroll,
++    handleScrollEnd,
++    contentWidth,
++    contentHeight,
++    getItemProps
++  };
++}
+\ No newline at end of file
+diff --git a/node_modules/react-native-reanimated-dnd/lib/hooks/useHorizontalSortable.js b/node_modules/react-native-reanimated-dnd/lib/hooks/useHorizontalSortable.js
+index 976719d..665d5dd 100644
+--- a/node_modules/react-native-reanimated-dnd/lib/hooks/useHorizontalSortable.js
++++ b/node_modules/react-native-reanimated-dnd/lib/hooks/useHorizontalSortable.js
+@@ -1 +1,191 @@
+-import{useCallback,useMemo,useRef,useState}from"react";import{useAnimatedReaction,useAnimatedStyle,useDerivedValue,useSharedValue,withSpring,withTiming}from"react-native-reanimated";import{Gesture}from"react-native-gesture-handler";import{scheduleOnRN}from"react-native-worklets";import{getContentWidth,getItemXPosition,setHorizontalAutoScroll,setHorizontalPosition}from"../components/sortableUtils";import{HorizontalScrollDirection}from"../types/sortable";export function useHorizontalSortable(options){const{id,positions,leftBound,autoScrollDirection,itemsCount,itemWidth,gap=0,paddingHorizontal=0,containerWidth=500,onMove,onDragStart,onDrop,onDragging}=options;const[isMoving,setIsMoving]=useState(false);const[hasHandle,setHasHandle]=useState(false);const registerHandle=useCallback((registered=>{setHasHandle(registered)}),[]);const movingSV=useSharedValue(false);const currentOverItemId=useSharedValue(null);const onDraggingLastCallTimestamp=useSharedValue(0);const THROTTLE_INTERVAL=50;const initialLeftVal=useMemo((()=>{const posArr=positions.get();const pos=posArr===null||posArr===void 0?void 0:posArr[id];return getItemXPosition(pos,itemWidth,gap,paddingHorizontal)}),[]);const initialLeftBoundVal=useMemo((()=>leftBound.get()),[]);const positionX=useSharedValue(initialLeftVal);const left=useSharedValue(initialLeftVal);const targetLeftBound=useSharedValue(initialLeftBoundVal);const initialItemContentX=useSharedValue(0);const initialFingerAbsoluteX=useSharedValue(0);const initialLeftBound=useSharedValue(0);const calculatedContainerWidth=useRef(containerWidth).current;const rightBound=useDerivedValue((()=>leftBound.value+calculatedContainerWidth));useAnimatedReaction((()=>positionX.value),((currentX,previousX)=>{if(currentX===null||!movingSV.value){return}if(previousX!==null&&currentX===previousX){return}const adjustedX=currentX-paddingHorizontal;const itemWithGapWidth=itemWidth+gap;const clampedPosition=Math.min(Math.max(0,Math.ceil(adjustedX/itemWithGapWidth)),itemsCount-1);let newOverItemId=null;for(const[itemIdIter,itemPosIter]of Object.entries(positions.value)){if(itemPosIter===clampedPosition&&itemIdIter!==id){newOverItemId=itemIdIter;break}}if(currentOverItemId.value!==newOverItemId){currentOverItemId.value=newOverItemId}if(onDragging){const now=Date.now();if(now-onDraggingLastCallTimestamp.value>THROTTLE_INTERVAL){scheduleOnRN(onDragging,id,newOverItemId,Math.round(currentX));onDraggingLastCallTimestamp.value=now}}left.value=currentX;setHorizontalPosition(currentX,itemsCount,positions,id,itemWidth,gap,paddingHorizontal);setHorizontalAutoScroll(currentX,leftBound.value,rightBound.value,itemWidth,autoScrollDirection)}),[movingSV,itemWidth,gap,paddingHorizontal,itemsCount,positions,id,onDragging,leftBound,rightBound,autoScrollDirection,currentOverItemId,left,onDraggingLastCallTimestamp]);useAnimatedReaction((()=>positions.value[id]),((currentPosition,previousPosition)=>{if(currentPosition!==null&&previousPosition!==null&&currentPosition!==previousPosition){if(!movingSV.value){const newLeft=getItemXPosition(currentPosition,itemWidth,gap,paddingHorizontal);left.value=withSpring(newLeft);if(onMove){scheduleOnRN(onMove,id,previousPosition,currentPosition)}}}}),[movingSV,itemWidth,gap,paddingHorizontal]);useAnimatedReaction((()=>autoScrollDirection.value),((scrollDirection,previousValue)=>{if(scrollDirection!==null&&previousValue!==null&&scrollDirection!==previousValue){switch(scrollDirection){case HorizontalScrollDirection.Left:{targetLeftBound.value=leftBound.value;targetLeftBound.value=withTiming(0,{duration:1500});break}case HorizontalScrollDirection.Right:{const contentWidth=getContentWidth(itemsCount,itemWidth,gap,paddingHorizontal);const maxScroll=Math.max(0,contentWidth-calculatedContainerWidth);targetLeftBound.value=leftBound.value;targetLeftBound.value=withTiming(maxScroll,{duration:1500});break}case HorizontalScrollDirection.None:{targetLeftBound.value=leftBound.value;break}}}}));useAnimatedReaction((()=>targetLeftBound.value),((targetLeftBoundValue,previousValue)=>{if(targetLeftBoundValue!==null&&previousValue!==null&&targetLeftBoundValue!==previousValue){if(movingSV.value){leftBound.value=targetLeftBoundValue}}}),[movingSV]);const createPanGesture=()=>Gesture.Pan().activateAfterLongPress(200).shouldCancelWhenOutside(false).onStart((event=>{"worklet";initialItemContentX.value=getItemXPosition(positions.value[id],itemWidth,gap,paddingHorizontal);initialFingerAbsoluteX.value=event.absoluteX;initialLeftBound.value=leftBound.value;positionX.value=initialItemContentX.value;movingSV.value=true;scheduleOnRN(setIsMoving,true);if(onDragStart){scheduleOnRN(onDragStart,id,positions.value[id])}})).onUpdate((event=>{"worklet";const fingerDxScreen=event.absoluteX-initialFingerAbsoluteX.value;const scrollDeltaSinceStart=leftBound.value-initialLeftBound.value;positionX.value=initialItemContentX.value+fingerDxScreen+scrollDeltaSinceStart})).onFinalize((()=>{"worklet";const finishPosition=getItemXPosition(positions.value[id],itemWidth,gap,paddingHorizontal);left.value=withTiming(finishPosition);movingSV.value=false;scheduleOnRN(setIsMoving,false);if(onDrop){const positionsCopy={...positions.value};scheduleOnRN(onDrop,id,positions.value[id],positionsCopy)}currentOverItemId.value=null}));const panGestureHandler=createPanGesture().enabled(!hasHandle);const handlePanGestureHandler=createPanGesture();const animatedStyle=useAnimatedStyle((()=>{"worklet";return{position:"absolute",top:0,bottom:0,left:left.value,width:itemWidth,zIndex:movingSV.value?1:0,backgroundColor:"transparent",shadowColor:"black",shadowOpacity:withSpring(movingSV.value?.2:0),shadowRadius:10}}),[movingSV,itemWidth]);return{animatedStyle,panGestureHandler,handlePanGestureHandler,isMoving,hasHandle,registerHandle}}
+\ No newline at end of file
++import { useCallback, useMemo, useRef, useState } from "react";
++import { useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
++import { Gesture } from "react-native-gesture-handler";
++import { scheduleOnRN } from "react-native-worklets";
++import { getContentWidth, getItemXPosition, setHorizontalAutoScroll, setHorizontalPosition } from "../components/sortableUtils";
++import { HorizontalScrollDirection } from "../types/sortable";
++
++export function useHorizontalSortable(options) {
++  const {
++    id,
++    positions,
++    leftBound,
++    autoScrollDirection,
++    isDragging,
++    itemsCount,
++    itemWidth,
++    gap = 0,
++    paddingHorizontal = 0,
++    containerWidth = 500,
++    onMove,
++    onDragStart,
++    onDrop,
++    onDragging
++  } = options;
++
++  const [isMoving, setIsMoving] = useState(false);
++  const [hasHandle, setHasHandle] = useState(false);
++  const registerHandle = useCallback(registered => {
++    setHasHandle(registered);
++  }, []);
++
++  const movingSV = useSharedValue(false);
++  const currentOverItemId = useSharedValue(null);
++  const onDraggingLastCallTimestamp = useSharedValue(0);
++  const THROTTLE_INTERVAL = 50;
++
++  const initialLeftVal = useMemo(() => {
++    const posArr = positions.get();
++    const pos = posArr === null || posArr === void 0 ? void 0 : posArr[id];
++    return getItemXPosition(pos, itemWidth, gap, paddingHorizontal);
++  }, []);
++
++  const initialLeftBoundVal = useMemo(() => leftBound.get(), []);
++  const positionX = useSharedValue(initialLeftVal);
++  const left = useSharedValue(initialLeftVal);
++  const targetLeftBound = useSharedValue(initialLeftBoundVal);
++  const initialItemContentX = useSharedValue(0);
++  const initialFingerAbsoluteX = useSharedValue(0);
++  const initialLeftBound = useSharedValue(0);
++  const calculatedContainerWidth = useRef(containerWidth).current;
++  const rightBound = useDerivedValue(() => leftBound.value + calculatedContainerWidth);
++
++  useAnimatedReaction(() => positionX.value, (currentX, previousX) => {
++    if (currentX === null || !movingSV.value) { return; }
++    if (previousX !== null && currentX === previousX) { return; }
++    const adjustedX = currentX - paddingHorizontal;
++    const itemWithGapWidth = itemWidth + gap;
++    const clampedPosition = Math.min(Math.max(0, Math.ceil(adjustedX / itemWithGapWidth)), itemsCount - 1);
++    let newOverItemId = null;
++    for (const [itemIdIter, itemPosIter] of Object.entries(positions.value)) {
++      if (itemPosIter === clampedPosition && itemIdIter !== id) {
++        newOverItemId = itemIdIter;
++        break;
++      }
++    }
++    if (currentOverItemId.value !== newOverItemId) {
++      currentOverItemId.value = newOverItemId;
++    }
++    if (onDragging) {
++      const now = Date.now();
++      if (now - onDraggingLastCallTimestamp.value > THROTTLE_INTERVAL) {
++        scheduleOnRN(onDragging, id, newOverItemId, Math.round(currentX));
++        onDraggingLastCallTimestamp.value = now;
++      }
++    }
++    left.value = currentX;
++    setHorizontalPosition(currentX, itemsCount, positions, id, itemWidth, gap, paddingHorizontal);
++    setHorizontalAutoScroll(currentX, leftBound.value, rightBound.value, itemWidth, autoScrollDirection);
++  }, [movingSV, itemWidth, gap, paddingHorizontal, itemsCount, positions, id, onDragging, leftBound, rightBound, autoScrollDirection, currentOverItemId, left, onDraggingLastCallTimestamp]);
++
++  useAnimatedReaction(() => positions.value[id], (currentPosition, previousPosition) => {
++    if (currentPosition !== null && currentPosition !== undefined) {
++      if (!movingSV.value) {
++        const newLeft = getItemXPosition(currentPosition, itemWidth, gap, paddingHorizontal);
++        if (previousPosition === null || previousPosition === undefined) {
++          left.value = newLeft;
++        } else if (currentPosition !== previousPosition) {
++          left.value = withSpring(newLeft);
++          if (onMove) {
++            scheduleOnRN(onMove, id, previousPosition, currentPosition);
++          }
++        }
++      }
++    }
++  }, [movingSV, itemWidth, gap, paddingHorizontal]);
++
++  useAnimatedReaction(() => autoScrollDirection.value, (scrollDirection, previousValue) => {
++    if (scrollDirection !== null && previousValue !== null && scrollDirection !== previousValue) {
++      switch (scrollDirection) {
++        case HorizontalScrollDirection.Left: {
++          targetLeftBound.value = leftBound.value;
++          targetLeftBound.value = withTiming(0, { duration: 1500 });
++          break;
++        }
++        case HorizontalScrollDirection.Right: {
++          const contentWidth = getContentWidth(itemsCount, itemWidth, gap, paddingHorizontal);
++          const maxScroll = Math.max(0, contentWidth - calculatedContainerWidth);
++          targetLeftBound.value = leftBound.value;
++          targetLeftBound.value = withTiming(maxScroll, { duration: 1500 });
++          break;
++        }
++        case HorizontalScrollDirection.None: {
++          targetLeftBound.value = leftBound.value;
++          break;
++        }
++      }
++    }
++  });
++
++  useAnimatedReaction(() => targetLeftBound.value, (targetLeftBoundValue, previousValue) => {
++    if (targetLeftBoundValue !== null && previousValue !== null && targetLeftBoundValue !== previousValue) {
++      if (movingSV.value) {
++        leftBound.value = targetLeftBoundValue;
++      }
++    }
++  }, [movingSV]);
++
++  const createPanGesture = (isHandle = false) => {
++    let gesture = Gesture.Pan();
++    if (!isHandle) {
++      gesture = gesture.activateAfterLongPress(200);
++    }
++    return gesture.shouldCancelWhenOutside(false).onStart(event => {
++      "worklet";
++      if (isDragging) { isDragging.value = true; }
++      initialItemContentX.value = getItemXPosition(positions.value[id], itemWidth, gap, paddingHorizontal);
++      initialFingerAbsoluteX.value = event.absoluteX;
++      initialLeftBound.value = leftBound.value;
++      positionX.value = initialItemContentX.value;
++      movingSV.value = true;
++      scheduleOnRN(setIsMoving, true);
++      if (onDragStart) {
++        scheduleOnRN(onDragStart, id, positions.value[id]);
++      }
++    }).onUpdate(event => {
++      "worklet";
++      const fingerDxScreen = event.absoluteX - initialFingerAbsoluteX.value;
++      const scrollDeltaSinceStart = leftBound.value - initialLeftBound.value;
++      positionX.value = initialItemContentX.value + fingerDxScreen + scrollDeltaSinceStart;
++    }).onFinalize(() => {
++      "worklet";
++      if (isDragging) { isDragging.value = false; }
++      const finishPosition = getItemXPosition(positions.value[id], itemWidth, gap, paddingHorizontal);
++      left.value = withTiming(finishPosition);
++      movingSV.value = false;
++      scheduleOnRN(setIsMoving, false);
++      if (onDrop) {
++        const positionsCopy = { ...positions.value };
++        scheduleOnRN(onDrop, id, positions.value[id], positionsCopy);
++      }
++      currentOverItemId.value = null;
++    });
++  };
++
++  const panGestureHandler = createPanGesture(false).enabled(!hasHandle);
++  const handlePanGestureHandler = createPanGesture(true);
++  const animatedStyle = useAnimatedStyle(() => {
++    "worklet";
++    return {
++      position: "absolute",
++      top: 0,
++      bottom: 0,
++      left: left.value,
++      width: itemWidth,
++      zIndex: movingSV.value ? 1 : 0,
++      backgroundColor: "transparent",
++      shadowColor: "black",
++      shadowOpacity: withSpring(movingSV.value ? 0.2 : 0),
++      shadowRadius: 10
++    };
++  }, [movingSV, itemWidth]);
++
++  return {
++    animatedStyle,
++    panGestureHandler,
++    handlePanGestureHandler,
++    isMoving,
++    hasHandle,
++    registerHandle
++  };
++}
+\ No newline at end of file
+diff --git a/node_modules/react-native-reanimated-dnd/lib/hooks/useHorizontalSortableList.js b/node_modules/react-native-reanimated-dnd/lib/hooks/useHorizontalSortableList.js
+index b48f0ed..601435e 100644
+--- a/node_modules/react-native-reanimated-dnd/lib/hooks/useHorizontalSortableList.js
++++ b/node_modules/react-native-reanimated-dnd/lib/hooks/useHorizontalSortableList.js
+@@ -1 +1,87 @@
+-import{useRef,useCallback}from"react";import{scrollTo,useAnimatedReaction,useAnimatedRef,useAnimatedScrollHandler,useSharedValue}from"react-native-reanimated";import{listToObject,getContentWidth}from"../components/sortableUtils";import{HorizontalScrollDirection}from"../types/sortable";export function useHorizontalSortableList(options){const{data,itemWidth,gap=0,paddingHorizontal=0,itemKeyExtractor=item=>item.id}=options;if(__DEV__){data.forEach(((item,index)=>{const id=itemKeyExtractor(item,index);if(typeof id!=="string"||!id){console.error(`[react-native-reanimated-dnd] Item at index ${index} has invalid id: ${id}. `+`Each item must have a unique string id property.`)}}))}const positions=useSharedValue(listToObject(data));const scrollX=useSharedValue(0);const autoScroll=useSharedValue(HorizontalScrollDirection.None);const scrollViewRef=useAnimatedRef();const dropProviderRef=useRef(null);useAnimatedReaction((()=>scrollX.value),(scrolling=>{scrollTo(scrollViewRef,scrolling,0,false)}));const handleScroll=useAnimatedScrollHandler((event=>{scrollX.value=event.contentOffset.x}));const handleScrollEnd=useCallback((()=>{let localScrollTimeout=null;if(localScrollTimeout){clearTimeout(localScrollTimeout)}localScrollTimeout=setTimeout((()=>{var _a;(_a=dropProviderRef.current)===null||_a===void 0?void 0:_a.requestPositionUpdate()}),50)}),[]);const contentWidth=getContentWidth(data.length,itemWidth,gap,paddingHorizontal);const getItemProps=useCallback(((item,index)=>{const id=itemKeyExtractor(item,index);return{id,positions,leftBound:scrollX,autoScrollDirection:autoScroll,itemsCount:data.length,itemWidth,gap,paddingHorizontal}}),[data.length,itemWidth,gap,paddingHorizontal,itemKeyExtractor,positions,scrollX,autoScroll]);return{positions,scrollX,autoScroll,scrollViewRef,dropProviderRef,handleScroll,handleScrollEnd,contentWidth,getItemProps}}
+\ No newline at end of file
++import { useRef, useCallback, useEffect } from "react";
++import { scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
++import { listToObject, getContentWidth } from "../components/sortableUtils";
++import { HorizontalScrollDirection } from "../types/sortable";
++
++export function useHorizontalSortableList(options) {
++  const {
++    data,
++    itemWidth,
++    gap = 0,
++    paddingHorizontal = 0,
++    itemKeyExtractor = item => item.id
++  } = options;
++
++  if (__DEV__) {
++    data.forEach((item, index) => {
++      const id = itemKeyExtractor(item, index);
++      if (typeof id !== "string" || !id) {
++        console.error(`[react-native-reanimated-dnd] Item at index ${index} has invalid id: ${id}. Each item must have a unique string id property.`);
++      }
++    });
++  }
++
++  const positions = useSharedValue(listToObject(data));
++
++  useEffect(() => {
++    positions.value = listToObject(data);
++  }, [
++    data.length,
++    data.map((d, idx) => itemKeyExtractor(d, idx)).join(","),
++    positions
++  ]);
++  const scrollX = useSharedValue(0);
++  const autoScroll = useSharedValue(HorizontalScrollDirection.None);
++  const isDragging = useSharedValue(false);
++  const scrollViewRef = useAnimatedRef();
++  const dropProviderRef = useRef(null);
++
++  useAnimatedReaction(() => scrollX.value, scrolling => {
++    if (isDragging.value) {
++      scrollTo(scrollViewRef, scrolling, 0, false);
++    }
++  });
++
++  const handleScroll = useAnimatedScrollHandler(event => {
++    scrollX.value = event.contentOffset.x;
++  });
++
++  const handleScrollEnd = useCallback(() => {
++    let localScrollTimeout = null;
++    if (localScrollTimeout) { clearTimeout(localScrollTimeout); }
++    localScrollTimeout = setTimeout(() => {
++      var _a;
++      (_a = dropProviderRef.current) === null || _a === void 0 ? void 0 : _a.requestPositionUpdate();
++    }, 50);
++  }, []);
++
++  const contentWidth = getContentWidth(data.length, itemWidth, gap, paddingHorizontal);
++
++  const getItemProps = useCallback((item, index) => {
++    const id = itemKeyExtractor(item, index);
++    return {
++      id,
++      positions,
++      leftBound: scrollX,
++      autoScrollDirection: autoScroll,
++      isDragging,
++      itemsCount: data.length,
++      itemWidth,
++      gap,
++      paddingHorizontal
++    };
++  }, [data.length, itemWidth, gap, paddingHorizontal, itemKeyExtractor, positions, scrollX, autoScroll, isDragging]);
++
++  return {
++    positions,
++    scrollX,
++    autoScroll,
++    isDragging,
++    scrollViewRef,
++    dropProviderRef,
++    handleScroll,
++    handleScrollEnd,
++    contentWidth,
++    getItemProps
++  };
++}
+\ No newline at end of file
+diff --git a/node_modules/react-native-reanimated-dnd/lib/hooks/useSortable.js b/node_modules/react-native-reanimated-dnd/lib/hooks/useSortable.js
+index 7bcc92f..ecc3172 100644
+--- a/node_modules/react-native-reanimated-dnd/lib/hooks/useSortable.js
++++ b/node_modules/react-native-reanimated-dnd/lib/hooks/useSortable.js
+@@ -1 +1,296 @@
+-import{useCallback,useMemo,useRef,useState}from"react";import{useAnimatedReaction,useAnimatedStyle,useDerivedValue,useSharedValue,withSpring,withTiming}from"react-native-reanimated";import{Gesture}from"react-native-gesture-handler";import{scheduleOnRN}from"react-native-worklets";import{findPositionForY,getItemCumulativeY}from"../components/sortableUtils";export var ScrollDirection;(function(ScrollDirection){ScrollDirection["None"]="none";ScrollDirection["Up"]="up";ScrollDirection["Down"]="down"})(ScrollDirection||(ScrollDirection={}));export function clamp(value,lowerBound,upperBound){"worklet";return Math.max(lowerBound,Math.min(value,upperBound))}export function objectMove(object,from,to){"worklet";const newObject=Object.assign({},object);const movedUp=to<from;for(const id in object){if(object[id]===from){newObject[id]=to;continue}const currentPosition=object[id];if(movedUp&&currentPosition>=to&&currentPosition<from){newObject[id]++}else if(currentPosition<=to&&currentPosition>from){newObject[id]--}}return newObject}export function listToObject(list){const values=Object.values(list);const object={};for(let i=0;i<values.length;i++){object[values[i].id]=i}return object}export function setPosition(positionY,itemsCount,positions,id,itemHeight){"worklet";const newPosition=clamp(Math.floor(positionY/itemHeight),0,itemsCount-1);if(newPosition!==positions.value[id]){positions.value=objectMove(positions.value,positions.value[id],newPosition)}}export function setAutoScroll(positionY,lowerBound,upperBound,scrollThreshold,autoScroll){"worklet";if(positionY<=lowerBound+scrollThreshold){autoScroll.value=ScrollDirection.Up}else if(positionY>=upperBound-scrollThreshold){autoScroll.value=ScrollDirection.Down}else{autoScroll.value=ScrollDirection.None}}export function useSortable(options){const{id,positions,lowerBound,autoScrollDirection,itemsCount,itemHeight,containerHeight=500,estimatedItemHeight=60,isDynamicHeight=false,itemHeights,onMove,onDragStart,onDrop,onDragging}=options;const effectiveItemHeight=itemHeight||estimatedItemHeight;const[isMoving,setIsMoving]=useState(false);const[hasHandle,setHasHandle]=useState(false);const registerHandle=useCallback((registered=>{setHasHandle(registered)}),[]);const movingSV=useSharedValue(false);const currentOverItemId=useSharedValue(null);const onDraggingLastCallTimestamp=useSharedValue(0);const THROTTLE_INTERVAL=50;const initialTopVal=useMemo((()=>{var _a;const posArr=positions.get();const pos=(_a=posArr===null||posArr===void 0?void 0:posArr[id])!==null&&_a!==void 0?_a:0;return pos*effectiveItemHeight}),[]);const initialLowerBoundVal=useMemo((()=>lowerBound.get()),[]);const positionY=useSharedValue(initialTopVal);const top=useSharedValue(initialTopVal);const targetLowerBound=useSharedValue(initialLowerBoundVal);const initialItemContentY=useSharedValue(0);const initialFingerAbsoluteY=useSharedValue(0);const initialLowerBound=useSharedValue(0);const calculatedContainerHeight=useRef(containerHeight).current;const upperBound=useDerivedValue((()=>lowerBound.value+calculatedContainerHeight));useAnimatedReaction((()=>{var _a;if(isDynamicHeight&&itemHeights){return getItemCumulativeY(id,positions.value,itemHeights.value,estimatedItemHeight)}return((_a=positions.value[id])!==null&&_a!==void 0?_a:0)*effectiveItemHeight}),((newTop,oldTop)=>{if(oldTop!==null&&newTop!==oldTop&&!movingSV.value){top.value=withSpring(newTop)}}),[isDynamicHeight,itemHeights,positions,id,effectiveItemHeight,estimatedItemHeight,movingSV]);useAnimatedReaction((()=>positions.value[id]),((currentPosition,previousPosition)=>{if(currentPosition!==null&&previousPosition!==null&&currentPosition!==previousPosition&&!movingSV.value&&onMove){scheduleOnRN(onMove,id,previousPosition,currentPosition)}}),[movingSV,onMove]);useAnimatedReaction((()=>positionY.value),((currentY,previousY)=>{if(currentY===null||!movingSV.value){return}if(previousY!==null&&currentY===previousY){return}let clampedPosition;if(isDynamicHeight&&itemHeights){clampedPosition=findPositionForY(currentY,positions.value,itemHeights.value,estimatedItemHeight,itemsCount)}else{clampedPosition=Math.min(Math.max(0,Math.ceil(currentY/effectiveItemHeight)),itemsCount-1)}let newOverItemId=null;const positionsObj=positions.value;for(const itemIdIter in positionsObj){if(positionsObj[itemIdIter]===clampedPosition&&itemIdIter!==id){newOverItemId=itemIdIter;break}}if(currentOverItemId.value!==newOverItemId){currentOverItemId.value=newOverItemId}if(onDragging){const now=Date.now();if(now-onDraggingLastCallTimestamp.value>THROTTLE_INTERVAL){scheduleOnRN(onDragging,id,newOverItemId,Math.round(currentY));onDraggingLastCallTimestamp.value=now}}top.value=currentY;if(isDynamicHeight){if(clampedPosition!==positions.value[id]){positions.value=objectMove(positions.value,positions.value[id],clampedPosition)}}else{setPosition(currentY,itemsCount,positions,id,effectiveItemHeight)}setAutoScroll(currentY,lowerBound.value,upperBound.value,effectiveItemHeight,autoScrollDirection)}),[movingSV,effectiveItemHeight,isDynamicHeight,estimatedItemHeight,itemsCount,positions,id,onDragging,lowerBound,upperBound,autoScrollDirection,currentOverItemId,top,onDraggingLastCallTimestamp,itemHeights]);useAnimatedReaction((()=>autoScrollDirection.value),((scrollDirection,previousValue)=>{var _a;if(scrollDirection!==null&&previousValue!==null&&scrollDirection!==previousValue){switch(scrollDirection){case ScrollDirection.Up:{targetLowerBound.value=lowerBound.value;targetLowerBound.value=withTiming(0,{duration:1500});break}case ScrollDirection.Down:{let contentHeight;if(isDynamicHeight&&itemHeights){contentHeight=0;const heights=itemHeights.value;const posObj=positions.value;for(const itemId in posObj){contentHeight+=(_a=heights[itemId])!==null&&_a!==void 0?_a:estimatedItemHeight}}else{contentHeight=itemsCount*effectiveItemHeight}const maxScroll=contentHeight-calculatedContainerHeight;targetLowerBound.value=lowerBound.value;targetLowerBound.value=withTiming(maxScroll,{duration:1500});break}case ScrollDirection.None:{targetLowerBound.value=lowerBound.value;break}}}}),[isDynamicHeight,itemHeights,effectiveItemHeight,estimatedItemHeight,itemsCount,calculatedContainerHeight]);useAnimatedReaction((()=>targetLowerBound.value),((targetLowerBoundValue,previousValue)=>{if(targetLowerBoundValue!==null&&previousValue!==null&&targetLowerBoundValue!==previousValue){if(movingSV.value){lowerBound.value=targetLowerBoundValue}}}),[movingSV]);const createPanGesture=()=>Gesture.Pan().activateAfterLongPress(200).shouldCancelWhenOutside(false).onStart((event=>{"worklet";if(isDynamicHeight&&itemHeights){initialItemContentY.value=getItemCumulativeY(id,positions.value,itemHeights.value,estimatedItemHeight)}else{initialItemContentY.value=positions.value[id]*effectiveItemHeight}initialFingerAbsoluteY.value=event.absoluteY;initialLowerBound.value=lowerBound.value;positionY.value=initialItemContentY.value;movingSV.value=true;scheduleOnRN(setIsMoving,true);if(onDragStart){scheduleOnRN(onDragStart,id,positions.value[id])}})).onUpdate((event=>{"worklet";const fingerDyScreen=event.absoluteY-initialFingerAbsoluteY.value;const scrollDeltaSinceStart=lowerBound.value-initialLowerBound.value;positionY.value=initialItemContentY.value+fingerDyScreen+scrollDeltaSinceStart})).onFinalize((()=>{"worklet";let finishPosition;if(isDynamicHeight&&itemHeights){finishPosition=getItemCumulativeY(id,positions.value,itemHeights.value,estimatedItemHeight)}else{finishPosition=positions.value[id]*effectiveItemHeight}top.value=withTiming(finishPosition);movingSV.value=false;scheduleOnRN(setIsMoving,false);if(onDrop){const positionsCopy={...positions.value};scheduleOnRN(onDrop,id,positions.value[id],positionsCopy)}currentOverItemId.value=null}));const panGestureHandler=createPanGesture().enabled(!hasHandle);const handlePanGestureHandler=createPanGesture();const animatedStyle=useAnimatedStyle((()=>{"worklet";return{position:"absolute",left:0,right:0,top:top.value,zIndex:movingSV.value?1:0,shadowColor:"black",shadowOpacity:withSpring(movingSV.value?.2:0),shadowRadius:10}}),[movingSV]);return{animatedStyle,panGestureHandler,handlePanGestureHandler,isMoving,hasHandle,registerHandle}}
+\ No newline at end of file
++import { useCallback, useMemo, useRef, useState } from "react";
++import { useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
++import { Gesture } from "react-native-gesture-handler";
++import { scheduleOnRN } from "react-native-worklets";
++import { findPositionForY, getItemCumulativeY } from "../components/sortableUtils";
++
++export var ScrollDirection;
++(function (ScrollDirection) {
++  ScrollDirection["None"] = "none";
++  ScrollDirection["Up"] = "up";
++  ScrollDirection["Down"] = "down";
++})(ScrollDirection || (ScrollDirection = {}));
++
++export function clamp(value, lowerBound, upperBound) {
++  "worklet";
++  return Math.max(lowerBound, Math.min(value, upperBound));
++}
++
++export function objectMove(object, from, to) {
++  "worklet";
++  const newObject = Object.assign({}, object);
++  const movedUp = to < from;
++  for (const id in object) {
++    if (object[id] === from) {
++      newObject[id] = to;
++      continue;
++    }
++    const currentPosition = object[id];
++    if (movedUp && currentPosition >= to && currentPosition < from) {
++      newObject[id]++;
++    } else if (currentPosition <= to && currentPosition > from) {
++      newObject[id]--;
++    }
++  }
++  return newObject;
++}
++
++export function listToObject(list) {
++  const values = Object.values(list);
++  const object = {};
++  for (let i = 0; i < values.length; i++) {
++    object[values[i].id] = i;
++  }
++  return object;
++}
++
++export function setPosition(positionY, itemsCount, positions, id, itemHeight) {
++  "worklet";
++  const newPosition = clamp(Math.floor(positionY / itemHeight), 0, itemsCount - 1);
++  if (newPosition !== positions.value[id]) {
++    positions.value = objectMove(positions.value, positions.value[id], newPosition);
++  }
++}
++
++export function setAutoScroll(positionY, lowerBound, upperBound, scrollThreshold, autoScroll) {
++  "worklet";
++  if (positionY <= lowerBound + scrollThreshold) {
++    autoScroll.value = ScrollDirection.Up;
++  } else if (positionY >= upperBound - scrollThreshold) {
++    autoScroll.value = ScrollDirection.Down;
++  } else {
++    autoScroll.value = ScrollDirection.None;
++  }
++}
++
++export function useSortable(options) {
++  const {
++    id,
++    positions,
++    lowerBound,
++    autoScrollDirection,
++    isDragging,
++    itemsCount,
++    itemHeight,
++    containerHeight = 500,
++    estimatedItemHeight = 60,
++    isDynamicHeight = false,
++    itemHeights,
++    onMove,
++    onDragStart,
++    onDrop,
++    onDragging
++  } = options;
++
++  const effectiveItemHeight = itemHeight || estimatedItemHeight;
++  const [isMoving, setIsMoving] = useState(false);
++  const [hasHandle, setHasHandle] = useState(false);
++  const registerHandle = useCallback(registered => {
++    setHasHandle(registered);
++  }, []);
++
++  const movingSV = useSharedValue(false);
++  const currentOverItemId = useSharedValue(null);
++  const onDraggingLastCallTimestamp = useSharedValue(0);
++  const THROTTLE_INTERVAL = 50;
++
++  const initialTopVal = useMemo(() => {
++    var _a;
++    const posArr = positions.get();
++    const pos = (_a = posArr === null || posArr === void 0 ? void 0 : posArr[id]) !== null && _a !== void 0 ? _a : 0;
++    return pos * effectiveItemHeight;
++  }, []);
++
++  const initialLowerBoundVal = useMemo(() => lowerBound.get(), []);
++  const positionY = useSharedValue(initialTopVal);
++  const top = useSharedValue(initialTopVal);
++  const targetLowerBound = useSharedValue(initialLowerBoundVal);
++  const initialItemContentY = useSharedValue(0);
++  const initialFingerAbsoluteY = useSharedValue(0);
++  const initialLowerBound = useSharedValue(0);
++  const calculatedContainerHeight = useRef(containerHeight).current;
++  const upperBound = useDerivedValue(() => lowerBound.value + calculatedContainerHeight);
++
++  useAnimatedReaction(() => {
++    var _a;
++    if (isDynamicHeight && itemHeights) {
++      return getItemCumulativeY(id, positions.value, itemHeights.value, estimatedItemHeight);
++    }
++    return ((_a = positions.value[id]) !== null && _a !== void 0 ? _a : 0) * effectiveItemHeight;
++  }, (newTop, oldTop) => {
++    if (!movingSV.value) {
++      if (oldTop === null || oldTop === undefined) {
++        top.value = newTop;
++      } else if (newTop !== oldTop) {
++        top.value = withSpring(newTop);
++      }
++    }
++  }, [isDynamicHeight, itemHeights, positions, id, effectiveItemHeight, estimatedItemHeight, movingSV]);
++
++  useAnimatedReaction(() => positions.value[id], (currentPosition, previousPosition) => {
++    if (currentPosition !== null && currentPosition !== undefined) {
++      if (!movingSV.value) {
++        if (previousPosition === null || previousPosition === undefined) {
++          // Do nothing on initial mount positioning
++        } else if (currentPosition !== previousPosition && onMove) {
++          scheduleOnRN(onMove, id, previousPosition, currentPosition);
++        }
++      }
++    }
++  }, [movingSV, onMove]);
++
++  useAnimatedReaction(() => positionY.value, (currentY, previousY) => {
++    if (currentY === null || !movingSV.value) {
++      return;
++    }
++    if (previousY !== null && currentY === previousY) {
++      return;
++    }
++    let clampedPosition;
++    if (isDynamicHeight && itemHeights) {
++      clampedPosition = findPositionForY(currentY, positions.value, itemHeights.value, estimatedItemHeight, itemsCount);
++    } else {
++      clampedPosition = Math.min(Math.max(0, Math.ceil(currentY / effectiveItemHeight)), itemsCount - 1);
++    }
++    let newOverItemId = null;
++    const positionsObj = positions.value;
++    for (const itemIdIter in positionsObj) {
++      if (positionsObj[itemIdIter] === clampedPosition && itemIdIter !== id) {
++        newOverItemId = itemIdIter;
++        break;
++      }
++    }
++    if (currentOverItemId.value !== newOverItemId) {
++      currentOverItemId.value = newOverItemId;
++    }
++    if (onDragging) {
++      const now = Date.now();
++      if (now - onDraggingLastCallTimestamp.value > THROTTLE_INTERVAL) {
++        scheduleOnRN(onDragging, id, newOverItemId, Math.round(currentY));
++        onDraggingLastCallTimestamp.value = now;
++      }
++    }
++    top.value = currentY;
++    if (isDynamicHeight) {
++      if (clampedPosition !== positions.value[id]) {
++        positions.value = objectMove(positions.value, positions.value[id], clampedPosition);
++      }
++    } else {
++      setPosition(currentY, itemsCount, positions, id, effectiveItemHeight);
++    }
++    setAutoScroll(currentY, lowerBound.value, upperBound.value, effectiveItemHeight, autoScrollDirection);
++  }, [movingSV, effectiveItemHeight, isDynamicHeight, estimatedItemHeight, itemsCount, positions, id, onDragging, lowerBound, upperBound, autoScrollDirection, currentOverItemId, top, onDraggingLastCallTimestamp, itemHeights]);
++
++  useAnimatedReaction(() => autoScrollDirection.value, (scrollDirection, previousValue) => {
++    var _a;
++    if (scrollDirection !== null && previousValue !== null && scrollDirection !== previousValue) {
++      switch (scrollDirection) {
++        case ScrollDirection.Up: {
++          targetLowerBound.value = lowerBound.value;
++          targetLowerBound.value = withTiming(0, { duration: 1500 });
++          break;
++        }
++        case ScrollDirection.Down: {
++          let contentHeight;
++          if (isDynamicHeight && itemHeights) {
++            contentHeight = 0;
++            const heights = itemHeights.value;
++            const posObj = positions.value;
++            for (const itemId in posObj) {
++              contentHeight += (_a = heights[itemId]) !== null && _a !== void 0 ? _a : estimatedItemHeight;
++            }
++          } else {
++            contentHeight = itemsCount * effectiveItemHeight;
++          }
++          const maxScroll = contentHeight - calculatedContainerHeight;
++          targetLowerBound.value = lowerBound.value;
++          targetLowerBound.value = withTiming(maxScroll, { duration: 1500 });
++          break;
++        }
++        case ScrollDirection.None: {
++          targetLowerBound.value = lowerBound.value;
++          break;
++        }
++      }
++    }
++  }, [isDynamicHeight, itemHeights, effectiveItemHeight, estimatedItemHeight, itemsCount, calculatedContainerHeight]);
++
++  useAnimatedReaction(() => targetLowerBound.value, (targetLowerBoundValue, previousValue) => {
++    if (targetLowerBoundValue !== null && previousValue !== null && targetLowerBoundValue !== previousValue) {
++      if (movingSV.value) {
++        lowerBound.value = targetLowerBoundValue;
++      }
++    }
++  }, [movingSV]);
++
++  const createPanGesture = (isHandle = false) => {
++    let gesture = Gesture.Pan();
++    if (!isHandle) {
++      gesture = gesture.activateAfterLongPress(200);
++    }
++    return gesture.shouldCancelWhenOutside(false).onStart(event => {
++      "worklet";
++      if (isDragging) { isDragging.value = true; }
++      if (isDynamicHeight && itemHeights) {
++        initialItemContentY.value = getItemCumulativeY(id, positions.value, itemHeights.value, estimatedItemHeight);
++      } else {
++        initialItemContentY.value = positions.value[id] * effectiveItemHeight;
++      }
++      initialFingerAbsoluteY.value = event.absoluteY;
++      initialLowerBound.value = lowerBound.value;
++      positionY.value = initialItemContentY.value;
++      movingSV.value = true;
++      scheduleOnRN(setIsMoving, true);
++      if (onDragStart) {
++        scheduleOnRN(onDragStart, id, positions.value[id]);
++      }
++    }).onUpdate(event => {
++      "worklet";
++      const fingerDxScreen = event.absoluteY - initialFingerAbsoluteY.value;
++      const scrollDeltaSinceStart = lowerBound.value - initialLowerBound.value;
++      positionY.value = initialItemContentY.value + fingerDxScreen + scrollDeltaSinceStart;
++    }).onFinalize(() => {
++      "worklet";
++      if (isDragging) { isDragging.value = false; }
++      let finishPosition;
++      if (isDynamicHeight && itemHeights) {
++        finishPosition = getItemCumulativeY(id, positions.value, itemHeights.value, estimatedItemHeight);
++      } else {
++        finishPosition = positions.value[id] * effectiveItemHeight;
++      }
++      top.value = withTiming(finishPosition);
++      movingSV.value = false;
++      scheduleOnRN(setIsMoving, false);
++      if (onDrop) {
++        const positionsCopy = { ...positions.value };
++        scheduleOnRN(onDrop, id, positions.value[id], positionsCopy);
++      }
++      currentOverItemId.value = null;
++    });
++  };
++
++  const panGestureHandler = createPanGesture(false).enabled(!hasHandle);
++  const handlePanGestureHandler = createPanGesture(true);
++  const animatedStyle = useAnimatedStyle(() => {
++    "worklet";
++    return {
++      position: "absolute",
++      left: 0,
++      right: 0,
++      top: top.value,
++      zIndex: movingSV.value ? 1 : 0,
++      shadowColor: "black",
++      shadowOpacity: withSpring(movingSV.value ? 0.2 : 0),
++      shadowRadius: 10
++    };
++  }, [movingSV]);
++
++  return {
++    animatedStyle,
++    panGestureHandler,
++    handlePanGestureHandler,
++    isMoving,
++    hasHandle,
++    registerHandle
++  };
++}
+\ No newline at end of file
+diff --git a/node_modules/react-native-reanimated-dnd/lib/hooks/useSortableList.js b/node_modules/react-native-reanimated-dnd/lib/hooks/useSortableList.js
+index f75a273..2f56974 100644
+--- a/node_modules/react-native-reanimated-dnd/lib/hooks/useSortableList.js
++++ b/node_modules/react-native-reanimated-dnd/lib/hooks/useSortableList.js
+@@ -1 +1,164 @@
+-import{useRef,useCallback,useMemo,useState,useEffect}from"react";import{scrollTo,useAnimatedReaction,useAnimatedRef,useAnimatedScrollHandler,useSharedValue}from"react-native-reanimated";import{listToObject,resolveItemHeight}from"../components/sortableUtils";import{ScrollDirection}from"../types/sortable";export function useSortableList(options){const{data,itemHeight,enableDynamicHeights=false,estimatedItemHeight=60,onHeightsMeasured,itemKeyExtractor=item=>item.id}=options;const isDynamicHeight=useMemo((()=>{if(enableDynamicHeights){return true}if(typeof itemHeight==="number"){return false}if(itemHeight===undefined){return false}return true}),[enableDynamicHeights,itemHeight]);const needsMeasurement=enableDynamicHeights;if(__DEV__){data.forEach(((item,index)=>{const id=itemKeyExtractor(item,index);if(typeof id!=="string"||!id){console.error(`[react-native-reanimated-dnd] Item at index ${index} has invalid id: ${id}. `+`Each item must have a unique string id property.`)}}));if(!isDynamicHeight&&itemHeight===undefined){console.error("[react-native-reanimated-dnd] itemHeight is required when not using dynamic heights. "+"Either provide itemHeight or set enableDynamicHeights to true.")}}const positions=useSharedValue(listToObject(data));const scrollY=useSharedValue(0);const autoScroll=useSharedValue(ScrollDirection.None);const scrollViewRef=useAnimatedRef();const dropProviderRef=useRef(null);const initialHeights=useMemo((()=>{if(!isDynamicHeight){return{}}const heights={};data.forEach(((item,index)=>{const id=itemKeyExtractor(item,index);heights[id]=resolveItemHeight(itemHeight,item,index,estimatedItemHeight)}));return heights}),[]);const itemHeightsSV=useSharedValue(initialHeights);const fixedContentHeight=typeof itemHeight==="number"?data.length*itemHeight:null;const[dynamicContentHeight,setDynamicContentHeight]=useState((()=>{if(!isDynamicHeight&&fixedContentHeight!==null){return fixedContentHeight}let total=0;data.forEach(((item,index)=>{total+=resolveItemHeight(itemHeight,item,index,estimatedItemHeight)}));return total}));useEffect((()=>{if(!isDynamicHeight){return}const newHeights={};data.forEach(((item,index)=>{const id=itemKeyExtractor(item,index);if(!needsMeasurement){newHeights[id]=resolveItemHeight(itemHeight,item,index,estimatedItemHeight)}else{const existing=itemHeightsSV.value[id];newHeights[id]=existing!==null&&existing!==void 0?existing:estimatedItemHeight}}));itemHeightsSV.value=newHeights;let total=0;data.forEach(((item,index)=>{var _a;const id=itemKeyExtractor(item,index);total+=(_a=newHeights[id])!==null&&_a!==void 0?_a:estimatedItemHeight}));setDynamicContentHeight(total)}),[data,isDynamicHeight,needsMeasurement,itemHeight,estimatedItemHeight,itemKeyExtractor]);const scheduleHeightUpdate=useCallback(((id,height)=>{const rounded=Math.round(height);const prev=itemHeightsSV.value[id];if(prev!==undefined&&Math.abs(prev-rounded)<1){return}const newHeights={...itemHeightsSV.value,[id]:rounded};itemHeightsSV.value=newHeights;let total=0;data.forEach(((item,index)=>{var _a;const itemId=itemKeyExtractor(item,index);total+=(_a=newHeights[itemId])!==null&&_a!==void 0?_a:estimatedItemHeight}));setDynamicContentHeight(total);if(onHeightsMeasured){onHeightsMeasured(newHeights)}}),[data,itemKeyExtractor,estimatedItemHeight,onHeightsMeasured]);useAnimatedReaction((()=>scrollY.value),(scrolling=>{scrollTo(scrollViewRef,0,scrolling,false)}));const handleScroll=useAnimatedScrollHandler((event=>{scrollY.value=event.contentOffset.y}));const handleScrollEnd=useCallback((()=>{let localScrollTimeout=null;if(localScrollTimeout){clearTimeout(localScrollTimeout)}localScrollTimeout=setTimeout((()=>{var _a;(_a=dropProviderRef.current)===null||_a===void 0?void 0:_a.requestPositionUpdate()}),50)}),[]);const contentHeight=!isDynamicHeight&&fixedContentHeight!==null?fixedContentHeight:dynamicContentHeight;const getItemProps=useCallback(((item,index)=>{const id=itemKeyExtractor(item,index);return{id,positions,lowerBound:scrollY,autoScrollDirection:autoScroll,itemsCount:data.length,itemHeight:typeof itemHeight==="number"?itemHeight:undefined,isDynamicHeight,estimatedItemHeight,itemHeights:isDynamicHeight?itemHeightsSV:undefined,scheduleHeightUpdate:needsMeasurement?scheduleHeightUpdate:undefined}}),[data.length,itemHeight,isDynamicHeight,estimatedItemHeight,needsMeasurement,itemKeyExtractor,positions,scrollY,autoScroll,itemHeightsSV,scheduleHeightUpdate]);return{positions,scrollY,autoScroll,scrollViewRef,dropProviderRef,handleScroll,handleScrollEnd,contentHeight,isDynamicHeight,itemHeights:itemHeightsSV,scheduleHeightUpdate:needsMeasurement?scheduleHeightUpdate:undefined,getItemProps}}
+\ No newline at end of file
++import { useRef, useCallback, useMemo, useState, useEffect } from "react";
++import { scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
++import { listToObject, resolveItemHeight } from "../components/sortableUtils";
++import { ScrollDirection } from "../types/sortable";
++
++export function useSortableList(options) {
++  const {
++    data,
++    itemHeight,
++    enableDynamicHeights = false,
++    estimatedItemHeight = 60,
++    onHeightsMeasured,
++    itemKeyExtractor = item => item.id
++  } = options;
++
++  const isDynamicHeight = useMemo(() => {
++    if (enableDynamicHeights) { return true; }
++    if (typeof itemHeight === "number") { return false; }
++    if (itemHeight === undefined) { return false; }
++    return true;
++  }, [enableDynamicHeights, itemHeight]);
++
++  const needsMeasurement = enableDynamicHeights;
++
++  if (__DEV__) {
++    data.forEach((item, index) => {
++      const id = itemKeyExtractor(item, index);
++      if (typeof id !== "string" || !id) {
++        console.error(`[react-native-reanimated-dnd] Item at index ${index} has invalid id: ${id}. Each item must have a unique string id property.`);
++      }
++    });
++    if (!isDynamicHeight && itemHeight === undefined) {
++      console.error("[react-native-reanimated-dnd] itemHeight is required when not using dynamic heights. Either provide itemHeight or set enableDynamicHeights to true.");
++    }
++  }
++
++  const positions = useSharedValue(listToObject(data));
++
++  useEffect(() => {
++    positions.value = listToObject(data);
++  }, [
++    data.length,
++    data.map((d, idx) => itemKeyExtractor(d, idx)).join(","),
++    positions
++  ]);
++  const scrollY = useSharedValue(0);
++  const autoScroll = useSharedValue(ScrollDirection.None);
++  const isDragging = useSharedValue(false);
++  const scrollViewRef = useAnimatedRef();
++  const dropProviderRef = useRef(null);
++
++  const initialHeights = useMemo(() => {
++    if (!isDynamicHeight) { return {}; }
++    const heights = {};
++    data.forEach((item, index) => {
++      const id = itemKeyExtractor(item, index);
++      heights[id] = resolveItemHeight(itemHeight, item, index, estimatedItemHeight);
++    });
++    return heights;
++  }, []);
++
++  const itemHeightsSV = useSharedValue(initialHeights);
++  const fixedContentHeight = typeof itemHeight === "number" ? data.length * itemHeight : null;
++  const [dynamicContentHeight, setDynamicContentHeight] = useState(() => {
++    if (!isDynamicHeight && fixedContentHeight !== null) { return fixedContentHeight; }
++    let total = 0;
++    data.forEach((item, index) => {
++      total += resolveItemHeight(itemHeight, item, index, estimatedItemHeight);
++    });
++    return total;
++  });
++
++  useEffect(() => {
++    if (!isDynamicHeight) { return; }
++    const newHeights = {};
++    data.forEach((item, index) => {
++      const id = itemKeyExtractor(item, index);
++      if (!needsMeasurement) {
++        newHeights[id] = resolveItemHeight(itemHeight, item, index, estimatedItemHeight);
++      } else {
++        const existing = itemHeightsSV.value[id];
++        newHeights[id] = existing !== null && existing !== undefined ? existing : estimatedItemHeight;
++      }
++    });
++    itemHeightsSV.value = newHeights;
++    let total = 0;
++    data.forEach((item, index) => {
++      const id = itemKeyExtractor(item, index);
++      total += newHeights[id] !== null && newHeights[id] !== undefined ? newHeights[id] : estimatedItemHeight;
++    });
++    setDynamicContentHeight(total);
++  }, [data, isDynamicHeight, needsMeasurement, itemHeight, estimatedItemHeight, itemKeyExtractor]);
++
++  const scheduleHeightUpdate = useCallback((id, height) => {
++    const rounded = Math.round(height);
++    const prev = itemHeightsSV.value[id];
++    if (prev !== undefined && Math.abs(prev - rounded) < 1) { return; }
++    const newHeights = { ...itemHeightsSV.value, [id]: rounded };
++    itemHeightsSV.value = newHeights;
++    let total = 0;
++    data.forEach((item, index) => {
++      const itemId = itemKeyExtractor(item, index);
++      total += newHeights[itemId] !== null && newHeights[itemId] !== undefined ? newHeights[itemId] : estimatedItemHeight;
++    });
++    setDynamicContentHeight(total);
++    if (onHeightsMeasured) {
++      onHeightsMeasured(newHeights);
++    }
++  }, [data, itemKeyExtractor, estimatedItemHeight, onHeightsMeasured]);
++
++  useAnimatedReaction(() => scrollY.value, scrolling => {
++    if (isDragging.value) {
++      scrollTo(scrollViewRef, 0, scrolling, false);
++    }
++  });
++
++  const handleScroll = useAnimatedScrollHandler(event => {
++    scrollY.value = event.contentOffset.y;
++  });
++
++  const handleScrollEnd = useCallback(() => {
++    let localScrollTimeout = null;
++    if (localScrollTimeout) { clearTimeout(localScrollTimeout); }
++    localScrollTimeout = setTimeout(() => {
++      var _a;
++      (_a = dropProviderRef.current) === null || _a === void 0 ? void 0 : _a.requestPositionUpdate();
++    }, 50);
++  }, []);
++
++  const contentHeight = !isDynamicHeight && fixedContentHeight !== null ? fixedContentHeight : dynamicContentHeight;
++
++  const getItemProps = useCallback((item, index) => {
++    const id = itemKeyExtractor(item, index);
++    return {
++      id,
++      positions,
++      lowerBound: scrollY,
++      autoScrollDirection: autoScroll,
++      isDragging,
++      itemsCount: data.length,
++      itemHeight: typeof itemHeight === "number" ? itemHeight : undefined,
++      isDynamicHeight,
++      estimatedItemHeight,
++      itemHeights: isDynamicHeight ? itemHeightsSV : undefined,
++      scheduleHeightUpdate: needsMeasurement ? scheduleHeightUpdate : undefined
++    };
++  }, [data.length, itemHeight, isDynamicHeight, estimatedItemHeight, needsMeasurement, itemKeyExtractor, positions, scrollY, autoScroll, isDragging, itemHeightsSV, scheduleHeightUpdate]);
++
++  return {
++    positions,
++    scrollY,
++    autoScroll,
++    isDragging,
++    scrollViewRef,
++    dropProviderRef,
++    handleScroll,
++    handleScrollEnd,
++    contentHeight,
++    isDynamicHeight,
++    itemHeights: itemHeightsSV,
++    scheduleHeightUpdate: needsMeasurement ? scheduleHeightUpdate : undefined,
++    getItemProps
++  };
++}
+\ No newline at end of file

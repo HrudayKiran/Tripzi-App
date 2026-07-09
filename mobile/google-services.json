@@ -7,17 +7,17 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:334857280812:android:a2948142078ba52a4fa089",
+        "mobilesdk_app_id": "1:334857280812:android:80d8f0fb76e8d1004fa089",
         "android_client_info": {
-          "package_name": "com.tripzi.mobile"
+          "package_name": "com.nxtvibes.mobile"
         }
       },
       "oauth_client": [
         {
-          "client_id": "334857280812-s52d3f0aahdo1d07adandmluscoqh2ci.apps.googleusercontent.com",
+          "client_id": "334857280812-pqkb622f8et51fj66obn8ekhpamsrh2m.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.tripzi.mobile",
+            "package_name": "com.nxtvibes.mobile",
             "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
           }
         },
@@ -35,7 +35,7 @@
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "334857280812-mb7tsrfd5q53ubachdlftnmogmskqu2c.apps.googleusercontent.com",
+              "client_id": "334857280812-h4rianngdvfitq16chgqp03dqn97vp8q.apps.googleusercontent.com",
               "client_type": 3
             }
           ]

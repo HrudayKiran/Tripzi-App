@@ -1,9 +1,9 @@
 import * as ImagePicker from 'expo-image-picker';
-import storage from '@react-native-firebase/storage';
-import functions from '@react-native-firebase/functions';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { Alert, Linking, Platform } from 'react-native';
+import { workersApi } from '../lib/workersApi';
 
-export type ImageFolder = 'profiles' | 'trips' | 'chats';
+export type ImageFolder = 'profiles' | 'direct_chats' | 'group_chats' | 'itineraries';
 
 export interface UploadOptions {
     folder: ImageFolder;
@@ -13,6 +13,8 @@ export interface UploadOptions {
     quality?: number;
     allowsEditing?: boolean;
     tripId?: string;
+    chatId?: string;
+    existingUri?: string;
 }
 
 export interface UploadResult {
@@ -75,26 +77,54 @@ const putBlobToSignedUrl = async (
 
 const uploadImageToR2 = async (
     uri: string,
-    callableName: 'startProfileImageUpload' | 'startTripImageUpload',
+    endpoint: 
+        | '/media/profile-upload' 
+        | '/media/direct-chat-upload'
+        | '/media/group-chat-upload'
+        | '/media/itinerary-upload',
     payload: Record<string, unknown>
 ): Promise<UploadResult> => {
     try {
         const contentType = inferContentType(uri);
         const fileName = inferFileName(uri);
-        const callable = functions().httpsCallable(callableName);
-        const ticketResponse = await callable({
-            ...payload,
-            contentType,
-            fileName,
+
+        const ticket = await workersApi<UploadTicket>(endpoint, {
+            body: { ...payload, contentType, fileName },
         });
-        const ticket = ticketResponse?.data as UploadTicket | undefined;
 
         if (!ticket?.uploadUrl || !ticket?.publicUrl || !ticket?.objectKey) {
             throw new Error('Upload ticket was incomplete.');
         }
 
-        const blob = await readLocalFileAsBlob(uri);
-        await putBlobToSignedUrl(ticket.uploadUrl, blob, contentType);
+        // Determine optimization settings based on endpoint
+        let resizeWidth = 1080;
+        let compressQuality = 0.7;
+
+        if (endpoint === '/media/profile-upload') {
+            resizeWidth = 400;
+            compressQuality = 0.6;
+        } else if (
+            endpoint === '/media/direct-chat-upload' ||
+            endpoint === '/media/group-chat-upload'
+        ) {
+            resizeWidth = 800;
+            compressQuality = 0.6;
+        }
+
+        // Optimize image before upload
+        const manipResult = await ImageManipulator.manipulateAsync(
+            uri,
+            [{ resize: { width: resizeWidth } }],
+            { 
+                compress: compressQuality, 
+                format: ImageManipulator.SaveFormat.JPEG 
+            }
+        );
+
+        const optimizedContentType = 'image/jpeg';
+
+        const blob = await readLocalFileAsBlob(manipResult.uri);
+        await putBlobToSignedUrl(ticket.uploadUrl, blob, optimizedContentType);
 
         return {
             success: true,
@@ -112,7 +142,6 @@ const uploadImageToR2 = async (
 
 /**
  * Request permission to access media library.
- * Shows alert with "Open Settings" option if denied.
  */
 export async function requestMediaPermission(): Promise<boolean> {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -142,7 +171,6 @@ export async function requestMediaPermission(): Promise<boolean> {
 
 /**
  * Request camera permission.
- * Shows alert with "Open Settings" option if denied.
  */
 export async function requestCameraPermission(): Promise<boolean> {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -174,39 +202,50 @@ export async function requestCameraPermission(): Promise<boolean> {
  * Pick an image from the device library and upload it.
  */
 export async function pickAndUploadImage(options: UploadOptions): Promise<UploadResult> {
-    const { folder, userId, subfolder, aspect = [1, 1], quality = 0.8, allowsEditing = true, tripId } = options;
+    const { folder, userId, aspect = [1, 1], quality = 0.8, allowsEditing = true, tripId, chatId, existingUri } = options;
 
-    const hasPermission = await requestMediaPermission();
-    if (!hasPermission) {
-        return { success: false, error: 'Permission denied' };
-    }
+    let uri = existingUri;
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing,
-        aspect,
-        quality,
-    });
+    if (!uri) {
+        const hasPermission = await requestMediaPermission();
+        if (!hasPermission) {
+            return { success: false, error: 'Permission denied' };
+        }
 
-    if (result.canceled || !result.assets[0]) {
-        return { success: false, error: 'Selection cancelled' };
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing,
+            aspect,
+            quality,
+        });
+
+        if (result.canceled || !result.assets[0]) {
+            return { success: false, error: 'Selection cancelled' };
+        }
+        uri = result.assets[0].uri;
     }
 
     if (folder === 'profiles') {
-        return uploadProfileImageToR2(result.assets[0].uri, userId);
+        return uploadProfileImageToR2(uri, userId);
     }
-    if (folder === 'trips') {
-        return uploadTripImageToR2(result.assets[0].uri, userId, tripId);
+    if (folder === 'itineraries') {
+        return uploadItineraryImageToR2(uri, userId, tripId);
+    }
+    if (folder === 'direct_chats') {
+        return uploadDirectChatImageToR2(uri, userId, chatId || 'general');
+    }
+    if (folder === 'group_chats') {
+        return uploadGroupChatImageToR2(uri, userId, chatId || 'general');
     }
 
-    return uploadToStorage(result.assets[0].uri, folder, userId, subfolder);
+    return uploadItineraryImageToR2(uri, userId);
 }
 
 /**
  * Take a photo with camera and upload it.
  */
 export async function captureAndUploadImage(options: UploadOptions): Promise<UploadResult> {
-    const { folder, userId, subfolder, aspect = [1, 1], quality = 0.8, allowsEditing = true, tripId } = options;
+    const { folder, userId, aspect = [1, 1], quality = 0.8, allowsEditing = true, tripId } = options;
 
     const hasPermission = await requestCameraPermission();
     if (!hasPermission) {
@@ -227,52 +266,59 @@ export async function captureAndUploadImage(options: UploadOptions): Promise<Upl
     if (folder === 'profiles') {
         return uploadProfileImageToR2(result.assets[0].uri, userId);
     }
-    if (folder === 'trips') {
-        return uploadTripImageToR2(result.assets[0].uri, userId, tripId);
+    if (folder === 'itineraries') {
+        return uploadItineraryImageToR2(result.assets[0].uri, userId, tripId);
+    }
+    if (folder === 'direct_chats') {
+        return uploadDirectChatImageToR2(result.assets[0].uri, userId);
+    }
+    if (folder === 'group_chats') {
+        return uploadGroupChatImageToR2(result.assets[0].uri, userId);
     }
 
-    return uploadToStorage(result.assets[0].uri, folder, userId, subfolder);
+    return uploadItineraryImageToR2(result.assets[0].uri, userId);
 }
 
 export async function uploadProfileImageToR2(
     uri: string,
     userId: string
 ): Promise<UploadResult> {
-    return uploadImageToR2(uri, 'startProfileImageUpload', { userId });
+    return uploadImageToR2(uri, '/media/profile-upload', { userId });
 }
 
-export async function uploadTripImageToR2(
+export async function uploadDirectChatImageToR2(
     uri: string,
     userId: string,
-    tripId?: string
+    chatId?: string
 ): Promise<UploadResult> {
-    return uploadImageToR2(uri, 'startTripImageUpload', { userId, tripId: tripId || null });
+    return uploadImageToR2(uri, '/media/direct-chat-upload', { userId, chatId: chatId || null });
 }
+
+export async function uploadGroupChatImageToR2(
+    uri: string,
+    userId: string,
+    chatId?: string
+): Promise<UploadResult> {
+    return uploadImageToR2(uri, '/media/group-chat-upload', { userId, chatId: chatId || null });
+}
+
+export async function uploadItineraryImageToR2(
+    uri: string,
+    userId: string,
+    itineraryId?: string
+): Promise<UploadResult> {
+    return uploadImageToR2(uri, '/media/itinerary-upload', { userId, itineraryId: itineraryId || null });
+}
+
+
 
 export async function deleteProfileImageFromR2(objectKey: string): Promise<boolean> {
     if (!objectKey) return false;
 
     try {
-        const callable = functions().httpsCallable('deleteProfileImage');
-        await callable({ objectKey });
-        return true;
-    } catch {
-        return false;
-    }
-}
-
-export async function deleteTripImagesFromR2(
-    objectKeys: string[],
-    tripId?: string
-): Promise<boolean> {
-    const filteredKeys = objectKeys.filter(Boolean);
-    if (filteredKeys.length === 0) return true;
-
-    try {
-        const callable = functions().httpsCallable('deleteTripImages');
-        await callable({
-            objectKeys: filteredKeys,
-            tripId: tripId || null,
+        await workersApi('/media/profile-image', {
+            method: 'DELETE',
+            body: { objectKey },
         });
         return true;
     } catch {
@@ -280,82 +326,65 @@ export async function deleteTripImagesFromR2(
     }
 }
 
-/**
- * Upload a local file to Firebase Storage.
- * Retained for non-migrated media only.
- */
-export async function uploadToStorage(
-    uri: string,
-    folder: ImageFolder,
-    userId: string,
-    subfolder?: string
-): Promise<UploadResult> {
-    try {
-        const timestamp = Date.now();
-        const filename = `${timestamp}.jpg`;
-        const path = subfolder
-            ? `${folder}/${userId}/${subfolder}/${filename}`
-            : `${folder}/${userId}/${filename}`;
-
-        const reference = storage().ref(path);
-        await reference.putFile(uri);
-        const downloadUrl = await reference.getDownloadURL();
-
-        return { success: true, url: downloadUrl, path };
-    } catch (error) {
-
-        return { success: false, error: 'Upload failed. Please try again.' };
-    }
-}
-
-/**
- * Delete a file from Firebase Storage by URL.
- * Retained for legacy/non-migrated media.
- */
-export async function deleteFromStorage(url: string): Promise<boolean> {
-    if (!url || !url.startsWith('https://')) {
-        return false;
-    }
+export async function deleteDirectChatImageFromR2(objectKey: string): Promise<boolean> {
+    if (!objectKey) return false;
 
     try {
-        const reference = storage().refFromURL(url);
-        await reference.delete();
+        await workersApi('/media/direct-chat-image', {
+            method: 'DELETE',
+            body: { objectKey },
+        });
         return true;
-    } catch (error) {
-
+    } catch {
         return false;
     }
 }
 
-/**
- * Delete a file from Firebase Storage by path.
- * Retained for legacy/non-migrated media.
- */
-export async function deleteFromStorageByPath(path: string): Promise<boolean> {
-    if (!path) {
-        return false;
-    }
+export async function deleteGroupChatImageFromR2(objectKey: string): Promise<boolean> {
+    if (!objectKey) return false;
 
     try {
-        const reference = storage().ref(path);
-        await reference.delete();
+        await workersApi('/media/group-chat-image', {
+            method: 'DELETE',
+            body: { objectKey },
+        });
         return true;
-    } catch (error) {
-
+    } catch {
         return false;
     }
 }
+
+export async function deleteItineraryImagesFromR2(
+    objectKeys: string[],
+    itineraryId?: string
+): Promise<boolean> {
+    const filteredKeys = objectKeys.filter(Boolean);
+    if (filteredKeys.length === 0) return true;
+
+    try {
+        await workersApi('/media/itinerary-image', {
+            method: 'DELETE',
+            body: { objectKeys: filteredKeys, itineraryId: itineraryId || null },
+        });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+
 
 export default {
     pickAndUploadImage,
     captureAndUploadImage,
-    uploadToStorage,
     uploadProfileImageToR2,
-    uploadTripImageToR2,
+    uploadDirectChatImageToR2,
+    uploadGroupChatImageToR2,
+    uploadItineraryImageToR2,
     deleteProfileImageFromR2,
-    deleteTripImagesFromR2,
-    deleteFromStorage,
-    deleteFromStorageByPath,
+    deleteDirectChatImageFromR2,
+    deleteGroupChatImageFromR2,
+    deleteItineraryImagesFromR2,
     requestMediaPermission,
     requestCameraPermission,
 };

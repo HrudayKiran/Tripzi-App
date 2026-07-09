@@ -3,17 +3,23 @@
     "strict": false,
     "noImplicitAny": false,
     "jsx": "react-native",
+    "moduleResolution": "bundler",
     "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "allowJs": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
     "typeRoots": [
       "./src/types",
       "./node_modules/@types"
     ]
   },
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "nativewind-env.d.ts"
   ],
   "extends": "expo/tsconfig.base"
 }

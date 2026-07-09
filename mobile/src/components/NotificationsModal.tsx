@@ -1,62 +1,113 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Animated, FlatList, ActivityIndicator, Linking } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import React, { useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Animated, ScrollView } from 'react-native';
+import { FlashList } from "@shopify/flash-list";
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Icon from './Icon';
+import { NeumorphicCloseButton } from './NeumorphicIconButtons';
+import { MotiView } from 'moti';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET } from '../styles';
-import { useNotifications, AppNotification, NotificationType } from '../hooks/useNotifications';
-import { useNavigation } from '@react-navigation/native';
-import { navigationRef } from '../navigation/RootNavigation';
-import { resolveNotificationTarget } from '../utils/notificationNavigation';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
+import { useRouter } from 'expo-router';
+import { supabase } from '../lib/supabase';
+import { useNotificationStore, Notification } from '../store/notificationStore';
 
 const { width } = Dimensions.get('window');
+
+// Bypasses the FlashList TypeScript configuration constraints in this workspace environment
+const TypedFlashList = FlashList as any;
+
+export type NotificationType =
+    | 'message'
+    | 'join_trip'
+    | 'join_success'
+    | 'trip_join'
+    | 'leave_trip'
+    | 'rating'
+    | 'trip_update'
+    | 'trip_cancelled'
+    | 'trip_full'
+    | 'report_submitted'
+    | 'trip_report'
+    | 'system'
+    | 'action_required';
 
 type NotificationsModalProps = {
     visible: boolean;
     onClose: () => void;
-    onNotificationsChange?: (count: number) => void;
 };
 
 // Map notification types to icons and colors
-const getNotificationStyle = (type: NotificationType): { icon: string; color: string } => {
+const getNotificationStyle = (type: NotificationType | string): { icon: string; color: string } => {
     switch (type) {
         case 'message':
-            return { icon: 'mail', color: '#9d74f7' };
+            return { icon: 'Envelope', color: '#9d74f7' };
         case 'join_trip':
         case 'join_success':
         case 'trip_join':
-            return { icon: 'person-add', color: '#10B981' };
+            return { icon: 'UserPlus', color: '#10B981' };
         case 'leave_trip':
-            return { icon: 'person-remove', color: '#EF4444' };
+            return { icon: 'UserMinus', color: '#EF4444' };
         case 'rating':
-            return { icon: 'star', color: '#F59E0B' };
+            return { icon: 'Star', color: '#F59E0B' };
         case 'trip_update':
-            return { icon: 'create', color: '#3B82F6' };
+            return { icon: 'NotePencil', color: '#3B82F6' };
         case 'trip_cancelled':
-            return { icon: 'close-circle', color: '#EF4444' };
+            return { icon: 'XCircle', color: '#EF4444' };
         case 'trip_full':
-            return { icon: 'people', color: '#9d74f7' };
+            return { icon: 'Users', color: '#9d74f7' };
         case 'report_submitted':
         case 'trip_report':
-            return { icon: 'flag', color: '#F97316' };
+            return { icon: 'Flag', color: '#F97316' };
         case 'system':
-            return { icon: 'megaphone', color: '#0EA5E9' };
+            return { icon: 'Megaphone', color: '#0EA5E9' };
         case 'action_required':
-            return { icon: 'notifications', color: '#F59E0B' };
+            return { icon: 'Bell', color: '#F59E0B' };
         default:
-            return { icon: 'notifications', color: '#6B7280' };
+            return { icon: 'Bell', color: '#6B7280' };
     }
 };
 
 // Format relative time
-const getTimeAgo = (date: Date): string => {
-    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+const getTimeAgo = (dateString: string): string => {
+    const seconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
     if (seconds < 60) return 'Just now';
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
     return `${Math.floor(seconds / 86400)}d ago`;
+};
+
+// Premium Skeleton Loader Item Component
+const NotificationSkeletonItem = ({ colors, isDarkMode }: { colors: any; isDarkMode: boolean }) => {
+    const skeletonBg = isDarkMode ? '#1E293B' : '#E5E7EB';
+    
+    return (
+        <MotiView
+            from={{ opacity: 0.4 }}
+            animate={{ opacity: 1 }}
+            transition={{
+                type: 'timing',
+                duration: 900,
+                loop: true,
+            }}
+            style={[styles.notificationItem, { backgroundColor: colors.card }]}
+        >
+            {/* Left side circular avatar/icon skeleton */}
+            <View style={[styles.notificationIcon, { backgroundColor: skeletonBg }]} />
+            
+            {/* Right side text skeleton stacks */}
+            <View style={styles.notificationContent}>
+                {/* Title */}
+                <View style={[styles.skeletonLine, { backgroundColor: skeletonBg, width: '45%', height: 14, marginBottom: 10 }]} />
+                {/* Body line 1 */}
+                <View style={[styles.skeletonLine, { backgroundColor: skeletonBg, width: '90%', height: 11, marginBottom: 6 }]} />
+                {/* Body line 2 */}
+                <View style={[styles.skeletonLine, { backgroundColor: skeletonBg, width: '60%', height: 11, marginBottom: 10 }]} />
+                {/* Time */}
+                <View style={[styles.skeletonLine, { backgroundColor: skeletonBg, width: '20%', height: 9 }]} />
+            </View>
+        </MotiView>
+    );
 };
 
 // Notification Item Component with Swipe-to-Delete
@@ -66,12 +117,12 @@ const NotificationItem = ({
     onDelete,
     colors
 }: {
-    notification: AppNotification;
+    notification: Notification;
     onPress: () => void;
     onDelete: () => void;
     colors: any;
 }) => {
-    const { icon, color } = getNotificationStyle(notification.type);
+    const { icon, color } = getNotificationStyle(notification.type || 'system');
     const swipeableRef = useRef<Swipeable>(null);
 
     const renderRightActions = () => (
@@ -82,7 +133,7 @@ const NotificationItem = ({
                 onDelete();
             }}
         >
-            <Ionicons name="trash-outline" size={24} color="#fff" />
+            <Icon name="Trash" size={24} color="#fff" />
             <Text style={styles.deleteText}>Delete</Text>
         </TouchableOpacity>
     );
@@ -98,13 +149,13 @@ const NotificationItem = ({
                 style={[
                     styles.notificationItem,
                     { backgroundColor: colors.card },
-                    !notification.read && { borderLeftWidth: 3, borderLeftColor: color }
+                    !notification.is_read && { borderLeftWidth: 3, borderLeftColor: color }
                 ]}
                 onPress={onPress}
                 activeOpacity={0.7}
             >
                 <View style={[styles.notificationIcon, { backgroundColor: `${color}20` }]}>
-                    <Ionicons name={icon as any} size={20} color={color} />
+                    <Icon name={icon as any} size={20} color={color} />
                 </View>
                 <View style={styles.notificationContent}>
                     <Text style={[styles.notificationTitle, { color: colors.text }]}>
@@ -114,10 +165,10 @@ const NotificationItem = ({
                         {notification.message}
                     </Text>
                     <Text style={[styles.notificationTime, { color: colors.textSecondary }]}>
-                        {getTimeAgo(notification.createdAt)}
+                        {getTimeAgo(notification.created_at)}
                     </Text>
                 </View>
-                {!notification.read && (
+                {!notification.is_read && (
                     <View style={[styles.unreadDot, { backgroundColor: color }]} />
                 )}
             </TouchableOpacity>
@@ -125,20 +176,139 @@ const NotificationItem = ({
     );
 };
 
-const NotificationsModal = ({ visible, onClose, onNotificationsChange }: NotificationsModalProps) => {
-    const { colors } = useTheme();
-    const navigation = useNavigation();
+const NotificationsModal = ({ visible, onClose }: NotificationsModalProps) => {
+    const { colors, isDarkMode } = useTheme();
+    const router = useRouter();
+    const insets = useSafeAreaInsets();
     const slideAnim = useRef(new Animated.Value(width)).current;
+
+    // Cache the current user ID after first resolution — avoids repeated network calls
+    const userIdRef = useRef<string | null>(null);
 
     const {
         notifications,
         unreadCount,
-        loading,
+        setNotifications,
         markAsRead,
         markAllAsRead,
-        deleteNotification
-    } = useNotifications();
+        deleteNotification,
+        setLoading,
+        isLoading,
+    } = useNotificationStore();
 
+    /**
+     * Resolves the current user ID using getSession() (cached — no network round trip).
+     * Falls back to getUser() only if session is missing.
+     */
+    const resolveUserId = useCallback(async (): Promise<string | null> => {
+        if (userIdRef.current) return userIdRef.current;
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.id) {
+            userIdRef.current = session.user.id;
+            return session.user.id;
+        }
+        // Fallback: verify with server in case session is stale
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.id) {
+            userIdRef.current = user.id;
+            return user.id;
+        }
+        return null;
+    }, []);
+
+    // Fetch notifications from Supabase when modal opens
+    const fetchNotifications = useCallback(async () => {
+        try {
+            setLoading(true);
+            const userId = await resolveUserId();
+            if (!userId) return;
+
+            const { data, error } = await supabase
+                .from('notifications')
+                .select('*')
+                .eq('recipient_id', userId)
+                .order('created_at', { ascending: false })
+                .limit(50);
+
+            if (error) {
+                console.error('[Notifications] Fetch error:', error.message);
+                return;
+            }
+
+            if (data) {
+                setNotifications(data.map(n => ({
+                    id: n.id,
+                    title: n.title,
+                    message: n.message,
+                    is_read: n.is_read,
+                    created_at: n.created_at,
+                    type: n.type,
+                    deep_link_route: n.deep_link_route,
+                    deep_link_params: n.deep_link_params,
+                    actor_name: n.actor_name,
+                })));
+            }
+        } catch (e) {
+            console.error('[Notifications] Unexpected fetch error:', e);
+        } finally {
+            setLoading(false);
+        }
+    }, [setNotifications, setLoading, resolveUserId]);
+
+    // Fetch + realtime subscription — fixed race condition with isMounted guard
+    useEffect(() => {
+        if (!visible) return;
+
+        let isMounted = true;
+        let channel: ReturnType<typeof supabase.channel> | null = null;
+
+        const setupAndSubscribe = async () => {
+            await fetchNotifications();
+            if (!isMounted) return;
+
+            const userId = await resolveUserId();
+            if (!userId || !isMounted) return;
+
+            channel = supabase
+                .channel(`notifications-${userId}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'notifications',
+                        filter: `recipient_id=eq.${userId}`,
+                    },
+                    (payload: any) => {
+                        if (!isMounted) return;
+                        if (payload.new) {
+                            const n = payload.new;
+                            useNotificationStore.getState().addNotification({
+                                id: n.id,
+                                title: n.title,
+                                message: n.message,
+                                is_read: n.is_read,
+                                created_at: n.created_at,
+                                type: n.type,
+                                deep_link_route: n.deep_link_route,
+                                deep_link_params: n.deep_link_params,
+                                actor_name: n.actor_name,
+                            });
+                        }
+                    }
+                )
+                .subscribe();
+        };
+
+        setupAndSubscribe();
+
+        return () => {
+            isMounted = false;
+            if (channel) supabase.removeChannel(channel);
+        };
+    }, [visible, fetchNotifications, resolveUserId]);
+
+    // Slide animation
     useEffect(() => {
         if (visible) {
             slideAnim.setValue(width);
@@ -157,50 +327,64 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
         }
     }, [visible]);
 
-    // Report notification count changes
-    useEffect(() => {
-        onNotificationsChange?.(unreadCount);
-    }, [unreadCount]);
+    const handleNotificationPress = async (notification: Notification) => {
+        if (!notification.is_read) {
+            const userId = await resolveUserId();
+            if (!userId) return;
 
-    const handleNotificationPress = async (notification: AppNotification) => {
-        // Mark as read
-        if (!notification.read) {
-            await markAsRead(notification.id);
+            // Optimistic local update
+            markAsRead(notification.id);
+
+            // Sync to Supabase — explicit ownership guard as defence-in-depth (RLS also enforces this)
+            supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('id', notification.id)
+                .eq('recipient_id', userId)
+                .then();
         }
 
-        const fallbackTarget = notification.type === 'age_verified' ? {
-            route: 'EditProfile',
-            params: {},
-        } : null;
-
-        const target = notification.deepLinkRoute
-            ? await resolveNotificationTarget(notification)
-            : fallbackTarget;
-
-        if (target) {
+        if (notification.deep_link_route) {
             onClose();
             setTimeout(() => {
-                if (target.route === 'ExternalLink') {
-                    const url = typeof target.params?.['url'] === 'string'
-                        ? target.params['url']
-                        : null;
-                    if (url && url.length > 0) {
-                        Linking.openURL(url).catch(() => { });
-                    }
-                    return;
-                }
-
-                if (navigationRef.isReady()) {
-                    navigationRef.navigate(target.route as any, target.params as any);
-                } else {
-                    navigation.navigate(target.route as never, target.params as never);
-                }
+                router.push({
+                    pathname: notification.deep_link_route as any,
+                    params: notification.deep_link_params as any,
+                });
             }, 300);
         }
     };
 
-    const handleDeleteNotification = (notificationId: string) => {
+    const handleDeleteNotification = async (notificationId: string) => {
+        const userId = await resolveUserId();
+        if (!userId) return;
+
+        // Optimistic local removal
         deleteNotification(notificationId);
+
+        // Sync to Supabase — explicit ownership guard as defence-in-depth (RLS also enforces this)
+        supabase
+            .from('notifications')
+            .delete()
+            .eq('id', notificationId)
+            .eq('recipient_id', userId)
+            .then();
+    };
+
+    const handleMarkAllAsRead = async () => {
+        const userId = await resolveUserId();
+        if (!userId) return;
+
+        // Optimistic local update
+        markAllAsRead();
+
+        // Sync to Supabase
+        supabase
+            .from('notifications')
+            .update({ is_read: true })
+            .eq('recipient_id', userId)
+            .eq('is_read', false)
+            .then();
     };
 
     return (
@@ -215,12 +399,12 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                             { transform: [{ translateX: slideAnim }] }
                         ]}
                     >
-                        <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+                        <View style={{ flex: 1, paddingTop: insets.top }}>
                             {/* Header */}
                             <View style={[styles.header, { borderBottomColor: colors.border }]}>
                                 <View style={styles.headerLeft}>
-                                    <View style={[styles.headerIcon, { backgroundColor: colors.primaryLight }]}>
-                                        <Ionicons name="notifications" size={20} color={colors.primary} />
+                                    <View style={[styles.headerIcon, { backgroundColor: isDarkMode ? '#222222' : '#F3F4F6' }]}>
+                                        <Icon name="Bell" size={20} color={isDarkMode ? '#FFFFFF' : '#000000'} />
                                     </View>
                                     <Text style={[styles.title, { color: colors.text }]}>Notifications</Text>
                                     {unreadCount > 0 && (
@@ -229,19 +413,29 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                                         </View>
                                     )}
                                 </View>
-                                <TouchableOpacity
+                                <NeumorphicCloseButton
                                     onPress={onClose}
-                                    style={styles.closeButton}
-                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                >
-                                    <Ionicons name="close" size={24} color={colors.text} />
-                                </TouchableOpacity>
+                                    size={42}
+                                    iconSize={22}
+                                />
                             </View>
 
-                            {loading ? (
-                                <View style={styles.loadingContainer}>
-                                    <ActivityIndicator size="large" color={colors.primary} />
-                                </View>
+                            {/* Loading / Content Render Decision */}
+                            {isLoading ? (
+                                <ScrollView 
+                                    style={styles.loadingScroll}
+                                    contentContainerStyle={styles.content}
+                                    showsVerticalScrollIndicator={false}
+                                >
+                                    <View style={styles.skeletonActionRow}>
+                                        <View style={[styles.skeletonLine, { backgroundColor: isDarkMode ? '#1E293B' : '#E5E7EB', width: '30%', height: 10 }]} />
+                                    </View>
+                                    <NotificationSkeletonItem colors={colors} isDarkMode={isDarkMode} />
+                                    <NotificationSkeletonItem colors={colors} isDarkMode={isDarkMode} />
+                                    <NotificationSkeletonItem colors={colors} isDarkMode={isDarkMode} />
+                                    <NotificationSkeletonItem colors={colors} isDarkMode={isDarkMode} />
+                                    <NotificationSkeletonItem colors={colors} isDarkMode={isDarkMode} />
+                                </ScrollView>
                             ) : notifications.length > 0 ? (
                                 <>
                                     {/* Action buttons */}
@@ -252,10 +446,10 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                                         {unreadCount > 0 && (
                                             <TouchableOpacity
                                                 style={styles.markAllButton}
-                                                onPress={markAllAsRead}
+                                                onPress={handleMarkAllAsRead}
                                                 activeOpacity={0.7}
                                             >
-                                                <Ionicons name="checkmark-done" size={16} color={colors.primary} />
+                                                <Icon name="Checks" size={16} color={colors.primary} />
                                                 <Text style={[styles.markAllText, { color: colors.primary }]}>
                                                     Mark all read
                                                 </Text>
@@ -264,28 +458,43 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                                     </View>
 
                                     {/* Notifications List */}
-                                    <FlatList
+                                    <TypedFlashList
                                         data={notifications}
-                                        keyExtractor={(item) => item.id}
+                                        keyExtractor={(item: any) => item.id}
                                         contentContainerStyle={styles.content}
                                         showsVerticalScrollIndicator={false}
-                                        renderItem={({ item, index }) => (
-                                            <Animatable.View animation="fadeInRight" delay={index * 30}>
+                                        renderItem={({ item, index }: any) => (
+                                            <MotiView
+                                                from={{ opacity: 0, translateX: 20 }}
+                                                animate={{ opacity: 1, translateX: 0 }}
+                                                transition={{ type: 'timing', duration: 300, delay: index * 30 }}
+                                            >
                                                 <NotificationItem
                                                     notification={item}
                                                     onPress={() => handleNotificationPress(item)}
                                                     onDelete={() => handleDeleteNotification(item.id)}
                                                     colors={colors}
                                                 />
-                                            </Animatable.View>
+                                            </MotiView>
                                         )}
+                                        estimatedItemSize={80}
                                     />
                                 </>
                             ) : (
                                 /* Empty State */
                                 <View style={styles.emptyState}>
-                                    <View style={[styles.emptyIcon, { backgroundColor: colors.primaryLight }]}>
-                                        <Ionicons name="notifications-off-outline" size={48} color={colors.primary} />
+                                    <View style={[
+                                        styles.emptyIcon,
+                                        {
+                                            backgroundColor: isDarkMode ? '#000000' : '#FFFFFF',
+                                            shadowColor: isDarkMode ? '#000000' : '#b8c4d9',
+                                            shadowOffset: { width: 3, height: 3 },
+                                            shadowOpacity: 0.8,
+                                            shadowRadius: 5,
+                                            elevation: 4,
+                                        }
+                                    ]}>
+                                        <Icon name="BellSlash" size={48} color={isDarkMode ? '#FFFFFF' : '#000000'} />
                                     </View>
                                     <Text style={[styles.emptyTitle, { color: colors.text }]}>All caught up!</Text>
                                     <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
@@ -293,7 +502,7 @@ const NotificationsModal = ({ visible, onClose, onNotificationsChange }: Notific
                                     </Text>
                                 </View>
                             )}
-                        </SafeAreaView>
+                        </View>
                     </Animated.View>
                 </View>
             </GestureHandlerRootView>
@@ -309,10 +518,11 @@ const styles = StyleSheet.create({
     headerLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
     headerIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
     title: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold },
-    closeButton: { width: TOUCH_TARGET.min, height: TOUCH_TARGET.min, justifyContent: 'center', alignItems: 'center' },
     badge: { backgroundColor: '#EF4444', paddingHorizontal: SPACING.sm, paddingVertical: 2, borderRadius: 10, minWidth: 20, alignItems: 'center' },
     badgeText: { color: '#fff', fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold },
-    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    loadingScroll: { flex: 1 },
+    skeletonActionRow: { paddingVertical: SPACING.md, marginBottom: SPACING.xs },
+    skeletonLine: { borderRadius: BORDER_RADIUS.sm },
     actionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.xl, paddingVertical: SPACING.sm },
     hintText: { fontSize: FONT_SIZE.xs },
     markAllButton: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },

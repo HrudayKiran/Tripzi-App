@@ -1,1 +1,1 @@
-export const GET_TRIPS_URL = process.env.EXPO_PUBLIC_GET_TRIPS_URL || 'https://gettrips-kdx4wt75ja-uc.a.run.app';
+export { DEFAULT_AVATAR_URL, DEFAULT_TRIP_IMAGE, DEFAULT_GROUP_IMAGE, getDisplayName, isValidImageUrl } from './defaults';

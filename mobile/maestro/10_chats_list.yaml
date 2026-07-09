@@ -1,4 +1,4 @@
-appId: com.tripzi.mobile
+appId: com.nxtvibes.mobile
 ---
 # Assumes starting from Home tab or any main tab
 - tapOn: "Messages"

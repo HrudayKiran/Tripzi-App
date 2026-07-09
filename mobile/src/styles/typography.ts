@@ -1,5 +1,5 @@
 /**
- * Global typography presets for the Tripzi app.
+ * Global typography presets for the NxtVibes app.
  * Use these as base styles with spread operator, e.g. { ...TYPOGRAPHY.heading1 }
  */
 import { StyleSheet, TextStyle } from 'react-native';

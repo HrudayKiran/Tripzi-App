@@ -5,44 +5,47 @@ import {
     StyleSheet,
     TouchableOpacity,
     TextInput,
-    FlatList,
     Image,
     ActivityIndicator,
     Alert,
     KeyboardAvoidingView,
     Platform,
+    BackHandler,
 } from 'react-native';
+import { FlashList } from "@shopify/flash-list";
+
+const TypedFlashList = FlashList as any;
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import Icon from '../components/Icon';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
+import { supabase } from '../lib/supabase';
 import { searchUsersByPrefix } from '../utils/searchUsers';
+import { pickAndUploadImage } from '../utils/imageUpload';
+import { UserSearchListSkeleton } from '../components/Skeletons';
 
 interface User {
     id: string;
     displayName: string;
     username?: string;
     photoURL?: string;
-    ageVerified?: boolean;
 }
 
-const CreateGroupScreen = ({ navigation }) => {
+const CreateGroupScreen = () => {
+    const router = useRouter();
     const { colors } = useTheme();
 
     // Use state for currentUser to properly handle auth state
-    const [currentUser, setCurrentUser] = useState(auth().currentUser);
+    const [currentUser, setCurrentUser] = useState<any>(null);
 
-    // Listen for auth state changes
     useEffect(() => {
-        const unsubscribe = auth().onAuthStateChanged((user) => {
-
-            setCurrentUser(user);
+        supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setCurrentUser(session?.user || null);
         });
-        return () => unsubscribe();
+        return () => subscription.unsubscribe();
     }, []);
 
     const [step, setStep] = useState<'select' | 'details'>('select');
@@ -53,6 +56,23 @@ const CreateGroupScreen = ({ navigation }) => {
     const [groupName, setGroupName] = useState('');
     const [groupIcon, setGroupIcon] = useState<string | null>(null);
     const [creating, setCreating] = useState(false);
+
+    useEffect(() => {
+        const backAction = () => {
+            if (searchQuery !== '') {
+                setSearchQuery('');
+                setSearchResults([]);
+                return true;
+            }
+            if (step === 'details') {
+                setStep('select');
+                return true;
+            }
+            return false;
+        };
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+        return () => backHandler.remove();
+    }, [searchQuery, step]);
 
 
 
@@ -68,13 +88,12 @@ const CreateGroupScreen = ({ navigation }) => {
         try {
             const users = await searchUsersByPrefix(query, 10);
             const results: User[] = users
-                .filter((u) => u.id !== currentUser?.uid)
+                .filter((u) => u.id !== currentUser?.id)
                 .map((u) => ({
                     id: u.id,
                     displayName: u.displayName || 'User',
                     username: u.username,
                     photoURL: u.photoURL,
-                    ageVerified: u.ageVerified,
                 }));
 
             setSearchResults(results);
@@ -131,22 +150,25 @@ const CreateGroupScreen = ({ navigation }) => {
             // Upload group icon if selected
             let groupIconUrl = '';
             if (groupIcon) {
-                const filename = `${Date.now()}_group.jpg`;
-                const storageRef = storage().ref(`groups/${currentUser.uid}/${filename}`);
-                await storageRef.putFile(groupIcon);
-                groupIconUrl = await storageRef.getDownloadURL();
+                const result = await pickAndUploadImage({
+                    folder: 'group_chats',
+                    userId: currentUser.id,
+                    existingUri: groupIcon,
+                });
+                if (result.success && result.url) groupIconUrl = result.url;
             }
 
-            // Get current user data
-            const currentUserDoc = await firestore().collection('users').doc(currentUser.uid).get();
-            const currentUserData = currentUserDoc.data();
+            // Get current user profile
+            const { data: profile } = await supabase.from('profiles').select('name, photo_url').eq('id', currentUser.id).maybeSingle();
+            const userData: any = profile || {};
+            const creatorName = userData.name || currentUser.user_metadata?.full_name || 'User';
 
             // Prepare participants
-            const participants = [currentUser.uid, ...selectedUsers.map((u) => u.id)];
+            const participants = [currentUser.id, ...selectedUsers.map((u) => u.id)];
             const participantDetails: { [key: string]: any } = {
-                [currentUser.uid]: {
-                    displayName: currentUserData?.name || currentUserData?.displayName || currentUser.displayName || 'User',
-                    photoURL: currentUserData?.photoURL || currentUser.photoURL || '',
+                [currentUser.id]: {
+                    displayName: creatorName,
+                    photoURL: userData.photo_url || currentUser.user_metadata?.avatar_url || '',
                     role: 'admin',
                 },
             };
@@ -160,57 +182,50 @@ const CreateGroupScreen = ({ navigation }) => {
             });
 
             // Create group chat
-            const chatRef = await firestore().collection('chats').add({
-                type: 'group',
-                groupName: groupName.trim(),
-                groupIcon: groupIconUrl,
+            const { data: chatRow, error: chatErr } = await supabase.from('group_chats').insert({
+                group_name: groupName.trim(),
+                group_icon: groupIconUrl,
                 participants,
-                participantDetails,
-                createdBy: currentUser.uid,
-                admins: [currentUser.uid],
-                unreadCount: participants.reduce((acc, uid) => {
-                    acc[uid] = 0;
-                    return acc;
-                }, {} as { [key: string]: number }),
-                mutedBy: [],
-                pinnedBy: [],
-                createdAt: firestore.FieldValue.serverTimestamp(),
-                updatedAt: firestore.FieldValue.serverTimestamp(),
-            });
+                participant_details: participantDetails,
+                created_by: currentUser.id,
+                admins: [currentUser.id],
+                unread_count: participants.reduce((acc, uid) => { acc[uid] = 0; return acc; }, {} as { [key: string]: number }),
+                last_message: {
+                    text: `${creatorName} created the group "${groupName.trim()}"`,
+                    sender_id: null,
+                    created_at: new Date().toISOString()
+                },
+            }).select('id').single();
+            if (chatErr || !chatRow) throw chatErr || new Error('Failed');
 
             // Add system message
-            await firestore()
-                .collection('chats')
-                .doc(chatRef.id)
-                .collection('messages')
-                .add({
-                    senderId: 'system',
-                    senderName: 'System',
-                    type: 'system',
-                    text: `${currentUserData?.name || currentUserData?.displayName || 'Someone'} created the group "${groupName.trim()}"`,
-                    status: 'sent',
-                    readBy: {},
-                    deliveredTo: [],
-                    deletedFor: [],
-                    createdAt: firestore.FieldValue.serverTimestamp(),
-                });
-
-            // Update parent chat with lastMessage
-            await firestore().collection('chats').doc(chatRef.id).update({
-                lastMessage: {
-                    text: `${currentUserData?.name || currentUserData?.displayName || 'Someone'} created the group "${groupName.trim()}"`,
-                    senderId: 'system',
-                    senderName: 'System',
-                    timestamp: firestore.FieldValue.serverTimestamp(),
-                    type: 'system',
-                },
-                updatedAt: firestore.FieldValue.serverTimestamp(),
+            await supabase.from('messages').insert({
+                chat_id: chatRow.id,
+                chat_type: 'group',
+                sender_id: 'system',
+                sender_name: 'System',
+                type: 'system',
+                text: `${creatorName} created the group "${groupName.trim()}"`,
+                status: 'sent',
+                read_by: {},
+                delivered_to: [],
+                deleted_for: [],
             });
 
-            navigation.replace('Chat', { chatId: chatRef.id });
-        } catch (error) {
-
-            Alert.alert('Error', 'Failed to create group. Please try again.');
+            router.replace({
+                pathname: '/chat/[id]',
+                params: {
+                    id: chatRow.id,
+                    chatId: chatRow.id,
+                    collectionName: 'group_chats',
+                    isGroupChat: 'true',
+                    otherUserName: groupName.trim(),
+                    otherUserPhoto: groupIconUrl || undefined,
+                }
+            });
+        } catch (error: any) {
+            console.error('Group creation error detailed:', error);
+            Alert.alert('Error', error?.message || 'Failed to create group. Please try again.');
         } finally {
             setCreating(false);
         }
@@ -235,16 +250,13 @@ const CreateGroupScreen = ({ navigation }) => {
                 <View style={styles.userInfo}>
                     <View style={styles.userNameRow}>
                         <Text style={[styles.userName, { color: colors.text }]}>{item.displayName}</Text>
-                        {item.ageVerified === true && (
-                            <Ionicons name="shield-checkmark" size={14} color="#10B981" style={{ marginLeft: 4 }} />
-                        )}
                     </View>
                     {item.username && (
                         <Text style={[styles.userUsername, { color: colors.primary }]}>@{item.username}</Text>
                     )}
                 </View>
                 <View style={[styles.checkbox, isSelected && styles.checkboxSelected, { borderColor: colors.primary }]}>
-                    {isSelected && <Ionicons name="checkmark" size={16} color="#fff" />}
+                    {isSelected && <Icon name="Check" size={16} color="#fff" />}
                 </View>
             </TouchableOpacity>
         );
@@ -260,7 +272,7 @@ const CreateGroupScreen = ({ navigation }) => {
                 </View>
             )}
             <View style={styles.removeSelectedBadge}>
-                <Ionicons name="close" size={12} color="#fff" />
+                <Icon name="X" size={12} color="#fff" />
             </View>
             <Text style={[styles.selectedUserName, { color: colors.text }]} numberOfLines={1}>
                 {item.displayName?.split(' ')[0]}
@@ -277,8 +289,8 @@ const CreateGroupScreen = ({ navigation }) => {
             >
                 {/* Header */}
                 <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                    <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-                        <Ionicons name="arrow-back" size={24} color={colors.text} />
+                    <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+                        <Icon name="CaretLeft" size={24} color={colors.text} />
                     </TouchableOpacity>
                     <Text style={[styles.headerTitle, { color: colors.text }]}>
                         {step === 'select' ? 'New Group' : 'Group Details'}
@@ -310,7 +322,7 @@ const CreateGroupScreen = ({ navigation }) => {
                     <>
                         {/* Search */}
                         <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
-                            <Ionicons name="search" size={20} color={colors.textSecondary} />
+                            <Icon name="MagnifyingGlass" size={20} color={colors.textSecondary} />
                             <TextInput
                                 style={[styles.searchInput, { color: colors.text }]}
                                 placeholder="Search users..."
@@ -323,7 +335,7 @@ const CreateGroupScreen = ({ navigation }) => {
                         {/* Selected users */}
                         {selectedUsers.length > 0 && (
                             <View style={styles.selectedContainer}>
-                                <FlatList
+                                <TypedFlashList
                                     data={selectedUsers}
                                     renderItem={renderSelectedUser}
                                     keyExtractor={(item) => item.id}
@@ -331,17 +343,16 @@ const CreateGroupScreen = ({ navigation }) => {
                                     showsHorizontalScrollIndicator={false}
                                     contentContainerStyle={styles.selectedList}
                                     keyboardShouldPersistTaps="handled"
+                                    estimatedItemSize={60}
                                 />
                             </View>
                         )}
 
                         {/* User list */}
                         {searching ? (
-                            <View style={styles.loadingContainer}>
-                                <ActivityIndicator size="small" color={colors.primary} />
-                            </View>
+                            <UserSearchListSkeleton />
                         ) : (
-                            <FlatList
+                            <TypedFlashList
                                 data={searchResults}
                                 renderItem={renderUserItem}
                                 keyExtractor={(item) => item.id}
@@ -355,7 +366,7 @@ const CreateGroupScreen = ({ navigation }) => {
                                 }
                                 ListEmptyComponent={
                                     <View style={styles.emptyContainer}>
-                                        <Ionicons name="people-outline" size={48} color={colors.textSecondary} style={{ marginBottom: 12 }} />
+                                        <Icon name="Users" size={48} color={colors.textSecondary} style={{ marginBottom: 12 }} />
                                         <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
                                             {searchQuery.length > 0 ? 'No users found' : 'Start typing to find people'}
                                         </Text>
@@ -366,6 +377,7 @@ const CreateGroupScreen = ({ navigation }) => {
                                         )}
                                     </View>
                                 }
+                                estimatedItemSize={80}
                             />
                         )}
                     </>
@@ -377,11 +389,11 @@ const CreateGroupScreen = ({ navigation }) => {
                                 <Image source={{ uri: groupIcon }} style={styles.groupIconPreview} />
                             ) : (
                                 <View style={[styles.iconPlaceholder, { backgroundColor: colors.card }]}>
-                                    <Ionicons name="camera" size={32} color={colors.textSecondary} />
+                                    <Icon name="Camera" size={32} color={colors.textSecondary} />
                                 </View>
                             )}
                             <View style={[styles.editIconBadge, { backgroundColor: colors.primary }]}>
-                                <Ionicons name="pencil" size={12} color="#fff" />
+                                <Icon name="Pencil" size={12} color="#fff" />
                             </View>
                         </TouchableOpacity>
 
@@ -398,7 +410,7 @@ const CreateGroupScreen = ({ navigation }) => {
                             {selectedUsers.length + 1} members (including you)
                         </Text>
 
-                        <FlatList
+                        <TypedFlashList
                             data={selectedUsers}
                             renderItem={({ item }) => (
                                 <View style={[styles.memberItem, { backgroundColor: colors.card }]}>
@@ -416,6 +428,7 @@ const CreateGroupScreen = ({ navigation }) => {
                             contentContainerStyle={styles.membersList}
                             keyboardShouldPersistTaps="handled"
                             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                            estimatedItemSize={72}
                         />
                     </View>
                 )}

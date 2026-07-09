@@ -1,22 +1,35 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createMMKV } from 'react-native-mmkv';
+
+const storage = createMMKV();
 
 export const PREFERENCE_KEYS = {
-    theme: '@tripzi_theme',
-    saveToGallery: '@tripzi_save_to_gallery',
-    notificationPrompted: '@tripzi_notification_prompted',
+    theme: '@nxtvibes_theme',
+    saveToGallery: '@nxtvibes_save_to_gallery',
+    notificationPrompted: '@nxtvibes_notification_prompted',
+    hapticsEnabled: '@nxtvibes_haptics_enabled',
+    hapticsIntensity: '@nxtvibes_haptics_intensity',
+    hapticsJoinTrip: '@nxtvibes_haptics_join_trip',
+    hapticsNav: '@nxtvibes_haptics_nav',
+    hapticsNotif: '@nxtvibes_haptics_notif',
 } as const;
+
+export const getBooleanPreferenceSync = (
+    key: string,
+    defaultValue: boolean
+): boolean => {
+    try {
+        const value = storage.getBoolean(key);
+        return value !== undefined ? value : defaultValue;
+    } catch {
+        return defaultValue;
+    }
+};
 
 export const getBooleanPreference = async (
     key: string,
     defaultValue: boolean
 ): Promise<boolean> => {
-    try {
-        const value = await AsyncStorage.getItem(key);
-        if (value === null) return defaultValue;
-        return value === 'true';
-    } catch {
-        return defaultValue;
-    }
+    return getBooleanPreferenceSync(key, defaultValue);
 };
 
 export const setBooleanPreference = async (
@@ -24,9 +37,21 @@ export const setBooleanPreference = async (
     value: boolean
 ): Promise<void> => {
     try {
-        await AsyncStorage.setItem(key, value ? 'true' : 'false');
+        storage.set(key, value);
     } catch {
         // Preference writes are non-blocking UX enhancements.
+    }
+};
+
+export const getStringPreferenceSync = (
+    key: string,
+    defaultValue: string | null = null
+): string | null => {
+    try {
+        const value = storage.getString(key);
+        return value !== undefined ? value : defaultValue;
+    } catch {
+        return defaultValue;
     }
 };
 
@@ -34,12 +59,7 @@ export const getStringPreference = async (
     key: string,
     defaultValue: string | null = null
 ): Promise<string | null> => {
-    try {
-        const value = await AsyncStorage.getItem(key);
-        return value === null ? defaultValue : value;
-    } catch {
-        return defaultValue;
-    }
+    return getStringPreferenceSync(key, defaultValue);
 };
 
 export const setStringPreference = async (
@@ -47,7 +67,7 @@ export const setStringPreference = async (
     value: string
 ): Promise<void> => {
     try {
-        await AsyncStorage.setItem(key, value);
+        storage.set(key, value);
     } catch {
         // Preference writes are non-blocking UX enhancements.
     }

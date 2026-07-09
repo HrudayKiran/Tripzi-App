@@ -1,6 +1,6 @@
-appId: com.tripzi.mobile
+appId: com.nxtvibes.mobile
 ---
-- assertVisible: "Tripzi"
+- assertVisible: "NxtVibes"
 # Test Filters
 - tapOn:
     id: "filter-button"
@@ -8,7 +8,7 @@ appId: com.tripzi.mobile
 - tapOn: "Budget (Low)"
 - tapOn: "Apply Filters"
 # Ensure we map back
-- assertVisible: "Tripzi"
+- assertVisible: "NxtVibes"
 # Scroll native view
 - scroll
 - scroll
@@ -26,4 +26,4 @@ appId: com.tripzi.mobile
 - assertVisible: "Filters"
 - tapOn: "Reset"
 - tapOn: "Apply Filters"
-- assertVisible: "Tripzi"
+- assertVisible: "NxtVibes"

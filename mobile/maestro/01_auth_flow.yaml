@@ -1,4 +1,4 @@
-appId: com.tripzi.mobile
+appId: com.nxtvibes.mobile
 ---
 - launchApp
 # Assuming we are on the Welcome Screen (first launch) or logged out
@@ -7,7 +7,7 @@ appId: com.tripzi.mobile
 
 # Start Screen
 - assertVisible:
-    text: "Tripzi"
+    text: "NxtVibes"
 - assertVisible:
     text: "Continue with Google"
     

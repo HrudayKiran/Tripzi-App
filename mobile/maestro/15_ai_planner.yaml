@@ -1,11 +1,11 @@
-appId: com.tripzi.mobile
+appId: com.nxtvibes.mobile
 ---
 - tapOn: "AI Planner"
 - assertVisible: "Where to next.*"
 - tapOn: "This Weekend"
 # Ensure we landed on chat UI
-- assertVisible: "Tripzi AI"
-- tapOn: "Ask Tripzi AI anything..."
+- assertVisible: "NxtVibes AI"
+- tapOn: "Ask NxtVibes AI anything..."
 - inputText: "Plan a budget trip for 2 days to a hill station."
 - hideKeyboard
 - tapOn:

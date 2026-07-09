@@ -1,70 +1,129 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
-import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import { supabase } from '../lib/supabase';
+import Icon from '../components/Icon';
+import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, STATUS, NEUTRAL } from '../styles';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, STATUS, NEUTRAL } from '../styles';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import DefaultAvatar from '../components/DefaultAvatar';
-import { navigationRef } from '../navigation/RootNavigation';
+import { resetDatabase, database } from '../database';
+import { useFocusEffect, useRouter } from 'expo-router';
+import Constants from 'expo-constants';
+import { unregisterPushToken, cancelAllScheduledNotifications } from '../services/notificationService';
+import { clearBadgeCount } from '../services/notificationChannels';
 
 
-
-const ProfileScreen = ({ navigation }) => {
+const ProfileScreen = () => {
+  const router = useRouter();
   const { colors } = useTheme();
   const [user, setUser] = useState(null);
-  const [showAccountModal, setShowAccountModal] = useState(false);
-  const [switchingAccount, setSwitchingAccount] = useState(false);
 
-  useEffect(() => {
-    const currentUser = auth().currentUser;
-    if (!currentUser) return;
 
-    // Configure Google Signin
-    const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-    if (!webClientId) {
-      return;
-    }
+  // Load profile from WatermelonDB first (instant), then subscribe to Supabase realtime
+  useFocusEffect(
+    React.useCallback(() => {
+      let isMounted = true;
+      // Kept as let so the cleanup can remove it even if init() hasn't
+      // finished yet (e.g. user navigates away before getSession resolves).
+      let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
 
-    GoogleSignin.configure({
-      webClientId,
-      offlineAccess: true,
-      scopes: ['profile', 'email'],
-    });
+      const init = async () => {
+        // getSession() is cache-backed — no network round-trip.
+        const { data: { session } } = await supabase.auth.getSession();
+        const authUser = session?.user;
+        if (!authUser || !isMounted) return;
 
-    const unsubscribe = firestore()
-
-      .collection('users')
-      .doc(currentUser.uid)
-      .onSnapshot((doc) => {
-        if (doc.exists) {
-          const data = doc.data() || {};
-          setUser({
-            id: doc.id,
-            ...data,
-            displayName: data.name || data.displayName || currentUser.displayName || 'User',
-          });
-        } else {
-          setUser({
-            displayName: currentUser.displayName,
-            email: currentUser.email,
-            photoURL: currentUser.photoURL,
+        // Configure Google Signin
+        const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+        if (webClientId) {
+          GoogleSignin.configure({
+            webClientId,
+            offlineAccess: true,
+            scopes: ['profile', 'email'],
           });
         }
-      }, (error) => {
-        // Error handled silently
-        setUser({
-          displayName: auth().currentUser?.displayName,
-          email: auth().currentUser?.email,
-          photoURL: auth().currentUser?.photoURL,
-        });
-      });
 
-    return () => unsubscribe();
-  }, []);
+        // 1. Try WatermelonDB first (instant)
+        try {
+          const localProfile = await database.get('profiles').find(authUser.id);
+          if (isMounted && localProfile) {
+            const lp = localProfile as any;
+            setUser({
+              id: authUser.id,
+              displayName: lp._raw.name || 'User',
+              photoURL: lp._raw.photo_url,
+              email: authUser.email,
+              username: lp._raw.username,
+            });
+          }
+        } catch {
+          // Not in local DB — fall through to Supabase
+        }
+
+        // 2. Fetch from Supabase (fresh data, updates local state)
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authUser.id)
+          .maybeSingle();
+
+        if (isMounted && profile) {
+          setUser({
+            id: profile.id,
+            ...profile,
+            displayName: profile.name || 'User',
+            photoURL: profile.photo_url,
+            email: profile.email,
+            username: profile.username,
+          });
+        } else if (isMounted) {
+          setUser(prev => prev || {
+            displayName: authUser.user_metadata?.full_name || 'User',
+            email: authUser.email,
+            photoURL: authUser.user_metadata?.avatar_url,
+          });
+        }
+
+        // 3. Subscribe to realtime updates scoped to THIS user's profile row.
+        //    Without the filter, any user's profile change would overwrite the
+        //    logged-in user's profile card with a stranger's data.
+        if (!isMounted) return;
+        const channelId = `profile-changes-${Math.random().toString(36).substring(2, 9)}`;
+        realtimeChannel = supabase
+          .channel(channelId)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'profiles',
+              filter: `id=eq.${authUser.id}`,
+            },
+            (payload) => {
+              if (payload.new && isMounted) {
+                const p = payload.new as any;
+                setUser({
+                  id: p.id,
+                  ...p,
+                  displayName: p.name || 'User',
+                  photoURL: p.photo_url,
+                });
+              }
+            }
+          )
+          .subscribe();
+      };
+
+      init();
+
+      return () => {
+        isMounted = false;
+        if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+      };
+    }, [])
+  );
 
   const handleLogout = async () => {
     Alert.alert(
@@ -76,18 +135,34 @@ const ProfileScreen = ({ navigation }) => {
           text: 'Logout',
           style: 'destructive',
           onPress: async () => {
+            // Reset profile status fields while still authenticated
             try {
-              if (auth().currentUser) {
-                firestore().collection('users').doc(auth().currentUser.uid).update({
-                  lastLogoutAt: firestore.FieldValue.serverTimestamp(),
-                }).catch(() => { });
+              const { data: { session } } = await supabase.auth.getSession();
+              if (session?.user) {
+                await supabase.from('profiles').update({
+                  push_notifications_enabled: false,
+                  notification_permission_status: 'revoked', // OS permission still granted, token invalidated on logout
+                  presence: 'offline',
+                  last_seen_at: new Date().toISOString(),
+                }).eq('id', session.user.id);
               }
-            } catch (e) { }
+            } catch (e) {
+              // Don't block logout if this fails
+            }
 
+            // Unregister push token BEFORE signing out (needs auth header)
             try {
-              await GoogleSignin.revokeAccess();
-            } catch (error: any) {
-              // Ignore if already revoked
+              await unregisterPushToken();
+            } catch (e) {
+              // Don't block logout if this fails
+            }
+
+            // Cancel all scheduled local notifications & clear badge
+            try {
+              await cancelAllScheduledNotifications();
+              await clearBadgeCount();
+            } catch (e) {
+              // Don't block logout if this fails
             }
 
             try {
@@ -97,20 +172,20 @@ const ProfileScreen = ({ navigation }) => {
             }
 
             try {
-              await auth().signOut();
+              await supabase.auth.signOut();
             } catch (e: any) {
               // Ignore sign out errors
             }
 
-            // Use root navigationRef to reset to Start
-            if (navigationRef.isReady()) {
-              navigationRef.reset({
-                index: 0,
-                routes: [{ name: 'Start' }],
-              });
-            }
+            // Clear local database on logout and await it to prevent data leaking
+            try {
+              await resetDatabase();
+            } catch (e) {}
+
+            // Route to start screen after logout
+            router.replace('/(auth)/start');
           }
-        },
+        }
       ]
     );
   };
@@ -129,132 +204,152 @@ const ProfileScreen = ({ navigation }) => {
     showChevron = true,
     hideIcon = false,
     largeText = false,
-  }) => (
-    <TouchableOpacity
-      style={[styles.menuItem, { backgroundColor: colors.card }, centered && styles.menuItemCentered, disabled && { opacity: 0.8 }]}
-      onPress={disabled ? undefined : onPress}
-      activeOpacity={disabled ? 1 : 0.7}
-      disabled={disabled}
-    >
-      {!hideIcon && (
-        <View style={[styles.menuIconBox, { backgroundColor: iconBg }]}>
-          <Ionicons name={icon} size={22} color={iconColor} />
+  }) => {
+    const isDark = colors.background !== '#FFFFFF' && colors.background !== '#ffffff';
+    const activeIconColor = isDark ? '#FFFFFF' : '#000000';
+    const activeIconBg = isDark ? '#333333' : '#F3F4F6';
+
+    return (
+      <TouchableOpacity
+        style={[styles.menuItem, { backgroundColor: colors.card }, centered && styles.menuItemCentered, disabled && { opacity: 0.8 }]}
+        onPress={disabled ? undefined : onPress}
+        activeOpacity={disabled ? 1 : 0.7}
+        disabled={disabled}
+      >
+        {!hideIcon && (
+          <View style={[styles.menuIconBox, { backgroundColor: activeIconBg }]}>
+            <Icon name={icon} size={22} color={activeIconColor} />
+          </View>
+        )}
+        <Text style={[styles.menuItemText, centered && styles.menuItemTextCentered, largeText && styles.menuItemTextLarge, { color: colors.text }]}>
+          {text}
+        </Text>
+        {badge && (
+          <View style={[styles.badge, { backgroundColor: isDark ? '#1F2937' : '#E5E7EB' }]}>
+            <Text style={[styles.badgeText, { color: colors.text }]}>{badge}</Text>
         </View>
       )}
-      <Text style={[styles.menuItemText, centered && styles.menuItemTextCentered, largeText && styles.menuItemTextLarge, { color: isDestructive ? colors.error : colors.text }]}>
-        {text}
-      </Text>
-      {badge && (
-        <View style={[styles.badge, { backgroundColor: '#D1FAE5' }]}>
-          <Text style={styles.badgeText}>{badge}</Text>
-        </View>
-      )}
-      {showChevron && !disabled && <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />}
+      {showChevron && !disabled && <Icon name="CaretRight" size={20} color={colors.textSecondary} />}
     </TouchableOpacity>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top']}>
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
         </View>
 
+        <View style={{ height: SPACING.lg }} />
+
         {/* User Profile Card - Tappable to view full profile */}
         <TouchableOpacity
-          onPress={() => navigation.navigate('UserProfile', { userId: auth().currentUser?.uid })}
+          onPress={() => {
+            // user state is already loaded from WatermelonDB/Supabase — no network call needed
+            if (user && (user as any).id) router.push({ pathname: '/profile/[id]', params: { id: (user as any).id } });
+          }}
           activeOpacity={0.8}
         >
-          <Animatable.View animation="fadeInUp" duration={400} style={[styles.profileCard, { backgroundColor: colors.card }, { flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }]}>
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 400 }}
+            style={[styles.profileCard, { backgroundColor: colors.card }, { flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }]}
+          >
             <View style={[styles.avatarContainer, { marginRight: 0 }]}>
               <View style={[styles.avatarBorder, { backgroundColor: colors.background }]}>
                 <DefaultAvatar
-                  uri={user && 'photoURL' in user ? user.photoURL : auth().currentUser?.photoURL}
-                  name={user?.displayName || auth().currentUser?.displayName}
+                  uri={user && 'photoURL' in user ? user.photoURL : null}
+                  name={user?.displayName}
                   size={80}
-                  style={styles.avatar} // Ensure styles.avatar doesn't conflict, mainly size
+                  style={styles.avatar}
                 />
               </View>
             </View>
 
-            <Text style={[styles.viewProfileText, { color: colors.primary, marginTop: SPACING.sm }]}>
+            <Text style={[styles.viewProfileText, { color: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000', marginTop: SPACING.sm }]}>
               View profile
             </Text>
-          </Animatable.View>
+          </MotiView>
         </TouchableOpacity>
 
-        {/* My Trips Section */}
-        <Animatable.View animation="fadeInUp" delay={100} duration={400} style={styles.menuSection}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>MY TRIPS</Text>
 
-          <MenuItem
-            icon="map-outline"
-            iconColor="#6366F1"
-            iconBg="#E0E7FF"
-            text="My Trips"
-            onPress={() => navigation.navigate('MyTrips')}
-          />
-        </Animatable.View>
 
         {/* General Section */}
-        <Animatable.View animation="fadeInUp" delay={150} duration={400} style={styles.menuSection}>
+        <MotiView
+          from={{ opacity: 0, translateY: 20 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 400, delay: 150 }}
+          style={styles.menuSection}
+        >
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>GENERAL</Text>
 
           <MenuItem
-            icon="create-outline"
+            icon="PencilSimple"
             iconColor="#F59E0B"
             iconBg="#FEF3C7"
             text="Edit Profile"
-            onPress={() => navigation.navigate('EditProfile')}
+            onPress={() => router.push('/profile/edit')}
           />
           <MenuItem
-            icon="settings-outline"
+            icon="Gear"
             iconColor="#6B7280"
             iconBg="#F3F4F6"
             text="Settings"
-            onPress={() => navigation.navigate('Settings')}
+            onPress={() => router.push('/profile/settings')}
           />
           <MenuItem
-            icon="document-text-outline"
+            icon="FileText"
             iconColor="#9d74f7"
             iconBg="#EDE9FE"
             text="Terms of Service"
-            onPress={() => navigation.navigate('Terms')}
+            onPress={() => router.push('/profile/terms')}
           />
           <MenuItem
-            icon="lock-closed-outline"
+            icon="Lock"
             iconColor="#3B82F6"
             iconBg="#DBEAFE"
             text="Privacy Policy"
-            onPress={() => navigation.navigate('PrivacyPolicy')}
+            onPress={() => router.push('/profile/privacy')}
           />
-        </Animatable.View>
+        </MotiView>
 
-        <Animatable.View animation="fadeInUp" delay={200} duration={400} style={styles.menuSection}>
+        <MotiView
+          from={{ opacity: 0, translateY: 20 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 400, delay: 200 }}
+          style={styles.menuSection}
+        >
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>SUPPORT</Text>
 
           <MenuItem
-            icon="bulb-outline"
+            icon="Lightbulb"
             iconColor="#F59E0B"
             iconBg="#FEF3C7"
             text="Suggest a Feature"
-            onPress={() => navigation.navigate('SuggestFeature')}
+            onPress={() => router.push('/profile/suggest-feature')}
           />
           <MenuItem
-            icon="help-circle-outline"
+            icon="Question"
             iconColor="#06B6D4"
             iconBg="#CFFAFE"
             text="Help & Support"
-            onPress={() => navigation.navigate('HelpSupport')}
+            onPress={() => router.push('/profile/help')}
           />
-        </Animatable.View>
+        </MotiView>
 
-        <Animatable.View animation="fadeInUp" delay={300} duration={400} style={styles.menuSection}>
+        <MotiView
+          from={{ opacity: 0, translateY: 20 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 400, delay: 300 }}
+          style={styles.menuSection}
+        >
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ACCOUNT</Text>
 
           <MenuItem
-            icon="log-out-outline"
+            icon="SignOut"
             iconColor="#EF4444"
             iconBg="#FEE2E2"
             text="Log Out"
@@ -264,8 +359,8 @@ const ProfileScreen = ({ navigation }) => {
             showChevron={false}
             largeText
           />
-          <Text style={[styles.versionText, { color: colors.textSecondary }]}>Tripzi Version 1.0.0</Text>
-        </Animatable.View>
+          <Text style={[styles.versionText, { color: colors.textSecondary }]}>NxtVibes v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
+        </MotiView>
 
         <View style={{ height: SPACING.sm * 2 }} />
       </ScrollView>
@@ -284,13 +379,7 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.md,
   },
   headerTitle: { fontSize: FONT_SIZE.xxl, fontWeight: FONT_WEIGHT.bold },
-  settingsButton: {
-    width: TOUCH_TARGET.min,
-    height: TOUCH_TARGET.min,
-    borderRadius: TOUCH_TARGET.min / 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -313,11 +402,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
   },
   avatar: { width: 80, height: 80, borderRadius: 40 },
-  profileInfo: { flex: 1, marginLeft: SPACING.lg },
 
-  userName: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold },
-  userEmail: { fontSize: FONT_SIZE.sm, marginTop: 2 },
-  username: { fontSize: FONT_SIZE.sm, marginTop: 2 },
   viewProfileText: { fontSize: FONT_SIZE.xs, marginTop: SPACING.xs },
   menuSection: {
     marginHorizontal: SPACING.xl,
@@ -357,37 +442,7 @@ const styles = StyleSheet.create({
     marginRight: SPACING.sm,
   },
   badgeText: { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold, color: STATUS.success },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: SPACING.lg,
-    borderRadius: BORDER_RADIUS.lg,
-    borderWidth: 2,
-    marginTop: SPACING.md,
-  },
-  logoutIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: BORDER_RADIUS.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: SPACING.md,
-  },
-  logoutButtonText: {
-    fontSize: FONT_SIZE.md,
-    fontWeight: FONT_WEIGHT.bold,
-  },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  accountSwitchModal: { borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, padding: SPACING.xl },
-  modalHandle: { width: 40, height: 4, backgroundColor: NEUTRAL.gray200, borderRadius: 2, alignSelf: 'center', marginBottom: SPACING.lg },
-  modalTitle: { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold, textAlign: 'center', marginBottom: SPACING.xl },
-  accountCard: { flexDirection: 'row', alignItems: 'center', padding: SPACING.lg, borderRadius: BORDER_RADIUS.lg, marginBottom: SPACING.md },
-  accountAvatar: { width: 50, height: 50, borderRadius: 25, marginRight: SPACING.md },
-  accountInfo: { flex: 1 },
-  accountName: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
-  accountEmail: { fontSize: FONT_SIZE.sm },
-  addAccountBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: SPACING.lg, borderRadius: BORDER_RADIUS.lg, borderWidth: 1, borderStyle: 'dashed', marginTop: SPACING.md, gap: SPACING.sm },
-  addAccountText: { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
+
   versionText: { textAlign: 'center', marginTop: SPACING.md, fontSize: FONT_SIZE.xs },
 });
 

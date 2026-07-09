@@ -5,17 +5,18 @@ import {
     StyleSheet,
     Modal,
     TouchableOpacity,
-    Image,
+
     Dimensions,
     ActivityIndicator,
     Alert,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import Icon from '../components/Icon';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
-import { deleteFromStorage, deleteProfileImageFromR2 } from '../utils/imageUpload';
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { deleteProfileImageFromR2 } from '../utils/imageUpload';
+import { supabase } from '../lib/supabase';
 import { SPACING, FONT_SIZE, FONT_WEIGHT } from '../styles';
 
 const { width, height } = Dimensions.get('window');
@@ -64,37 +65,23 @@ const ProfilePictureViewer = ({
         try {
             if (imageObjectKey) {
                 await deleteProfileImageFromR2(imageObjectKey);
-            } else if (imageUrl.includes('firebasestorage')) {
-                try {
-                    await deleteFromStorage(imageUrl);
-                } catch (e) {
-
-                }
             }
 
-            // 2. Always update Firestore to remove URL
-            const userId = auth().currentUser?.uid;
-            if (userId) {
-                await firestore().collection('users').doc(userId).update({
-                    photoURL: null,
-                    photoObjectKey: null,
-                });
-
-                // Keep Firebase Auth profile in sync so no stale fallback avatar remains.
-                try {
-                    await auth().currentUser?.updateProfile({ photoURL: null });
-                } catch (e) {
-
-                }
+            // Update Supabase profile to remove URL
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user?.id) {
+                await supabase.from('profiles').update({
+                    photo_url: null,
+                    photo_object_key: null,
+                }).eq('id', user.id);
             }
 
             onDeleted?.();
             onClose();
             Alert.alert('Success', 'Profile picture removed.');
-            return; // Exit early as we manually handled success
+            return;
 
         } catch (error) {
-
             Alert.alert('Error', 'Failed to delete image. Please try again.');
         } finally {
             setIsDeleting(false);
@@ -113,7 +100,7 @@ const ProfilePictureViewer = ({
                         onPress={onClose}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
-                        <Ionicons name="close" size={28} color="#fff" />
+                        <Icon name="X" size={28} color="#fff" />
                     </TouchableOpacity>
 
                     <Text style={styles.headerTitle}>{userName}</Text>
@@ -128,7 +115,7 @@ const ProfilePictureViewer = ({
                             {isDeleting ? (
                                 <ActivityIndicator size="small" color="#fff" />
                             ) : (
-                                <Ionicons name="trash-outline" size={24} color="#EF4444" />
+                                <Icon name="Trash" size={24} color="#EF4444" />
                             )}
                         </TouchableOpacity>
                     ) : (
@@ -142,15 +129,19 @@ const ProfilePictureViewer = ({
                         <Image
                             source={{ uri: imageUrl }}
                             style={styles.fullImage}
-                            resizeMode="contain"
+                            contentFit="contain"
+                            transition={200}
                         />
                     ) : (
-                        <View style={[styles.placeholder, { backgroundColor: colors.primaryLight }]}>
-                            <Ionicons name="person" size={120} color={colors.primary} />
+                        <LinearGradient
+                            colors={['#9d74f7', '#EC4899', '#F59E0B']}
+                            style={styles.placeholder}
+                        >
+
                             <Text style={[styles.noImageText, { color: colors.textSecondary }]}>
                                 No profile picture
                             </Text>
-                        </View>
+                        </LinearGradient>
                     )}
                 </View>
             </View>

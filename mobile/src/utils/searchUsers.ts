@@ -1,4 +1,4 @@
-import firestore from '@react-native-firebase/firestore';
+import { supabase } from '../lib/supabase';
 
 export interface SearchUserResult {
     id: string;
@@ -6,7 +6,6 @@ export interface SearchUserResult {
     username?: string;
     email?: string;
     photoURL?: string;
-    ageVerified?: boolean;
     [key: string]: any;
 }
 
@@ -21,8 +20,7 @@ const dedupeById = (users: SearchUserResult[]): SearchUserResult[] => {
 };
 
 /**
- * Indexed prefix search on public profiles by `displayName` and `username`.
- * Requires Firestore indexes on these fields when used with orderBy+startAt.
+ * Search public profiles by display_name and username using Supabase ilike.
  */
 export const searchUsersByPrefix = async (
     query: string,
@@ -31,43 +29,34 @@ export const searchUsersByPrefix = async (
     const trimmed = query.trim();
     if (trimmed.length < 2) return [];
 
-    const queryLower = trimmed.toLowerCase();
-    const endLower = `${queryLower}\uf8ff`;
+    const pattern = `${trimmed}%`;
 
-    const queryTitleCase = queryLower.charAt(0).toUpperCase() + queryLower.slice(1);
-    const endTitleCase = `${queryTitleCase}\uf8ff`;
-
-    const [nameSnap, usernameSnap, rawNameSnap] = await Promise.all([
-        firestore()
-            .collection('public_users')
-            .orderBy('displayName')
-            .startAt(queryTitleCase)
-            .endAt(endTitleCase)
-            .limit(limit)
-            .get()
-            .catch(() => ({ docs: [] } as any)),
-        firestore()
-            .collection('public_users')
-            .orderBy('username')
-            .startAt(queryLower)
-            .endAt(endLower)
-            .limit(limit)
-            .get()
-            .catch(() => ({ docs: [] } as any)),
-        trimmed !== queryTitleCase && trimmed !== queryLower ? firestore()
-            .collection('public_users')
-            .orderBy('displayName')
-            .startAt(trimmed)
-            .endAt(`${trimmed}\uf8ff`)
-            .limit(limit)
-            .get()
-            .catch(() => ({ docs: [] } as any)) : { docs: [] } as any
+    const [nameResult, usernameResult] = await Promise.all([
+        supabase
+            .from('public_profiles')
+            .select('id, display_name, username, photo_url')
+            .ilike('display_name', pattern)
+            .limit(limit),
+        supabase
+            .from('public_profiles')
+            .select('id, display_name, username, photo_url')
+            .ilike('username', pattern)
+            .limit(limit),
     ]);
 
-    const users = [
-        ...nameSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })),
-        ...usernameSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })),
-        ...rawNameSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })),
+    const users: SearchUserResult[] = [
+        ...(nameResult.data || []).map((p) => ({
+            id: p.id,
+            displayName: p.display_name,
+            username: p.username,
+            photoURL: p.photo_url,
+        })),
+        ...(usernameResult.data || []).map((p) => ({
+            id: p.id,
+            displayName: p.display_name,
+            username: p.username,
+            photoURL: p.photo_url,
+        })),
     ];
 
     return dedupeById(users).slice(0, limit);

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { useNetwork } from '../contexts/NetworkContext';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { SPACING, FONT_SIZE, FONT_WEIGHT } from '../styles';
 
 const OfflineBanner: React.FC = () => {
@@ -39,7 +39,7 @@ const OfflineBanner: React.FC = () => {
             ]}
         >
             <View style={styles.content}>
-                <Ionicons name="cloud-offline-outline" size={18} color="#fff" />
+                <Icon name="CloudSlash" size={18} color="#fff" />
                 <Text style={styles.text}>No Internet Connection</Text>
             </View>
         </Animated.View>

@@ -1,5 +1,5 @@
 /**
- * Global color constants for the Tripzi app.
+ * Global color constants for the NxtVibes app.
  * Use these instead of hardcoding hex values in screens/components.
  * For theme-aware colors (light/dark mode), use `useTheme().colors` from ThemeContext.
  */

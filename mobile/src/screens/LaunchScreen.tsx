@@ -1,48 +1,54 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, Animated, Easing, Image, StatusBar as RNStatusBar } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Animated, Easing, StatusBar as RNStatusBar } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useNavigation } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
+import { supabase } from '../lib/supabase';
 import AppLogo from '../components/AppLogo';
-import * as Animatable from 'react-native-animatable';
+import { MotiView } from 'moti';
 import { BRAND, NEUTRAL } from '../styles';
+import Constants from 'expo-constants';
 
-import { useIsFocused } from '@react-navigation/native';
-
-const { width, height } = Dimensions.get('window');
-
-const MAP_PATTERN_URL = 'https://lh3.googleusercontent.com/aida-public/AB6AXuC2zQAHh1rkj2FOH71NZ5u5InNaK_bDbfoyy8O91U9Xmx-N7Qu3U5uuuQ386ncxJR4ZMfcZi2iglnw8Vqdn0-Q03VIJ0PK6sugqvEXcydEzxm1ulpMWGy1TwUT1RlTaUOhfBviPNgVlb_1sxRuF83KnmRjmtJFDQHj4gOSXjflVp27SQzE_Xm8m5r4kvyaGe2o-MucjQ5US4UfjqhIFXRIYfureKViEvplWqzhcJbeCbExN7KVaP8enyNUYXGu0PLp0gMNZ79-7WbA';
 
 const LaunchScreen = () => {
-  const navigation = useNavigation();
-  const isFocused = useIsFocused();
+  const router = useRouter();
   const progress = useRef(new Animated.Value(0)).current;
   const isMountedRef = useRef(true);
 
   useEffect(() => {
     isMountedRef.current = true;
+    let anim: Animated.CompositeAnimation | null = null;
 
-    // Animate the loading bar
-    const anim = Animated.timing(progress, {
-      toValue: 1,
-      duration: 3500, // Slightly longer for dramatic effect
-      useNativeDriver: false,
-      easing: Easing.out(Easing.cubic),
-    });
-
-    anim.start(({ finished }) => {
-      // Only navigate if animation completed naturally AND screen is still mounted/focused
-      if (finished && isMountedRef.current) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Welcome' } as any],
+    // Check session immediately
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session && isMountedRef.current) {
+        // If logged in, go directly to home
+        router.replace('/(tabs)');
+      } else if (isMountedRef.current) {
+        // If not logged in, show splash animation then go to welcome
+        anim = Animated.timing(progress, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: false,
+          easing: Easing.out(Easing.cubic),
         });
+
+        anim.start(({ finished }) => {
+          if (finished && isMountedRef.current) {
+            router.replace('/(auth)/welcome');
+          }
+        });
+      }
+    }).catch(() => {
+      // Network error or Supabase unreachable — send user to welcome screen
+      if (isMountedRef.current) {
+        router.replace('/(auth)/welcome');
       }
     });
 
     return () => {
       isMountedRef.current = false;
-      anim.stop(); // Cancel animation on unmount
+      anim?.stop();
     };
   }, []);
 
@@ -67,29 +73,28 @@ const LaunchScreen = () => {
         {/* Abstract Map Overlay */}
 
 
-        {/* Decorative Blurs (Simulated with absolute views) */}
-        <View style={[styles.blurCircle, styles.blurTopLeft]} />
-        <View style={[styles.blurCircle, styles.blurBottomRight]} />
+
 
         {/* Top Spacer */}
         <View style={{ height: RNStatusBar.currentHeight || 48 }} />
 
         {/* Center Content */}
         <View style={styles.centerContent}>
-          <Animatable.View
-            animation="fadeInUp"
-            duration={1000}
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 1000 }}
             style={styles.logoWrapper}
           >
-            {/* Logo with Glow */}
-            <AppLogo size={112} showDot={true} showGlow={true} />
+            {/* Logo matching WelcomeScreen exactly */}
+            <AppLogo size={96} showDot={false} />
 
             {/* Text */}
             <View style={styles.textContainer}>
-              <Text style={styles.appName}>Tripzi</Text>
+              <Text style={styles.appName}>NxtVibes</Text>
               <Text style={styles.tagline}>CONNECT. PLAN. TRAVEL.</Text>
             </View>
-          </Animatable.View>
+          </MotiView>
         </View>
 
         {/* Bottom Section: Loader & Meta */}
@@ -102,7 +107,7 @@ const LaunchScreen = () => {
               ]}
             />
           </View>
-          <Text style={styles.versionText}>v1.0.0</Text>
+          <Text style={styles.versionText}>v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
         </View>
 
       </LinearGradient>
@@ -128,25 +133,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     opacity: 0.1, // opacity-10
   },
-  blurCircle: {
-    position: 'absolute',
-    width: 256, // w-64
-    height: 256, // h-64
-    borderRadius: 128,
-    opacity: 0.3,
-  },
-  blurTopLeft: {
-    top: '25%',
-    left: '25%',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    transform: [{ translateX: -128 }, { translateY: -128 }],
-  },
-  blurBottomRight: {
-    bottom: '25%',
-    right: '25%',
-    backgroundColor: 'rgba(76, 29, 149, 0.3)', // #4c1d95/30
-    transform: [{ translateX: 128 }, { translateY: 128 }],
-  },
+
   centerContent: {
     flex: 1,
     justifyContent: 'center',

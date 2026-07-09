@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from './Icon';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, TOUCH_TARGET, HEADER, FONT_SIZE, FONT_WEIGHT } from '../styles';
 
@@ -34,7 +34,7 @@ const Header = ({ title, onBack, showBack = true, rightAction, transparent = fal
                             activeOpacity={0.7}
                             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         >
-                            <Ionicons name="chevron-back" size={28} color={colors.text} />
+                            <Icon name="CaretLeft" size={28} color={colors.text} />
                         </TouchableOpacity>
                     )}
                 </View>

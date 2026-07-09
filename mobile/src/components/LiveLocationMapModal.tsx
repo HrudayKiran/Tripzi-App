@@ -1,18 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, Dimensions } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Platform, Image as RNImage } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
-import firestore from '@react-native-firebase/firestore';
-import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { supabase } from '../lib/supabase';
+import Icon from '../components/Icon';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 import { formatDistanceToNow } from 'date-fns';
+import DefaultAvatar from './DefaultAvatar';
+import * as Location from 'expo-location';
+import * as FileSystem from 'expo-file-system/legacy';
+import { database } from '../database';
 
 interface LiveLocationMapModalProps {
     visible: boolean;
     onClose: () => void;
     chatId: string;
     currentUser: any;
-    collectionName?: 'chats' | 'group_chats';
+    collectionName?: 'chats' | 'group_chats' | 'direct_chats';
 }
 
 const DEFAULT_REGION = {
@@ -22,138 +27,292 @@ const DEFAULT_REGION = {
     longitudeDelta: 10,
 };
 
-const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectionName = 'chats' }: LiveLocationMapModalProps) => {
-    const { colors } = useTheme();
-    const [users, setUsers] = useState<any[]>([]);
-    const [region, setRegion] = useState<any>(DEFAULT_REGION);
+const UserMarker = ({ user }: { user: any }) => {
+    const [tracksView, setTracksView] = useState(true);
+
+    const hasImage = !!user.localImageUri;
+    const isActive = user.isActive;
 
     useEffect(() => {
-        if (!visible || !chatId) return;
+        setTracksView(true);
+        // Allow re-rasterization for a few seconds then stop to save perf
+        const timer = setTimeout(() => {
+            setTracksView(false);
+        }, 4000);
+        return () => clearTimeout(timer);
+    }, [user.localImageUri, user.id]);
 
-        const unsubscribe = firestore()
-            .collection(collectionName)
-            .doc(chatId)
-            .collection('live_shares')
-            .where('isActive', '==', true)
-            .where('validUntil', '>', firestore.Timestamp.now())
-            .onSnapshot(async (snapshot) => {
-                const activeUsers: any[] = [];
+    // WhatsApp live location style: active users get green border, inactive/ended get gray border
+    const ringColor = isActive ? '#25D366' : '#9ca3af';
 
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    if (typeof data.latitude !== 'number' || typeof data.longitude !== 'number') {
-                        return;
-                    }
-                    if (data.latitude === 0 && data.longitude === 0) {
-                        return;
-                    }
-                    activeUsers.push({ id: doc.id, ...data });
-                });
+    return (
+        <Marker
+            key={`${user.id}_${user.localImageUri ? 'img' : 'noimg'}`}
+            coordinate={{ latitude: user.latitude, longitude: user.longitude }}
+            title={user.displayName}
+            description={user.isActive 
+                ? `Active • Updated ${user.updated_at ? formatDistanceToNow(new Date(user.updated_at)) : 'just now'} ago`
+                : `Ended • ${user.updated_at ? formatDistanceToNow(new Date(user.updated_at)) : 'just now'} ago`
+            }
+            tracksViewChanges={tracksView}
+        >
+            <View style={styles.markerContainer}>
+                <View style={[styles.markerImageWrapper, { borderColor: ringColor }]}>
+                    {hasImage ? (
+                        <RNImage
+                            source={{ uri: user.localImageUri }}
+                            style={styles.markerImageDirect}
+                            resizeMode="cover"
+                        />
+                    ) : (
+                        <Icon name="User" size={24} color="#9ca3af" />
+                    )}
+                </View>
+                <View style={[styles.markerArrow, { borderBottomColor: ringColor }]} />
+            </View>
+        </Marker>
+    );
+};
 
-                setUsers(activeUsers);
+const LiveLocationMapModal = ({ visible, onClose, chatId, currentUser, collectionName = 'chats' }: LiveLocationMapModalProps) => {
+    const { colors, isDarkMode } = useTheme();
+    const insets = useSafeAreaInsets();
+    const [users, setUsers] = useState<any[]>([]);
+    const mapRef = useRef<MapView>(null);
+    const [hasAnimated, setHasAnimated] = useState(false);
+    const [hasPermission, setHasPermission] = useState(false);
 
-                if (activeUsers.length > 0) {
-                    setRegion({
-                        latitude: activeUsers[0].latitude,
-                        longitude: activeUsers[0].longitude,
-                        latitudeDelta: 0.01,
-                        longitudeDelta: 0.01,
-                    });
+    useEffect(() => {
+        if (!visible) return;
+        const checkPermission = async () => {
+            try {
+                const { status } = await Location.getForegroundPermissionsAsync();
+                if (status === 'granted') {
+                    setHasPermission(true);
+                } else {
+                    const { status: reqStatus } = await Location.requestForegroundPermissionsAsync();
+                    setHasPermission(reqStatus === 'granted');
                 }
+            } catch (e) {
+                console.warn('Error checking location permission:', e);
+            }
+        };
+        checkPermission();
+    }, [visible]);
+
+    useEffect(() => {
+        if (!visible) {
+            setHasAnimated(false);
+            return;
+        }
+        if (!chatId) return;
+
+        const loadShares = async () => {
+            const { data, error } = await supabase
+                .from('live_shares')
+                .select(`
+                    id, chat_id, chat_type, user_id, latitude, longitude, is_active, expires_at, updated_at, heading,
+                    profiles:user_id (
+                        name,
+                        photo_url
+                    )
+                `)
+                .eq('chat_id', chatId)
+                .order('updated_at', { ascending: false });
+
+            console.log('[LiveLocationMap] Supabase live_shares query result:', JSON.stringify(data?.map((d: any) => ({ user_id: d.user_id, profiles: d.profiles })), null, 2));
+            if (error) console.log('[LiveLocationMap] Supabase query error:', error);
+
+            const latestSharesMap = new Map<string, any>();
+            (data || []).forEach((d: any) => {
+                if (latestSharesMap.has(d.user_id)) return;
+                latestSharesMap.set(d.user_id, d);
             });
 
-        return () => unsubscribe();
-    }, [visible, chatId, collectionName]);
+            const activeUsersPromises = Array.from(latestSharesMap.values())
+                .map(async (d: any) => {
+                    const profile = Array.isArray(d.profiles) ? d.profiles[0] : d.profiles;
+                    const isActive = d.is_active && new Date(d.expires_at) > new Date();
+                    
+                    let name = profile?.name || 'User';
+                    let photoURL = profile?.photo_url || null;
 
-    const focusOnUser = (user: any) => {
-        setRegion({
-            latitude: user.latitude,
-            longitude: user.longitude,
-            latitudeDelta: 0.005,
-            longitudeDelta: 0.005,
-        });
+                    // Fallback 1: Current Auth User metadata
+                    if (d.user_id === currentUser?.id) {
+                        name = currentUser?.user_metadata?.full_name || name;
+                        photoURL = currentUser?.user_metadata?.avatar_url || currentUser?.user_metadata?.photoURL || photoURL;
+                    }
+
+                    // Fallback 2: Local WatermelonDB Profiles table lookup
+                    if (!photoURL) {
+                        try {
+                            const localProf: any = await database.get('profiles').find(d.user_id);
+                            if (localProf) {
+                                name = localProf.name || name;
+                                photoURL = localProf.photoUrl || photoURL;
+                            }
+                        } catch (e) {
+                            // ignore local DB lookup errors
+                        }
+                    }
+
+                    console.log('[LiveLocationMap] Resolved user:', name, 'photoURL:', photoURL);
+
+                    return {
+                        id: d.user_id,
+                        latitude: d.latitude,
+                        longitude: d.longitude,
+                        updated_at: d.updated_at,
+                        displayName: name,
+                        photoURL: photoURL,
+                        isActive,
+                        localImageUri: null as string | null,
+                    };
+                });
+
+            const resolvedUsers = await Promise.all(activeUsersPromises);
+            const activeUsers = resolvedUsers.filter(d => typeof d.latitude === 'number' && typeof d.longitude === 'number' && !(d.latitude === 0 && d.longitude === 0));
+
+            const downloadPromises = activeUsers.map(async (user) => {
+                if (user.photoURL && (user.photoURL.startsWith('https://') || user.photoURL.startsWith('http://'))) {
+                    try {
+                        // Use a stable cache filename based on user ID
+                        const localPath = `${FileSystem.cacheDirectory}avatar_${user.id}.jpg`;
+                        // Check if already cached
+                        const info = await FileSystem.getInfoAsync(localPath);
+                        let fileUriToRead = null;
+
+                        if (info.exists) {
+                            fileUriToRead = localPath;
+                            console.log('[LiveLocationMap] Using cached avatar file for:', user.displayName);
+                        } else {
+                            const result = await FileSystem.downloadAsync(user.photoURL, localPath);
+                            if (result.status === 200) {
+                                fileUriToRead = result.uri;
+                                console.log('[LiveLocationMap] Downloaded avatar for:', user.displayName, 'to:', result.uri);
+                            }
+                        }
+
+                        if (fileUriToRead) {
+                            const base64Data = await FileSystem.readAsStringAsync(fileUriToRead, {
+                                encoding: 'base64',
+                            });
+                            user.localImageUri = `data:image/jpeg;base64,${base64Data}`;
+                            console.log('[LiveLocationMap] Loaded base64 image data for:', user.displayName);
+                        }
+                    } catch (e) {
+                        console.log('[LiveLocationMap] Failed to download or read avatar for:', user.displayName, e);
+                    }
+                }
+            });
+            await Promise.all(downloadPromises);
+
+            setUsers([...activeUsers]);
+            if (activeUsers.length > 0 && !hasAnimated) {
+                mapRef.current?.animateToRegion({
+                    latitude: activeUsers[0].latitude,
+                    longitude: activeUsers[0].longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                }, 1000);
+                setHasAnimated(true);
+            }
+        };
+
+        loadShares();
+        const randomSuffix = Math.random().toString(36).substring(2, 9);
+        const channelName = `live-loc-${chatId}-${randomSuffix}`;
+        const channel = supabase.channel(channelName)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'live_shares', filter: `chat_id=eq.${chatId}` }, () => { loadShares(); })
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [visible, chatId, collectionName, hasAnimated, currentUser]);
+
+    const handleMyLocation = async () => {
+        try {
+            const location = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.Balanced,
+            });
+            mapRef.current?.animateToRegion({
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+                latitudeDelta: 0.005,
+                longitudeDelta: 0.005,
+            }, 500);
+        } catch (e) {
+            if (users.length > 0) {
+                mapRef.current?.animateToRegion({
+                    latitude: users[0].latitude,
+                    longitude: users[0].longitude,
+                    latitudeDelta: 0.005,
+                    longitudeDelta: 0.005,
+                }, 500);
+            }
+        }
     };
+
+    const headerTop = Math.max(insets.top, 15) + 10;
+
 
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
             <View style={styles.container}>
                 <MapView
+                    ref={mapRef}
                     provider={PROVIDER_GOOGLE}
                     style={styles.map}
                     initialRegion={DEFAULT_REGION}
-                    region={region}
-                    onRegionChangeComplete={setRegion}
-                    showsUserLocation
-                    showsMyLocationButton
+                    showsUserLocation={hasPermission}
+                    showsMyLocationButton={Platform.OS === 'ios' && hasPermission}
+                    mapPadding={{
+                        top: headerTop + 20,
+                        right: 15,
+                        bottom: Platform.OS === 'ios' ? Math.max(insets.bottom, 15) + 20 : 15,
+                        left: 15
+                    }}
                 >
                     {users.map(user => (
-                        <Marker
-                            key={user.id}
-                            coordinate={{ latitude: user.latitude, longitude: user.longitude }}
-                            title={user.displayName}
-                            description={`Updated ${user.timestamp ? formatDistanceToNow(user.timestamp.toDate()) : 'just now'} ago`}
-                        >
-                            <View style={styles.markerContainer}>
-                                {user.photoURL ? (
-                                    <Image
-                                        source={{ uri: user.photoURL }}
-                                        style={[styles.markerImage, { borderColor: user.id === currentUser?.uid ? colors.primary : '#fff' }]}
-                                    />
-                                ) : (
-                                    <View style={[styles.markerFallback, { borderColor: user.id === currentUser?.uid ? colors.primary : '#fff' }]}>
-                                        <Text style={styles.markerFallbackText}>
-                                            {(user.displayName || 'U').charAt(0).toUpperCase()}
-                                        </Text>
-                                    </View>
-                                )}
-                                <View style={styles.markerArrow} />
-                            </View>
-                        </Marker>
+                        <UserMarker key={`${user.id}_${user.localImageUri ? 'img' : 'noimg'}`} user={user} />
                     ))}
                 </MapView>
 
-                {/* Header */}
-                <View style={styles.header}>
-                    <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-                        <Ionicons name="close" size={24} color="#000" />
+                {/* Header — title on left, close on right */}
+                <View style={[styles.header, { top: headerTop }]}>
+                    <Text style={[styles.headerTitle, {
+                        color: isDarkMode ? '#fff' : '#000',
+                        backgroundColor: isDarkMode ? 'rgba(30,30,30,0.85)' : 'rgba(255,255,255,0.85)',
+                    }]}>
+                        Live Location
+                    </Text>
+                    <View style={{ flex: 1 }} />
+                    <TouchableOpacity
+                        style={[styles.closeButton, {
+                            backgroundColor: isDarkMode ? 'rgba(40,40,40,0.9)' : 'rgba(255,255,255,0.95)',
+                        }]}
+                        onPress={onClose}
+                    >
+                        <Icon name="X" size={22} color={isDarkMode ? '#fff' : '#000'} />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Live Locations</Text>
                 </View>
 
-                {/* User List Overlay */}
-                <View style={[styles.userList, { backgroundColor: colors.card }]}>
-                    <Text style={[styles.userListTitle, { color: colors.textSecondary }]}>Active Sharers ({users.length})</Text>
-                    {users.length === 0 ? (
-                        <Text style={{ padding: SPACING.md, color: colors.textSecondary }}>No one is sharing live location.</Text>
-                    ) : (
-                        users.map(user => (
-                            <TouchableOpacity
-                                key={user.id}
-                                style={styles.userRow}
-                                onPress={() => focusOnUser(user)}
-                            >
-                                {user.photoURL ? (
-                                    <Image source={{ uri: user.photoURL }} style={styles.listAvatar} />
-                                ) : (
-                                    <View style={[styles.listAvatar, styles.listAvatarFallback]}>
-                                        <Text style={styles.markerFallbackText}>
-                                            {(user.displayName || 'U').charAt(0).toUpperCase()}
-                                        </Text>
-                                    </View>
-                                )}
-                                <View style={{ flex: 1 }}>
-                                    <Text style={[styles.userName, { color: colors.text }]}>
-                                        {user.id === currentUser?.uid ? 'You' : user.displayName}
-                                    </Text>
-                                    <Text style={[styles.updatedText, { color: colors.textSecondary }]}>
-                                        Last active: {user.timestamp ? formatDistanceToNow(user.timestamp.toDate()) : 'now'} ago
-                                    </Text>
-                                </View>
-                                <Ionicons name="navigate-circle-outline" size={24} color={colors.primary} />
-                            </TouchableOpacity>
-                        ))
-                    )}
-                </View>
+                {/* Custom My Location button for Android — positioned in the bottom right, styled like Google Maps native button */}
+                {Platform.OS === 'android' && hasPermission && (
+                    <TouchableOpacity
+                        style={[styles.nativeMyLocationButton, {
+                            bottom: Math.max(insets.bottom, 15) + 20,
+                            backgroundColor: isDarkMode ? '#222222' : '#ffffff',
+                        }]}
+                        onPress={handleMyLocation}
+                        activeOpacity={0.8}
+                    >
+                        <Icon 
+                            name="Gps" 
+                            size={22} 
+                            color={isDarkMode ? '#ffffff' : '#5f6368'} 
+                        />
+                    </TouchableOpacity>
+                )}
+
             </View>
         </Modal>
     );
@@ -164,56 +323,70 @@ const styles = StyleSheet.create({
     map: { ...StyleSheet.absoluteFillObject },
     header: {
         position: 'absolute',
-        top: 50,
-        left: 20,
-        right: 20,
+        left: 16,
+        right: 16,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: SPACING.md,
+        zIndex: 10,
     },
     closeButton: {
-        backgroundColor: '#fff',
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: 42,
+        height: 42,
+        borderRadius: 21,
         justifyContent: 'center',
         alignItems: 'center',
-        elevation: 5,
+        elevation: 6,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
+        shadowOpacity: 0.25,
+        shadowRadius: 6,
     },
     headerTitle: {
         fontSize: FONT_SIZE.lg,
         fontWeight: FONT_WEIGHT.bold,
-        color: '#000',
-        backgroundColor: 'rgba(255,255,255,0.8)',
         paddingHorizontal: SPACING.md,
-        paddingVertical: 4,
+        paddingVertical: 8,
         borderRadius: BORDER_RADIUS.md,
         overflow: 'hidden',
     },
-    markerContainer: { alignItems: 'center' },
-    markerImage: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        borderWidth: 2,
-    },
-    markerFallback: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        borderWidth: 2,
-        backgroundColor: '#1F2937',
-        justifyContent: 'center',
+
+    markerContainer: {
         alignItems: 'center',
     },
-    markerFallbackText: {
-        color: '#fff',
-        fontSize: FONT_SIZE.sm,
-        fontWeight: FONT_WEIGHT.bold,
+    markerImageWrapper: {
+        width: 46,
+        height: 46,
+        borderRadius: 23,
+        borderWidth: 3,
+        borderColor: '#fff',
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        overflow: 'hidden',
+    },
+    markerImageDirect: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+    },
+    nativeMyLocationButton: {
+        position: 'absolute',
+        right: 16,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 6,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
     },
     markerArrow: {
         width: 0,
@@ -229,38 +402,6 @@ const styles = StyleSheet.create({
         transform: [{ rotate: '180deg' }],
         marginTop: -2,
     },
-    userList: {
-        position: 'absolute',
-        bottom: 30,
-        left: 20,
-        right: 20,
-        borderRadius: BORDER_RADIUS.lg,
-        padding: SPACING.md,
-        elevation: 10,
-        maxHeight: 200,
-    },
-    userListTitle: {
-        fontSize: FONT_SIZE.xs,
-        fontWeight: FONT_WEIGHT.bold,
-        marginBottom: SPACING.sm,
-        textTransform: 'uppercase',
-    },
-    userRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: SPACING.sm,
-        gap: SPACING.sm,
-        borderBottomWidth: 0.5,
-        borderBottomColor: 'rgba(0,0,0,0.1)',
-    },
-    listAvatar: { width: 32, height: 32, borderRadius: 16 },
-    listAvatarFallback: {
-        backgroundColor: '#1F2937',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    userName: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold },
-    updatedText: { fontSize: 10 },
 });
 
 export default LiveLocationMapModal;

@@ -1,36 +1,42 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Modal, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import Icon from '../components/Icon';
+import { MotiView } from 'moti';
 import { WebView } from 'react-native-webview';
 import { useTheme } from '../contexts/ThemeContext';
-import auth from '@react-native-firebase/auth';
+import { supabase } from '../lib/supabase';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, NEUTRAL } from '../styles';
 
 // ─── Tawk.to Configuration ─────────────────────────────────────────
 const TAWKTO_PROPERTY_ID = process.env.EXPO_PUBLIC_TAWKTO_PROPERTY_ID || '';
 const TAWKTO_WIDGET_ID = process.env.EXPO_PUBLIC_TAWKTO_WIDGET_ID || '';
 
-const SUPPORT_EMAIL = 'support@tripzi.app';
+const SUPPORT_EMAIL = 'nxtvibes.app@gmail.com';
 
-const HelpSupportScreen = ({ navigation }) => {
+import { useRouter } from 'expo-router';
+import { NeumorphicBackButton } from '../components/NeumorphicIconButtons';
+
+const HelpSupportScreen = () => {
+  const router = useRouter();
   const { colors } = useTheme();
   const [expandedFAQ, setExpandedFAQ] = useState(null);
   const [chatVisible, setChatVisible] = useState(false);
   const [chatLoading, setChatLoading] = useState(true);
   const webViewRef = useRef<WebView>(null);
 
-  const currentUser = auth().currentUser;
+  const [currentUser, setCurrentUser] = React.useState<any>(null);
+  React.useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+  }, []);
 
   const faqs = [
-    { id: 1, question: 'How do I create a trip?', answer: 'Tap the + button from the main tabs, then create a trip manually or with Tripzi AI.' },
+    { id: 1, question: 'How do I create a trip?', answer: 'Tap the + button from the main tabs, then create a trip manually or with NxtVibes AI.' },
     { id: 2, question: "Why can't I join some trips?", answer: 'Trips may be full, already started, cancelled, or restricted by host gender preference. Your profile must also be complete.' },
     { id: 3, question: 'When do group chats appear?', answer: 'A trip group chat is created automatically when the first traveler joins a trip. Later joined users are added to the same group.' },
-    { id: 4, question: 'Why are notifications not working?', answer: 'Tripzi needs device notification permission. If permission is denied, Tripzi may disable both push and in-app notifications until you enable it again.' },
-    { id: 5, question: 'Can I rate a trip anytime?', answer: 'No. Ratings are available only after the trip end date and only for travelers who joined that trip.' },
-    { id: 6, question: 'How do I delete my account?', answer: 'Open Settings, choose Delete Account, select a reason, and confirm. Tripzi will delete your account and connected data, while keeping limited safety records if required.' },
-    { id: 7, question: 'Is Tripzi available outside India?', answer: 'No. Tripzi is currently designed only for users in India and for adults aged 18 or above.' },
+    { id: 4, question: 'Why are notifications not working?', answer: 'NxtVibes needs device notification permission. If permission is denied, NxtVibes may disable both push and in-app notifications until you enable it again.' },
+    { id: 6, question: 'How do I delete my account?', answer: 'Open Settings, choose Delete Account, select a reason, and confirm. NxtVibes will delete your account and connected data, while keeping limited safety records if required.' },
+    { id: 7, question: 'Is NxtVibes available outside India?', answer: 'No. NxtVibes is currently designed only for users in India and for adults aged 18 or above.' },
   ];
 
   const toggleFAQ = (id) => {
@@ -45,16 +51,20 @@ const HelpSupportScreen = ({ navigation }) => {
 
   // Open email client with pre-filled user info
   const openEmail = () => {
-    const subject = encodeURIComponent('Tripzi App Support');
-    const body = encodeURIComponent(`\n\n---\nUser: ${currentUser?.displayName || 'N/A'}\nEmail: ${currentUser?.email || 'N/A'}\nUID: ${currentUser?.uid || 'N/A'}`);
+    const subject = encodeURIComponent('NxtVibes App Support');
+    const body = encodeURIComponent(`\n\n---\nUser: ${currentUser?.user_metadata?.full_name || 'N/A'}\nEmail: ${currentUser?.email || 'N/A'}\nUID: ${currentUser?.id || 'N/A'}`);
     Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`);
+  };
+
+  const openWebsite = () => {
+    Linking.openURL('https://nxtvibes.vercel.app/');
   };
 
   // tawk.to Direct Chat Link URL
   const chatUrl = `https://tawk.to/chat/${TAWKTO_PROPERTY_ID}/${TAWKTO_WIDGET_ID}`;
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top']}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -62,16 +72,9 @@ const HelpSupportScreen = ({ navigation }) => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.7}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="chevron-back" size={28} color={colors.text} />
-          </TouchableOpacity>
+          <NeumorphicBackButton onPress={() => router.back()} />
           <Text style={[styles.headerTitle, { color: colors.text }]}>Help & Support</Text>
-          <View style={styles.placeholder} />
+          <View style={{ width: 45 }} />
         </View>
 
         <ScrollView
@@ -81,29 +84,47 @@ const HelpSupportScreen = ({ navigation }) => {
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         >
           {/* Contact Options */}
-          <Animatable.View animation="fadeInUp" duration={400} style={styles.contactContainer}>
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 400 }}
+            style={styles.contactContainer}
+          >
             <ContactCard
-              icon="mail-outline"
+              icon="Envelope"
               label="Email"
-              iconColor="#9d74f7"
-              bgColor="#EDE9FE"
+              iconColor={colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000'}
+              bgColor={colors.background !== '#FFFFFF' ? '#333333' : '#F3F4F6'}
               colors={colors}
               onPress={openEmail}
             />
             <ContactCard
-              icon="chatbubble-ellipses-outline"
+              icon="ChatDots"
               label="Live Chat"
-              iconColor="#10B981"
-              bgColor="#D1FAE5"
+              iconColor={colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000'}
+              bgColor={colors.background !== '#FFFFFF' ? '#333333' : '#F3F4F6'}
               colors={colors}
               onPress={openLiveChat}
             />
-          </Animatable.View>
+            <ContactCard
+              icon="Globe"
+              label="Website"
+              iconColor={colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000'}
+              bgColor={colors.background !== '#FFFFFF' ? '#333333' : '#F3F4F6'}
+              colors={colors}
+              onPress={openWebsite}
+            />
+          </MotiView>
 
           {/* FAQ Section */}
-          <Animatable.View animation="fadeInUp" delay={100} duration={400} style={[styles.faqSection, { backgroundColor: colors.card }]}>
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 400, delay: 100 }}
+            style={[styles.faqSection, { backgroundColor: colors.card }]}
+          >
             <View style={styles.faqHeader}>
-              <Ionicons name="help-circle-outline" size={24} color={colors.primary} />
+              <Icon name="Question" size={24} color={colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000'} />
               <Text style={[styles.faqTitle, { color: colors.text }]}>Frequently Asked Questions</Text>
             </View>
 
@@ -115,20 +136,25 @@ const HelpSupportScreen = ({ navigation }) => {
                   activeOpacity={0.7}
                 >
                   <Text style={[styles.faqQuestionText, { color: colors.text }]}>{faq.question}</Text>
-                  <Ionicons
-                    name={expandedFAQ === faq.id ? "chevron-up" : "chevron-down"}
+                  <Icon
+                    name={expandedFAQ === faq.id ? "CaretUp" : "CaretDown"}
                     size={20}
                     color={colors.textSecondary}
                   />
                 </TouchableOpacity>
                 {expandedFAQ === faq.id && (
-                  <Animatable.View animation="fadeIn" duration={200} style={styles.faqAnswer}>
+                  <MotiView
+                    from={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ type: 'timing', duration: 200 }}
+                    style={styles.faqAnswer}
+                  >
                     <Text style={[styles.faqAnswerText, { color: colors.textSecondary }]}>{faq.answer}</Text>
-                  </Animatable.View>
+                  </MotiView>
                 )}
               </View>
             ))}
-          </Animatable.View>
+          </MotiView>
 
 
           <View style={{ height: SPACING.xxxl }} />
@@ -150,10 +176,10 @@ const HelpSupportScreen = ({ navigation }) => {
               style={styles.chatCloseBtn}
               activeOpacity={0.7}
             >
-              <Ionicons name="close" size={26} color={NEUTRAL.white} />
+              <Icon name="X" size={26} color={NEUTRAL.white} />
             </TouchableOpacity>
             <View style={styles.chatHeaderCenter}>
-              <Ionicons name="chatbubbles" size={20} color={NEUTRAL.white} />
+              <Icon name="ChatTeardropDots" size={20} color={NEUTRAL.white} />
               <Text style={styles.chatHeaderTitle}>Live Support</Text>
             </View>
             <TouchableOpacity
@@ -164,7 +190,7 @@ const HelpSupportScreen = ({ navigation }) => {
               style={styles.chatCloseBtn}
               activeOpacity={0.7}
             >
-              <Ionicons name="refresh" size={22} color={NEUTRAL.white} />
+              <Icon name="ArrowClockwise" size={22} color={NEUTRAL.white} />
             </TouchableOpacity>
           </View>
 
@@ -217,7 +243,7 @@ const ContactCard = ({ icon, label, iconColor, bgColor, colors, onPress }) => (
     onPress={onPress}
   >
     <View style={[styles.contactIcon, { backgroundColor: bgColor }]}>
-      <Ionicons name={icon} size={28} color={iconColor} />
+      <Icon name={icon as any} size={28} color={iconColor} />
     </View>
     <Text style={[styles.contactLabel, { color: colors.text }]}>{label}</Text>
   </TouchableOpacity>
@@ -235,20 +261,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-  },
-  backButton: {
-    width: TOUCH_TARGET.min,
-    height: TOUCH_TARGET.min,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 10 : 20,
+    paddingBottom: 20,
   },
   headerTitle: {
     fontSize: FONT_SIZE.lg,
     fontWeight: FONT_WEIGHT.semibold,
-  },
-  placeholder: {
-    width: TOUCH_TARGET.min,
   },
   content: {
     flex: 1,

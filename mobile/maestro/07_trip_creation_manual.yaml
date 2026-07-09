@@ -1,4 +1,4 @@
-appId: com.tripzi.mobile
+appId: com.nxtvibes.mobile
 ---
 - tapOn: "+"
 - assertVisible: "Create a Trip Manually"
@@ -37,5 +37,5 @@ appId: com.tripzi.mobile
 - tapOn: "Post Trip"
 # Should navigate away, likely to the profile or feed
 - extendedWaitUntil:
-    visible: "Tripzi" # Or profile if it navigates there as the code says `UserProfile`
+    visible: "NxtVibes" # Or profile if it navigates there as the code says `UserProfile`
     timeout: 10000

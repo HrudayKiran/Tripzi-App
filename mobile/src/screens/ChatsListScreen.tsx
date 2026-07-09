@@ -4,49 +4,63 @@ import {
     Text,
     StyleSheet,
     TouchableOpacity,
-    FlatList,
-    Image,
     ActivityIndicator,
     RefreshControl,
     TextInput,
     Modal,
     Alert,
+    BackHandler,
 } from 'react-native';
+import { FlashList } from "@shopify/flash-list";
+
+const TypedFlashList = FlashList as any;
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import { useRouter } from 'expo-router';
+import Icon from '../components/Icon';
+import { NeumorphicBackButton, NeumorphicSearchButton, NeumorphicIconButton } from '../components/NeumorphicIconButtons';
+import { MotiView } from 'moti';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, NEUTRAL } from '../styles';
-import { useChats, Chat } from '../hooks/useChats';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
+import { useChatsQuery, Chat } from '../hooks/useChatsQuery';
+import { supabase } from '../lib/supabase';
 import { formatDistanceToNow } from 'date-fns';
-import { LinearGradient } from 'expo-linear-gradient';
+
 import { searchUsersByPrefix } from '../utils/searchUsers';
 import DefaultAvatar from '../components/DefaultAvatar';
+import { ChatsListSkeleton, UserSearchListSkeleton } from '../components/Skeletons';
 
 interface SearchUser {
     id: string;
     displayName: string;
     username?: string;
     photoURL?: string;
-    ageVerified?: boolean;
 }
 
-const ChatsListScreen = ({ navigation }) => {
-    const { colors } = useTheme();
-    const { chats, loading, refreshChats, deleteChat } = useChats();
+const ChatsListScreen = () => {
+    const router = useRouter();
+    const { colors, isDarkMode } = useTheme();
+    const { chats, loading, refreshChats, deleteChat, getOrCreateDirectChat } = useChatsQuery();
+    const [refreshing, setRefreshing] = useState(false);
+
+    const handleRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            await refreshChats();
+        } finally {
+            setRefreshing(false);
+        }
+    }, [refreshChats]);
 
     // Use state for currentUser to properly handle auth state
-    const [currentUser, setCurrentUser] = useState(auth().currentUser);
+    const [currentUser, setCurrentUser] = useState<any>(null);
 
-    // Listen for auth state changes
     React.useEffect(() => {
-        const unsubscribe = auth().onAuthStateChanged((user) => {
-
-            setCurrentUser(user);
+        // getSession() is cache-backed (no network call); getUser() makes a network round-trip
+        supabase.auth.getSession().then(({ data: { session } }) => setCurrentUser(session?.user || null));
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setCurrentUser(session?.user || null);
         });
-        return () => unsubscribe();
+        return () => subscription.unsubscribe();
     }, []);
 
     // Search state
@@ -56,16 +70,45 @@ const ChatsListScreen = ({ navigation }) => {
     const [searching, setSearching] = useState(false);
     const [startingChat, setStartingChat] = useState(false);
 
+    React.useEffect(() => {
+        const backAction = () => {
+            if (showSearch) {
+                setShowSearch(false);
+                setSearchQuery('');
+                setSearchResults([]);
+                return true;
+            }
+            return false;
+        };
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+        return () => backHandler.remove();
+    }, [showSearch]);
+
 
     // Messages Settings modal
     const [showMessagesSettings, setShowMessagesSettings] = useState(false);
-    const [readReceipts, setReadReceipts] = useState(true);
+    // Tracks the dropdown's top position, measured dynamically from header layout
+    // so it aligns correctly across all screen sizes and safe-area insets.
+    const [dropdownTop, setDropdownTop] = useState(105);
 
     // Selection Mode State
     const [selectedChats, setSelectedChats] = useState<Set<string>>(new Set());
     const isSelectionMode = selectedChats.size > 0;
 
-    const handleLongPress = (chatId: string) => {
+    const getOtherParticipant = useCallback(
+        (chat: Chat) => {
+            if (!currentUser) return null;
+            const otherUid = chat.participants.find((uid) => uid !== currentUser.id);
+            if (!otherUid) return null;
+            return {
+                uid: otherUid,
+                ...chat.participantDetails?.[otherUid],
+            };
+        },
+        [currentUser]
+    );
+
+    const handleLongPress = useCallback((chatId: string) => {
         const newSelected = new Set(selectedChats);
         if (newSelected.has(chatId)) {
             newSelected.delete(chatId);
@@ -73,26 +116,30 @@ const ChatsListScreen = ({ navigation }) => {
             newSelected.add(chatId);
         }
         setSelectedChats(newSelected);
-    };
+    }, [selectedChats]);
 
-    const handlePressChat = (chat: Chat) => {
+    const handlePressChat = useCallback((chat: Chat) => {
         if (isSelectionMode) {
             handleLongPress(chat.id);
         } else {
             const otherUser = chat.type === 'direct' ? getOtherParticipant(chat) : null;
-            navigation.navigate('Chat', {
-                chatId: chat.id,
-                collectionName: chat.collectionName,
-                otherUserId: otherUser?.uid,
-                otherUserName: chat.type === 'group' ? chat.groupName : otherUser?.displayName,
-                otherUserPhoto: chat.type === 'group' ? chat.groupIcon : otherUser?.photoURL,
-                isGroupChat: chat.type === 'group',
-                tripTitle: chat.type === 'group' ? chat.groupName : undefined,
+            router.push({
+                pathname: '/chat/[id]',
+                params: {
+                    id: chat.id,
+                    chatId: chat.id,
+                    collectionName: chat.collectionName,
+                    otherUserId: otherUser?.uid,
+                    otherUserName: chat.type === 'group' ? chat.groupName : otherUser?.displayName,
+                    otherUserPhoto: chat.type === 'group' ? chat.groupIcon : otherUser?.photoURL,
+                    isGroupChat: String(chat.type === 'group'),
+                    tripTitle: chat.type === 'group' ? chat.groupName : undefined,
+                }
             });
         }
-    };
+    }, [isSelectionMode, handleLongPress, getOtherParticipant, router]);
 
-    const handleDeleteSelected = () => {
+    const handleDeleteSelected = useCallback(() => {
         Alert.alert(
             'Delete Chat?',
             `Are you sure you want to delete ${selectedChats.size} chat${selectedChats.size > 1 ? 's' : ''}?`,
@@ -113,26 +160,13 @@ const ChatsListScreen = ({ navigation }) => {
                 }
             ]
         );
-    };
+    }, [selectedChats, deleteChat]);
 
-    const handleCancelSelection = () => {
+    const handleCancelSelection = useCallback(() => {
         setSelectedChats(new Set());
-    };
+    }, []);
 
-    const getOtherParticipant = useCallback(
-        (chat: Chat) => {
-            if (!currentUser) return null;
-            const otherUid = chat.participants.find((uid) => uid !== currentUser.uid);
-            if (!otherUid) return null;
-            return {
-                uid: otherUid,
-                ...chat.participantDetails?.[otherUid],
-            };
-        },
-        [currentUser]
-    );
-
-    const formatTime = (timestamp: any) => {
+    const formatTime = useCallback((timestamp: any) => {
         if (!timestamp) return '';
         try {
             const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -140,10 +174,79 @@ const ChatsListScreen = ({ navigation }) => {
         } catch {
             return '';
         }
-    };
+    }, []);
+
+    const getLastMessageText = useCallback((item: Chat) => {
+        if (!item.lastMessage?.text) return 'Start a conversation';
+        if (!currentUser) return item.lastMessage.text;
+
+        const text = item.lastMessage.text;
+        const isGroup = item.type === 'group';
+
+        if (isGroup) {
+            if (text.includes('created the group') || text.includes('created this group')) {
+                if (item.createdBy === currentUser.id) {
+                    return 'You created this group';
+                }
+            }
+
+            const userName = item.participantDetails?.[currentUser.id]?.displayName || currentUser.user_metadata?.full_name || 'User';
+
+            if (item.lastMessage.type === 'system' || !item.lastMessage.senderId) {
+                let translated = text;
+                
+                if (translated.includes(' added ')) {
+                    const parts = translated.split(' added ');
+                    if (parts.length === 2) {
+                        const actorName = parts[0];
+                        const memberName = parts[1];
+                        const isActorMe = actorName.trim().toLowerCase() === userName.trim().toLowerCase();
+                        const isMemberMe = memberName.trim().toLowerCase() === userName.trim().toLowerCase();
+                        if (isActorMe) return `You added ${memberName}`;
+                        if (isMemberMe) return `${actorName} added You`;
+                    }
+                }
+                
+                if (translated.includes(' removed ')) {
+                    const parts = translated.split(' removed ');
+                    if (parts.length === 2) {
+                        const actorName = parts[0];
+                        const memberName = parts[1];
+                        const isActorMe = actorName.trim().toLowerCase() === userName.trim().toLowerCase();
+                        const isMemberMe = memberName.trim().toLowerCase() === userName.trim().toLowerCase();
+                        if (isActorMe) return `You removed ${memberName}`;
+                        if (isMemberMe) return `${actorName} removed You`;
+                    }
+                }
+
+                if (translated.includes(' made ') && translated.includes(' an admin')) {
+                    const regex = /(.+) made (.+) an admin/;
+                    const match = translated.match(regex);
+                    if (match && match.length === 3) {
+                        const actorName = match[1];
+                        const memberName = match[2];
+                        const isActorMe = actorName.trim().toLowerCase() === userName.trim().toLowerCase();
+                        const isMemberMe = memberName.trim().toLowerCase() === userName.trim().toLowerCase();
+                        if (isActorMe) return `You made ${memberName} an admin`;
+                        if (isMemberMe) return `${actorName} made You an admin`;
+                    }
+                }
+
+                if (translated.startsWith(userName)) {
+                    translated = 'You' + translated.substring(userName.length);
+                }
+                if (translated.endsWith(userName)) {
+                    translated = translated.substring(0, translated.length - userName.length) + 'You';
+                }
+                return translated;
+            }
+        }
+
+        return text;
+    }, [currentUser]);
 
     // Search users
-    const handleSearch = async (query: string) => {
+    const handleSearch = useCallback(async (query: string) => {
         setSearchQuery(query);
         if (query.trim().length < 2) {
             setSearchResults([]);
@@ -154,12 +257,11 @@ const ChatsListScreen = ({ navigation }) => {
         try {
             const results = await searchUsersByPrefix(query, 10);
             setSearchResults(
-                results.filter((u) => u.id !== currentUser?.uid).map((u) => ({
+                results.filter((u) => u.id !== currentUser?.id).map((u) => ({
                     id: u.id,
                     displayName: u.displayName || 'User',
                     username: u.username,
                     photoURL: u.photoURL,
-                    ageVerified: u.ageVerified,
                 }))
             );
         } catch (error) {
@@ -167,87 +269,56 @@ const ChatsListScreen = ({ navigation }) => {
         } finally {
             setSearching(false);
         }
-    };
+    }, [currentUser]);
 
-    // Start chat with user
-    const startChatWithUser = async (user: SearchUser) => {
+    // Start chat — delegates entirely to the hook's getOrCreateDirectChat which
+    // handles: in-memory check → Supabase DB check → create, all atomically.
+    // This eliminates the previous duplicate Supabase fetch that could create
+    // duplicate chats in race conditions.
+    const startChatWithUser = useCallback(async (user: SearchUser) => {
         if (!currentUser) return;
         setStartingChat(true);
 
         try {
-            // Check if chat already exists
-            const chatQuery = await firestore()
-                .collection('chats')
-                .where('type', '==', 'direct')
-                .where('participants', 'array-contains', currentUser.uid)
-                .get();
-
-            let chatId = null;
-            for (const doc of chatQuery.docs) {
-                const data = doc.data();
-                if (data.participants.includes(user.id)) {
-                    chatId = doc.id;
-                    break;
-                }
-            }
-
-            if (!chatId) {
-                // Create new chat
-                const currentUserDoc = await firestore().collection('users').doc(currentUser.uid).get();
-                const currentUserData = currentUserDoc.data();
-
-                const newChatRef = await firestore().collection('chats').add({
-                    type: 'direct',
-                    participants: [currentUser.uid, user.id],
-                    participantDetails: {
-                        [currentUser.uid]: {
-                            displayName: currentUserData?.name || currentUserData?.displayName || currentUser.displayName || 'User',
-                            photoURL: currentUserData?.photoURL || currentUser.photoURL || '',
-                        },
-                        [user.id]: {
-                            displayName: user.displayName || 'User',
-                            photoURL: user.photoURL || '',
-                        },
-                    },
-                    unreadCount: {
-                        [currentUser.uid]: 0,
-                        [user.id]: 0,
-                    },
-                    mutedBy: [],
-                    pinnedBy: [],
-                    createdAt: firestore.FieldValue.serverTimestamp(),
-                    updatedAt: firestore.FieldValue.serverTimestamp(),
-                });
-                chatId = newChatRef.id;
-            }
+            const chatId = await getOrCreateDirectChat(user.id, {
+                displayName: user.displayName || 'User',
+                photoURL: user.photoURL || '',
+            });
 
             setShowSearch(false);
             setSearchQuery('');
             setSearchResults([]);
 
-            navigation.navigate('Chat', {
-                chatId,
-                collectionName: 'chats',
-                otherUserId: user.id,
-                otherUserName: user.displayName,
-                otherUserPhoto: user.photoURL,
+            router.push({
+                pathname: '/chat/[id]',
+                params: {
+                    id: chatId,
+                    chatId,
+                    collectionName: 'direct_chats',
+                    otherUserId: user.id,
+                    otherUserName: user.displayName,
+                    otherUserPhoto: user.photoURL,
+                }
             });
         } catch (error) {
-
             Alert.alert('Error', 'Could not start chat. Please try again.');
         } finally {
             setStartingChat(false);
         }
-    };
+    }, [currentUser, getOrCreateDirectChat, router]);
 
-    const renderChatItem = ({ item, index }: { item: Chat; index: number }) => {
+    const renderChatItem = useCallback(({ item, index }: { item: Chat; index: number }) => {
         const otherUser = item.type === 'direct' ? getOtherParticipant(item) : null;
         const displayName = item.type === 'group' ? item.groupName : otherUser?.displayName || 'User';
         const displayPhoto = item.type === 'group' ? item.groupIcon : otherUser?.photoURL;
-        const unreadCount = currentUser ? item.unreadCount?.[currentUser.uid] || 0 : 0;
+        const unreadCount = currentUser ? item.unreadCount?.[currentUser.id] || (item as any).unread_count?.[currentUser.id] || 0 : 0;
 
         return (
-            <Animatable.View animation="fadeInUp" delay={index * 50} duration={300}>
+            <MotiView
+                from={{ opacity: 0, translateY: 20 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: 'timing', duration: 300, delay: index * 50 }}
+            >
                 <TouchableOpacity
                     style={[
                         styles.chatItem,
@@ -282,7 +353,7 @@ const ChatsListScreen = ({ navigation }) => {
                                 ]}
                                 numberOfLines={1}
                             >
-                                {item.lastMessage?.text || 'Start a conversation'}
+                                {getLastMessageText(item)}
                             </Text>
 
                             {unreadCount > 0 && (
@@ -295,11 +366,11 @@ const ChatsListScreen = ({ navigation }) => {
                         </View>
                     </View>
                 </TouchableOpacity>
-            </Animatable.View>
+            </MotiView>
         );
-    };
+    }, [selectedChats, colors, handlePressChat, handleLongPress, getOtherParticipant, currentUser, formatTime, getLastMessageText]);
 
-    const renderSearchResult = ({ item }: { item: SearchUser }) => (
+    const renderSearchResult = useCallback(({ item }: { item: SearchUser }) => (
         <TouchableOpacity
             style={[styles.searchResultItem, { backgroundColor: colors.card }]}
             onPress={() => startChatWithUser(item)}
@@ -312,38 +383,27 @@ const ChatsListScreen = ({ navigation }) => {
                     <Text style={[styles.searchUserName, { color: colors.text }]}>
                         {item.displayName}
                     </Text>
-                    {item.ageVerified === true && (
-                        <Ionicons name="shield-checkmark" size={14} color="#10B981" style={{ marginLeft: 4 }} />
-                    )}
                 </View>
                 {item.username && (
                     <Text style={[styles.searchUsername, { color: colors.primary }]}>@{item.username}</Text>
                 )}
             </View>
-            <Ionicons name="chatbubble-outline" size={20} color={colors.primary} />
+            <Icon name="ChatTeardrop" size={20} color={colors.primary} />
         </TouchableOpacity>
-    );
+    ), [colors, startChatWithUser, startingChat]);
 
-    const renderEmptyState = () => (
+    const renderEmptyState = useCallback(() => (
         <View style={styles.emptyContainer}>
-            <Ionicons name="chatbubbles-outline" size={80} color={colors.textSecondary} />
+            <Icon name="ChatTeardropDots" size={80} color={colors.textSecondary} />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>No Chats Yet</Text>
             <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
                 Tap the search icon to find people and start chatting!
             </Text>
         </View>
-    );
+    ), [colors]);
 
 
-    if (loading) {
-        return (
-            <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={colors.primary} />
-                </View>
-            </SafeAreaView>
-        );
-    }
+    // Removed full-screen loading state to render skeletons inside main view
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -352,76 +412,95 @@ const ChatsListScreen = ({ navigation }) => {
                 <View style={[styles.header, { backgroundColor: colors.primary }]}>
                     <View style={styles.headerLeft}>
                         <TouchableOpacity onPress={handleCancelSelection}>
-                            <Ionicons name="arrow-back" size={24} color="white" />
+                            <Icon name="CaretLeft" size={24} color="white" />
                         </TouchableOpacity>
                         <Text style={[styles.headerTitle, { color: 'white', marginLeft: 16 }]}>
                             {selectedChats.size} Selected
                         </Text>
                     </View>
                     <TouchableOpacity onPress={handleDeleteSelected}>
-                        <Ionicons name="trash-outline" size={24} color="white" />
+                        <Icon name="Trash" size={24} color="white" />
                     </TouchableOpacity>
                 </View>
             ) : (
-                <View style={styles.header}>
+                <View
+                    style={styles.header}
+                    onLayout={(e) => {
+                        const { y, height } = e.nativeEvent.layout;
+                        setDropdownTop(y + height + 8);
+                    }}
+                >
                     <Text style={[styles.headerTitle, { color: colors.text }]}>Messages</Text>
                     <View style={styles.headerButtons}>
-                        <TouchableOpacity
-                            style={[styles.headerButton, { backgroundColor: colors.card }]}
+                        <NeumorphicSearchButton
                             onPress={() => setShowSearch(true)}
-                            activeOpacity={0.7}
-                            testID="chats-search-button"
-                        >
-                            <Ionicons name="search-outline" size={22} color={colors.text} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.headerButton, { backgroundColor: colors.card }]}
+                            size={44}
+                            iconSize={22}
+                            style={{ marginRight: SPACING.xs }}
+                        />
+                        <NeumorphicIconButton
                             onPress={() => setShowMessagesSettings(true)}
-                            activeOpacity={0.7}
-                            testID="chats-menu-button"
-                        >
-                            <Ionicons name="ellipsis-vertical" size={22} color={colors.text} />
-                        </TouchableOpacity>
+                            iconName="DotsThreeVertical"
+                            size={44}
+                            iconSize={22}
+                        />
                     </View>
                 </View>
             )}
 
             {/* Chat List */}
-            <FlatList
-                data={chats}
+            {loading ? (
+                <ChatsListSkeleton />
+            ) : (
+                <TypedFlashList
+                    data={chats}
                 renderItem={renderChatItem}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={[
                     styles.listContent,
                     chats.length === 0 && styles.emptyList,
+                    { paddingBottom: 120 }
                 ]}
                 ListEmptyComponent={renderEmptyState}
                 refreshControl={
                     <RefreshControl
-                        refreshing={loading}
-                        onRefresh={refreshChats}
-                        tintColor={colors.primary}
+                        refreshing={refreshing}
+                        onRefresh={handleRefresh}
+                        colors={[isDarkMode ? '#FFFFFF' : '#000000']}
+                        tintColor={isDarkMode ? '#FFFFFF' : '#000000'}
+                        progressBackgroundColor={isDarkMode ? '#222222' : '#FFFFFF'}
                     />
                 }
                 showsVerticalScrollIndicator={false}
+                estimatedItemSize={80}
             />
+            )}
 
             {/* Search Modal */}
-            <Modal visible={showSearch} animationType="slide" transparent>
+            <Modal
+                visible={showSearch}
+                animationType="slide"
+                transparent
+                onRequestClose={() => {
+                    setShowSearch(false);
+                    setSearchQuery('');
+                    setSearchResults([]);
+                }}
+            >
                 <View style={[styles.searchModal, { backgroundColor: colors.background }]}>
                     <SafeAreaView style={styles.searchModalContent}>
                         {/* Search Header */}
                         <View style={[styles.searchHeader, { borderBottomColor: colors.border }]}>
-                            <TouchableOpacity
-                                style={styles.closeButton}
+                            <NeumorphicBackButton
                                 onPress={() => {
                                     setShowSearch(false);
                                     setSearchQuery('');
                                     setSearchResults([]);
                                 }}
-                            >
-                                <Ionicons name="arrow-back" size={24} color={colors.text} />
-                            </TouchableOpacity>
+                                size={40}
+                                iconSize={24}
+                                style={{ marginRight: SPACING.md }}
+                            />
                             <TextInput
                                 style={[styles.searchInput, { backgroundColor: colors.card, color: colors.text }]}
                                 placeholder="Search by name or username..."
@@ -435,19 +514,16 @@ const ChatsListScreen = ({ navigation }) => {
 
                         {/* Search Results */}
                         {searching ? (
-                            <View style={styles.searchLoading}>
-                                <ActivityIndicator size="small" color={colors.primary} />
-                                <Text style={[styles.searchingText, { color: colors.textSecondary }]}>Searching...</Text>
-                            </View>
+                            <UserSearchListSkeleton />
                         ) : searchQuery.length > 0 && searchResults.length === 0 ? (
                             <View style={styles.noResults}>
-                                <Ionicons name="person-outline" size={48} color={colors.textSecondary} />
+                                <Icon name="User" size={48} color={colors.textSecondary} />
                                 <Text style={[styles.noResultsText, { color: colors.textSecondary }]}>
                                     No users found for "{searchQuery}"
                                 </Text>
                             </View>
                         ) : (
-                            <FlatList
+                            <TypedFlashList
                                 data={searchResults}
                                 renderItem={renderSearchResult}
                                 keyExtractor={(item) => item.id}
@@ -460,12 +536,13 @@ const ChatsListScreen = ({ navigation }) => {
                                         </Text>
                                     ) : null
                                 }
+                                estimatedItemSize={60}
                             />
                         )}
 
                         {startingChat && (
                             <View style={styles.startingChatOverlay}>
-                                <ActivityIndicator size="large" color={colors.primary} />
+                                <ActivityIndicator size="large" color={isDarkMode ? '#FFFFFF' : '#000000'} />
                                 <Text style={[styles.startingChatText, { color: colors.text }]}>Starting chat...</Text>
                             </View>
                         )}
@@ -480,15 +557,33 @@ const ChatsListScreen = ({ navigation }) => {
                     activeOpacity={1}
                     onPress={() => setShowMessagesSettings(false)}
                 >
-                    <View style={[styles.dropdownMenu, { backgroundColor: colors.card }]}>
+                    <View style={[styles.dropdownMenu, { backgroundColor: colors.card, top: dropdownTop }]}>
                         <TouchableOpacity
                             style={styles.dropdownItem}
                             onPress={() => {
                                 setShowMessagesSettings(false);
-                                navigation.navigate('MessageSettings');
+                                setTimeout(() => {
+                                    router.push('/chat/create');
+                                }, 200);
                             }}
                         >
-                            <Ionicons name="settings" size={20} color={colors.text} />
+                            <Icon name="Users" size={20} color={colors.text} />
+                            <Text style={[styles.dropdownText, { color: colors.text }]}>New Group Chat</Text>
+                        </TouchableOpacity>
+
+                        {/* Divider */}
+                        <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: SPACING.md }} />
+
+                        <TouchableOpacity
+                            style={styles.dropdownItem}
+                            onPress={() => {
+                                setShowMessagesSettings(false);
+                                setTimeout(() => {
+                                    router.push('/chat/settings');
+                                }, 200);
+                            }}
+                        >
+                            <Icon name="Gear" size={20} color={colors.text} />
                             <Text style={[styles.dropdownText, { color: colors.text }]}>Settings</Text>
                         </TouchableOpacity>
                     </View>
@@ -502,11 +597,7 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
+
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -519,19 +610,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
     },
-    persistentSearchBar: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginHorizontal: SPACING.xl,
-        marginBottom: SPACING.sm,
-        paddingHorizontal: SPACING.md,
-        paddingVertical: SPACING.sm,
-        borderRadius: BORDER_RADIUS.lg,
-        gap: SPACING.sm,
-    },
-    persistentSearchText: {
-        fontSize: FONT_SIZE.sm,
-    },
+
     headerTitle: {
         fontSize: FONT_SIZE.xxl,
         fontWeight: FONT_WEIGHT.bold,
@@ -540,20 +619,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: SPACING.sm,
     },
-    headerButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    searchButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
+
     listContent: {
         paddingHorizontal: SPACING.lg,
     },
@@ -572,23 +638,7 @@ const styles = StyleSheet.create({
         position: 'relative',
         marginRight: SPACING.md,
     },
-    avatar: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-    },
-    avatarPlaceholder: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    avatarText: {
-        color: '#fff',
-        fontSize: FONT_SIZE.xl,
-        fontWeight: FONT_WEIGHT.bold,
-    },
+
     chatInfo: {
         flex: 1,
     },
@@ -649,19 +699,7 @@ const styles = StyleSheet.create({
         lineHeight: 22,
         marginBottom: SPACING.lg,
     },
-    startChatButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: SPACING.xl,
-        paddingVertical: SPACING.md,
-        borderRadius: BORDER_RADIUS.lg,
-        gap: SPACING.sm,
-    },
-    startChatButtonText: {
-        color: '#fff',
-        fontSize: FONT_SIZE.md,
-        fontWeight: FONT_WEIGHT.semibold,
-    },
+
     // Search Modal
     searchModal: {
         flex: 1,
@@ -676,9 +714,7 @@ const styles = StyleSheet.create({
         paddingVertical: SPACING.sm,
         borderBottomWidth: 1,
     },
-    closeButton: {
-        padding: SPACING.sm,
-    },
+
     searchInput: {
         flex: 1,
         marginLeft: SPACING.sm,
@@ -687,15 +723,7 @@ const styles = StyleSheet.create({
         borderRadius: BORDER_RADIUS.lg,
         fontSize: FONT_SIZE.md,
     },
-    searchLoading: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    searchingText: {
-        marginTop: SPACING.md,
-        fontSize: FONT_SIZE.md,
-    },
+
     noResults: {
         flex: 1,
         justifyContent: 'center',
@@ -721,20 +749,7 @@ const styles = StyleSheet.create({
         borderRadius: BORDER_RADIUS.lg,
         marginBottom: SPACING.sm,
     },
-    searchAvatar: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        marginRight: SPACING.md,
-    },
-    searchAvatarPlaceholder: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: SPACING.md,
-    },
+
     searchUserInfo: {
         flex: 1,
     },
@@ -767,7 +782,6 @@ const styles = StyleSheet.create({
     },
     dropdownMenu: {
         position: 'absolute',
-        top: 60,
         right: SPACING.lg,
         borderRadius: BORDER_RADIUS.md,
         minWidth: 180,

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Animated } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/Icon';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT } from '../styles';
 
@@ -20,10 +20,12 @@ const DEFAULT_REGION = {
 };
 
 const LocationPickerModal = ({ visible, onClose, onSelectLocation }: LocationPickerModalProps) => {
-    const { colors } = useTheme();
-    const [region, setRegion] = useState<any>(DEFAULT_REGION);
+    const { colors, isDarkMode } = useTheme();
+    const mapRef = React.useRef<MapView>(null);
     const [selectedLocation, setSelectedLocation] = useState<any>(null);
+    const shimmerAnim = React.useRef(new Animated.Value(0.3)).current;
     const [loading, setLoading] = useState(true);
+    const [addressLoading, setAddressLoading] = useState(false);
     const [address, setAddress] = useState('');
     const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
 
@@ -33,15 +35,36 @@ const LocationPickerModal = ({ visible, onClose, onSelectLocation }: LocationPic
         }
     }, [visible]);
 
+    useEffect(() => {
+        if (loading && visible) {
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(shimmerAnim, {
+                        toValue: 0.8,
+                        duration: 800,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(shimmerAnim, {
+                        toValue: 0.3,
+                        duration: 800,
+                        useNativeDriver: true,
+                    }),
+                ])
+            ).start();
+        } else {
+            shimmerAnim.setValue(0.3);
+        }
+    }, [loading, visible]);
+
     const initializeMap = async () => {
         setLoading(true);
         setAddress('');
         setLocationPermissionDenied(false);
+        setSelectedLocation(null);
         try {
             const { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
                 setLocationPermissionDenied(true);
-                setRegion(DEFAULT_REGION);
                 setSelectedLocation(null);
                 return;
             }
@@ -49,20 +72,18 @@ const LocationPickerModal = ({ visible, onClose, onSelectLocation }: LocationPic
             const location = await Location.getCurrentPositionAsync({
                 accuracy: Location.Accuracy.Balanced,
             });
-            const initialRegion = {
+            const targetRegion = {
                 latitude: location.coords.latitude,
                 longitude: location.coords.longitude,
                 latitudeDelta: 0.005,
                 longitudeDelta: 0.005,
             };
-            setRegion(initialRegion);
-            setSelectedLocation({
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
-            });
-            await fetchAddress(location.coords.latitude, location.coords.longitude);
+            
+            setTimeout(() => {
+                mapRef.current?.animateToRegion(targetRegion, 1000);
+            }, 500);
+
         } catch (error) {
-            setRegion(DEFAULT_REGION);
             setSelectedLocation(null);
             setAddress('');
         } finally {
@@ -71,6 +92,7 @@ const LocationPickerModal = ({ visible, onClose, onSelectLocation }: LocationPic
     };
 
     const fetchAddress = async (lat: number, lng: number) => {
+        setAddressLoading(true);
         try {
             const [result] = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
             if (result) {
@@ -79,11 +101,29 @@ const LocationPickerModal = ({ visible, onClose, onSelectLocation }: LocationPic
             }
         } catch (error) {
             setAddress(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+        } finally {
+            setAddressLoading(false);
         }
     };
 
     const handlePress = async (e: any) => {
-        const { latitude, longitude } = e.nativeEvent.coordinate;
+        const coordinate = e.nativeEvent?.coordinate;
+        if (!coordinate) return;
+        const { latitude, longitude } = coordinate;
+        setSelectedLocation({ latitude, longitude });
+        await fetchAddress(latitude, longitude);
+        mapRef.current?.animateToRegion({
+            latitude,
+            longitude,
+            latitudeDelta: 0.005,
+            longitudeDelta: 0.005,
+        }, 300);
+    };
+
+    const handleDragEnd = async (e: any) => {
+        const coordinate = e.nativeEvent?.coordinate;
+        if (!coordinate) return;
+        const { latitude, longitude } = coordinate;
         setSelectedLocation({ latitude, longitude });
         await fetchAddress(latitude, longitude);
     };
@@ -103,33 +143,54 @@ const LocationPickerModal = ({ visible, onClose, onSelectLocation }: LocationPic
         <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
             <View style={styles.container}>
                 {loading ? (
-                    <View style={[styles.map, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#f0f0f0' }]}>
-                        <ActivityIndicator size="large" color={colors.primary} />
-                        <Text style={{ marginTop: 10, color: '#666' }}>Loading Map...</Text>
+                    <View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDarkMode ? '#121212' : '#F3F4F6' }]}>
+                        {/* Map Area Skeleton */}
+                        <Animated.View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDarkMode ? '#1E1E1E' : '#E5E7EB', opacity: shimmerAnim }]} />
+                        
+                        {/* Header Back Button Skeleton */}
+                        <View style={[styles.backButton, { backgroundColor: isDarkMode ? '#2A2A2A' : '#FFFFFF' }]} />
+                        
+                        {/* Bottom Card Skeleton */}
+                        <View style={[styles.bottomCard, { backgroundColor: colors.card }]}>
+                            <View style={styles.locationInfo}>
+                                <Animated.View style={[styles.iconContainer, { backgroundColor: isDarkMode ? '#2A2A2A' : '#E5E7EB', opacity: shimmerAnim }]} />
+                                <View style={{ flex: 1, gap: 8 }}>
+                                    <Animated.View style={{ width: 80, height: 12, borderRadius: 6, backgroundColor: isDarkMode ? '#2A2A2A' : '#E5E7EB', opacity: shimmerAnim }} />
+                                    <Animated.View style={{ width: '90%', height: 16, borderRadius: 8, backgroundColor: isDarkMode ? '#2A2A2A' : '#E5E7EB', opacity: shimmerAnim }} />
+                                </View>
+                            </View>
+                            <Animated.View style={[styles.confirmButton, { backgroundColor: isDarkMode ? '#2A2A2A' : '#E5E7EB', opacity: shimmerAnim, height: 48, borderRadius: BORDER_RADIUS.lg }]} />
+                        </View>
                     </View>
                 ) : (
                     <MapView
+                        ref={mapRef}
                         provider={PROVIDER_GOOGLE}
                         style={styles.map}
-                        initialRegion={region}
+                        initialRegion={DEFAULT_REGION}
                         onPress={handlePress}
+                        onPoiClick={handlePress}
                         showsUserLocation={!locationPermissionDenied}
                         showsMyLocationButton={!locationPermissionDenied}
                     >
                         {selectedLocation && (
-                            <Marker coordinate={selectedLocation} />
+                            <Marker 
+                                coordinate={selectedLocation} 
+                                draggable
+                                onDragEnd={handleDragEnd}
+                            />
                         )}
                     </MapView>
                 )}
 
                 {/* Header Back Button */}
                 <TouchableOpacity style={styles.backButton} onPress={onClose}>
-                    <Ionicons name="arrow-back" size={24} color="#000" />
+                    <Icon name="ArrowLeft" size={24} color="#000" />
                 </TouchableOpacity>
 
                 {locationPermissionDenied && (
                     <View style={[styles.permissionBanner, { backgroundColor: colors.card }]}>
-                        <Ionicons name="information-circle" size={18} color={colors.primary} />
+                        <Icon name="Info" size={18} color={colors.primary} />
                         <Text style={[styles.permissionText, { color: colors.text }]}>
                             Location permission is off. You can still pick a place manually on the map.
                         </Text>
@@ -140,24 +201,29 @@ const LocationPickerModal = ({ visible, onClose, onSelectLocation }: LocationPic
                 <View style={[styles.bottomCard, { backgroundColor: colors.card }]}>
                     <View style={styles.locationInfo}>
                         <View style={styles.iconContainer}>
-                            <Ionicons name="location" size={24} color={colors.primary} />
+                            <Icon name="MapPin" size={24} color={colors.primary} />
                         </View>
                         <View style={{ flex: 1 }}>
                             <Text style={[styles.label, { color: colors.textSecondary }]}>Selected Location</Text>
-                            <Text style={[styles.address, { color: colors.text }]} numberOfLines={2}>
-                                {address || 'Tap on map to select'}
-                            </Text>
+                            {addressLoading ? (
+                                <Animated.View style={{ width: '85%', height: 16, borderRadius: 8, backgroundColor: isDarkMode ? '#2A2A2A' : '#E5E7EB', opacity: shimmerAnim, marginTop: 4 }} />
+                            ) : (
+                                <Text style={[styles.address, { color: colors.text }]} numberOfLines={2}>
+                                    {address || 'Tap on map to select'}
+                                </Text>
+                            )}
                         </View>
                     </View>
 
-                    <TouchableOpacity
-                        style={[styles.confirmButton, { backgroundColor: colors.primary, opacity: selectedLocation ? 1 : 0.5 }]}
-                        onPress={handleConfirm}
-                        disabled={!selectedLocation}
-                    >
-                        <Text style={styles.confirmButtonText}>Share Location</Text>
-                        <Ionicons name="send" size={16} color="#fff" />
-                    </TouchableOpacity>
+                    {selectedLocation && (
+                        <TouchableOpacity
+                            style={[styles.confirmButton, { backgroundColor: colors.primary }]}
+                            onPress={handleConfirm}
+                        >
+                            <Text style={styles.confirmButtonText}>Share Location</Text>
+                            <Icon name="PaperPlaneTilt" size={16} color="#fff" />
+                        </TouchableOpacity>
+                    )}
                 </View>
             </View>
         </Modal>

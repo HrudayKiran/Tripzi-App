@@ -1,0 +1,75 @@
+name = "nxtvibes-workers"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Cron Triggers:
+#   "30 2 * * *"   — daily at 8:00 AM IST (2:30 AM UTC) — trip lifecycle + AI chat cleanup
+#   "*/10 * * * *" — every 10 minutes — R2 deleted media cleanup (retry-safe)
+[triggers]
+crons = ["30 2 * * *", "*/10 * * * *"]
+
+# Workers AI binding (free tier: 10K neurons/day)
+[ai]
+binding = "AI"
+
+# D1 database binding — chat history storage
+[[d1_databases]]
+binding = "DB"
+database_name = "tripzi-ai-db"
+database_id = "d26496d4-0ebd-45a4-9f98-60cc4f663cb1"
+
+# Environment variables (non-secret)
+[vars]
+SUPABASE_URL = "https://pcbeldwtogqhffpssjlt.supabase.co"
+R2_PUBLIC_BASE_URL = "https://pub-d648f382c69b4f7a90803d45f550a1aa.r2.dev"
+
+# Secrets (set via `wrangler secret put <NAME>`):
+# SUPABASE_SERVICE_ROLE_KEY
+# SUPABASE_JWT_SECRET
+# GROQ_API_KEY
+# UNSPLASH_ACCESS_KEY
+# R2_ACCESS_KEY_ID
+# R2_SECRET_ACCESS_KEY
+# R2_ACCOUNT_ID
+# R2_BUCKET_NAME
+# FIREBASE_SERVICE_ACCOUNT_JSON
+# ZILLIZ_ENDPOINT          (Zilliz Cloud cluster public endpoint)
+# ZILLIZ_API_KEY            (Zilliz Cloud API key)
+# CF_ACCOUNT_ID             (your Cloudflare account ID)
+# AI_GATEWAY_SLUG           (AI Gateway name, e.g. "tripzi-gateway")
+# TAVILY_API_KEY            (Tavily web search API key)
+
+# Rate Limiting — protects AI, media, and general endpoints
+[[ratelimits]]
+name = "AI_RATE_LIMITER"
+namespace_id = "1001"
+
+[ratelimits.simple]
+limit = 20
+period = 60
+
+[[ratelimits]]
+name = "MEDIA_RATE_LIMITER"
+namespace_id = "1002"
+
+[ratelimits.simple]
+limit = 10
+period = 60
+
+[[ratelimits]]
+name = "GLOBAL_RATE_LIMITER"
+namespace_id = "1003"
+
+[ratelimits.simple]
+limit = 100
+period = 60
+
+# Public rate limiter — IP-based, for unauthenticated /public/* endpoints
+[[ratelimits]]
+name = "PUBLIC_RATE_LIMITER"
+namespace_id = "1004"
+
+[ratelimits.simple]
+limit = 10
+period = 60

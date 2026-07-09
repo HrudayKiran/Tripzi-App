@@ -8,76 +8,56 @@ import {
     ScrollView,
     Alert,
     ActivityIndicator,
-    Modal,
     Platform,
     KeyboardAvoidingView,
-    Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import auth from '@react-native-firebase/auth';
-import functions from '@react-native-firebase/functions';
+import Icon from '../components/Icon';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '../contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
-import {
-    requestNotificationPermission,
-    syncNotificationPreference,
-} from '../utils/notificationPermissions';
-import { PREFERENCE_KEYS, setBooleanPreference } from '../utils/preferences';
+import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, STATUS } from '../styles';
+import { supabase } from '../lib/supabase';
+import { workersApi } from '../lib/workersApi';
+import { database, resetDatabase } from '../database';
+import Profile from '../database/models/Profile';
 
 const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/;
+const FULL_NAME_MAX_LENGTH = 60;
 
-const sanitizeUsername = (value: string): string => value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
+const sanitizeUsername = (value: string): string =>
+    value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
 
-const calculateAge = (dob: Date): number => {
-    const today = new Date();
-    let age = today.getFullYear() - dob.getFullYear();
-    const monthDiff = today.getMonth() - dob.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
-        age--;
-    }
-    return age;
-};
+const sanitizeFullName = (value: string): string =>
+    // Strip control characters, leading/trailing whitespace, cap at max length
+    value.replace(/[\x00-\x1F\x7F]/g, '').slice(0, FULL_NAME_MAX_LENGTH);
 
-const CompleteProfileScreen = ({ navigation, route }) => {
-    const { colors } = useTheme();
-    const currentUser = auth().currentUser;
+const CompleteProfileScreen = () => {
+    const { colors, isDarkMode } = useTheme();
+    const router = useRouter();
+    const routeParams = useLocalSearchParams();
     const [fullName, setFullName] = useState('');
     const [username, setUsername] = useState('');
-    const [bio, setBio] = useState('');
     const [gender, setGender] = useState<'male' | 'female' | null>(null);
-    const [dob, setDob] = useState<Date | null>(null);
-    const [showDatePicker, setShowDatePicker] = useState(false);
-    const [draftDob, setDraftDob] = useState<Date>(new Date(2000, 0, 1));
     const [checkingUsername, setCheckingUsername] = useState(false);
     const [usernameError, setUsernameError] = useState('');
     const [usernameOk, setUsernameOk] = useState(false);
-    const [agreedToTerms, setAgreedToTerms] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
-    const pendingIdToken = route?.params?.idToken || null;
-    const pendingEmail = route?.params?.email || currentUser?.email || '';
-    const pendingDisplayName = route?.params?.displayName || currentUser?.displayName || '';
+    const pendingEmail = typeof routeParams?.email === 'string' ? routeParams.email : '';
+    const pendingDisplayName = typeof routeParams?.displayName === 'string' ? routeParams.displayName : '';
 
     useEffect(() => {
-        if (!pendingIdToken) {
-            navigation.reset({ index: 0, routes: [{ name: 'Start' }] });
-            return;
-        }
-
         const defaultName = pendingDisplayName || '';
         const defaultUsername = sanitizeUsername(pendingEmail?.split('@')[0] || 'traveler');
 
         setFullName(defaultName);
         setUsername(defaultUsername);
-    }, [navigation, pendingDisplayName, pendingEmail, pendingIdToken]);
+    }, [pendingDisplayName, pendingEmail]);
 
     useEffect(() => {
         let active = true;
-        let timeout: any;
+        let timeout: ReturnType<typeof setTimeout>;
 
         const run = async () => {
             const value = sanitizeUsername(username.trim());
@@ -97,16 +77,15 @@ const CompleteProfileScreen = ({ navigation, route }) => {
             setUsernameError('');
             setUsernameOk(false);
             try {
-                const checkUsernameAvailability = functions().httpsCallable('checkUsernameAvailability');
-                const result = await checkUsernameAvailability({
-                    username: value,
-                    excludeUid: '',
-                });
-                const available = !!result?.data?.available;
+                // Check username availability via authenticated Worker endpoint
+                const response = await workersApi(
+                    `/account/check-username/${encodeURIComponent(value.toLowerCase().trim())}`,
+                    { method: 'GET' }
+                );
 
                 if (!active) return;
 
-                if (available) {
+                if (response.available) {
                     setUsernameOk(true);
                 } else {
                     setUsernameError('Username is already taken');
@@ -131,53 +110,24 @@ const CompleteProfileScreen = ({ navigation, route }) => {
     }, [username]);
 
     const canSubmit = useMemo(() => {
-        return !!fullName.trim() && !!gender && !!dob && usernameOk && agreedToTerms && !checkingUsername && !submitting;
-    }, [fullName, gender, dob, usernameOk, agreedToTerms, checkingUsername, submitting]);
-
-    const openDatePicker = () => {
-        setDraftDob(dob || new Date(2000, 0, 1));
-        setShowDatePicker(true);
-    };
-
-    const closeDatePicker = () => {
-        setShowDatePicker(false);
-    };
-
-    const confirmDatePicker = () => {
-        setDob(draftDob);
-        closeDatePicker();
-    };
-
-    const handleDateChange = (event: any, selectedDate?: Date) => {
-        if (Platform.OS === 'android') {
-            setShowDatePicker(false);
-            if (event.type === 'set' && selectedDate) {
-                setDob(selectedDate);
-            }
-            return;
-        }
-
-        if (selectedDate) {
-            setDraftDob(selectedDate);
-        }
-    };
+        return !!fullName.trim() && !!gender && usernameOk && !checkingUsername && !submitting;
+    }, [fullName, gender, usernameOk, checkingUsername, submitting]);
 
     const resetToStart = async () => {
-        try {
-            await GoogleSignin.revokeAccess();
-        } catch (e) { }
-        try {
-            await GoogleSignin.signOut();
-        } catch (e) { }
-        try {
-            await auth().signOut();
-        } catch (e) { }
-        navigation.reset({ index: 0, routes: [{ name: 'Start' }] });
+        try { await GoogleSignin.revokeAccess(); } catch (e) { }
+        try { await GoogleSignin.signOut(); } catch (e) { }
+        try { await supabase.auth.signOut(); } catch (e) { }
+        try { await resetDatabase(); } catch (e) { }
+        router.replace('/(auth)/start');
     };
 
     const handleSubmit = async () => {
         if (!fullName.trim()) {
             Alert.alert('Missing Field', 'Full name is required.');
+            return;
+        }
+        if (fullName.trim().length > FULL_NAME_MAX_LENGTH) {
+            Alert.alert('Name Too Long', `Full name must be ${FULL_NAME_MAX_LENGTH} characters or less.`);
             return;
         }
         if (!USERNAME_REGEX.test(sanitizeUsername(username.trim())) || !usernameOk) {
@@ -188,60 +138,79 @@ const CompleteProfileScreen = ({ navigation, route }) => {
             Alert.alert('Missing Field', 'Please select gender.');
             return;
         }
-        if (!dob) {
-            Alert.alert('Missing Field', 'Please select your date of birth.');
-            return;
-        }
-        if (!agreedToTerms) {
-            Alert.alert('Required', 'You must agree to the Terms and Privacy Policy to continue.');
-            return;
-        }
-
-        const age = calculateAge(dob);
-        if (age < 18) {
-            Alert.alert('Not Eligible', `You are not eligible to use Tripzi because your age is ${age}. You must be at least 18 years old.`);
-            await resetToStart();
-            return;
-        }
 
         setSubmitting(true);
         try {
-            if (!pendingIdToken) {
-                throw new Error('Missing Google session. Please continue with Google again.');
+            // Get current Supabase session
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                throw new Error('Session expired. Please sign in again.');
             }
 
-            const finalizeGoogleOnboarding = functions().httpsCallable('finalizeGoogleOnboarding');
-            const onboardingResult: any = await finalizeGoogleOnboarding({
-                idToken: pendingIdToken,
-                name: fullName.trim(),
-                username: sanitizeUsername(username.trim()),
-                gender,
-                dateOfBirth: dob.toISOString(),
-                bio: bio.trim(),
+            const finalName = sanitizeFullName(fullName.trim());
+            const finalUsername = sanitizeUsername(username.trim());
+
+            // Create or update profile in Supabase
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .upsert({
+                    id: user.id,
+                    email: user.email || pendingEmail,
+                    name: finalName,
+                    username: finalUsername,
+                    gender,
+                    photo_url: user.user_metadata?.avatar_url || null,
+                    last_login_at: new Date().toISOString(),
+                });
+
+            if (profileError) {
+                if (profileError.message?.includes('profiles_username_key')) {
+                    setUsernameError('Username is already taken');
+                    setUsernameOk(false);
+                    return;
+                }
+                throw new Error(profileError.message || 'Failed to create profile.');
+            }
+
+            // Sync user metadata to mark profile complete on the auth side
+            await supabase.auth.updateUser({
+                data: { profile_completed: true }
             });
 
-            const customToken = onboardingResult?.data?.customToken;
-            if (!customToken) {
-                throw new Error('Could not start your Tripzi account session.');
+            // Write to WatermelonDB — upsert: update if exists, create if not
+            try {
+                const existingRecords = await database.get<Profile>('profiles').query().fetch();
+                const existingProfile = existingRecords.find(p => p.id === user.id);
+
+                await database.write(async () => {
+                    if (existingProfile) {
+                        // Update existing record
+                        await existingProfile.update((p: Profile) => {
+                            p.name = finalName;
+                            p.username = finalUsername;
+                            p.photoUrl = user.user_metadata?.avatar_url || null;
+                        });
+                    } else {
+                        // Create new record
+                        await database.get<Profile>('profiles').create((p: Profile) => {
+                            (p as any)._raw.id = user.id;
+                            p.name = finalName;
+                            p.username = finalUsername;
+                            p.photoUrl = user.user_metadata?.avatar_url || null;
+                            p.pushNotificationsEnabled = false;
+                            p.saveToGallery = false;
+                        });
+                    }
+                });
+            } catch (dbError) {
+                // Non-fatal: server has the data, local DB will sync on next pull
+                console.error('[CompleteProfile] WatermelonDB write error:', dbError);
             }
 
-            const authResult = await auth().signInWithCustomToken(customToken);
-            const signedInUser = authResult.user;
+            router.replace('/(tabs)');
 
-            navigation.reset({ index: 0, routes: [{ name: 'App' }] });
         } catch (error: any) {
-            const code = error?.code || '';
-            if (code.includes('failed-precondition')) {
-                Alert.alert('Not Eligible', 'You are not eligible to use Tripzi because your age is under 18.');
-                await resetToStart();
-                return;
-            }
-            if (code.includes('already-exists')) {
-                setUsernameError('Username is already taken');
-                setUsernameOk(false);
-            } else {
-                Alert.alert('Error', error?.message || 'Failed to complete profile setup.');
-            }
+            Alert.alert('Error', error?.message || 'Failed to complete profile setup.');
         } finally {
             setSubmitting(false);
         }
@@ -257,168 +226,143 @@ const CompleteProfileScreen = ({ navigation, route }) => {
                 <ScrollView
                     contentContainerStyle={styles.content}
                     keyboardShouldPersistTaps="handled"
-                    keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
                     showsVerticalScrollIndicator={false}
                 >
-                    <Text style={[styles.title, { color: colors.text }]}>Complete your profile</Text>
-                    <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Required to continue to Tripzi.</Text>
-
-                    <Text style={[styles.label, { color: colors.textSecondary }]}>Full Name *</Text>
-                    <TextInput
-                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                        value={fullName}
-                        onChangeText={setFullName}
-                        placeholder="Your full name"
-                        placeholderTextColor={colors.textSecondary}
-                    />
-
-                    <Text style={[styles.label, { color: colors.textSecondary }]}>Username *</Text>
-                    <TextInput
-                        style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: usernameError ? STATUS.error : colors.border }]}
-                        value={username}
-                        onChangeText={(value) => setUsername(sanitizeUsername(value))}
-                        autoCapitalize="none"
-                        maxLength={20}
-                        placeholder="username"
-                        placeholderTextColor={colors.textSecondary}
-                    />
-                    {checkingUsername ? (
-                        <Text style={[styles.hintText, { color: colors.textSecondary }]}>Checking availability...</Text>
-                    ) : usernameError ? (
-                        <Text style={styles.errorText}>{usernameError}</Text>
-                    ) : usernameOk ? (
-                        <Text style={styles.okText}>Username available</Text>
-                    ) : null}
-
-                    <Text style={[styles.label, { color: colors.textSecondary }]}>Gender *</Text>
-                    <View style={styles.genderRow}>
-                        <TouchableOpacity
-                            style={[
-                                styles.genderOption,
-                                { borderColor: colors.border, backgroundColor: colors.inputBackground },
-                                gender === 'male' && styles.genderSelected,
-                            ]}
-                            onPress={() => setGender('male')}
-                        >
-                            <Text style={[styles.genderText, gender === 'male' && styles.genderTextSelected]}>Male</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[
-                                styles.genderOption,
-                                { borderColor: colors.border, backgroundColor: colors.inputBackground },
-                                gender === 'female' && styles.genderSelected,
-                            ]}
-                            onPress={() => setGender('female')}
-                        >
-                            <Text style={[styles.genderText, gender === 'female' && styles.genderTextSelected]}>Female</Text>
-                        </TouchableOpacity>
+                    <View style={styles.header}>
+                        <Text style={[styles.title, { color: colors.text }]}>Complete Profile</Text>
+                        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Tell us a bit about yourself to get started.</Text>
                     </View>
 
-                    <Text style={[styles.label, { color: colors.textSecondary }]}>Date of Birth *</Text>
-                    <TouchableOpacity
-                        style={[styles.input, styles.dateButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
-                        onPress={openDatePicker}
-                    >
-                        <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} />
-                        <Text style={[styles.dateText, { color: dob ? colors.text : colors.textSecondary }]}>
-                            {dob ? dob.toLocaleDateString('en-IN') : 'Select your date of birth'}
-                        </Text>
-                    </TouchableOpacity>
-
-                    {showDatePicker && Platform.OS === 'android' && (
-                        <DateTimePicker
-                            value={dob || new Date(2000, 0, 1)}
-                            mode="date"
-                            display="default"
-                            onChange={handleDateChange}
-                            maximumDate={new Date()}
-                            minimumDate={new Date(1920, 0, 1)}
-                        />
-                    )}
-
-                    {showDatePicker && Platform.OS === 'ios' && (
-                        <Modal transparent animationType="fade" visible={showDatePicker} onRequestClose={closeDatePicker}>
-                            <Pressable style={styles.datePickerOverlay} onPress={closeDatePicker}>
-                                <Pressable style={[styles.datePickerCard, { backgroundColor: colors.card }]} onPress={() => { }}>
-                                    <View style={[styles.datePickerHeader, { borderBottomColor: colors.border }]}>
-                                        <TouchableOpacity onPress={closeDatePicker}>
-                                            <Text style={[styles.datePickerAction, { color: colors.textSecondary }]}>Cancel</Text>
-                                        </TouchableOpacity>
-                                        <Text style={[styles.datePickerTitle, { color: colors.text }]}>Select Date of Birth</Text>
-                                        <TouchableOpacity onPress={confirmDatePicker}>
-                                            <Text style={[styles.datePickerAction, { color: colors.primary }]}>Done</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                    <DateTimePicker
-                                        value={draftDob}
-                                        mode="date"
-                                        display="spinner"
-                                        onChange={handleDateChange}
-                                        maximumDate={new Date()}
-                                        minimumDate={new Date(1920, 0, 1)}
-                                    />
-                                </Pressable>
-                            </Pressable>
-                        </Modal>
-                    )}
-
-                    <Text style={[styles.label, { color: colors.textSecondary }]}>Bio (Optional)</Text>
-                    <TextInput
-                        style={[styles.input, styles.bioInput, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                        value={bio}
-                        onChangeText={setBio}
-                        placeholder="Tell people about yourself..."
-                        placeholderTextColor={colors.textSecondary}
-                        multiline
-                        maxLength={150}
-                    />
-
-                    <View style={styles.termsContainer}>
-                        <TouchableOpacity
-                            style={styles.checkbox}
-                            onPress={() => setAgreedToTerms(!agreedToTerms)}
-                            activeOpacity={0.7}
-                        >
-                            <Ionicons
-                                name={agreedToTerms ? 'checkbox' : 'square-outline'}
-                                size={22}
-                                color={agreedToTerms ? colors.primary : colors.textSecondary}
+                    <View style={styles.form}>
+                        {/* Full Name */}
+                        <View style={styles.inputGroup}>
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>Full Name</Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                                value={fullName}
+                                onChangeText={(v) => setFullName(sanitizeFullName(v))}
+                                placeholder="John Doe"
+                                placeholderTextColor={colors.textSecondary}
+                                maxLength={FULL_NAME_MAX_LENGTH}
+                                autoComplete="name"
+                                textContentType="name"
+                                returnKeyType="next"
                             />
-                        </TouchableOpacity>
-                        <Text style={[styles.termsText, { color: colors.textSecondary }]}>
-                            I agree to Tripzi{' '}
-                            <Text
-                                style={[styles.linkText, { color: colors.primary }]}
-                                onPress={() => navigation.navigate('Terms')}
-                            >
-                                Terms
-                            </Text>
-                            {' '}and{' '}
-                            <Text
-                                style={[styles.linkText, { color: colors.primary }]}
-                                onPress={() => navigation.navigate('PrivacyPolicy')}
-                            >
-                                Privacy Policy
-                            </Text>
-                        </Text>
-                    </View>
+                        </View>
 
-                    <TouchableOpacity disabled={!canSubmit} onPress={handleSubmit} style={styles.submitWrap}>
-                        <LinearGradient
-                            colors={canSubmit ? [...BRAND.gradient] : ['#9CA3AF', '#9CA3AF']}
-                            style={styles.submitBtn}
+                        {/* Username */}
+                        <View style={styles.inputGroup}>
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>Username</Text>
+                            <View style={styles.usernameInputWrapper}>
+                                <TextInput
+                                    style={[styles.input, {
+                                        backgroundColor: colors.inputBackground,
+                                        color: colors.text,
+                                        borderColor: usernameError ? STATUS.error : usernameOk ? STATUS.success : colors.border,
+                                        flex: 1,
+                                    }]}
+                                    value={username}
+                                    onChangeText={(value) => setUsername(sanitizeUsername(value))}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    maxLength={20}
+                                    placeholder="username"
+                                    placeholderTextColor={colors.textSecondary}
+                                    returnKeyType="done"
+                                />
+                                {checkingUsername && (
+                                    <ActivityIndicator size="small" color={colors.primary} style={styles.inputIcon} />
+                                )}
+                                {!checkingUsername && usernameOk && (
+                                    <Icon name="CheckCircle" size={20} color={STATUS.success} style={styles.inputIcon} />
+                                )}
+                                {!checkingUsername && usernameError && (
+                                    <Icon name="XCircle" size={20} color={STATUS.error} style={styles.inputIcon} />
+                                )}
+                            </View>
+                            {usernameError ? (
+                                <Text style={styles.errorText}>{usernameError}</Text>
+                            ) : usernameOk ? (
+                                <Text style={styles.okText}>Username is available</Text>
+                            ) : null}
+                        </View>
+
+                        {/* Gender */}
+                        <View style={styles.inputGroup}>
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>Gender</Text>
+                            <View style={styles.genderRow}>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.genderOption,
+                                        { backgroundColor: colors.inputBackground, borderColor: colors.border },
+                                        gender === 'male' && [styles.genderSelected, { borderColor: isDarkMode ? '#FFFFFF' : '#000000', backgroundColor: isDarkMode ? '#FFFFFF' : '#000000' }],
+                                    ]}
+                                    onPress={() => setGender('male')}
+                                    accessibilityLabel="Select Male"
+                                    accessibilityRole="button"
+                                    accessibilityState={{ selected: gender === 'male' }}
+                                >
+                                    <Text style={[styles.genderText, { color: gender === 'male' ? (isDarkMode ? '#000000' : '#FFFFFF') : colors.text }]}>Male</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.genderOption,
+                                        { backgroundColor: colors.inputBackground, borderColor: colors.border },
+                                        gender === 'female' && [styles.genderSelected, { borderColor: isDarkMode ? '#FFFFFF' : '#000000', backgroundColor: isDarkMode ? '#FFFFFF' : '#000000' }],
+                                    ]}
+                                    onPress={() => setGender('female')}
+                                    accessibilityLabel="Select Female"
+                                    accessibilityRole="button"
+                                    accessibilityState={{ selected: gender === 'female' }}
+                                >
+                                    <Text style={[styles.genderText, { color: gender === 'female' ? (isDarkMode ? '#000000' : '#FFFFFF') : colors.text }]}>Female</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        {/* Submit */}
+                        <TouchableOpacity
+                            disabled={!canSubmit}
+                            onPress={handleSubmit}
+                            accessibilityLabel="Continue to the app"
+                            accessibilityRole="button"
+                            accessibilityState={{ disabled: !canSubmit }}
+                            style={[
+                                styles.submitBtn,
+                                {
+                                    backgroundColor: canSubmit
+                                        ? (isDarkMode ? '#FFFFFF' : '#000000')
+                                        : (isDarkMode ? '#1E1E1E' : '#E5E7EB'),
+                                    borderColor: canSubmit
+                                        ? (isDarkMode ? '#FFFFFF' : '#000000')
+                                        : (isDarkMode ? '#2D2D2D' : '#D1D5DB'),
+                                    borderWidth: 1,
+                                }
+                            ]}
                         >
-                            {submitting ? (
-                                <ActivityIndicator color="#fff" />
-                            ) : (
-                                <Text style={styles.submitText}>Submit</Text>
-                            )}
-                        </LinearGradient>
-                    </TouchableOpacity>
+                            <View style={styles.submitInner}>
+                                {submitting ? (
+                                    <ActivityIndicator color={isDarkMode ? '#000000' : '#FFFFFF'} />
+                                ) : (
+                                    <Text style={[
+                                        styles.submitText,
+                                        {
+                                            color: canSubmit
+                                                ? (isDarkMode ? '#000000' : '#FFFFFF')
+                                                : (isDarkMode ? '#555555' : '#9CA3AF')
+                                        }
+                                    ]}>
+                                        Continue
+                                    </Text>
+                                )}
+                            </View>
+                        </TouchableOpacity>
+                    </View>
                 </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
+
 };
 
 const styles = StyleSheet.create({
@@ -427,6 +371,9 @@ const styles = StyleSheet.create({
     content: {
         padding: SPACING.xl,
     },
+    header: {
+        marginBottom: SPACING.xl,
+    },
     title: {
         fontSize: FONT_SIZE.xxl,
         fontWeight: FONT_WEIGHT.bold,
@@ -434,12 +381,16 @@ const styles = StyleSheet.create({
     subtitle: {
         fontSize: FONT_SIZE.sm,
         marginTop: SPACING.xs,
-        marginBottom: SPACING.lg,
+    },
+    form: {
+        gap: SPACING.lg,
+    },
+    inputGroup: {
+        gap: SPACING.xs,
     },
     label: {
         fontSize: FONT_SIZE.xs,
-        marginTop: SPACING.md,
-        marginBottom: SPACING.xs,
+        fontWeight: FONT_WEIGHT.semibold,
     },
     input: {
         borderWidth: 1,
@@ -448,23 +399,23 @@ const styles = StyleSheet.create({
         paddingVertical: SPACING.md,
         fontSize: FONT_SIZE.md,
     },
-    bioInput: {
-        minHeight: 100,
-        textAlignVertical: 'top',
+    usernameInputWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
-    hintText: {
-        fontSize: FONT_SIZE.xs,
-        marginTop: SPACING.xs,
+    inputIcon: {
+        position: 'absolute',
+        right: SPACING.md,
     },
     errorText: {
         fontSize: FONT_SIZE.xs,
-        marginTop: SPACING.xs,
         color: STATUS.error,
+        marginTop: SPACING.xs,
     },
     okText: {
         fontSize: FONT_SIZE.xs,
-        marginTop: SPACING.xs,
         color: STATUS.success,
+        marginTop: SPACING.xs,
     },
     genderRow: {
         flexDirection: 'row',
@@ -478,84 +429,27 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     genderSelected: {
-        borderColor: '#7C3AED',
-        backgroundColor: '#F5F3FF',
+        borderWidth: 1,
     },
     genderText: {
         fontSize: FONT_SIZE.md,
-        color: '#374151',
-        fontWeight: FONT_WEIGHT.medium,
-    },
-    genderTextSelected: {
-        color: '#7C3AED',
-        fontWeight: FONT_WEIGHT.bold,
-    },
-    dateButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: SPACING.sm,
-    },
-    dateText: {
-        fontSize: FONT_SIZE.md,
-    },
-    datePickerOverlay: {
-        flex: 1,
-        justifyContent: 'flex-end',
-        backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    },
-    datePickerCard: {
-        borderTopLeftRadius: BORDER_RADIUS.xl,
-        borderTopRightRadius: BORDER_RADIUS.xl,
-        paddingBottom: SPACING.xl,
-    },
-    datePickerHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: SPACING.lg,
-        paddingVertical: SPACING.md,
-        borderBottomWidth: 1,
-    },
-    datePickerTitle: {
-        fontSize: FONT_SIZE.md,
         fontWeight: FONT_WEIGHT.semibold,
-    },
-    datePickerAction: {
-        fontSize: FONT_SIZE.sm,
-        fontWeight: FONT_WEIGHT.semibold,
-    },
-    submitWrap: {
-        marginTop: SPACING.xl,
-        marginBottom: SPACING.xxxl,
     },
     submitBtn: {
-        paddingVertical: SPACING.lg,
         borderRadius: BORDER_RADIUS.lg,
+        overflow: 'hidden',
+        marginTop: SPACING.md,
+    },
+    submitInner: {
+        paddingVertical: SPACING.lg,
         alignItems: 'center',
+        justifyContent: 'center',
     },
     submitText: {
-        color: NEUTRAL.white,
         fontSize: FONT_SIZE.md,
         fontWeight: FONT_WEIGHT.bold,
     },
-    termsContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: SPACING.lg,
-        paddingHorizontal: 2,
-    },
-    checkbox: {
-        marginRight: SPACING.sm,
-    },
-    termsText: {
-        flex: 1,
-        fontSize: FONT_SIZE.sm,
-        lineHeight: 20,
-    },
-    linkText: {
-        fontWeight: FONT_WEIGHT.bold,
-        textDecorationLine: 'underline',
-    },
 });
+
 
 export default CompleteProfileScreen;

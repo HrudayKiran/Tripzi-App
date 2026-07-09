@@ -1,17 +1,23 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, KeyboardAvoidingView, Platform, Linking } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingView, Platform, Linking } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
-import { Ionicons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
+import { supabase } from '../lib/supabase';
+import Icon from '../components/Icon';
+import { MotiView } from 'moti';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../contexts/ThemeContext';
+import { getBooleanPreference, PREFERENCE_KEYS } from '../utils/preferences';
+import * as Haptics from 'expo-haptics';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, STATUS, NEUTRAL } from '../styles';
 
-const TAWKTO_TICKET_EMAIL = 'tickets@tripzi.p.tawk.email';
+import { useRouter } from 'expo-router';
+import { NeumorphicBackButton } from '../components/NeumorphicIconButtons';
 
-const SuggestFeatureScreen = ({ navigation }) => {
+const TAWKTO_TICKET_EMAIL = 'tickets@nxtvibes.p.tawk.email';
+
+const SuggestFeatureScreen = () => {
+  const router = useRouter();
   const MAX_ATTACHMENTS = 3;
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState('suggest');
@@ -58,20 +64,31 @@ const SuggestFeatureScreen = ({ navigation }) => {
   };
 
   const featureCategories = [
-    { id: 'trip', label: 'Trip Planning', icon: 'map', color: '#3B82F6' },
-    { id: 'messaging', label: 'Messaging', icon: 'chatbubble', color: '#9d74f7' },
-    { id: 'profile', label: 'Profile', icon: 'person', color: '#6B7280' },
-    { id: 'other', label: 'Other', icon: 'ellipsis-horizontal', color: '#F59E0B' },
+    { id: 'trip', label: 'Trip Planning', icon: 'MapTrifold', color: '#3B82F6' },
+    { id: 'messaging', label: 'Messaging', icon: 'ChatTeardropDots', color: '#9d74f7' },
+    { id: 'profile', label: 'Profile', icon: 'User', color: '#6B7280' },
+    { id: 'other', label: 'Other', icon: 'DotsThree', color: '#F59E0B' },
   ];
 
   const bugCategories = [
-    { id: 'crash', label: 'Crash', icon: 'warning', color: '#EF4444' },
-    { id: 'ui', label: 'UI/Display', icon: 'cube', color: '#10B981' },
-    { id: 'login', label: 'Login', icon: 'lock-closed', color: '#F97316' },
-    { id: 'other', label: 'Other', icon: 'ellipsis-horizontal', color: '#9CA3AF' },
+    { id: 'crash', label: 'Crash', icon: 'Warning', color: '#EF4444' },
+    { id: 'ui', label: 'UI/Display', icon: 'Cube', color: '#10B981' },
+    { id: 'login', label: 'Login', icon: 'Lock', color: '#F97316' },
+    { id: 'other', label: 'Other', icon: 'DotsThree', color: '#9CA3AF' },
   ];
 
   const severityLevels = ['Low', 'Medium', 'High', 'Critical'];
+
+  const triggerSuccessHaptics = async () => {
+    try {
+      const hapticsEnabled = await getBooleanPreference(PREFERENCE_KEYS.hapticsEnabled, true);
+      if (hapticsEnabled) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch {
+      // Ignore
+    }
+  };
 
   const handleSubmitFeature = async () => {
     if (!featureTitle || !featureDescription) {
@@ -79,22 +96,23 @@ const SuggestFeatureScreen = ({ navigation }) => {
       return;
     }
     try {
-      const currentUser = auth().currentUser;
-      await firestore().collection('suggestions').add({
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      await supabase.from('suggestions').insert({
         title: featureTitle,
         description: featureDescription,
         category: featureCategory,
-        imageUris: featureImages,
-        imageUri: featureImages[0] || null,
-        userId: currentUser?.uid,
-        createdAt: firestore.FieldValue.serverTimestamp(),
+        image_uris: featureImages,
+        image_uri: featureImages[0] || null,
+        user_id: currentUser?.id,
       });
 
+      await triggerSuccessHaptics();
       Alert.alert('Ticket Received ✅', 'Thank you! Your feature suggestion has been received. Our team will review it shortly. A confirmation has been sent to your email.');
-      navigation.goBack();
+      router.back();
     } catch (error) {
+      await triggerSuccessHaptics();
       Alert.alert('Thank You! 🎉', 'Your suggestion has been saved locally.');
-      navigation.goBack();
+      router.back();
     }
   };
 
@@ -104,28 +122,29 @@ const SuggestFeatureScreen = ({ navigation }) => {
       return;
     }
     try {
-      const currentUser = auth().currentUser;
-      await firestore().collection('bugs').add({
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      await supabase.from('bugs').insert({
         title: bugTitle,
         description: bugDescription,
         category: bugCategory,
         severity: bugSeverity,
-        imageUris: bugImages,
-        imageUri: bugImages[0] || null,
-        userId: currentUser?.uid,
-        createdAt: firestore.FieldValue.serverTimestamp(),
+        image_uris: bugImages,
+        image_uri: bugImages[0] || null,
+        user_id: currentUser?.id,
       });
 
+      await triggerSuccessHaptics();
       Alert.alert('Ticket Received ✅', 'Thank you! Your bug report has been received. Our team will investigate it shortly. A confirmation has been sent to your email.');
-      navigation.goBack();
+      router.back();
     } catch (error) {
+      await triggerSuccessHaptics();
       Alert.alert('Thank You! 🎉', 'Your bug report has been saved locally.');
-      navigation.goBack();
+      router.back();
     }
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top']}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -133,37 +152,30 @@ const SuggestFeatureScreen = ({ navigation }) => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.7}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="chevron-back" size={28} color={colors.text} />
-          </TouchableOpacity>
+          <NeumorphicBackButton onPress={() => router.back()} />
           <Text style={[styles.headerTitle, { color: colors.text }]}>Feedback</Text>
-          <View style={styles.placeholder} />
+          <View style={{ width: 45 }} />
         </View>
 
         {/* Tabs */}
         <View style={[styles.tabContainer, { backgroundColor: colors.card }]}>
           <TouchableOpacity
-            style={[styles.tab, activeTab === 'suggest' && { backgroundColor: colors.primary }]}
+            style={[styles.tab, activeTab === 'suggest' && { backgroundColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]}
             onPress={() => setActiveTab('suggest')}
             activeOpacity={0.8}
           >
-            <Ionicons name="bulb-outline" size={18} color={activeTab === 'suggest' ? '#fff' : colors.textSecondary} />
-            <Text style={[styles.tabText, { color: activeTab === 'suggest' ? '#fff' : colors.textSecondary }]}>
+            <Icon name="Lightbulb" size={18} color={activeTab === 'suggest' ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary} />
+            <Text style={[styles.tabText, { color: activeTab === 'suggest' ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary }]}>
               Suggest
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tab, activeTab === 'bug' && { backgroundColor: colors.primary }]}
+            style={[styles.tab, activeTab === 'bug' && { backgroundColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]}
             onPress={() => setActiveTab('bug')}
             activeOpacity={0.8}
           >
-            <Ionicons name="bug-outline" size={18} color={activeTab === 'bug' ? '#fff' : colors.textSecondary} />
-            <Text style={[styles.tabText, { color: activeTab === 'bug' ? '#fff' : colors.textSecondary }]}>
+            <Icon name="Bug" size={18} color={activeTab === 'bug' ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary} />
+            <Text style={[styles.tabText, { color: activeTab === 'bug' ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary }]}>
               Report Bug
             </Text>
           </TouchableOpacity>
@@ -175,11 +187,16 @@ const SuggestFeatureScreen = ({ navigation }) => {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         >
-          <Animatable.View animation="fadeIn" duration={300} key={activeTab}>
+          <MotiView
+            from={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ type: 'timing', duration: 300 }}
+            key={activeTab}
+          >
             {activeTab === 'suggest' ? (
               <>
                 <View style={[styles.iconContainer, { backgroundColor: '#FEF3C7' }]}>
-                  <Ionicons name="bulb" size={40} color="#F59E0B" />
+                  <Icon name="Lightbulb" size={40} color="#F59E0B" />
                 </View>
                 <Text style={[styles.formTitle, { color: colors.text }]}>Have an idea?</Text>
                 <Text style={[styles.formSubtitle, { color: colors.textSecondary }]}>We'd love to hear your suggestions!</Text>
@@ -196,7 +213,7 @@ const SuggestFeatureScreen = ({ navigation }) => {
                       onPress={() => setFeatureCategory(cat.id)}
                       activeOpacity={0.7}
                     >
-                      <Ionicons name={cat.icon as any} size={18} color={cat.color} />
+                      <Icon name={cat.icon as any} size={18} color={cat.color} />
                       <Text style={[styles.categoryText, { color: colors.text }]}>{cat.label}</Text>
                     </TouchableOpacity>
                   ))}
@@ -229,7 +246,7 @@ const SuggestFeatureScreen = ({ navigation }) => {
                   onPress={() => pickImage(featureImages, setFeatureImages)}
                 >
                   <View style={styles.uploadPlaceholder}>
-                    <Ionicons name="images-outline" size={32} color={colors.primary} />
+                    <Icon name="Image" size={32} color={colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000'} />
                     <Text style={[styles.uploadText, { color: colors.textSecondary }]}>
                       Add screenshot ({featureImages.length}/{MAX_ATTACHMENTS})
                     </Text>
@@ -239,13 +256,18 @@ const SuggestFeatureScreen = ({ navigation }) => {
                   <View style={styles.previewGrid}>
                     {featureImages.map((uri, index) => (
                       <View key={`${uri}-${index}`} style={styles.previewItem}>
-                        <Image source={{ uri }} style={styles.uploadedImage} />
+                        <Image
+                          source={{ uri }}
+                          style={styles.uploadedImage}
+                          contentFit="cover"
+                          transition={200}
+                        />
                         <TouchableOpacity
                           style={styles.removeImageBtn}
                           onPress={() => removeImage(index, setFeatureImages)}
                           activeOpacity={0.8}
                         >
-                          <Ionicons name="close" size={14} color="#fff" />
+                          <Icon name="X" size={14} color="#fff" />
                         </TouchableOpacity>
                       </View>
                     ))}
@@ -253,18 +275,18 @@ const SuggestFeatureScreen = ({ navigation }) => {
                 )}
 
                 <TouchableOpacity
-                  style={[styles.submitButton, { backgroundColor: colors.primary }]}
+                  style={[styles.submitButton, { backgroundColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]}
                   onPress={handleSubmitFeature}
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="star" size={20} color="#fff" />
-                  <Text style={styles.submitButtonText}>Submit Suggestion</Text>
+                  <Icon name="Star" size={20} color={colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF'} />
+                  <Text style={[styles.submitButtonText, { color: colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF' }]}>Submit Suggestion</Text>
                 </TouchableOpacity>
               </>
             ) : (
               <>
                 <View style={[styles.iconContainer, { backgroundColor: '#FEE2E2' }]}>
-                  <Ionicons name="bug" size={40} color="#EF4444" />
+                  <Icon name="Bug" size={40} color="#EF4444" />
                 </View>
                 <Text style={[styles.formTitle, { color: colors.text }]}>Found a bug?</Text>
                 <Text style={[styles.formSubtitle, { color: colors.textSecondary }]}>Help us improve by reporting issues</Text>
@@ -281,7 +303,7 @@ const SuggestFeatureScreen = ({ navigation }) => {
                       onPress={() => setBugCategory(cat.id)}
                       activeOpacity={0.7}
                     >
-                      <Ionicons name={cat.icon as any} size={18} color={cat.color} />
+                      <Icon name={cat.icon as any} size={18} color={cat.color} />
                       <Text style={[styles.categoryText, { color: colors.text }]}>{cat.label}</Text>
                     </TouchableOpacity>
                   ))}
@@ -294,12 +316,12 @@ const SuggestFeatureScreen = ({ navigation }) => {
                       key={level}
                       style={[
                         styles.severityButton,
-                        { backgroundColor: bugSeverity === level ? colors.primary : colors.card, borderColor: colors.border },
+                        { backgroundColor: bugSeverity === level ? (colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000') : colors.card, borderColor: colors.border },
                       ]}
                       onPress={() => setBugSeverity(level)}
                       activeOpacity={0.7}
                     >
-                      <Text style={[styles.severityText, { color: bugSeverity === level ? '#fff' : colors.text }]}>
+                      <Text style={[styles.severityText, { color: bugSeverity === level ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.text }]}>
                         {level}
                       </Text>
                     </TouchableOpacity>
@@ -333,7 +355,7 @@ const SuggestFeatureScreen = ({ navigation }) => {
                   onPress={() => pickImage(bugImages, setBugImages)}
                 >
                   <View style={styles.uploadPlaceholder}>
-                    <Ionicons name="images-outline" size={32} color={colors.primary} />
+                    <Icon name="Image" size={32} color={colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000'} />
                     <Text style={[styles.uploadText, { color: colors.textSecondary }]}>
                       Add screenshot ({bugImages.length}/{MAX_ATTACHMENTS})
                     </Text>
@@ -343,13 +365,18 @@ const SuggestFeatureScreen = ({ navigation }) => {
                   <View style={styles.previewGrid}>
                     {bugImages.map((uri, index) => (
                       <View key={`${uri}-${index}`} style={styles.previewItem}>
-                        <Image source={{ uri }} style={styles.uploadedImage} />
+                        <Image
+                          source={{ uri }}
+                          style={styles.uploadedImage}
+                          contentFit="cover"
+                          transition={200}
+                        />
                         <TouchableOpacity
                           style={styles.removeImageBtn}
                           onPress={() => removeImage(index, setBugImages)}
                           activeOpacity={0.8}
                         >
-                          <Ionicons name="close" size={14} color="#fff" />
+                          <Icon name="X" size={14} color="#fff" />
                         </TouchableOpacity>
                       </View>
                     ))}
@@ -357,16 +384,16 @@ const SuggestFeatureScreen = ({ navigation }) => {
                 )}
 
                 <TouchableOpacity
-                  style={[styles.submitButton, { backgroundColor: colors.primary }]}
+                  style={[styles.submitButton, { backgroundColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]}
                   onPress={handleSubmitBug}
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="bug" size={20} color="#fff" />
-                  <Text style={styles.submitButtonText}>Submit Bug Report</Text>
+                  <Icon name="Bug" size={20} color={colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF'} />
+                  <Text style={[styles.submitButtonText, { color: colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF' }]}>Submit Bug Report</Text>
                 </TouchableOpacity>
               </>
             )}
-          </Animatable.View>
+          </MotiView>
           <View style={{ height: SPACING.xxxl }} />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -382,16 +409,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-  },
-  backButton: {
-    width: TOUCH_TARGET.min,
-    height: TOUCH_TARGET.min,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 10 : 20,
+    paddingBottom: 20,
   },
   headerTitle: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.semibold },
-  placeholder: { width: TOUCH_TARGET.min },
   tabContainer: {
     flexDirection: 'row',
     marginHorizontal: SPACING.xl,

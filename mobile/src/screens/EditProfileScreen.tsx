@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
     View,
     Text,
@@ -11,11 +11,20 @@ import {
     KeyboardAvoidingView,
     Platform,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { getBooleanPreference, PREFERENCE_KEYS } from '../utils/preferences';
+import * as Haptics from 'expo-haptics';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+import Icon from '../components/Icon';
+import { supabase } from '../lib/supabase';
+import { workersApi } from '../lib/workersApi';
 import { LinearGradient } from 'expo-linear-gradient';
+import { database } from '../database';
+import { NeumorphicBackButton } from '../components/NeumorphicIconButtons';
+import { MotiView } from 'moti';
+
+
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, TOUCH_TARGET, BRAND, STATUS, NEUTRAL } from '../styles';
 import DefaultAvatar from '../components/DefaultAvatar';
@@ -29,46 +38,75 @@ const formatGender = (gender?: string | null) => {
     return `${gender.charAt(0).toUpperCase()}${gender.slice(1).toLowerCase()}`;
 };
 
-const EditProfileScreen = ({ navigation }) => {
+import { useRouter } from 'expo-router';
+
+const EditProfileScreen = () => {
+    const router = useRouter();
     const { colors } = useTheme();
-    const currentUser = auth().currentUser;
+    const [currentUser, setCurrentUser] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [user, setUser] = useState<any>(null);
     const [name, setName] = useState('');
     const [username, setUsername] = useState('');
-    const [bio, setBio] = useState('');
     const [profileImage, setProfileImage] = useState<string | null>(null);
     const [profileImageObjectKey, setProfileImageObjectKey] = useState<string | null>(null);
     const [checkingUsername, setCheckingUsername] = useState(false);
     const [usernameError, setUsernameError] = useState('');
     const [usernameOk, setUsernameOk] = useState(false);
+    const isMounted = useRef(true);
 
     useEffect(() => {
-        if (!currentUser) {
-            navigation.goBack();
-            return;
-        }
+        return () => {
+            isMounted.current = false;
+        };
+    }, []);
 
-        const unsubscribe = firestore()
-            .collection('users')
-            .doc(currentUser.uid)
-            .onSnapshot((doc) => {
-                const data = doc.data() || {};
-                const displayName = data.name || data.displayName || currentUser.displayName || '';
-                setUser({ id: doc.id, ...data, displayName });
+    useEffect(() => {
+
+        const loadUser = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                router.back();
+                return;
+            }
+            setCurrentUser(user);
+
+            // 1. Try WatermelonDB first (instant)
+            try {
+                const localProfile = await database.get('profiles').find(user.id);
+                if (localProfile) {
+                    const lp = (localProfile as any)._raw;
+                    const displayName = lp.name || user.user_metadata?.full_name || '';
+                    setUser({ id: user.id, ...lp, displayName, email: user.email });
+                    setName(displayName);
+                    setUsername(lp.username || '');
+                    setProfileImage(lp.photo_url || user.user_metadata?.avatar_url || null);
+                    setLoading(false);
+                }
+            } catch {
+                // Not in local DB, fall through
+            }
+
+            // 2. Fetch from Supabase (fresh data)
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .maybeSingle();
+
+            if (profile) {
+                const displayName = profile.name || profile.display_name || user.user_metadata?.full_name || '';
+                setUser({ id: user.id, ...profile, displayName, email: user.email });
                 setName(displayName);
-                setUsername(data.username || '');
-                setBio(data.bio || '');
-                setProfileImage(data.photoURL || currentUser.photoURL || null);
-                setProfileImageObjectKey(data.photoObjectKey || null);
-                setLoading(false);
-            }, () => {
-                setLoading(false);
-            });
-
-        return () => unsubscribe();
-    }, [currentUser, navigation]);
+                setUsername(profile.username || '');
+                setProfileImage(profile.photo_url || user.user_metadata?.avatar_url || null);
+                setProfileImageObjectKey(profile.photo_object_key || null);
+            }
+            setLoading(false);
+        };
+        loadUser();
+    }, []);
 
     useEffect(() => {
         let active = true;
@@ -87,23 +125,28 @@ const EditProfileScreen = ({ navigation }) => {
                 return;
             }
 
+            if (value === user?.username) {
+                setUsernameOk(true);
+                setUsernameError('');
+                return;
+            }
+
             setCheckingUsername(true);
             setUsernameError('');
             setUsernameOk(false);
             try {
-                const snapshot = await firestore()
-                    .collection('public_users')
-                    .where('username', '==', value)
-                    .get();
-
+                const response = await workersApi(
+                    `/account/check-username/${encodeURIComponent(value.toLowerCase().trim())}`,
+                    { method: 'GET' }
+                );
+                
                 if (!active) return;
 
-                const isTaken = snapshot.docs.some(doc => doc.id !== currentUser?.uid);
-                if (isTaken) {
+                if (response.available) {
+                    setUsernameOk(true);
+                } else {
                     setUsernameError('Username is already taken');
                     setUsernameOk(false);
-                } else {
-                    setUsernameOk(true);
                 }
             } catch {
                 if (!active) return;
@@ -112,10 +155,12 @@ const EditProfileScreen = ({ navigation }) => {
             } finally {
                 if (active) setCheckingUsername(false);
             }
+
         };
 
         timeout = setTimeout(run, 350);
         return () => {
+
             active = false;
             clearTimeout(timeout);
         };
@@ -128,6 +173,30 @@ const EditProfileScreen = ({ navigation }) => {
     const pickProfile = async () => {
         if (!currentUser) return;
         try {
+            // 1. Pick the image
+            const hasPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (hasPermission.status !== 'granted') {
+                Alert.alert('Permission Required', 'Please allow access to your photos to upload images.');
+                return;
+            }
+
+            const pickerResult = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.7,
+            });
+
+            if (pickerResult.canceled || !pickerResult.assets[0]) {
+                return;
+            }
+
+            const localUri = pickerResult.assets[0].uri;
+            
+            // 2. Show image immediately
+            setProfileImage(localUri);
+
+            // 3. Upload image
             const previousObjectKey = profileImageObjectKey || user?.photoObjectKey || null;
             const result = await pickAndUploadImage({
                 folder: 'profiles',
@@ -135,19 +204,19 @@ const EditProfileScreen = ({ navigation }) => {
                 aspect: [1, 1],
                 quality: 0.7,
                 allowsEditing: true,
+                existingUri: localUri, // Use the picked URI
             });
 
             if (result.success && result.url && result.objectKey) {
                 try {
-                    await firestore().collection('users').doc(currentUser.uid).set({
-                        photoURL: result.url,
-                        photoObjectKey: result.objectKey,
-                        updatedAt: firestore.FieldValue.serverTimestamp(),
-                    }, { merge: true });
+                    await supabase.from('profiles').update({
+                        photo_url: result.url,
+                        photo_object_key: result.objectKey,
+                    }).eq('id', currentUser.id);
 
                     try {
-                        await currentUser.updateProfile({
-                            photoURL: result.url,
+                        await supabase.auth.updateUser({
+                            data: { avatar_url: result.url },
                         });
                     } catch (e) { }
 
@@ -155,9 +224,11 @@ const EditProfileScreen = ({ navigation }) => {
                         await deleteProfileImageFromR2(previousObjectKey);
                     }
 
-                    setProfileImage(result.url);
-                    setProfileImageObjectKey(result.objectKey);
-                    setUser((prev: any) => ({ ...prev, photoURL: result.url, photoObjectKey: result.objectKey }));
+                    if (isMounted.current) {
+                        setProfileImage(result.url); // Update with remote URL
+                        setProfileImageObjectKey(result.objectKey);
+                        setUser((prev: any) => ({ ...prev, photoURL: result.url, photoObjectKey: result.objectKey }));
+                    }
                 } catch {
                     await deleteProfileImageFromR2(result.objectKey);
                     Alert.alert('Error', 'Could not upload profile image.');
@@ -170,6 +241,7 @@ const EditProfileScreen = ({ navigation }) => {
         }
     };
 
+
     const handleSave = async () => {
         if (!currentUser) return;
         if (!name.trim()) {
@@ -181,62 +253,139 @@ const EditProfileScreen = ({ navigation }) => {
             return;
         }
 
-        setSaving(true);
+        const sanitized = sanitizeUsername(username.trim());
+
         try {
-            const sanitized = sanitizeUsername(username.trim());
-            await firestore().collection('users').doc(currentUser.uid).set({
-                name: name.trim(),
-                username: sanitized,
-                bio: bio.trim(),
-                photoURL: profileImage || null,
-                photoObjectKey: profileImageObjectKey || null,
-                displayName: firestore.FieldValue.delete(),
-                updatedAt: firestore.FieldValue.serverTimestamp(),
-            }, { merge: true });
-
-            try {
-                await currentUser.updateProfile({
-                    displayName: name.trim(),
-                    photoURL: profileImage || undefined,
-                });
-            } catch (e) { }
-
-            Alert.alert('Saved', 'Profile updated successfully.');
-            navigation.goBack();
-        } catch (error: any) {
-            Alert.alert('Error', error?.message || 'Could not save profile.');
-        } finally {
-            setSaving(false);
+            const hapticsEnabled = await getBooleanPreference(PREFERENCE_KEYS.hapticsEnabled, true);
+            if (hapticsEnabled) {
+                await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+        } catch {
+            // Ignore
         }
+
+        // 1. Write to WatermelonDB immediately (so local UI updates right away)
+        try {
+            const profilesCollection = database.get('profiles');
+            let localProfile: any = null;
+            
+            try {
+                localProfile = await profilesCollection.find(currentUser.id);
+            } catch (e) {
+                // Record not found in local DB
+                localProfile = null;
+            }
+            
+            await database.write(async () => {
+                if (localProfile) {
+                    await localProfile.update((profile: any) => {
+                        profile.name = name.trim();
+                        profile.username = sanitized;
+                        profile.photo_url = profileImage || null;
+                        profile.updated_at = Date.now();
+                    });
+                } else {
+                    // Create if not exists
+                    await profilesCollection.create((profile: any) => {
+                        profile._raw.id = currentUser.id;
+                        profile.name = name.trim();
+                        profile.username = sanitized;
+                        profile.photo_url = profileImage || null;
+                        // push_notifications_enabled is intentionally omitted here —
+                        // WatermelonDB schema default (false) applies on create,
+                        // and the value must never be overwritten on profile edits.
+                        profile.save_to_gallery = false;
+                        profile.updated_at = Date.now();
+                    });
+                }
+            });
+        } catch (dbError) {
+            console.error('Failed to write to WatermelonDB:', dbError);
+        }
+
+
+        supabase.from('profiles').update({
+            name: name.trim(),
+            username: sanitized,
+            photo_url: profileImage || null,
+            photo_object_key: profileImageObjectKey || null,
+        }).eq('id', currentUser.id).then(({ error }) => {
+            if (error) console.error('Failed to update Supabase profile:', error);
+        });
+
+        supabase.auth.updateUser({
+            data: { full_name: name.trim(), avatar_url: profileImage || undefined },
+        }).catch(e => console.error('Failed to update auth user:', e));
+
+        // 3. Navigate back immediately
+        router.back();
+
     };
+
+    const isDark = colors.background !== '#FFFFFF' && colors.background !== '#ffffff';
+
+    const SkeletonBlock = ({ style }: { style: any }) => (
+        <MotiView
+            from={{ opacity: 0.4 }}
+            animate={{ opacity: 1 }}
+            transition={{
+                type: 'timing',
+                duration: 1000,
+                loop: true,
+                repeatReverse: true,
+            }}
+            style={[style, { backgroundColor: isDark ? '#262626' : '#E5E7EB' }]}
+        />
+    );
 
     if (loading) {
         return (
             <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top']}>
-                <View style={styles.loaderWrap}>
-                    <ActivityIndicator size="large" color={colors.primary} />
+                <View style={styles.header}>
+                    <NeumorphicBackButton onPress={() => router.back()} />
+                    <Text style={[styles.headerTitle, { color: colors.text }]}>Edit Profile</Text>
+                    <View style={{ width: 45 }} />
                 </View>
+
+                <ScrollView
+                    contentContainerStyle={styles.content}
+                    showsVerticalScrollIndicator={false}
+                >
+                    <View style={styles.skeletonContainer}>
+                        {/* Avatar Section Skeleton */}
+                        <View style={styles.avatarSection}>
+                            <SkeletonBlock style={styles.skeletonAvatar} />
+                            <SkeletonBlock style={styles.skeletonChangePhotoBtn} />
+                        </View>
+
+                        {/* Form Inputs Skeletons */}
+                        {[1, 2, 3, 4].map((i) => (
+                            <View key={i} style={styles.skeletonFormGroup}>
+                                <SkeletonBlock style={styles.skeletonLabel} />
+                                <SkeletonBlock style={styles.skeletonInput} />
+                            </View>
+                        ))}
+
+
+                        {/* Save Button Skeleton */}
+                        <SkeletonBlock style={styles.skeletonSaveButton} />
+                    </View>
+                </ScrollView>
             </SafeAreaView>
         );
     }
 
     return (
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top']}>
             <KeyboardAvoidingView
                 style={styles.keyboardContainer}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
             >
                 <View style={styles.header}>
-                    <TouchableOpacity
-                        style={[styles.headerBtn]}
-                        onPress={() => navigation.goBack()}
-                        activeOpacity={0.8}
-                    >
-                        <Ionicons name="chevron-back" size={24} color={colors.text} />
-                    </TouchableOpacity>
+                    <NeumorphicBackButton onPress={() => router.back()} />
                     <Text style={[styles.headerTitle, { color: colors.text }]}>Edit Profile</Text>
-                    <View style={styles.headerBtn} />
+                    <View style={{ width: 45 }} />
                 </View>
 
                 <ScrollView
@@ -251,11 +400,11 @@ const EditProfileScreen = ({ navigation }) => {
                             size={100}
                         />
                         <TouchableOpacity
-                            style={[styles.changePhotoButton, { borderColor: colors.primary }]}
+                            style={[styles.changePhotoButton, { borderColor: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]}
                             onPress={pickProfile}
                             activeOpacity={0.8}
                         >
-                            <Text style={[styles.changePhotoText, { color: colors.primary }]}>Change Photo</Text>
+                            <Text style={[styles.changePhotoText, { color: colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000' }]}>Change Photo</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -271,14 +420,6 @@ const EditProfileScreen = ({ navigation }) => {
                     <TextInput
                         style={[styles.input, styles.readOnlyInput, { backgroundColor: colors.inputBackground, color: colors.textSecondary, borderColor: colors.border }]}
                         value={formatGender(user?.gender)}
-                        editable={false}
-                        selectTextOnFocus={false}
-                    />
-
-                    <Text style={[styles.label, { color: colors.textSecondary }]}>Age Verification</Text>
-                    <TextInput
-                        style={[styles.input, styles.readOnlyInput, { backgroundColor: colors.inputBackground, color: colors.textSecondary, borderColor: colors.border }]}
-                        value={user?.ageVerified === true ? 'Verified' : 'Not verified'}
                         editable={false}
                         selectTextOnFocus={false}
                     />
@@ -310,28 +451,22 @@ const EditProfileScreen = ({ navigation }) => {
                         <Text style={styles.okText}>Username available</Text>
                     ) : null}
 
-                    <Text style={[styles.label, { color: colors.textSecondary }]}>Bio</Text>
-                    <TextInput
-                        style={[styles.input, styles.bioInput, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-                        value={bio}
-                        onChangeText={setBio}
-                        placeholder="Tell people about yourself..."
-                        placeholderTextColor={colors.textSecondary}
-                        multiline
-                        maxLength={150}
-                    />
 
                     <TouchableOpacity onPress={handleSave} disabled={!canSave} style={styles.saveWrap}>
-                        <LinearGradient
-                            colors={canSave ? [...BRAND.gradient] : ['#9CA3AF', '#9CA3AF']}
-                            style={styles.saveButton}
+                        <View
+                            style={[
+                                styles.saveButton,
+                                { 
+                                    backgroundColor: canSave ? (colors.background !== '#FFFFFF' ? '#FFFFFF' : '#000000') : (colors.background !== '#FFFFFF' ? '#333333' : '#E5E7EB')
+                                }
+                            ]}
                         >
                             {saving ? (
-                                <ActivityIndicator color="#fff" />
+                                <ActivityIndicator color={colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF'} />
                             ) : (
-                                <Text style={styles.saveText}>Save Changes</Text>
+                                <Text style={[styles.saveText, { color: canSave ? (colors.background !== '#FFFFFF' ? '#000000' : '#FFFFFF') : colors.textSecondary }]}>Save Changes</Text>
                             )}
-                        </LinearGradient>
+                        </View>
                     </TouchableOpacity>
                 </ScrollView>
             </KeyboardAvoidingView>
@@ -342,19 +477,13 @@ const EditProfileScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
     safeArea: { flex: 1 },
     keyboardContainer: { flex: 1 },
-    loaderWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: SPACING.lg,
-        paddingVertical: SPACING.sm,
-    },
-    headerBtn: {
-        width: TOUCH_TARGET.min,
-        height: TOUCH_TARGET.min,
-        justifyContent: 'center',
-        alignItems: 'center',
+        paddingTop: Platform.OS === 'ios' ? 10 : 20,
+        paddingBottom: 20,
     },
     headerTitle: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.semibold },
     content: {
@@ -391,10 +520,7 @@ const styles = StyleSheet.create({
     readOnlyInput: {
         opacity: 0.9,
     },
-    bioInput: {
-        minHeight: 100,
-        textAlignVertical: 'top',
-    },
+
     hintText: {
         fontSize: FONT_SIZE.xs,
         marginTop: SPACING.xs,
@@ -421,6 +547,41 @@ const styles = StyleSheet.create({
         color: NEUTRAL.white,
         fontSize: FONT_SIZE.md,
         fontWeight: FONT_WEIGHT.bold,
+    },
+    skeletonContainer: {
+        paddingTop: SPACING.md,
+    },
+    skeletonAvatar: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        marginBottom: SPACING.sm,
+    },
+    skeletonChangePhotoBtn: {
+        width: 120,
+        height: 32,
+        borderRadius: BORDER_RADIUS.md,
+        marginTop: SPACING.xs,
+    },
+    skeletonFormGroup: {
+        marginBottom: SPACING.md,
+    },
+    skeletonLabel: {
+        width: 80,
+        height: 14,
+        borderRadius: BORDER_RADIUS.sm,
+        marginBottom: SPACING.xs,
+        marginTop: SPACING.sm,
+    },
+    skeletonInput: {
+        height: 52,
+        borderRadius: BORDER_RADIUS.md,
+    },
+
+    skeletonSaveButton: {
+        height: 56,
+        borderRadius: BORDER_RADIUS.lg,
+        marginTop: SPACING.xl,
     },
 });
 
