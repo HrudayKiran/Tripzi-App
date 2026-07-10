@@ -1,0 +1,23 @@
+{
+  "name": "nxtvibes",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/mobile",
+    "apps/api"
+  ],
+  "scripts": {
+    "dev:mobile": "cd apps/mobile && npm run start",
+    "dev:api": "cd apps/api && mix phx.server",
+    "build:mobile": "cd apps/mobile && eas build",
+    "install:mobile": "cd apps/mobile && npm install",
+    "typecheck": "cd apps/mobile && npm run typecheck",
+    "test": "cd apps/mobile && npm test"
+  },
+  "engines": {
+    "node": ">=20.18.1"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.4"
+  }
+}
