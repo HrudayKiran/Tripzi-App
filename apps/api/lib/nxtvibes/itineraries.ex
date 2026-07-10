@@ -13,9 +13,11 @@ defmodule NxtVibes.Itineraries do
   Matches user_id or if user is in participants list.
   """
   def list_itineraries_for_user(user_id, updated_since \\ nil) do
+    {:ok, binary_user_id} = Ecto.UUID.dump(user_id)
+
     query =
       from i in Itinerary,
-        where: i.user_id == ^user_id or fragment("? = ANY(?)", ^user_id, i.participants)
+        where: i.user_id == ^user_id or fragment("? = ANY(?)", ^binary_user_id, i.participants)
 
     query =
       if updated_since do

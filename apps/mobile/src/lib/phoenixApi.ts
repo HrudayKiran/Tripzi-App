@@ -1,6 +1,14 @@
 import { supabase } from './supabase';
 
-const PHOENIX_API_URL = process.env.EXPO_PUBLIC_PHOENIX_API_URL || 'http://localhost:4000';
+const getApiUrl = () => {
+  // Use EXPO_PUBLIC_PHOENIX_API_URL directly.
+  // For physical devices AND emulators, run `adb reverse tcp:4000 tcp:4000` once before testing.
+  // This tunnels the device's localhost:4000 → your PC's localhost:4000 over USB/ADB.
+  // Do NOT replace localhost with 10.0.2.2 — that only works in emulators and breaks physical devices.
+  return process.env.EXPO_PUBLIC_PHOENIX_API_URL || 'http://localhost:4000/api';
+};
+
+const PHOENIX_API_URL = getApiUrl();
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -45,7 +53,7 @@ export const phoenixApi = async <T = any>(
   while (attempt < maxAttempts) {
     attempt++;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
       if (__DEV__) {

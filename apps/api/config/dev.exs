@@ -4,7 +4,13 @@ database_url = System.get_env("DATABASE_URL")
 
 repo_config =
   if database_url do
-    [url: database_url]
+    # Use the DATABASE_URL hostname directly — Postgrex parses it and
+    # socket_options: [:inet6] tells Erlang to do an IPv6 (AAAA) DNS lookup
+    # and connect over IPv6 to Supabase's direct connection endpoint.
+    [
+      url: database_url,
+      socket_options: [:inet6]
+    ]
   else
     [
       username: "postgres",
@@ -19,8 +25,7 @@ config :nxtvibes, NxtVibes.Repo,
     [
       stacktrace: true,
       show_sensitive_data_on_connection_error: true,
-      pool_size: 10,
-      socket_options: [:inet6]
+      pool_size: 10
     ]
 
 # For development, we disable any cache and enable
@@ -30,9 +35,8 @@ config :nxtvibes, NxtVibes.Repo,
 # watchers to your application. For example, we can use it
 # to bundle .js and .css sources.
 config :nxtvibes, NxtVibesWeb.Endpoint,
-  # Binding to loopback ipv4 address prevents access from other machines.
-  # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
-  http: [ip: {127, 0, 0, 1}],
+  # Change to {0, 0, 0, 0} to allow access from Android emulator (10.0.2.2) and other machines.
+  http: [ip: {0, 0, 0, 0}],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,

@@ -38,9 +38,11 @@ defmodule NxtVibes.Chats do
   Lists direct chats for a user, optionally filtered by updated_since date.
   """
   def list_direct_chats_for_user(user_id, updated_since \\ nil) do
+    {:ok, binary_user_id} = Ecto.UUID.dump(user_id)
+
     query =
       from c in DirectChat,
-        where: fragment("? = ANY(?)", ^user_id, c.participants)
+        where: fragment("? = ANY(?)", ^binary_user_id, c.participants)
 
     query =
       if updated_since do
@@ -85,9 +87,11 @@ defmodule NxtVibes.Chats do
   Lists group chats for a user, optionally filtered by updated_since date.
   """
   def list_group_chats_for_user(user_id, updated_since \\ nil) do
+    {:ok, binary_user_id} = Ecto.UUID.dump(user_id)
+
     query =
       from c in GroupChat,
-        where: fragment("? = ANY(?)", ^user_id, c.participants)
+        where: fragment("? = ANY(?)", ^binary_user_id, c.participants)
 
     query =
       if updated_since do

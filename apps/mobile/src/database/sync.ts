@@ -54,9 +54,16 @@ export async function syncDatabase() {
   if (__DEV__) console.log('[Sync] Starting synchronization via Phoenix sync API...');
 
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      if (__DEV__) console.log('[Sync] No active session, skipping database synchronization.');
+      isSyncing = false;
+      return;
+    }
+    const user = session.user;
 
     await synchronize({
+
       database,
       pullChanges: async ({ lastPulledAt }) => {
         const lastSyncUserId = storage.getString(LAST_SYNC_USER_KEY);
