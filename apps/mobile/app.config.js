@@ -3,7 +3,15 @@ const fs = require('fs');
 const { withDangerousMod } = require('@expo/config-plugins');
 
 const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
-const notifeeLibsPath = path.resolve(__dirname, 'node_modules/@notifee/react-native/android/libs').replace(/\\/g, '/');
+
+// In npm workspaces, packages are hoisted to the root node_modules.
+// Check workspace root first, then fall back to local node_modules.
+function resolveFromWorkspace(modulePath) {
+  const localPath = path.resolve(__dirname, 'node_modules', modulePath);
+  const rootPath = path.resolve(__dirname, '../..', 'node_modules', modulePath);
+  return fs.existsSync(rootPath) ? rootPath : localPath;
+}
+const notifeeLibsPath = resolveFromWorkspace('@notifee/react-native/android/libs').replace(/\\/g, '/');
 
 function copyFolderRecursiveSync(source, target) {
   if (!fs.existsSync(source)) return;

@@ -1,4 +1,4 @@
-# Logs
+# ─── Logs ─────────────────────────────────────────────────────────────────────
 logs
 *.log
 npm-debug.log*
@@ -7,12 +7,13 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# ─── Node ─────────────────────────────────────────────────────────────────────
 node_modules
 dist
 dist-ssr
 *.local
 
-# Editor directories and files
+# ─── Editor ───────────────────────────────────────────────────────────────────
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -22,16 +23,36 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# ─── Environment / Secrets ────────────────────────────────────────────────────
+# Ignore all .env files EXCEPT .env.example (which is the committed template)
 .env
 .env.*
+!.env.example
 functions/.env
 functions/.env.*
 
-# Expo
+# ─── Expo / React Native ──────────────────────────────────────────────────────
 .expo/
+apps/mobile/.expo/
+apps/mobile/android/
+apps/mobile/ios/
 
-# Specific secrets
+# ─── Elixir / Phoenix ─────────────────────────────────────────────────────────
+apps/api/_build/
+apps/api/deps/
+apps/api/.elixir_ls/
+apps/api/priv/static/assets/
+apps/api/erl_crash.dump
+
+# ─── Cloudflare Workers ───────────────────────────────────────────────────────
+workers/.wrangler/
+workers/dist/
+
+# ─── Specific Secrets ─────────────────────────────────────────────────────────
 scripts/service-account.json
+apps/mobile/credentials/
+apps/mobile/google-services.json
 
-# Agents Customizations
+# ─── Agents ───────────────────────────────────────────────────────────────────
 .agents/
