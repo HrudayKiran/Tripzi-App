@@ -1,4 +1,5 @@
 {
+  "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": false,
     "noImplicitAny": false,
@@ -11,15 +12,17 @@
     "resolveJsonModule": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "useDefineForClassFields": false,
-    "typeRoots": [
-      "./src/types",
-      "./node_modules/@types"
-    ]
+    "useDefineForClassFields": false
   },
   "include": [
     "src/**/*",
     "nativewind-env.d.ts"
   ],
-  "extends": "expo/tsconfig.base"
+  "exclude": [
+    "node_modules",
+    "../../node_modules/phosphor-react-native/**/*",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/__tests__/*"
+  ]
 }

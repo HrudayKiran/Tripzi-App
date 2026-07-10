@@ -22,6 +22,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, STATUS, NEUTRAL } from '../styles';
 import { supabase } from '../lib/supabase';
 import { workersApi } from '../lib/workersApi';
+import { phoenixApi } from '../lib/phoenixApi';
 import { uploadGroupChatImageToR2 } from '../utils/imageUpload';
 import { searchUsersByPrefix } from '../utils/searchUsers';
 import { getPublicProfilesByIds } from '../utils/publicProfiles';
@@ -269,11 +270,11 @@ const GroupInfoScreen = () => {
     const addMember = async (user: any) => {
         if (!isAdmin || !group) return;
         try {
-            await workersApi('/group_chats/add-member', { body: {
+            await phoenixApi('/group_chats/add-member', { body: {
                 chatId,
                 memberId: user.id,
                 collectionName: 'group_chats',
-            } });
+              } });
 
             setShowAddMember(false);
             setSearchQuery('');
@@ -297,7 +298,7 @@ const GroupInfoScreen = () => {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await workersApi('/group_chats/remove-member', { body: {
+                            await phoenixApi('/group_chats/remove-member', { body: {
                                 chatId,
                                 memberId: member.id,
                                 collectionName: 'group_chats',
@@ -329,7 +330,7 @@ const GroupInfoScreen = () => {
                     onPress: async () => {
                         try {
                             const endpoint = newRole === 'admin' ? '/group_chats/promote-admin' : '/group_chats/demote-admin';
-                            await workersApi(endpoint, { body: {
+                            await phoenixApi(endpoint, { body: {
                                 chatId,
                                 memberId: member.id,
                                 collectionName: 'group_chats',
@@ -355,7 +356,7 @@ const GroupInfoScreen = () => {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await workersApi('/group_chats/leave', { body: {
+                            await phoenixApi('/group_chats/leave', { body: {
                                 chatId,
                                 collectionName: 'group_chats',
                             } });

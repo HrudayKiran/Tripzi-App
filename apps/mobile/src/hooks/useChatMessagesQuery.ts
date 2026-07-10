@@ -35,8 +35,28 @@ function parsePostgresArray(val: any): string[] {
     return [];
 }
 
-function mapLocalMessage(m: Message): ChatMessage {
+function mapLocalMessage(m: Message, parentMap?: Map<string, any>): ChatMessage {
     const parseDateSafe = (val: any) => parsePostgresDate(val);
+
+    let replyTo: ReplyTo | undefined = undefined;
+    if (m.replyToRaw) {
+        try {
+            const parsed = JSON.parse(m.replyToRaw);
+            if (parsed && typeof parsed === 'object' && parsed.messageId) {
+                replyTo = parsed;
+            }
+        } catch {
+            // It is a plain UUID string! Resolve from parentMap
+            if (parentMap && parentMap.has(m.replyToRaw)) {
+                const parent = parentMap.get(m.replyToRaw);
+                replyTo = {
+                    messageId: parent.id,
+                    text: parent.text || '',
+                    senderId: parent.senderId,
+                };
+            }
+        }
+    }
 
     return {
         id: m.id,
@@ -48,7 +68,7 @@ function mapLocalMessage(m: Message): ChatMessage {
         mediaThumbnail: undefined,
         location: m.locationData || undefined,
         voiceDuration: m.voiceDuration || undefined,
-        replyTo: m.replyToData || undefined,
+        replyTo,
         status: m.status as MessageStatus,
         readBy: m.readByData || {},
         deliveredTo: m.deliveredToData || [],
@@ -59,6 +79,31 @@ function mapLocalMessage(m: Message): ChatMessage {
         createdAt: m.createdAt,
     };
 }
+
+async function resolveRepliesAndMapMessages(localMessages: any[]): Promise<ChatMessage[]> {
+    const replyToIds = localMessages
+        .map((m: any) => m.replyToRaw)
+        .filter((id): id is string => {
+            if (!id) return false;
+            if (id.trim().startsWith('{') || id.trim().startsWith('[')) return false;
+            return true;
+        });
+
+    let parentMap = new Map<string, any>();
+    if (replyToIds.length > 0) {
+        try {
+            const parents = await database.get('messages')
+                .query(Q.where('id', Q.oneOf(replyToIds)))
+                .fetch();
+            parentMap = new Map(parents.map((p: any) => [p.id, p]));
+        } catch (e) {
+            console.error('[resolveRepliesAndMapMessages] Failed to batch load parent messages:', e);
+        }
+    }
+
+    return localMessages.map((m: any) => mapLocalMessage(m, parentMap));
+}
+
 
 const writeRemoteMessageToLocal = async (newRow: any) => {
     if (!newRow) return;
@@ -204,7 +249,7 @@ export function useChatMessagesQuery(
             const messagesList = [...localMessages].reverse();
             setHasMore(localMessages.length >= PAGE_SIZE);
 
-            return messagesList.map((m: any) => mapLocalMessage(m));
+            return resolveRepliesAndMapMessages(messagesList);
         },
         enabled: !!chatId && !!userId,
         staleTime: 30_000,
@@ -248,7 +293,7 @@ export function useChatMessagesQuery(
         setHasMore(olderLocalMessages.length >= PAGE_SIZE);
 
         if (olderLocalMessages.length > 0) {
-            const mapped = [...olderLocalMessages].reverse().map((m: any) => mapLocalMessage(m));
+            const mapped = await resolveRepliesAndMapMessages([...olderLocalMessages].reverse());
 
             queryClient.setQueryData<ChatMessage[]>(['messages', chatId], (old) => [
                 ...mapped,
@@ -324,11 +369,9 @@ export function useChatMessagesQuery(
                             rec._raw.id = chatId;
                             if (remoteChat) {
                                 if (chatType === 'group') {
-                                    rec.itineraryId = remoteChat.itinerary_id;
                                     rec.groupName = remoteChat.group_name;
                                     rec.groupDescription = remoteChat.group_description;
                                     rec.groupIcon = remoteChat.group_icon;
-                                    rec.itineraryImage = remoteChat.itinerary_image;
                                     rec.participantsRaw = JSON.stringify(remoteChat.participants);
                                     rec.participantDetailsRaw = JSON.stringify(remoteChat.participant_details);
                                     rec.createdBy = remoteChat.created_by;

@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-  version: 11,
+  version: 12,
   tables: [
     tableSchema({
       name: 'profiles',
@@ -59,11 +59,9 @@ export default appSchema({
     tableSchema({
       name: 'group_chats',
       columns: [
-        { name: 'itinerary_id', type: 'string', isIndexed: true },
         { name: 'group_name', type: 'string' },
         { name: 'group_description', type: 'string', isOptional: true },
         { name: 'group_icon', type: 'string', isOptional: true },
-        { name: 'itinerary_image', type: 'string', isOptional: true },
         { name: 'participants', type: 'string' }, // JSON string
         { name: 'participant_details', type: 'string', isOptional: true }, // JSON string
         { name: 'created_by', type: 'string', isOptional: true },

@@ -236,7 +236,7 @@ const ChatScreen = () => {
     // Typing indicator state
     const [isTyping, setIsTyping] = useState(false);
     const [otherUserTyping, setOtherUserTyping] = useState(false);
-    const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastTypingUpdate = useRef<number>(0);
 
     // Chat menu state (three-dots)

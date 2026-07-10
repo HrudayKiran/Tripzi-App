@@ -7,10 +7,7 @@ import accountRoutes from './routes/account';
 import aiRoutes from './routes/ai';
 import kbRoutes from './routes/kb';
 import mediaRoutes from './routes/media';
-import groupChatsRoutes from './routes/group_chats';
-import chatNotificationRoutes from './routes/chat';
 import publicRoutes from './routes/public';
-import { handleDailyTripLifecycle } from './scheduled/daily';
 import { deleteR2Objects } from './lib/r2';
 
 const app = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
@@ -40,8 +37,6 @@ app.use('/public/*', publicRateLimit);
 app.use('/account/*', requireAuth, globalRateLimit);
 app.use('/ai/*', requireAuth, aiRateLimit);
 app.use('/media/*', requireAuth, mediaRateLimit);
-app.use('/group_chats/*', requireAuth, globalRateLimit);
-app.use('/chat/*', requireAuth, globalRateLimit);
 
 // Mount routes
 app.route('/public', publicRoutes);
@@ -49,15 +44,13 @@ app.route('/account', accountRoutes);
 app.route('/ai', aiRoutes);
 app.route('/ai/kb', kbRoutes);
 app.route('/media', mediaRoutes);
-app.route('/group_chats', groupChatsRoutes);
-app.route('/chat', chatNotificationRoutes);
 
 // Export for Cloudflare Workers
 export default {
   fetch: app.fetch,
 
   // Cron trigger handler:
-  //   "30 2 * * *"   — daily cron (trip lifecycle + AI chat cleanup + R2 cleanup)
+  //   "30 2 * * *"   — daily cron (AI chat cleanup + R2 cleanup)
   //   "*/10 * * * *" — frequent cron (R2 deleted media cleanup only)
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     const isDailyCron = event.cron === '30 2 * * *';
@@ -65,7 +58,6 @@ export default {
 
     if (isDailyCron) {
       ctx.waitUntil(Promise.all([
-        handleDailyTripLifecycle(env),
         cleanupExpiredChats(env),
         cleanupDeletedMedia(env),
         cleanupExpiredLiveShares(env),

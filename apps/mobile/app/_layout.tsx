@@ -5,23 +5,14 @@ import { NetworkProvider } from '../src/contexts/NetworkContext';
 import OfflineBanner from '../src/components/OfflineBanner';
 import { NotificationToast } from '../src/components/NotificationToast';
 import React from 'react';
+import NetInfo from '@react-native-community/netinfo';
 import analytics from '@react-native-firebase/analytics';
 import crashlytics from '@react-native-firebase/crashlytics';
 import perf from '@react-native-firebase/perf';
 import { DatabaseProvider } from '@nozbe/watermelondb/DatabaseProvider';
 import { database, resetDatabase } from '../src/database';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30_000,       // Data stays fresh for 30 seconds
-      gcTime: 10 * 60_000,     // Cache kept for 10 minutes
-      refetchOnWindowFocus: false,
-      retry: 2,
-    },
-  },
-});
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from '../src/lib/queryClient';
 import { syncDatabase } from '../src/database/sync';
 import { useAppCheck } from '../src/hooks/useAppCheck';
 import { useRemoteConfig } from '../src/hooks/useRemoteConfig';
@@ -36,6 +27,7 @@ import {
   setupNotificationTapHandler,
   handleInitialNotification,
   setupPermissionWatcher,
+  cancelAllScheduledNotifications,
 } from '../src/services/notificationService';
 import { createNotificationChannels, clearBadgeCount } from '../src/services/notificationChannels';
 import ErrorBoundary from '../src/components/ErrorBoundary';
@@ -109,15 +101,25 @@ export default function RootLayout() {
         // (while session is still valid). Don't call it here — session is already gone.
         queryClient.clear();
         resetDatabase().catch(() => { });
+        // Cancel all scheduled trip reminder notifications so they don't fire for next user
+        cancelAllScheduledNotifications().catch(() => { });
       }
     });
 
     // Setup FCM token refresh listener
     const unsubTokenRefresh = setupTokenRefreshListener();
 
+    // Re-sync when the device comes back online after being offline
+    const unsubNetwork = NetInfo.addEventListener((state) => {
+      if (state.isConnected && state.isInternetReachable) {
+        syncDatabase().catch(() => { });
+      }
+    });
+
     return () => {
       subscription.unsubscribe();
       unsubTokenRefresh();
+      unsubNetwork();
     };
   }, []);
 

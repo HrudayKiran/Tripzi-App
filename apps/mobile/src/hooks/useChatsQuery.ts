@@ -38,7 +38,7 @@ const normalizeRow = (row: any, collectionName: 'direct_chats' | 'group_chats', 
     const rawClearedAt = typeof row.cleared_at === 'string'
         ? (() => {
             try { return JSON.parse(row.cleared_at); } catch (e) { return {}; }
-          })()
+        })()
         : row.cleared_at || {};
 
     if (rawClearedAt && typeof rawClearedAt === 'object') {
@@ -81,7 +81,7 @@ const normalizeLocalChat = (row: any, collectionName: 'direct_chats' | 'group_ch
     if (row.lastMessage) {
         try {
             lastMessageObj = typeof row.lastMessage === 'string' ? JSON.parse(row.lastMessage) : row.lastMessage;
-        } catch (e) {}
+        } catch (e) { }
     }
 
     let lastMessage: LastMessage | undefined;
@@ -99,7 +99,7 @@ const normalizeLocalChat = (row: any, collectionName: 'direct_chats' | 'group_ch
     if (row.clearedAtRaw) {
         try {
             clearedAtMap = JSON.parse(row.clearedAtRaw);
-        } catch (e) {}
+        } catch (e) { }
     }
 
     if (userId && lastMessage && lastMessage.timestamp && clearedAtMap[userId]) {
@@ -119,7 +119,7 @@ const normalizeLocalChat = (row: any, collectionName: 'direct_chats' | 'group_ch
     if (deletedForRaw) {
         try {
             deletedBy = JSON.parse(deletedForRaw);
-        } catch (e) {}
+        } catch (e) { }
     }
 
     let participantDetails: Record<string, any> = {};
@@ -127,7 +127,7 @@ const normalizeLocalChat = (row: any, collectionName: 'direct_chats' | 'group_ch
     if (detailsRaw) {
         try {
             participantDetails = JSON.parse(detailsRaw);
-        } catch (e) {}
+        } catch (e) { }
     }
 
     return {
@@ -139,8 +139,6 @@ const normalizeLocalChat = (row: any, collectionName: 'direct_chats' | 'group_ch
         groupName: type === 'group' ? (row.groupName || 'Group Chat') : undefined,
         groupDescription: type === 'group' ? row.groupDescription : undefined,
         groupIcon: type === 'group' ? row.groupIcon : undefined,
-        tripImage: type === 'group' ? row.itineraryImage : undefined,
-        tripId: type === 'group' ? row.itineraryId : undefined,
         createdBy: type === 'group' ? row.createdBy : undefined,
         memberCount: type === 'group' ? (row.memberCount || participants.length) : participants.length,
         hidden: row.hidden === true,
@@ -169,6 +167,7 @@ export function useChatsQuery() {
                 .filter((c) => !c.deletedBy?.includes(userId) && c.hidden !== true);
         },
         enabled: !!userId,
+        staleTime: 30_000,
     });
 
     // Fetch group chats from WatermelonDB locally
@@ -182,6 +181,7 @@ export function useChatsQuery() {
                 .filter((c) => !c.deletedBy?.includes(userId) && c.hidden !== true);
         },
         enabled: !!userId,
+        staleTime: 30_000,
     });
 
     const chats = [...directChats, ...groupChats].sort((a, b) => {
@@ -327,7 +327,7 @@ export function useChatsQuery() {
                             try {
                                 const existing = await collection.find(oldRow.id);
                                 await existing.destroyPermanently();
-                            } catch (e) {}
+                            } catch (e) { }
                         }
                     });
                 } catch (e) {
@@ -353,11 +353,9 @@ export function useChatsQuery() {
                             } catch (e) {
                                 await collection.create((rec: any) => {
                                     rec._raw.id = newRow.id;
-                                    rec.itineraryId = newRow.itinerary_id;
                                     rec.groupName = newRow.group_name;
                                     rec.groupDescription = newRow.group_description;
                                     rec.groupIcon = newRow.group_icon;
-                                    rec.itineraryImage = newRow.itinerary_image;
                                     rec.participantsRaw = JSON.stringify(newRow.participants);
                                     rec.participantDetailsRaw = JSON.stringify(newRow.participant_details);
                                     rec.createdBy = newRow.created_by;
@@ -377,11 +375,9 @@ export function useChatsQuery() {
                             try {
                                 const existing = await collection.find(newRow.id);
                                 await existing.update((rec: any) => {
-                                    rec.itineraryId = newRow.itinerary_id;
                                     rec.groupName = newRow.group_name;
                                     rec.groupDescription = newRow.group_description;
                                     rec.groupIcon = newRow.group_icon;
-                                    rec.itineraryImage = newRow.itinerary_image;
                                     rec.participantsRaw = JSON.stringify(newRow.participants);
                                     rec.participantDetailsRaw = JSON.stringify(newRow.participant_details);
                                     rec.createdBy = newRow.created_by;
@@ -398,11 +394,9 @@ export function useChatsQuery() {
                             } catch (e) {
                                 await collection.create((rec: any) => {
                                     rec._raw.id = newRow.id;
-                                    rec.itineraryId = newRow.itinerary_id;
                                     rec.groupName = newRow.group_name;
                                     rec.groupDescription = newRow.group_description;
                                     rec.groupIcon = newRow.group_icon;
-                                    rec.itineraryImage = newRow.itinerary_image;
                                     rec.participantsRaw = JSON.stringify(newRow.participants);
                                     rec.participantDetailsRaw = JSON.stringify(newRow.participant_details);
                                     rec.createdBy = newRow.created_by;
@@ -422,7 +416,7 @@ export function useChatsQuery() {
                             try {
                                 const existing = await collection.find(oldRow.id);
                                 await existing.destroyPermanently();
-                            } catch (e) {}
+                            } catch (e) { }
                         }
                     });
                 } catch (e) {
