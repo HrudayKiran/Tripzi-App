@@ -407,12 +407,15 @@ const ChatScreen = () => {
         const loadPresence = async () => {
             const { data, error } = await supabase
                 .from('profiles')
-                .select('photo_url, presence, last_seen_at')
+                .select('photo_url, last_seen_at')
                 .eq('id', otherParticipantUid)
                 .maybeSingle();
             if (error || !data) return;
             if (data.photo_url) setLivePhoto(data.photo_url);
-            setRawPresence(typeof data.presence === 'string' ? data.presence.toLowerCase() : '');
+            
+            // Check in-memory Phoenix presence first
+            const livePresence = otherParticipantUid ? getOnlineUsersPresenceState(otherParticipantUid) : null;
+            setRawPresence(livePresence?.status || 'offline');
             setRawLastSeen(data.last_seen_at);
         };
 

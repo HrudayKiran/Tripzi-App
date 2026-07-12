@@ -53,12 +53,14 @@ defmodule NxtVibesWeb.SyncController do
       trip_title: i.trip_title,
       from_location: i.from_location,
       to_location: i.to_location,
-      from_date: i.from_date,
-      to_date: i.to_date,
+      # WatermelonDB stores from_date/to_date as `string` columns — send ISO 8601 strings
+      from_date: if(i.from_date, do: DateTime.to_iso8601(i.from_date), else: nil),
+      to_date: if(i.to_date, do: DateTime.to_iso8601(i.to_date), else: nil),
       duration_days: i.duration_days,
       trip_types: Jason.encode!(i.trip_types || []),
       transport_modes: Jason.encode!(i.transport_modes || []),
-      cost_per_person: i.cost_per_person,
+      # Decimal → float so JSON doesn't emit a Decimal struct
+      cost_per_person: if(i.cost_per_person, do: Decimal.to_float(i.cost_per_person), else: nil),
       accommodation_type: i.accommodation_type,
       booking_status: i.booking_status,
       accommodation_days: i.accommodation_days,
@@ -67,7 +69,7 @@ defmodule NxtVibesWeb.SyncController do
       participants: Jason.encode!(i.participants || []),
       checklist: Jason.encode!(i.checklist || []),
       notes: Jason.encode!(i.notes || []),
-      itinerary_map_view: if(i.itinerary_map_view, do: Jason.encode!(i.itinerary_map_view), else: nil),
+      itinerary_map_view: if(i.itinerary_map_view && map_size(i.itinerary_map_view) > 0, do: Jason.encode!(i.itinerary_map_view), else: nil),
       created_at: to_ms(i.created_at),
       updated_at: to_ms(i.updated_at)
     }
@@ -78,6 +80,7 @@ defmodule NxtVibesWeb.SyncController do
     display_name = Map.get(p, :display_name) || Map.get(p, :name) || "Traveler"
     name = Map.get(p, :name) || display_name
     push_enabled = Map.get(p, :push_notifications_enabled) || false
+    save_to_gallery = Map.get(p, :save_to_gallery) || false
 
     %{
       id: p.id,
@@ -85,22 +88,36 @@ defmodule NxtVibesWeb.SyncController do
       username: p.username,
       photo_url: p.photo_url,
       push_notifications_enabled: push_enabled,
-      save_to_gallery: false,
+      save_to_gallery: save_to_gallery,
       created_at: to_ms(p.created_at),
       updated_at: to_ms(p.updated_at)
     }
   end
 
+
   defp map_direct_chat(c) do
+    # Extract last_message_at from inside the last_message JSONB object
+    # DB has no separate last_message_at column; it's stored as last_message.created_at
+    last_message_at =
+      case c.last_message do
+        %{"created_at" => ts} when is_binary(ts) ->
+          case DateTime.from_iso8601(ts) do
+            {:ok, dt, _} -> DateTime.to_unix(dt, :millisecond)
+            _ -> nil
+          end
+        _ -> nil
+      end
+
     %{
       id: c.id,
       participants: Jason.encode!(c.participants || []),
-      participant_details: if(c.participant_details, do: Jason.encode!(c.participant_details), else: nil),
-      last_message: if(c.last_message, do: Jason.encode!(c.last_message), else: nil),
-      unread_count: if(c.unread_count, do: Jason.encode!(c.unread_count), else: nil),
-      cleared_at: if(c.cleared_at, do: Jason.encode!(c.cleared_at), else: nil),
-      deleted_for: Jason.encode!(c.deleted_by || []),
-      typing: if(c.typing, do: Jason.encode!(c.typing), else: nil),
+      participant_details: if(c.participant_details && map_size(c.participant_details) > 0, do: Jason.encode!(c.participant_details), else: nil),
+      last_message: if(c.last_message && map_size(c.last_message) > 0, do: Jason.encode!(c.last_message), else: nil),
+      last_message_at: last_message_at,
+      unread_count: if(c.unread_count && map_size(c.unread_count) > 0, do: Jason.encode!(c.unread_count), else: nil),
+      cleared_at: if(c.cleared_at && map_size(c.cleared_at) > 0, do: Jason.encode!(c.cleared_at), else: nil),
+      deleted_for: Jason.encode!(c.deleted_for || []),
+      typing: if(c.typing && map_size(c.typing) > 0, do: Jason.encode!(c.typing), else: nil),
       created_at: to_ms(c.created_at),
       updated_at: to_ms(c.updated_at)
     }
@@ -113,16 +130,16 @@ defmodule NxtVibesWeb.SyncController do
       group_description: gc.group_description,
       group_icon: gc.group_icon,
       participants: Jason.encode!(gc.participants || []),
-      participant_details: if(gc.participant_details, do: Jason.encode!(gc.participant_details), else: nil),
+      participant_details: if(gc.participant_details && map_size(gc.participant_details) > 0, do: Jason.encode!(gc.participant_details), else: nil),
       created_by: gc.created_by,
       member_count: gc.member_count,
-      hidden: gc.hidden,
+      hidden: gc.hidden || false,
       admins: Jason.encode!(gc.admins || []),
-      last_message: if(gc.last_message, do: Jason.encode!(gc.last_message), else: nil),
-      unread_count: if(gc.unread_count, do: Jason.encode!(gc.unread_count), else: nil),
-      cleared_at: if(gc.cleared_at, do: Jason.encode!(gc.cleared_at), else: nil),
-      deleted_for: Jason.encode!(gc.deleted_by || []),
-      typing: if(gc.typing, do: Jason.encode!(gc.typing), else: nil),
+      last_message: if(gc.last_message && map_size(gc.last_message) > 0, do: Jason.encode!(gc.last_message), else: nil),
+      unread_count: if(gc.unread_count && map_size(gc.unread_count) > 0, do: Jason.encode!(gc.unread_count), else: nil),
+      cleared_at: if(gc.cleared_at && map_size(gc.cleared_at) > 0, do: Jason.encode!(gc.cleared_at), else: nil),
+      deleted_for: Jason.encode!(gc.deleted_for || []),
+      typing: if(gc.typing && map_size(gc.typing) > 0, do: Jason.encode!(gc.typing), else: nil),
       created_at: to_ms(gc.created_at),
       updated_at: to_ms(gc.updated_at)
     }
@@ -139,15 +156,17 @@ defmodule NxtVibesWeb.SyncController do
       text: m.text,
       media_url: m.media_url,
       location: if(m.location, do: Jason.encode!(m.location), else: nil),
-      voice_duration: m.voice_duration,
-      reply_to: m.reply_to,
+      # voice_duration is a Decimal — convert to float for JSON
+      voice_duration: if(m.voice_duration, do: Decimal.to_float(m.voice_duration), else: nil),
+      # reply_to is a UUID binary — WatermelonDB stores it as a JSON string in the `reply_to` field
+      reply_to: nil,
       status: m.status,
-      read_by: if(m.read_by, do: Jason.encode!(m.read_by), else: nil),
-      delivered_to: if(m.delivered_to, do: Jason.encode!(m.delivered_to), else: nil),
+      read_by: if(m.read_by && map_size(m.read_by) > 0, do: Jason.encode!(m.read_by), else: nil),
+      delivered_to: if(m.delivered_to && length(m.delivered_to) > 0, do: Jason.encode!(m.delivered_to), else: nil),
       edited_at: if(m.edited_at, do: to_ms(m.edited_at), else: nil),
-      deleted_for: if(m.deleted_for, do: Jason.encode!(m.deleted_for), else: nil),
+      deleted_for: if(m.deleted_for && length(m.deleted_for) > 0, do: Jason.encode!(m.deleted_for), else: nil),
       deleted_for_everyone_at: if(m.deleted_for_everyone_at, do: to_ms(m.deleted_for_everyone_at), else: nil),
-      mentions: if(m.mentions, do: Jason.encode!(m.mentions), else: nil),
+      mentions: if(m.mentions && length(m.mentions) > 0, do: Jason.encode!(m.mentions), else: nil),
       created_at: to_ms(m.created_at),
       updated_at: to_ms(m.updated_at)
     }
@@ -300,21 +319,18 @@ defmodule NxtVibesWeb.SyncController do
     record
   end
 
-  # Helper to rename deleted_for -> deleted_by
-  defp rename_deleted_for(record) do
-    if Map.has_key?(record, "deleted_for") do
-      deleted_for = Map.get(record, "deleted_for")
-      record |> Map.delete("deleted_for") |> Map.put("deleted_by", deleted_for)
-    else
-      record
-    end
-  end
+  # deleted_for column name is now consistent between Supabase DB, Ecto, and WatermelonDB
+  # No rename shim needed.
 
   # Upsert helpers using ON CONFLICT in Ecto
   defp upsert_itinerary(record) do
+    # Ecto schema types:
+    # {:array,:string}  → trip_types, transport_modes, itinerary, participants
+    # {:array,:map}     → places_to_visit, checklist, notes
+    # :map              → itinerary_map_view
     prepared = prepare_record(record,
-      ["trip_types", "transport_modes", "itinerary", "participants"],
-      ["places_to_visit", "checklist", "notes", "itinerary_map_view"],
+      ["trip_types", "transport_modes", "itinerary", "participants", "places_to_visit", "checklist", "notes"],
+      ["itinerary_map_view"],
       ["created_at", "updated_at"]
     )
 
@@ -337,9 +353,8 @@ defmodule NxtVibesWeb.SyncController do
   end
 
   defp upsert_direct_chat(record) do
-    record = rename_deleted_for(record)
     prepared = prepare_record(record,
-      ["participants", "deleted_by"],
+      ["participants", "deleted_for"],
       ["participant_details", "last_message", "unread_count", "cleared_at", "typing"],
       ["created_at", "updated_at"]
     )
@@ -350,9 +365,8 @@ defmodule NxtVibesWeb.SyncController do
   end
 
   defp upsert_group_chat(record) do
-    record = rename_deleted_for(record)
     prepared = prepare_record(record,
-      ["participants", "admins", "deleted_by"],
+      ["participants", "admins", "deleted_for"],
       ["participant_details", "last_message", "unread_count", "cleared_at", "typing"],
       ["created_at", "updated_at"]
     )
@@ -363,11 +377,16 @@ defmodule NxtVibesWeb.SyncController do
   end
 
   defp upsert_message(record) do
+    # Ecto schema types:
+    # {:array,:string}  → delivered_to, deleted_for, mentions
+    # :map              → location, read_by
+    # Drop reply_to from mobile push — it's a UUID and we don't sync it back
     prepared = prepare_record(record,
       ["delivered_to", "deleted_for", "mentions"],
       ["location", "read_by"],
       ["created_at", "updated_at", "edited_at", "deleted_for_everyone_at"]
     )
+    |> Map.drop(["reply_to"])
 
     %Message{id: prepared["id"]}
     |> Message.changeset(prepared)

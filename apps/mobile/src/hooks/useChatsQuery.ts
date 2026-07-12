@@ -5,6 +5,7 @@ import { useCurrentUser } from './useCurrentUser';
 import type { ChatParticipant, LastMessage, Chat } from '../types/chat';
 import { database } from '../database';
 import { Q } from '@nozbe/watermelondb';
+import { joinChannel, connectPhoenixSocket } from '../lib/phoenixSocket';
 
 // Re-export types from centralized location
 export type { ChatParticipant, LastMessage, Chat } from '../types/chat';
@@ -64,7 +65,7 @@ const normalizeRow = (row: any, collectionName: 'direct_chats' | 'group_chats', 
         hidden: row.hidden === true,
         lastMessage,
         unreadCount: row.unread_count || {},
-        deletedBy: Array.isArray(row.deleted_by) ? row.deleted_by : [],
+        deletedBy: Array.isArray(row.deleted_for) ? row.deleted_for : [],
         clearedAt: clearedAtObj,
         createdAt: row.created_at ? new Date(row.created_at) : null,
         updatedAt: row.updated_at ? new Date(row.updated_at) : null,
@@ -151,9 +152,55 @@ const normalizeLocalChat = (row: any, collectionName: 'direct_chats' | 'group_ch
     };
 };
 
+/** Write/update a chat record (direct or group) from a server event payload */
+async function writeChatToLocal(
+    collectionName: 'direct_chats' | 'group_chats',
+    newRow: any,
+    isGroup: boolean
+) {
+    await database.write(async () => {
+        const collection = database.get(collectionName);
+        let existing: any = null;
+        try { existing = await collection.find(newRow.id); } catch {}
+
+        const applyFields = (rec: any) => {
+            rec.participantsRaw = JSON.stringify(newRow.participants || []);
+            rec.participantDetailsRaw = JSON.stringify(newRow.participant_details || {});
+            rec.lastMessage = JSON.stringify(newRow.last_message);
+            rec.unreadCountRaw = JSON.stringify(newRow.unread_count || {});
+            // deleted_for is now consistent: Supabase DB, Ecto schema, and WatermelonDB all use deleted_for
+            rec.deletedForRaw = JSON.stringify(newRow.deleted_for || []);
+            rec.clearedAtRaw = JSON.stringify(newRow.cleared_at || {});
+            rec.typingRaw = JSON.stringify(newRow.typing || {});
+            rec._raw.updated_at = parsePostgresDateToMs(newRow.updated_at);
+
+            if (isGroup) {
+                rec.groupName = newRow.group_name;
+                rec.groupDescription = newRow.group_description;
+                rec.groupIcon = newRow.group_icon;
+                rec.createdBy = newRow.created_by;
+                rec.memberCount = newRow.member_count;
+                rec.hidden = newRow.hidden;
+                rec.adminsRaw = JSON.stringify(newRow.admins || []);
+            } else {
+                rec.lastMessageAt = newRow.last_message_at;
+            }
+        };
+
+        if (existing) {
+            await existing.update(applyFields);
+        } else {
+            await collection.create((rec: any) => {
+                rec._raw.id = newRow.id;
+                applyFields(rec);
+                rec._raw.created_at = parsePostgresDateToMs(newRow.created_at);
+            });
+        }
+    });
+}
+
 export function useChatsQuery() {
     const queryClient = useQueryClient();
-    // C6: Use centralized useCurrentUser hook instead of inline auth.getUser()
     const { userId } = useCurrentUser();
 
     // Fetch direct chats from WatermelonDB locally
@@ -193,7 +240,8 @@ export function useChatsQuery() {
     const loading = loadingDirect || loadingGroup;
     const error = errorDirect || errorGroup;
 
-    // Mutations
+    // ── Mutations ─────────────────────────────────────────────────────────────
+
     const createDirectChatMutation = useMutation({
         mutationFn: async ({ otherUserId, otherUserDetails }: { otherUserId: string, otherUserDetails: ChatParticipant }) => {
             if (!userId) throw new Error('Not authenticated');
@@ -214,7 +262,7 @@ export function useChatsQuery() {
                     [otherUserId]: otherUserDetails,
                 },
                 unread_count: { [userId]: 0, [otherUserId]: 0 },
-                deleted_by: [],
+                deleted_for: [],
             };
 
             const { data, error: insertError } = await supabase
@@ -235,7 +283,6 @@ export function useChatsQuery() {
         mutationFn: async (chatId: string) => {
             if (!userId) return;
 
-            // Determine correct table dynamically by checking direct_chats first
             const { data: directCheck } = await supabase
                 .from('direct_chats')
                 .select('id')
@@ -246,12 +293,12 @@ export function useChatsQuery() {
 
             const { data: current } = await supabase
                 .from(table)
-                .select('deleted_by')
+                .select('deleted_for')
                 .eq('id', chatId)
                 .maybeSingle();
 
-            const deletedBy = Array.isArray(current?.deleted_by) ? [...current.deleted_by, userId] : [userId];
-            await supabase.from(table).update({ deleted_by: deletedBy }).eq('id', chatId);
+            const deletedBy = Array.isArray(current?.deleted_for) ? [...current.deleted_for, userId] : [userId];
+            await supabase.from(table).update({ deleted_for: deletedBy }).eq('id', chatId);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['chats', userId] });
@@ -259,177 +306,73 @@ export function useChatsQuery() {
         },
     });
 
-    // Realtime channel names with random suffixes (C4)
+    // ── Phoenix user channel subscription ────────────────────────────────────
+    // Replaces ALL Supabase Realtime postgres_changes on direct_chats + group_chats.
+    // Server broadcasts chat_updated events to user:{userId} when:
+    //   - A new message arrives (updates last_message, unread_count)
+    //   - A member is added/removed
+    //   - Chat is deleted
     useEffect(() => {
         if (!userId) return;
 
-        const randomSuffix = Math.random().toString(36).substring(2, 9);
-        const directName = `chats-direct-${userId}-${randomSuffix}`;
-        const groupName = `chats-group-${userId}-${randomSuffix}`;
+        // Ensure Phoenix socket is connected
+        connectPhoenixSocket();
 
-        const channelDirect = supabase
-            .channel(directName)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'direct_chats' }, async (payload) => {
-                const newRow = payload.new as any;
-                const oldRow = payload.old as any;
+        const userTopic = `user:${userId}`;
 
-                try {
-                    await database.write(async () => {
-                        const collection = database.get('direct_chats');
-                        if (payload.eventType === 'INSERT') {
-                            try {
-                                await collection.find(newRow.id);
-                            } catch (e) {
-                                await collection.create((rec: any) => {
-                                    rec._raw.id = newRow.id;
-                                    rec.participantsRaw = JSON.stringify(newRow.participants);
-                                    rec.participantDetailsRaw = JSON.stringify(newRow.participant_details || {});
-                                    rec.lastMessage = JSON.stringify(newRow.last_message);
-                                    rec.lastMessageAt = newRow.last_message_at;
-                                    rec.unreadCountRaw = JSON.stringify(newRow.unread_count);
-                                    rec.clearedAtRaw = JSON.stringify(newRow.cleared_at);
-                                    rec.deletedForRaw = JSON.stringify(newRow.deleted_by || []);
-                                    rec.typingRaw = JSON.stringify(newRow.typing || {});
-                                    rec._raw.created_at = parsePostgresDateToMs(newRow.created_at);
-                                    rec._raw.updated_at = parsePostgresDateToMs(newRow.updated_at);
-                                });
-                            }
-                        } else if (payload.eventType === 'UPDATE') {
-                            try {
-                                const existing = await collection.find(newRow.id);
-                                await existing.update((rec: any) => {
-                                    rec.participantsRaw = JSON.stringify(newRow.participants);
-                                    rec.participantDetailsRaw = JSON.stringify(newRow.participant_details || {});
-                                    rec.lastMessage = JSON.stringify(newRow.last_message);
-                                    rec.lastMessageAt = newRow.last_message_at;
-                                    rec.unreadCountRaw = JSON.stringify(newRow.unread_count);
-                                    rec.clearedAtRaw = JSON.stringify(newRow.cleared_at);
-                                    rec.deletedForRaw = JSON.stringify(newRow.deleted_by || []);
-                                    rec.typingRaw = JSON.stringify(newRow.typing || {});
-                                    rec._raw.updated_at = parsePostgresDateToMs(newRow.updated_at);
-                                });
-                            } catch (e) {
-                                await collection.create((rec: any) => {
-                                    rec._raw.id = newRow.id;
-                                    rec.participantsRaw = JSON.stringify(newRow.participants);
-                                    rec.participantDetailsRaw = JSON.stringify(newRow.participant_details || {});
-                                    rec.lastMessage = JSON.stringify(newRow.last_message);
-                                    rec.lastMessageAt = newRow.last_message_at;
-                                    rec.unreadCountRaw = JSON.stringify(newRow.unread_count);
-                                    rec.clearedAtRaw = JSON.stringify(newRow.cleared_at);
-                                    rec.deletedForRaw = JSON.stringify(newRow.deleted_by || []);
-                                    rec.typingRaw = JSON.stringify(newRow.typing || {});
-                                    rec._raw.created_at = parsePostgresDateToMs(newRow.created_at);
-                                    rec._raw.updated_at = parsePostgresDateToMs(newRow.updated_at);
-                                });
-                            }
-                        } else if (payload.eventType === 'DELETE') {
-                            try {
-                                const existing = await collection.find(oldRow.id);
-                                await existing.destroyPermanently();
-                            } catch (e) { }
-                        }
+        const cleanup = joinChannel(userTopic, async (event, payload) => {
+            switch (event) {
+                case 'chat_updated': {
+                    // A direct or group chat was updated (new message, member change, etc.)
+                    const { chat_type, chat } = payload || {};
+                    if (!chat?.id) break;
+                    const collectionName = chat_type === 'group' ? 'group_chats' : 'direct_chats';
+                    await writeChatToLocal(collectionName, chat, chat_type === 'group');
+                    queryClient.invalidateQueries({
+                        queryKey: [chat_type === 'group' ? 'groupChats' : 'chats', userId],
                     });
-                } catch (e) {
-                    console.error('[ChatsListSync] Failed to persist direct_chat changes:', e);
+                    break;
                 }
 
-                queryClient.invalidateQueries({ queryKey: ['chats', userId] });
-            })
-            .subscribe();
-
-        const channelGroup = supabase
-            .channel(groupName)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'group_chats' }, async (payload) => {
-                const newRow = payload.new as any;
-                const oldRow = payload.old as any;
-
-                try {
-                    await database.write(async () => {
-                        const collection = database.get('group_chats');
-                        if (payload.eventType === 'INSERT') {
-                            try {
-                                await collection.find(newRow.id);
-                            } catch (e) {
-                                await collection.create((rec: any) => {
-                                    rec._raw.id = newRow.id;
-                                    rec.groupName = newRow.group_name;
-                                    rec.groupDescription = newRow.group_description;
-                                    rec.groupIcon = newRow.group_icon;
-                                    rec.participantsRaw = JSON.stringify(newRow.participants);
-                                    rec.participantDetailsRaw = JSON.stringify(newRow.participant_details);
-                                    rec.createdBy = newRow.created_by;
-                                    rec.memberCount = newRow.member_count;
-                                    rec.hidden = newRow.hidden;
-                                    rec.adminsRaw = JSON.stringify(newRow.admins || []);
-                                    rec.lastMessage = JSON.stringify(newRow.last_message);
-                                    rec.unreadCountRaw = JSON.stringify(newRow.unread_count);
-                                    rec.deletedForRaw = JSON.stringify(newRow.deleted_by || []);
-                                    rec.clearedAtRaw = JSON.stringify(newRow.cleared_at || {});
-                                    rec.typingRaw = JSON.stringify(newRow.typing || {});
-                                    rec._raw.created_at = parsePostgresDateToMs(newRow.created_at);
-                                    rec._raw.updated_at = parsePostgresDateToMs(newRow.updated_at);
-                                });
-                            }
-                        } else if (payload.eventType === 'UPDATE') {
-                            try {
-                                const existing = await collection.find(newRow.id);
-                                await existing.update((rec: any) => {
-                                    rec.groupName = newRow.group_name;
-                                    rec.groupDescription = newRow.group_description;
-                                    rec.groupIcon = newRow.group_icon;
-                                    rec.participantsRaw = JSON.stringify(newRow.participants);
-                                    rec.participantDetailsRaw = JSON.stringify(newRow.participant_details);
-                                    rec.createdBy = newRow.created_by;
-                                    rec.memberCount = newRow.member_count;
-                                    rec.hidden = newRow.hidden;
-                                    rec.adminsRaw = JSON.stringify(newRow.admins || []);
-                                    rec.lastMessage = JSON.stringify(newRow.last_message);
-                                    rec.unreadCountRaw = JSON.stringify(newRow.unread_count);
-                                    rec.deletedForRaw = JSON.stringify(newRow.deleted_by || []);
-                                    rec.clearedAtRaw = JSON.stringify(newRow.cleared_at || {});
-                                    rec.typingRaw = JSON.stringify(newRow.typing || {});
-                                    rec._raw.updated_at = parsePostgresDateToMs(newRow.updated_at);
-                                });
-                            } catch (e) {
-                                await collection.create((rec: any) => {
-                                    rec._raw.id = newRow.id;
-                                    rec.groupName = newRow.group_name;
-                                    rec.groupDescription = newRow.group_description;
-                                    rec.groupIcon = newRow.group_icon;
-                                    rec.participantsRaw = JSON.stringify(newRow.participants);
-                                    rec.participantDetailsRaw = JSON.stringify(newRow.participant_details);
-                                    rec.createdBy = newRow.created_by;
-                                    rec.memberCount = newRow.member_count;
-                                    rec.hidden = newRow.hidden;
-                                    rec.adminsRaw = JSON.stringify(newRow.admins || []);
-                                    rec.lastMessage = JSON.stringify(newRow.last_message);
-                                    rec.unreadCountRaw = JSON.stringify(newRow.unread_count);
-                                    rec.deletedForRaw = JSON.stringify(newRow.deleted_by || []);
-                                    rec.clearedAtRaw = JSON.stringify(newRow.cleared_at || {});
-                                    rec.typingRaw = JSON.stringify(newRow.typing || {});
-                                    rec._raw.created_at = parsePostgresDateToMs(newRow.created_at);
-                                    rec._raw.updated_at = parsePostgresDateToMs(newRow.updated_at);
-                                });
-                            }
-                        } else if (payload.eventType === 'DELETE') {
-                            try {
-                                const existing = await collection.find(oldRow.id);
-                                await existing.destroyPermanently();
-                            } catch (e) { }
-                        }
-                    });
-                } catch (e) {
-                    console.error('[ChatsListSync] Failed to persist group_chat changes:', e);
+                case 'new_direct_chat': {
+                    // A new direct chat was created where this user is a participant
+                    if (!payload?.id) break;
+                    await writeChatToLocal('direct_chats', payload, false);
+                    queryClient.invalidateQueries({ queryKey: ['chats', userId] });
+                    break;
                 }
 
-                queryClient.invalidateQueries({ queryKey: ['groupChats', userId] });
-            })
-            .subscribe();
+                case 'new_group_chat': {
+                    // Added to a new group chat
+                    if (!payload?.id) break;
+                    await writeChatToLocal('group_chats', payload, true);
+                    queryClient.invalidateQueries({ queryKey: ['groupChats', userId] });
+                    break;
+                }
+
+                case 'chat_deleted': {
+                    const { chat_id, chat_type } = payload || {};
+                    if (!chat_id) break;
+                    const collectionName = chat_type === 'group' ? 'group_chats' : 'direct_chats';
+                    await database.write(async () => {
+                        try {
+                            const rec = await database.get(collectionName).find(chat_id);
+                            await (rec as any).destroyPermanently();
+                        } catch {}
+                    });
+                    queryClient.invalidateQueries({
+                        queryKey: [chat_type === 'group' ? 'groupChats' : 'chats', userId],
+                    });
+                    break;
+                }
+
+                default:
+                    break;
+            }
+        });
 
         return () => {
-            supabase.removeChannel(channelDirect);
-            supabase.removeChannel(channelGroup);
+            cleanup();
         };
     }, [userId, queryClient]);
 
@@ -445,7 +388,7 @@ export function useChatsQuery() {
             if (existing) {
                 if (existing.deletedBy?.includes(userId)) {
                     const newDeletedBy = existing.deletedBy.filter((id) => id !== userId);
-                    await supabase.from('direct_chats').update({ deleted_by: newDeletedBy }).eq('id', existing.id);
+                    await supabase.from('direct_chats').update({ deleted_for: newDeletedBy }).eq('id', existing.id);
                     queryClient.invalidateQueries({ queryKey: ['chats', userId] });
                 }
                 return existing.id;
@@ -454,7 +397,7 @@ export function useChatsQuery() {
             // Query DB
             const { data: found } = await supabase
                 .from('direct_chats')
-                .select('id, participants, deleted_by')
+                .select('id, participants, deleted_for')
                 .contains('participants', [userId]);
 
             const match = (found || []).find((c: any) =>
@@ -462,9 +405,9 @@ export function useChatsQuery() {
             );
 
             if (match) {
-                if (Array.isArray(match.deleted_by) && match.deleted_by.includes(userId)) {
-                    const newDeletedBy = match.deleted_by.filter((id: string) => id !== userId);
-                    await supabase.from('direct_chats').update({ deleted_by: newDeletedBy }).eq('id', match.id);
+                if (Array.isArray(match.deleted_for) && match.deleted_for.includes(userId)) {
+                    const newDeletedBy = match.deleted_for.filter((id: string) => id !== userId);
+                    await supabase.from('direct_chats').update({ deleted_for: newDeletedBy }).eq('id', match.id);
                     queryClient.invalidateQueries({ queryKey: ['chats', userId] });
                 }
                 return match.id;

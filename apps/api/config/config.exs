@@ -63,8 +63,11 @@ config :nxtvibes, Oban,
      crontab: [
        # Runs daily at 8:00 AM IST (2:30 AM UTC)
        {"30 2 * * *", NxtVibes.Workers.TripLifecycleWorker}
-     ]}
+     ]},
+    # Prune completed/discarded jobs older than 7 days to prevent unbounded table growth
+    {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7}
   ]
+
 
 
 # Import environment specific config. This must remain at the bottom

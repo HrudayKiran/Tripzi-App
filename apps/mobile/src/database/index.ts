@@ -2,6 +2,7 @@ import { Database } from '@nozbe/watermelondb';
 import SQLiteAdapter from '@nozbe/watermelondb/adapters/sqlite';
 
 import schema from './schema';
+import migrations from './migrations';
 import Itinerary from './models/Itinerary';
 import Chat from './models/Chat';
 import GroupChat from './models/GroupChat';
@@ -22,8 +23,9 @@ setGenerator(uuidv4);
 
 const adapter = new SQLiteAdapter({
   schema,
-  // (Optional) Database name - versioned to trigger automatic recreation on schema bumps
-  dbName: `nxtvibes_offline_v${schema.version}`,
+  migrations,
+  // Use a fixed dbName — migrations now handle upgrades safely without wiping
+  dbName: 'nxtvibes_offline',
   // (Recommended) If you want to use the high-performance JSI adapter on Android
   jsi: false,
   onSetUpError: error => {
@@ -31,6 +33,7 @@ const adapter = new SQLiteAdapter({
     console.error('[Database] Adapter setup error:', error);
   }
 });
+
 
 export const database = new Database({
   adapter,

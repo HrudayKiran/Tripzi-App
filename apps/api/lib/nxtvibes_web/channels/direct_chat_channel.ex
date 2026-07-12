@@ -26,7 +26,7 @@ defmodule NxtVibesWeb.DirectChatChannel do
   def handle_info(:after_join, socket) do
     # Track online presence in the chat room
     {:ok, _} = Presence.track(socket, socket.assigns.current_user_id, %{
-      online_at: System.system_time(:second)
+      online_at: DateTime.utc_now() |> DateTime.to_iso8601()
     })
     push(socket, "presence_state", Presence.list(socket))
     {:noreply, socket}
@@ -76,12 +76,12 @@ defmodule NxtVibesWeb.DirectChatChannel do
         broadcast!(socket, "new_message", mapped)
 
         # Enqueue Push Notification job via Oban
-        # Will execute when Oban worker is loaded in Phase 5
         case Chats.get_direct_chat(chat_id) do
-          %DirectChat{participants: participants} ->
+          %DirectChat{participants: participants} = chat ->
             recipient_id = Enum.find(participants, &(&1 != user_id))
+
+            # Push notification via Oban
             if recipient_id do
-              # Add background notification task
               if Code.ensure_loaded?(Oban) do
                 %{
                   chat_id: chat_id,
@@ -95,6 +95,35 @@ defmodule NxtVibesWeb.DirectChatChannel do
                 |> Oban.insert()
               end
             end
+
+            # Broadcast chat_updated to ALL participants' user channels
+            # This drives useChatsQuery's live last_message + unread_count update
+            chat_payload = %{
+              "chat_type" => "direct",
+              "chat" => %{
+                "id" => chat.id,
+                "participants" => chat.participants,
+                "participant_details" => chat.participant_details,
+                "last_message" => %{
+                  "text" => message.text,
+                  "sender_id" => user_id,
+                  "sender_name" => message.sender_name,
+                  "created_at" => DateTime.to_unix(message.created_at, :millisecond),
+                  "type" => message.type
+                },
+                "unread_count" => chat.unread_count,
+                "cleared_at" => chat.cleared_at,
+                "deleted_for" => chat.deleted_for,
+                "typing" => chat.typing,
+                "created_at" => DateTime.to_unix(chat.created_at, :millisecond),
+                "updated_at" => DateTime.to_unix(chat.updated_at, :millisecond)
+              }
+            }
+
+            Enum.each(participants || [], fn participant_id ->
+              NxtVibesWeb.Endpoint.broadcast("user:#{participant_id}", "chat_updated", chat_payload)
+            end)
+
           _ -> :ok
         end
 

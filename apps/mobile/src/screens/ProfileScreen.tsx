@@ -142,7 +142,6 @@ const ProfileScreen = () => {
                 await supabase.from('profiles').update({
                   push_notifications_enabled: false,
                   notification_permission_status: 'revoked', // OS permission still granted, token invalidated on logout
-                  presence: 'offline',
                   last_seen_at: new Date().toISOString(),
                 }).eq('id', session.user.id);
               }

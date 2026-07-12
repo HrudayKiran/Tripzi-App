@@ -1,180 +1,122 @@
+/**
+ * usePresence.ts
+ *
+ * Tracks and broadcasts user presence using Phoenix Channels + Phoenix Presence.
+ * Replaces the Supabase Realtime presence channel entirely.
+ *
+ * Architecture:
+ *  - On mount: joins "user:{userId}" Phoenix channel, tracks presence via :after_join
+ *  - Phoenix server tracks online state in ETS (not DB) via NxtVibesWeb.Presence
+ *  - AppState changes (foreground/background) send presence updates to server
+ *  - Other users' presence is readable via getOnlineUsersPresenceState(userId)
+ *
+ * Industry standard: Discord, WhatsApp, Telegram all use in-process presence
+ * (Redis/ETS) — NOT database columns. This implementation follows that pattern.
+ */
+
 import { useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { joinChannel, pushToChannel, connectPhoenixSocket } from '../lib/phoenixSocket';
 
-// ── Module-level singleton for the shared presence channel ──────────────────
-// ChatScreen reads from this directly via getOnlineUsersPresenceState()
-// without adding any listeners (which Supabase forbids after subscribe()).
-let _presenceChannel: ReturnType<typeof supabase.channel> | null = null;
+// ── Module-level presence state ───────────────────────────────────────────────
+// Keyed by userId → { status, online_at }
+// Populated by Phoenix presence_state and presence_diff events from the channel.
+const _presenceState = new Map<string, { status: string; online_at: string }>();
 
 /**
- * Returns the current Supabase Presence state for a given user ID.
- * Safe to call at any time — returns null if the channel isn't ready yet.
+ * Returns the current presence info for a given user ID.
+ * Returns null if user is not tracked (assumed offline).
  */
 export function getOnlineUsersPresenceState(userId: string): {
   status: string;
   online_at: string;
 } | null {
-  if (!_presenceChannel) return null;
-  try {
-    const state = (_presenceChannel as any).presenceState() as Record<string, any[]>;
-    const entries = state[userId];
-    if (entries && entries.length > 0) {
-      return entries[entries.length - 1];
-    }
-  } catch {
-    // Channel not ready
-  }
-  return null;
+  return _presenceState.get(userId) ?? null;
 }
 
-const writePresence = async (presence: 'online' | 'away' | 'offline') => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
-
-  try {
-    await supabase
-      .from('profiles')
-      .update({
-        presence,
-        last_seen_at: new Date().toISOString(),
-      })
-      .eq('id', user.id);
-  } catch {
-    // Silence database update errors — non-critical
-  }
-};
-
 export const usePresence = () => {
-  const channelRef = useRef<any>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     let isMounted = true;
-    let channel: any = null;
-    let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+    let appStateSubscription: any = null;
+    let channelCleanup: (() => void) | null = null;
 
-    const setupPresence = async () => {
+    const setup = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || !isMounted) return;
 
-      // Initial DB update
-      await writePresence('online');
-      if (!isMounted) return; // BUG #11: guard after every await
-
-      // ── Tear down any stale channel before creating a fresh one ──────────────
-      // On Expo hot-reload or React Strict Mode double-effect, the old 'online-users'
-      // channel may still be subscribed. Calling .on() on an already-subscribed channel
-      // throws "cannot add presence callbacks after subscribe()". We remove it first.
-      const existingChannels = supabase.getChannels();
-      const staleChannel = existingChannels.find(
-        (ch: any) => ch.topic === 'realtime:online-users'
-      );
-      if (staleChannel) {
-        try {
-          await supabase.removeChannel(staleChannel);
-        } catch {
-          // Ignore removal errors — channel may already be closing
-        }
-      }
+      // Ensure socket is connected before joining
+      await connectPhoenixSocket();
       if (!isMounted) return;
 
-      // Create a fresh Supabase Realtime Presence Channel
-      channel = supabase.channel('online-users', {
-        config: { presence: { key: user.id } },
+      const topic = `user:${user.id}`;
+
+      // Join the user channel — Phoenix server tracks presence on join
+      channelCleanup = joinChannel(topic, (event, payload) => {
+        switch (event) {
+          case 'presence_state': {
+            // Full presence snapshot on first join
+            // payload: { userId: [{ status, online_at }] }
+            _presenceState.clear();
+            for (const [uid, metas] of Object.entries(payload as Record<string, any[]>)) {
+              const latest = metas[metas.length - 1];
+              if (latest) _presenceState.set(uid, { status: latest.status ?? 'online', online_at: latest.online_at ?? new Date().toISOString() });
+            }
+            break;
+          }
+          case 'presence_diff': {
+            // Incremental join/leave events
+            const { joins, leaves } = payload as { joins: Record<string, any[]>; leaves: Record<string, any[]> };
+            for (const [uid, metas] of Object.entries(joins ?? {})) {
+              const latest = metas[metas.length - 1];
+              if (latest) _presenceState.set(uid, { status: latest.status ?? 'online', online_at: latest.online_at ?? new Date().toISOString() });
+            }
+            for (const uid of Object.keys(leaves ?? {})) {
+              _presenceState.delete(uid);
+            }
+            break;
+          }
+          default:
+            break;
+        }
       });
 
-      channel
-        .on('presence', { event: 'sync' }, () => {
-          // Presence state synced — readable via getOnlineUsersPresenceState()
-        })
-        .subscribe(async (status: string) => {
-          if (status === 'SUBSCRIBED' && isMounted) {
-            await channel.track({
-              online_at: new Date().toISOString(),
-              status: 'online',
-            });
-          }
-        });
-
-      channelRef.current = channel;
-      _presenceChannel = channel; // expose to getOnlineUsersPresenceState()
-
-      // ── BUG #8: Heartbeat — keeps last_seen_at fresh every 60s while app is active ──
-      // Without this, ChatScreen's 40-second offline timeout incorrectly marks
-      // an active user as offline because last_seen_at is never updated after mount.
-      heartbeatInterval = setInterval(async () => {
-        if (!isMounted) return;
-        if (AppState.currentState !== 'active') return; // only while in foreground
-        await writePresence('online');
-        if (!isMounted) return;
-        if (channelRef.current) {
-          try {
-            await channelRef.current.track({
-              online_at: new Date().toISOString(),
-              status: 'online',
-            });
-          } catch {
-            // Presence channel may have been removed — non-fatal
-          }
-        }
-      }, 60_000); // Every 60 seconds
-    };
-
-    setupPresence();
-
-    const handleAppStateChange = async (nextState: AppStateStatus) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !isMounted) return;
-
-      if (nextState === 'active') {
-        await writePresence('online');
-        if (!isMounted) return;
-        if (channelRef.current) {
-          try {
-            await channelRef.current.track({
-              online_at: new Date().toISOString(),
-              status: 'online',
-            });
-          } catch {}
-        }
-      } else if (nextState === 'background' || nextState === 'inactive') {
-        await writePresence('away');
-        if (!isMounted) return;
-        if (channelRef.current) {
-          try {
-            await channelRef.current.track({
-              online_at: new Date().toISOString(),
-              status: 'away',
-            });
-          } catch {}
-        }
+      // Track ourselves as online on the channel
+      try {
+        await pushToChannel(topic, 'update_presence', { status: 'online', online_at: new Date().toISOString() });
+      } catch {
+        // Non-critical — server tracks presence on join anyway
       }
+
+      // Handle app state changes (foreground/background)
+      const handleAppStateChange = async (nextState: AppStateStatus) => {
+        if (!isMounted) return;
+        const status = nextState === 'active' ? 'online' : 'away';
+        try {
+          await pushToChannel(topic, 'update_presence', { status, online_at: new Date().toISOString() });
+        } catch {}
+
+        // Also update last_seen_at in DB for historical purposes (lightweight — only on transition)
+        if (nextState !== 'active') {
+          supabase.from('profiles')
+            .update({ last_seen_at: new Date().toISOString() })
+            .eq('id', user.id)
+            .then(() => {}, () => {});
+        }
+      };
+
+      appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
     };
 
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    setup();
 
     return () => {
       isMounted = false;
-      subscription.remove();
-
-      // Clear heartbeat on unmount
-      if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-        heartbeatInterval = null;
-      }
-
-      const cleanup = async () => {
-        _presenceChannel = null;
-        if (channel) {
-          try {
-            await channel.untrack();
-            await supabase.removeChannel(channel);
-          } catch {}
-        }
-        await writePresence('offline');
-      };
-
-      cleanup();
+      appStateSubscription?.remove();
+      channelCleanup?.();
+      _presenceState.clear();
     };
   }, []);
 };

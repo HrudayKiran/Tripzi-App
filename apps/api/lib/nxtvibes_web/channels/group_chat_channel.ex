@@ -26,7 +26,7 @@ defmodule NxtVibesWeb.GroupChatChannel do
   def handle_info(:after_join, socket) do
     # Track online presence in the chat room
     {:ok, _} = Presence.track(socket, socket.assigns.current_user_id, %{
-      online_at: System.system_time(:second)
+      online_at: DateTime.utc_now() |> DateTime.to_iso8601()
     })
     push(socket, "presence_state", Presence.list(socket))
     {:noreply, socket}
@@ -77,10 +77,10 @@ defmodule NxtVibesWeb.GroupChatChannel do
 
         # Enqueue Push Notification job via Oban for each other participant
         case Chats.get_group_chat(chat_id) do
-          %GroupChat{participants: participants, group_name: group_name} ->
+          %GroupChat{participants: participants, group_name: group_name} = chat ->
             recipients = Enum.filter(participants || [], &(&1 != user_id))
 
-            # Trigger push job for each recipient
+            # Push notification via Oban for each recipient
             if Code.ensure_loaded?(Oban) do
               Enum.each(recipients, fn recipient_id ->
                 %{
@@ -96,6 +96,42 @@ defmodule NxtVibesWeb.GroupChatChannel do
                 |> Oban.insert()
               end)
             end
+
+            # Broadcast chat_updated to ALL participants' user channels
+            # This drives useChatsQuery's live last_message + unread_count update
+            chat_payload = %{
+              "chat_type" => "group",
+              "chat" => %{
+                "id" => chat.id,
+                "group_name" => chat.group_name,
+                "group_description" => chat.group_description,
+                "group_icon" => chat.group_icon,
+                "participants" => chat.participants,
+                "participant_details" => chat.participant_details,
+                "created_by" => chat.created_by,
+                "member_count" => chat.member_count,
+                "hidden" => chat.hidden,
+                "admins" => chat.admins,
+                "last_message" => %{
+                  "text" => message.text,
+                  "sender_id" => user_id,
+                  "sender_name" => message.sender_name,
+                  "created_at" => DateTime.to_unix(message.created_at, :millisecond),
+                  "type" => message.type
+                },
+                "unread_count" => chat.unread_count,
+                "cleared_at" => chat.cleared_at,
+                "deleted_for" => chat.deleted_for,
+                "typing" => chat.typing,
+                "created_at" => DateTime.to_unix(chat.created_at, :millisecond),
+                "updated_at" => DateTime.to_unix(chat.updated_at, :millisecond)
+              }
+            }
+
+            Enum.each(participants || [], fn participant_id ->
+              NxtVibesWeb.Endpoint.broadcast("user:#{participant_id}", "chat_updated", chat_payload)
+            end)
+
           _ -> :ok
         end
 

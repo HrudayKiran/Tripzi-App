@@ -12,7 +12,7 @@ defmodule NxtVibes.Accounts.Profile do
     field :photo_object_key, :string
     field :push_notifications_enabled, :boolean, default: false
     field :notification_permission_status, :string, default: "not_determined"
-    field :presence, :string, default: "offline"
+    field :save_to_gallery, :boolean, default: false
     field :last_seen_at, :utc_datetime
     field :last_login_at, :utc_datetime
 
@@ -32,7 +32,7 @@ defmodule NxtVibes.Accounts.Profile do
       :photo_object_key,
       :push_notifications_enabled,
       :notification_permission_status,
-      :presence,
+      :save_to_gallery,
       :last_seen_at,
       :last_login_at
     ])

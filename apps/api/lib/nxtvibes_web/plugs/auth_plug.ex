@@ -8,8 +8,8 @@ defmodule NxtVibesWeb.Plugs.AuthPlug do
   def call(conn, _opts) do
     case get_req_header(conn, "authorization") do
       ["Bearer " <> token] ->
-        # DEBUG: decode header + payload without verification so we can see what claims/alg the token has
-        log_token_info(token)
+        # Decode token header for debug logging (dev only)
+        if Application.get_env(:nxtvibes, :dev_routes), do: log_token_info(token)
 
         case Token.verify_token(token) do
           {:ok, %{"sub" => user_id}} ->

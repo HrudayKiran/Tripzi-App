@@ -9,7 +9,6 @@ defmodule NxtVibes.Accounts.PublicProfile do
     field :username, :string
     field :photo_url, :string
     field :gender, :string
-    field :presence, :string
     field :last_seen_at, :utc_datetime
 
     timestamps(type: :utc_datetime)
@@ -18,7 +17,7 @@ defmodule NxtVibes.Accounts.PublicProfile do
   @doc false
   def changeset(public_profile, attrs) do
     public_profile
-    |> cast(attrs, [:id, :display_name, :name, :username, :photo_url, :gender, :presence, :last_seen_at])
+    |> cast(attrs, [:id, :display_name, :name, :username, :photo_url, :gender, :last_seen_at])
     |> validate_required([:id, :display_name])
   end
 end

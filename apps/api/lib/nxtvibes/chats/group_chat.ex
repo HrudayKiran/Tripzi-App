@@ -17,9 +17,11 @@ defmodule NxtVibes.Chats.GroupChat do
     field :admins, {:array, :string}, default: []
     field :last_message, :map
     field :unread_count, :map, default: %{}
-    field :deleted_by, {:array, :string}, default: []   # actual column: deleted_by (not deleted_for)
+    field :deleted_for, {:array, :string}, default: []   # column renamed: deleted_by → deleted_for
     field :cleared_at, :map, default: %{}
     field :typing, :map, default: %{}
+    field :muted_by, {:array, :string}, default: []
+    field :pinned_by, {:array, :string}, default: []
 
     timestamps(type: :utc_datetime, inserted_at: :created_at, updated_at: :updated_at)
   end
@@ -39,9 +41,11 @@ defmodule NxtVibes.Chats.GroupChat do
       :admins,
       :last_message,
       :unread_count,
-      :deleted_by,
+      :deleted_for,
       :cleared_at,
-      :typing
+      :typing,
+      :muted_by,
+      :pinned_by
     ])
     |> validate_required([:group_name, :participants])
   end

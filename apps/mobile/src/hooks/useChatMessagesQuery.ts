@@ -8,6 +8,7 @@ import { Q } from '@nozbe/watermelondb';
 import Message from '../database/models/Message';
 import { parsePostgresDate, parsePostgresDateToMs, parsePostgresDateToMsOrNull } from '../utils/date';
 import { workersApi } from '../lib/workersApi';
+import { joinChannel, pushToChannel, connectPhoenixSocket } from '../lib/phoenixSocket';
 
 // Re-export types from centralized location for backward compatibility
 export type { MessageType, MessageStatus, ReplyTo, LocationData, ChatMessage } from '../types/chat';
@@ -195,8 +196,6 @@ export function useChatMessagesQuery(
     const { userId } = useCurrentUser();
     const senderProfileRef = useRef<{ name: string } | null>(null);
     const [hasMore, setHasMore] = useState(true);
-    // Holds the active realtime channel so sendMessage can broadcast to it
-    const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
     // Dedup guard: tracks message IDs we have already handled locally (sent or received)
     const seenMessageIdsRef = useRef<Set<string>>(new Set());
 
@@ -302,13 +301,14 @@ export function useChatMessagesQuery(
         }
     }, [chatId, hasMore, queryClient, clearedAt, userId]);
 
-    // Send message to local WatermelonDB then Supabase
+    // Send message via Phoenix channel → local WatermelonDB
     const sendMessage = useCallback(async (text: string, replyTo?: ReplyTo, mentions?: string[]) => {
         if (!chatId || !userId || !text.trim() || !chatType) {
             throw new Error('Invalid send arguments');
         }
 
         const senderName = senderProfileRef.current?.name || 'User';
+        const topic = chatType === 'group' ? `group:${chatId}` : `dm:${chatId}`;
 
         let localId = '';
         try {
@@ -336,287 +336,126 @@ export function useChatMessagesQuery(
             throw new Error('Failed to save message locally.');
         }
 
+        // Dedup: mark as seen before the channel echo comes back
+        seenMessageIdsRef.current.add(localId);
+
         // Invalidate queries so UI updates immediately
         queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
 
-        // Update local parent chat's last message and reset unread count
+        // Update local parent chat last_message + unread count
         const parentTable = chatType === 'group' ? 'group_chats' : 'direct_chats';
-        const collection = database.get(parentTable);
-        let chatRecord: any = null;
         try {
-            chatRecord = await collection.find(chatId);
-        } catch (e) {
-            // Not found locally, fetch from Supabase
-            let remoteChat: any = null;
-            try {
-                const { data } = await supabase
-                    .from(parentTable)
-                    .select('*')
-                    .eq('id', chatId)
-                    .maybeSingle();
-                remoteChat = data;
-            } catch (err) {
-                console.warn('[sendMessage] Failed to fetch remote parent chat:', err);
-            }
-
-            // Write to WatermelonDB (either the remote chat details or a minimal fallback)
-            try {
-                await database.write(async () => {
-                    try {
-                        chatRecord = await collection.find(chatId);
-                    } catch (findErr) {
-                        chatRecord = await collection.create((rec: any) => {
-                            rec._raw.id = chatId;
-                            if (remoteChat) {
-                                if (chatType === 'group') {
-                                    rec.groupName = remoteChat.group_name;
-                                    rec.groupDescription = remoteChat.group_description;
-                                    rec.groupIcon = remoteChat.group_icon;
-                                    rec.participantsRaw = JSON.stringify(remoteChat.participants);
-                                    rec.participantDetailsRaw = JSON.stringify(remoteChat.participant_details);
-                                    rec.createdBy = remoteChat.created_by;
-                                    rec.memberCount = remoteChat.member_count;
-                                    rec.hidden = remoteChat.hidden;
-                                    rec.adminsRaw = JSON.stringify(remoteChat.admins || []);
-                                    rec.lastMessage = JSON.stringify(remoteChat.last_message);
-                                    rec.unreadCountRaw = JSON.stringify(remoteChat.unread_count);
-                                    rec.deletedForRaw = JSON.stringify(remoteChat.deleted_by || []);
-                                    rec.clearedAtRaw = JSON.stringify(remoteChat.cleared_at || {});
-                                    rec.typingRaw = JSON.stringify(remoteChat.typing || {});
-                                } else {
-                                    rec.participantsRaw = JSON.stringify(remoteChat.participants);
-                                    rec.participantDetailsRaw = JSON.stringify(remoteChat.participant_details || {});
-                                    rec.lastMessage = JSON.stringify(remoteChat.last_message);
-                                    rec.lastMessageAt = remoteChat.last_message_at;
-                                    rec.unreadCountRaw = JSON.stringify(remoteChat.unread_count);
-                                    rec.clearedAtRaw = JSON.stringify(remoteChat.cleared_at);
-                                    rec.deletedForRaw = JSON.stringify(remoteChat.deleted_by || []);
-                                    rec.typingRaw = JSON.stringify(remoteChat.typing || {});
-                                }
-                                rec._raw.created_at = parsePostgresDateToMs(remoteChat.created_at);
-                                rec._raw.updated_at = parsePostgresDateToMs(remoteChat.updated_at);
-                            } else {
-                                // Minimal fallback fallback if fetch failed/offline
-                                rec.participantsRaw = JSON.stringify([userId]);
-                                rec.unreadCountRaw = JSON.stringify({});
-                                rec.deletedForRaw = JSON.stringify([]);
-                                rec.clearedAtRaw = JSON.stringify({});
-                                rec.typingRaw = JSON.stringify({});
-                                if (chatType === 'group') {
-                                    rec.groupName = 'Group Chat';
-                                    rec.hidden = false;
-                                    rec.adminsRaw = JSON.stringify([]);
-                                }
-                                rec._raw.created_at = Date.now();
-                                rec._raw.updated_at = Date.now();
-                            }
-                        });
-                    }
-                });
-            } catch (writeErr) {
-                console.error('[sendMessage] Failed to create parent chat locally:', writeErr);
-            }
-        }
-
-        if (chatRecord) {
+            const chatRecord = await database.get(parentTable).find(chatId);
             await database.write(async () => {
-                try {
-                    await chatRecord.update((rec: any) => {
-                        rec.lastMessage = JSON.stringify({
-                            text: text.trim(),
-                            sender_id: userId,
-                            sender_name: senderName,
-                            created_at: new Date().toISOString(),
-                            type: 'text',
-                        });
-                        rec._raw.updated_at = Date.now();
-                        if (rec.unreadCountRaw) {
-                            try {
-                                const currentUnread = JSON.parse(rec.unreadCountRaw) || {};
-                                currentUnread[userId] = 0;
-                                rec.unreadCountRaw = JSON.stringify(currentUnread);
-                            } catch (e) {}
-                        }
-                    });
-                } catch (e) {
-                    console.error('[sendMessage] Failed to update parent chat fields:', e);
-                }
-            });
-        }
-        queryClient.invalidateQueries({ queryKey: [chatType === 'group' ? 'groupChats' : 'chats', userId] });
-
-        // Attempt Supabase insert in the background
-        try {
-            const now = new Date().toISOString();
-            const messagePayload = {
-                id: localId,
-                chat_id: chatId,
-                chat_type: chatType,
-                sender_id: userId,
-                sender_name: senderName,
-                type: 'text',
-                text: text.trim(),
-                status: 'sent',
-                reply_to: replyTo ? replyTo.messageId : null,
-                mentions: mentions || [],
-                created_at: now,
-                updated_at: now,
-                read_by: {},
-                delivered_to: [],
-                deleted_for: [],
-            };
-
-            const { error: insertError } = await supabase
-                .from('messages')
-                .insert([messagePayload]);
-
-            if (insertError) throw insertError;
-
-            // Broadcast to channel so recipient gets it instantly (WhatsApp-style fast path)
-            // Sender marks their own id as seen to avoid double-processing their own broadcast
-            seenMessageIdsRef.current.add(localId);
-            if (channelRef.current) {
-                channelRef.current.send({
-                    type: 'broadcast',
-                    event: 'new_message',
-                    payload: messagePayload,
-                });
-            }
-
-            // Increment unread count for other participants atomically in Supabase
-            const { data: chatData } = await supabase
-                .from(parentTable)
-                .select('participants')
-                .eq('id', chatId)
-                .maybeSingle();
-
-            if (chatData) {
-                const participants = chatData.participants || [];
-                for (const pId of participants) {
-                    if (pId !== userId) {
-                        await supabase.rpc('increment_unread_count', {
-                            p_chat_id: chatId,
-                            p_chat_type: chatType,
-                            p_user_id: pId,
-                        });
-                    }
-                }
-            }
-
-            // Update parent table in Supabase
-            await supabase
-                .from(parentTable)
-                .update({
-                    last_message: {
+                await (chatRecord as any).update((rec: any) => {
+                    rec.lastMessage = JSON.stringify({
                         text: text.trim(),
                         sender_id: userId,
                         sender_name: senderName,
                         created_at: new Date().toISOString(),
                         type: 'text',
-                    },
-                    updated_at: new Date().toISOString(),
-                })
-                .eq('id', chatId);
+                    });
+                    rec._raw.updated_at = Date.now();
+                    if (rec.unreadCountRaw) {
+                        try {
+                            const uc = JSON.parse(rec.unreadCountRaw) || {};
+                            uc[userId] = 0;
+                            rec.unreadCountRaw = JSON.stringify(uc);
+                        } catch {}
+                    }
+                });
+            });
+        } catch {}
 
-            // Update local message status to sent and mark as synced
+        queryClient.invalidateQueries({ queryKey: [chatType === 'group' ? 'groupChats' : 'chats', userId] });
+
+        try {
+            // ── Phoenix channel send (replaces Supabase insert + broadcast) ──
+            // Server saves to DB, broadcasts new_message to all members, fires Oban push jobs
+            const serverMsg = await pushToChannel(topic, 'send_message', {
+                id: localId,
+                text: text.trim(),
+                type: 'text',
+                reply_to: replyTo?.messageId ?? null,
+                mentions: mentions || [],
+                sender_name: senderName,
+            });
+
+            // Mark local message as sent + synced
             await database.write(async () => {
                 try {
-                    const collection = database.get('messages');
-                    const existing = await collection.find(localId);
-                    await existing.update((rec: any) => {
+                    const existing = await database.get('messages').find(localId);
+                    await (existing as any).update((rec: any) => {
                         rec.status = 'sent';
                         rec._raw._status = 'synced';
                     });
-                } catch (e) {}
+                } catch {}
             });
 
             queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
-
-            // Send push notification to other participants (fire-and-forget)
-            workersApi('/chat/send-notification', {
-              method: 'POST',
-              body: {
-                chatId,
-                chatType,
-                senderName,
-                messagePreview: text.trim(),
-              },
-            }).then((res: any) => {
-              if (__DEV__) console.log('[sendMessage] Push notification sent:', JSON.stringify(res));
-            }).catch((err: any) => {
-              if (__DEV__) console.error('[sendMessage] Push notification failed:', err?.message || err);
-            });
-
             return { success: true, status: 'sent' };
 
         } catch (error: any) {
-            const isPermanentError = error?.code === '42501' || error?.code?.startsWith('23') || error?.code?.startsWith('42') || error?.status === 403 || error?.status === 401;
-            
-            if (isPermanentError) {
-                console.error('[sendMessage] Permanent failure sending message:', error);
-                // Delete the local message so it doesn't get stuck in sync
-                try {
-                    await database.write(async () => {
-                        const collection = database.get('messages');
-                        const existing = await collection.find(localId);
-                        await existing.destroyPermanently();
-                    });
-                } catch (e) {}
-                
-                // Invalidate query to remove from UI
-                queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
-                
-                throw new Error(error?.message || 'You do not have permission to send messages in this chat.');
-            }
-
-            console.warn('[sendMessage] Failed to send message to Supabase (offline), keeping in local queue:', error);
+            console.warn('[sendMessage] Phoenix push failed (offline), keeping pending:', error);
+            // Message stays in local DB as pending — sync will pick it up
             return { success: true, status: 'pending' };
         }
     }, [chatId, userId, chatType, queryClient]);
 
-    // Mark messages as read using batch RPC
+    // Mark messages as read via Phoenix channel
     const markAsRead = useCallback(async () => {
         if (!chatId || !userId || !chatType) return;
 
         try {
-            const { data: unreadMessages, error: fetchError } = await supabase
-                .from('messages')
-                .select('id, read_by')
-                .eq('chat_id', chatId)
-                .neq('sender_id', userId);
+            const topic = chatType === 'group' ? `group:${chatId}` : `dm:${chatId}`;
 
-            if (fetchError) throw fetchError;
+            // Get unread message IDs from local DB
+            const unread = await database.get('messages')
+                .query(
+                    Q.where('chat_id', chatId),
+                    Q.where('sender_id', Q.notEq(userId))
+                )
+                .fetch();
 
-            const toUpdate = (unreadMessages || []).filter((m: any) => {
-                const readBy = m.read_by || {};
-                return !readBy[userId];
+            const toUpdate = (unread as any[]).filter((m) => {
+                try {
+                    const readBy = JSON.parse(m.readByRaw || '{}');
+                    return !readBy[userId];
+                } catch { return true; }
             });
 
             if (toUpdate.length > 0) {
-                const messageIds = toUpdate.map((m: any) => m.id);
-                await supabase.rpc('batch_mark_as_read', {
-                    p_message_ids: messageIds,
-                    p_user_id: userId,
+                // Fire-and-forget push to server for DB update + broadcast
+                pushToChannel(topic, 'mark_read', {
+                    message_ids: toUpdate.map((m) => m.id),
+                }).catch(() => {
+                    // Fallback: call Supabase RPC directly if Phoenix not connected
+                    const runFallback = async () => {
+                        try {
+                            await supabase.rpc('batch_mark_as_read', {
+                                p_message_ids: toUpdate.map((m: any) => m.id),
+                                p_user_id: userId,
+                            });
+                        } catch {}
+                    };
+                    runFallback();
                 });
             }
 
+            // Reset unread count locally
             const parentTable = chatType === 'group' ? 'group_chats' : 'direct_chats';
-            const { data: chatData } = await supabase
-                .from(parentTable)
-                .select('unread_count')
-                .eq('id', chatId)
-                .maybeSingle();
-
-            if (chatData) {
-                const currentUnread = chatData.unread_count || {};
-                if (currentUnread[userId] !== 0) {
-                    const newUnread = { ...currentUnread, [userId]: 0 };
-                    await supabase
-                        .from(parentTable)
-                        .update({ unread_count: newUnread })
-                        .eq('id', chatId);
-                }
-            }
+            try {
+                const chatRec = await database.get(parentTable).find(chatId);
+                await database.write(async () => {
+                    await (chatRec as any).update((rec: any) => {
+                        try {
+                            const uc = JSON.parse(rec.unreadCountRaw || '{}');
+                            uc[userId] = 0;
+                            rec.unreadCountRaw = JSON.stringify(uc);
+                        } catch {}
+                    });
+                });
+            } catch {}
 
             queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
 
@@ -625,94 +464,118 @@ export function useChatMessagesQuery(
         }
     }, [chatId, userId, chatType, queryClient]);
 
-    // Hybrid realtime: Broadcast (fast INSERT delivery) + postgres_changes (UPDATE/DELETE correctness)
+    // ── Phoenix Channel real-time subscription ──────────────────────────────
+    // Replaces ALL Supabase Realtime channels (broadcast + postgres_changes).
+    // Server broadcasts new_message, message_edited, message_deleted, messages_read,
+    // user_typing via Phoenix PubSub — no Supabase involvement.
     useEffect(() => {
-        if (!chatId) return;
+        if (!chatId || !chatType) return;
 
-        const randomSuffix = Math.random().toString(36).substring(2, 9);
-        const channelName = `messages-${chatId}-${randomSuffix}`;
+        // Ensure socket is connected
+        connectPhoenixSocket();
 
-        // Remove any stale channel first (handles hot-reload / StrictMode double-mount)
-        const existing = supabase.getChannels().find(ch => ch.topic === `realtime:${channelName}`);
-        if (existing) supabase.removeChannel(existing);
+        const topic = chatType === 'group' ? `group:${chatId}` : `dm:${chatId}`;
 
         // Clear dedup set when switching chats
         seenMessageIdsRef.current.clear();
 
-        const channel = supabase
-            .channel(channelName)
-            // ── PRIMARY PATH: Broadcast for fast new message delivery (WhatsApp-style ~10–50ms) ──
-            // Sender broadcasts after DB insert; all recipients receive it here instantly.
-            // Sender's own broadcast is ignored via seenMessageIdsRef dedup guard.
-            .on('broadcast', { event: 'new_message' }, async (payload) => {
-                const newMsg = payload.payload as any;
-                if (!newMsg?.id) return;
-                // Dedup: skip if we have already processed this message locally (e.g. we sent it)
-                if (seenMessageIdsRef.current.has(newMsg.id)) return;
-                seenMessageIdsRef.current.add(newMsg.id);
-                await writeRemoteMessageToLocal(newMsg);
-                queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
-            })
-            // ── CORRECTNESS PATH: postgres_changes for UPDATE (edits, read receipts, deletedFor) ──
-            .on('postgres_changes', {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'messages',
-                filter: `chat_id=eq.${chatId}`,
-            }, async (payload) => {
-                const updated = payload.new as any;
-                if (!updated) return;
-                await writeRemoteMessageToLocal(updated);
-                queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
-            })
-            // ── CORRECTNESS PATH: postgres_changes for DELETE (delete for everyone) ──
-            .on('postgres_changes', {
-                event: 'DELETE',
-                schema: 'public',
-                table: 'messages',
-                filter: `chat_id=eq.${chatId}`,
-            }, async (payload) => {
-                const deleted = payload.old as any;
-                if (!deleted?.id) return;
-                seenMessageIdsRef.current.delete(deleted.id);
-                try {
-                    await database.write(async () => {
-                        const collection = database.get('messages');
-                        try {
-                            const existing = await collection.find(deleted.id);
-                            await existing.destroyPermanently();
-                        } catch (e) {}
-                    });
-                } catch (e) {
-                    console.error('[useChatMessagesQuery] Failed to delete local message:', e);
+        const cleanup = joinChannel(topic, async (event, payload) => {
+            switch (event) {
+                case 'new_message': {
+                    if (!payload?.id) break;
+                    if (seenMessageIdsRef.current.has(payload.id)) break;
+                    seenMessageIdsRef.current.add(payload.id);
+                    await writeRemoteMessageToLocal(payload);
+                    queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+                    // Also update parent chat last_message in local DB
+                    queryClient.invalidateQueries({ queryKey: ['chats', userId] });
+                    queryClient.invalidateQueries({ queryKey: ['groupChats', userId] });
+                    break;
                 }
-                queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
-            })
-            // ── RECOVERY PATH: postgres_changes INSERT as fallback ──
-            // Catches messages the Broadcast missed (e.g. app was backgrounded, reconnected)
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'messages',
-                filter: `chat_id=eq.${chatId}`,
-            }, async (payload) => {
-                const newMsg = payload.new as any;
-                if (!newMsg?.id) return;
-                // Skip if already handled by Broadcast (dedup)
-                if (seenMessageIdsRef.current.has(newMsg.id)) return;
-                seenMessageIdsRef.current.add(newMsg.id);
-                await writeRemoteMessageToLocal(newMsg);
-                queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
-            })
-            .subscribe();
 
-        channelRef.current = channel;
+                case 'message_edited': {
+                    const { message_id, text, edited_at } = payload || {};
+                    if (!message_id) break;
+                    await database.write(async () => {
+                        try {
+                            const msg = await database.get('messages').find(message_id);
+                            await (msg as any).update((rec: any) => {
+                                rec.text = text;
+                                rec.editedAt = edited_at || Date.now();
+                                rec._raw.updated_at = Date.now();
+                            });
+                        } catch {}
+                    });
+                    queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+                    break;
+                }
+
+                case 'message_deleted': {
+                    const { message_id, everyone } = payload || {};
+                    if (!message_id) break;
+                    if (everyone) {
+                        await database.write(async () => {
+                            try {
+                                const msg = await database.get('messages').find(message_id);
+                                await (msg as any).update((rec: any) => {
+                                    rec.text = '';
+                                    rec.mediaUrl = null;
+                                    rec.deletedForEveryoneAt = Date.now();
+                                    rec._raw.updated_at = Date.now();
+                                });
+                            } catch {}
+                        });
+                    } else {
+                        await database.write(async () => {
+                            try {
+                                const msg = await database.get('messages').find(message_id);
+                                await (msg as any).destroyPermanently();
+                            } catch {}
+                        });
+                    }
+                    seenMessageIdsRef.current.delete(message_id);
+                    queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+                    break;
+                }
+
+                case 'messages_read': {
+                    const { user_id, message_ids } = payload || {};
+                    if (!user_id || !message_ids?.length) break;
+                    await database.write(async () => {
+                        for (const msgId of message_ids) {
+                            try {
+                                const msg = await database.get('messages').find(msgId);
+                                await (msg as any).update((rec: any) => {
+                                    try {
+                                        const readBy = JSON.parse(rec.readByRaw || '{}');
+                                        readBy[user_id] = new Date().toISOString();
+                                        rec.readByRaw = JSON.stringify(readBy);
+                                        rec.status = 'read';
+                                        rec._raw.updated_at = Date.now();
+                                    } catch {}
+                                });
+                            } catch {}
+                        }
+                    });
+                    queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+                    break;
+                }
+
+                case 'presence_state':
+                case 'presence_diff':
+                case 'user_typing':
+                    // Typing and presence handled by usePresence hook
+                    break;
+
+                default:
+                    break;
+            }
+        });
 
         return () => {
-            channelRef.current = null;
-            supabase.removeChannel(channel);
+            cleanup();
         };
-    }, [chatId, queryClient, chatType]);
+    }, [chatId, chatType, queryClient, userId]);
 
     // Filter out messages deleted for the current user
     const visibleMessages = useMemo(() => {
@@ -732,4 +595,3 @@ export function useChatMessagesQuery(
 }
 
 export default useChatMessagesQuery;
-

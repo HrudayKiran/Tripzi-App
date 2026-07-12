@@ -18,6 +18,7 @@ import { useAppCheck } from '../src/hooks/useAppCheck';
 import { useRemoteConfig } from '../src/hooks/useRemoteConfig';
 import { usePresence } from '../src/hooks/usePresence';
 import { supabase } from '../src/lib/supabase';
+import { connectPhoenixSocket, disconnectPhoenixSocket } from '../src/lib/phoenixSocket';
 import { useNotificationStore } from '../src/store/notificationStore';
 import {
   registerPushToken,
@@ -88,6 +89,9 @@ export default function RootLayout() {
         queryClient.clear();
         syncDatabase().catch(() => { });
 
+        // Connect Phoenix WebSocket for real-time channels (replaces Supabase Realtime)
+        connectPhoenixSocket();
+
         // Register FCM push token with backend (only on SIGNED_IN, not TOKEN_REFRESHED)
         // Delay to let Activity fully mount — Android 13+ needs Activity ready for permission dialog
         if (event === 'SIGNED_IN') {
@@ -97,6 +101,8 @@ export default function RootLayout() {
         }
       } else if (event === 'SIGNED_OUT') {
         if (__DEV__) console.log('[RootLayout] User signed out, clearing private data...');
+        // Disconnect Phoenix socket — no channels needed when logged out
+        disconnectPhoenixSocket();
         // Note: unregisterPushToken() is called in ProfileScreen BEFORE signOut
         // (while session is still valid). Don't call it here — session is already gone.
         queryClient.clear();

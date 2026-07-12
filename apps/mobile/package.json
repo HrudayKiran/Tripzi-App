@@ -51,6 +51,7 @@
     "expo-system-ui": "~55.0.19",
     "lottie-react-native": "~7.3.4",
     "moti": "^0.30.0",
+    "phoenix": "^1.8.9",
     "phosphor-react-native": "^3.0.6",
     "react": "19.2.0",
     "react-hook-form": "^7.75.0",
