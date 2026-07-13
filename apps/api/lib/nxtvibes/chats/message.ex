@@ -13,7 +13,6 @@ defmodule NxtVibes.Chats.Message do
     field :type, :string
     field :media_url, :string
     field :location, :map
-    field :voice_duration, :decimal
     field :reply_to, :binary_id
     field :status, :string
     field :read_by, :map, default: %{}
@@ -30,6 +29,7 @@ defmodule NxtVibes.Chats.Message do
   def changeset(message, attrs) do
     message
     |> cast(attrs, [
+      :id,
       :chat_id,
       :chat_type,
       :sender_id,
@@ -38,7 +38,6 @@ defmodule NxtVibes.Chats.Message do
       :type,
       :media_url,
       :location,
-      :voice_duration,
       :reply_to,
       :status,
       :read_by,

@@ -3,8 +3,10 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
-    "start": "expo start",
-    "android": "expo run:android",
+    "adb-reverse": "node scripts/adb-reverse-all.js",
+    "start": "npm run adb-reverse & expo start",
+    "android": "npm run adb-reverse && expo run:android",
+    "android:device": "npm run adb-reverse && expo run:android --device",
     "ios": "expo run:ios",
     "test": "jest",
     "typecheck": "tsc --noEmit",

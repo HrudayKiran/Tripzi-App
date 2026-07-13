@@ -18,6 +18,7 @@ import { useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { joinChannel, pushToChannel, connectPhoenixSocket } from '../lib/phoenixSocket';
+import { useCurrentUser } from './useCurrentUser';
 
 // ── Module-level presence state ───────────────────────────────────────────────
 // Keyed by userId → { status, online_at }
@@ -36,22 +37,21 @@ export function getOnlineUsersPresenceState(userId: string): {
 }
 
 export const usePresence = () => {
-  const cleanupRef = useRef<(() => void) | null>(null);
+  const { userId } = useCurrentUser();
 
   useEffect(() => {
+    if (!userId) return;
+
     let isMounted = true;
     let appStateSubscription: any = null;
     let channelCleanup: (() => void) | null = null;
 
     const setup = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !isMounted) return;
-
       // Ensure socket is connected before joining
       await connectPhoenixSocket();
       if (!isMounted) return;
 
-      const topic = `user:${user.id}`;
+      const topic = `user:${userId}`;
 
       // Join the user channel — Phoenix server tracks presence on join
       channelCleanup = joinChannel(topic, (event, payload) => {
@@ -102,7 +102,7 @@ export const usePresence = () => {
         if (nextState !== 'active') {
           supabase.from('profiles')
             .update({ last_seen_at: new Date().toISOString() })
-            .eq('id', user.id)
+            .eq('id', userId)
             .then(() => {}, () => {});
         }
       };
@@ -118,7 +118,7 @@ export const usePresence = () => {
       channelCleanup?.();
       _presenceState.clear();
     };
-  }, []);
+  }, [userId]);
 };
 
 export default usePresence;

@@ -44,7 +44,23 @@ defmodule NxtVibesWeb.SyncController do
     |> DateTime.to_unix(:millisecond)
   end
 
-  # Formatting maps for WatermelonDB sync response
+  # Convert a list that may contain raw binary UUIDs (from Postgres) to UUID strings.
+  # Postgres returns UUID[] columns as [<<183, 18, ...>>, ...] binaries.
+  # Jason cannot encode raw binaries — they must be cast to UUID strings first.
+  defp uuid_list(nil), do: []
+  defp uuid_list(list) when is_list(list) do
+    Enum.map(list, fn
+      bin when is_binary(bin) and byte_size(bin) == 16 ->
+        # Raw 16-byte binary UUID from Postgres — cast to string
+        Ecto.UUID.cast!(bin)
+      str when is_binary(str) ->
+        # Already a string UUID
+        str
+      other ->
+        to_string(other)
+    end)
+  end
+
   defp map_itinerary(i) do
     %{
       id: i.id,
@@ -66,7 +82,7 @@ defmodule NxtVibesWeb.SyncController do
       accommodation_days: i.accommodation_days,
       places_to_visit: Jason.encode!(i.places_to_visit || []),
       itinerary: Jason.encode!(i.itinerary || []),
-      participants: Jason.encode!(i.participants || []),
+      participants: Jason.encode!(uuid_list(i.participants)),
       checklist: Jason.encode!(i.checklist || []),
       notes: Jason.encode!(i.notes || []),
       itinerary_map_view: if(i.itinerary_map_view && map_size(i.itinerary_map_view) > 0, do: Jason.encode!(i.itinerary_map_view), else: nil),
@@ -110,14 +126,15 @@ defmodule NxtVibesWeb.SyncController do
 
     %{
       id: c.id,
-      participants: Jason.encode!(c.participants || []),
+      participants: Jason.encode!(uuid_list(c.participants)),
       participant_details: if(c.participant_details && map_size(c.participant_details) > 0, do: Jason.encode!(c.participant_details), else: nil),
       last_message: if(c.last_message && map_size(c.last_message) > 0, do: Jason.encode!(c.last_message), else: nil),
       last_message_at: last_message_at,
       unread_count: if(c.unread_count && map_size(c.unread_count) > 0, do: Jason.encode!(c.unread_count), else: nil),
       cleared_at: if(c.cleared_at && map_size(c.cleared_at) > 0, do: Jason.encode!(c.cleared_at), else: nil),
-      deleted_for: Jason.encode!(c.deleted_for || []),
-      typing: if(c.typing && map_size(c.typing) > 0, do: Jason.encode!(c.typing), else: nil),
+      deleted_for: Jason.encode!(uuid_list(c.deleted_for)),
+      muted_by: Jason.encode!(uuid_list(c.muted_by)),
+      pinned_by: Jason.encode!(uuid_list(c.pinned_by)),
       created_at: to_ms(c.created_at),
       updated_at: to_ms(c.updated_at)
     }
@@ -129,17 +146,18 @@ defmodule NxtVibesWeb.SyncController do
       group_name: gc.group_name,
       group_description: gc.group_description,
       group_icon: gc.group_icon,
-      participants: Jason.encode!(gc.participants || []),
+      participants: Jason.encode!(uuid_list(gc.participants)),
       participant_details: if(gc.participant_details && map_size(gc.participant_details) > 0, do: Jason.encode!(gc.participant_details), else: nil),
       created_by: gc.created_by,
       member_count: gc.member_count,
       hidden: gc.hidden || false,
-      admins: Jason.encode!(gc.admins || []),
+      admins: Jason.encode!(uuid_list(gc.admins)),
       last_message: if(gc.last_message && map_size(gc.last_message) > 0, do: Jason.encode!(gc.last_message), else: nil),
       unread_count: if(gc.unread_count && map_size(gc.unread_count) > 0, do: Jason.encode!(gc.unread_count), else: nil),
       cleared_at: if(gc.cleared_at && map_size(gc.cleared_at) > 0, do: Jason.encode!(gc.cleared_at), else: nil),
-      deleted_for: Jason.encode!(gc.deleted_for || []),
-      typing: if(gc.typing && map_size(gc.typing) > 0, do: Jason.encode!(gc.typing), else: nil),
+      deleted_for: Jason.encode!(uuid_list(gc.deleted_for)),
+      muted_by: Jason.encode!(uuid_list(gc.muted_by)),
+      pinned_by: Jason.encode!(uuid_list(gc.pinned_by)),
       created_at: to_ms(gc.created_at),
       updated_at: to_ms(gc.updated_at)
     }
@@ -156,10 +174,8 @@ defmodule NxtVibesWeb.SyncController do
       text: m.text,
       media_url: m.media_url,
       location: if(m.location, do: Jason.encode!(m.location), else: nil),
-      # voice_duration is a Decimal — convert to float for JSON
-      voice_duration: if(m.voice_duration, do: Decimal.to_float(m.voice_duration), else: nil),
-      # reply_to is a UUID binary — WatermelonDB stores it as a JSON string in the `reply_to` field
-      reply_to: nil,
+      # reply_to is a UUID — send as string so WatermelonDB can store it in the reply_to string column
+      reply_to: if(m.reply_to, do: to_string(m.reply_to), else: nil),
       status: m.status,
       read_by: if(m.read_by && map_size(m.read_by) > 0, do: Jason.encode!(m.read_by), else: nil),
       delivered_to: if(m.delivered_to && length(m.delivered_to) > 0, do: Jason.encode!(m.delivered_to), else: nil),
@@ -354,8 +370,8 @@ defmodule NxtVibesWeb.SyncController do
 
   defp upsert_direct_chat(record) do
     prepared = prepare_record(record,
-      ["participants", "deleted_for"],
-      ["participant_details", "last_message", "unread_count", "cleared_at", "typing"],
+      ["participants", "deleted_for", "muted_by", "pinned_by"],
+      ["participant_details", "last_message", "unread_count", "cleared_at"],
       ["created_at", "updated_at"]
     )
 
@@ -366,8 +382,8 @@ defmodule NxtVibesWeb.SyncController do
 
   defp upsert_group_chat(record) do
     prepared = prepare_record(record,
-      ["participants", "admins", "deleted_for"],
-      ["participant_details", "last_message", "unread_count", "cleared_at", "typing"],
+      ["participants", "admins", "deleted_for", "muted_by", "pinned_by"],
+      ["participant_details", "last_message", "unread_count", "cleared_at"],
       ["created_at", "updated_at"]
     )
 

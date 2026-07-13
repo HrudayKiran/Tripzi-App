@@ -20,7 +20,9 @@ export default class GroupChat extends Model {
   @field('unread_count') unreadCountRaw?: string; // JSON string
   @field('deleted_for') deletedForRaw?: string; // JSON string
   @field('cleared_at') clearedAtRaw?: string; // JSON string
-  @field('typing') typingRaw?: string; // JSON string
+  // typing is ephemeral — tracked via Phoenix Presence, not persisted in DB
+  @field('muted_by') mutedByRaw?: string; // JSON string (array of user IDs)
+  @field('pinned_by') pinnedByRaw?: string; // JSON string (array of user IDs)
 
   @readonly @date('created_at') createdAt!: Date;
   @readonly @date('updated_at') updatedAt!: Date;

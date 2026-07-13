@@ -22,6 +22,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, FONT_SIZE, FONT_WEIGHT, BRAND, STATUS, NEUTRAL } from '../styles';
 import { supabase } from '../lib/supabase';
+import { phoenixApi } from '../lib/phoenixApi';
 import { searchUsersByPrefix } from '../utils/searchUsers';
 import { pickAndUploadImage } from '../utils/imageUpload';
 import { UserSearchListSkeleton } from '../components/Skeletons';
@@ -181,42 +182,24 @@ const CreateGroupScreen = () => {
                 };
             });
 
-            // Create group chat
-            const { data: chatRow, error: chatErr } = await supabase.from('group_chats').insert({
-                group_name: groupName.trim(),
-                group_icon: groupIconUrl,
-                participants,
-                participant_details: participantDetails,
-                created_by: currentUser.id,
-                admins: [currentUser.id],
-                unread_count: participants.reduce((acc, uid) => { acc[uid] = 0; return acc; }, {} as { [key: string]: number }),
-                last_message: {
-                    text: `${creatorName} created the group "${groupName.trim()}"`,
-                    sender_id: null,
-                    created_at: new Date().toISOString()
+            // Route group creation through Phoenix — atomically creates group,
+            // inserts system message, and broadcasts to all participants.
+            const result = await phoenixApi<{ success: boolean; chat_id: string }>('/groups/create', {
+                body: {
+                    group_name: groupName.trim(),
+                    group_icon: groupIconUrl || null,
+                    participants: selectedUsers.map((u) => u.id),
+                    participant_details: participantDetails,
                 },
-            }).select('id').single();
-            if (chatErr || !chatRow) throw chatErr || new Error('Failed');
-
-            // Add system message
-            await supabase.from('messages').insert({
-                chat_id: chatRow.id,
-                chat_type: 'group',
-                sender_id: 'system',
-                sender_name: 'System',
-                type: 'system',
-                text: `${creatorName} created the group "${groupName.trim()}"`,
-                status: 'sent',
-                read_by: {},
-                delivered_to: [],
-                deleted_for: [],
             });
+
+            if (!result.success || !result.chat_id) throw new Error('Failed to create group');
 
             router.replace({
                 pathname: '/chat/[id]',
                 params: {
-                    id: chatRow.id,
-                    chatId: chatRow.id,
+                    id: result.chat_id,
+                    chatId: result.chat_id,
                     collectionName: 'group_chats',
                     isGroupChat: 'true',
                     otherUserName: groupName.trim(),

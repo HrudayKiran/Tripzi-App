@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-  version: 12,
+  version: 13,
   tables: [
     tableSchema({
       name: 'profiles',
@@ -51,7 +51,8 @@ export default appSchema({
         { name: 'unread_count', type: 'string', isOptional: true }, // JSON string (map of UID -> count)
         { name: 'cleared_at', type: 'string', isOptional: true }, // JSON string (map of UID -> ISO date)
         { name: 'deleted_for', type: 'string', isOptional: true }, // JSON string (array of IDs)
-        { name: 'typing', type: 'string', isOptional: true }, // JSON string (map of UID -> boolean)
+        { name: 'muted_by', type: 'string', isOptional: true }, // JSON string (array of IDs)
+        { name: 'pinned_by', type: 'string', isOptional: true }, // JSON string (array of IDs)
         { name: 'created_at', type: 'number' },
         { name: 'updated_at', type: 'number' },
       ],
@@ -72,7 +73,8 @@ export default appSchema({
         { name: 'unread_count', type: 'string', isOptional: true }, // JSON string
         { name: 'deleted_for', type: 'string', isOptional: true }, // JSON string
         { name: 'cleared_at', type: 'string', isOptional: true }, // JSON string
-        { name: 'typing', type: 'string', isOptional: true }, // JSON string
+        { name: 'muted_by', type: 'string', isOptional: true }, // JSON string (array of IDs)
+        { name: 'pinned_by', type: 'string', isOptional: true }, // JSON string (array of IDs)
         { name: 'created_at', type: 'number' },
         { name: 'updated_at', type: 'number' },
       ],
@@ -88,8 +90,7 @@ export default appSchema({
         { name: 'type', type: 'string' },
         { name: 'media_url', type: 'string', isOptional: true },
         { name: 'location', type: 'string', isOptional: true }, // JSON string
-        { name: 'voice_duration', type: 'number', isOptional: true },
-        { name: 'reply_to', type: 'string', isOptional: true }, // JSON string
+        { name: 'reply_to', type: 'string', isOptional: true }, // JSON string (ReplyTo object)
         { name: 'status', type: 'string' },
         { name: 'read_by', type: 'string', isOptional: true }, // JSON string
         { name: 'delivered_to', type: 'string', isOptional: true }, // JSON string

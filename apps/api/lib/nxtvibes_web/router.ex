@@ -18,11 +18,15 @@ defmodule NxtVibesWeb.Router do
   scope "/api", NxtVibesWeb do
     pipe_through [:api, :auth]
 
+    post "/groups/create", GroupChatController, :create_group
+
     post "/group_chats/add-member", GroupChatController, :add_member
     post "/group_chats/remove-member", GroupChatController, :remove_member
     post "/group_chats/leave", GroupChatController, :leave
     post "/group_chats/promote-admin", GroupChatController, :promote_admin
     post "/group_chats/demote-admin", GroupChatController, :demote_admin
+    post "/group_chats/update-name", GroupChatController, :update_name
+    post "/group_chats/update-icon", GroupChatController, :update_icon
 
     # WatermelonDB sync endpoints
     get "/sync/pull", SyncController, :pull

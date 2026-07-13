@@ -1,4 +1,4 @@
-﻿import { schemaMigrations, createTable, addColumns } from '@nozbe/watermelondb/Schema/migrations';
+import { schemaMigrations, createTable, addColumns, unsafeExecuteSql } from '@nozbe/watermelondb/Schema/migrations';
 
 /**
  * WatermelonDB Migrations
@@ -7,7 +7,10 @@
  * add a migration step here. Without this file, WatermelonDB WIPES
  * the local SQLite DB on every version bump, losing all cached user data.
  *
- * Current schema version: 12
+ * Note: WatermelonDB v0.28 does NOT export removeColumns.
+ * Use unsafeExecuteSql to drop columns when needed.
+ *
+ * Current schema version: 13
  */
 export default schemaMigrations({
   migrations: [
@@ -118,7 +121,6 @@ export default schemaMigrations({
             { name: 'type', type: 'string' },
             { name: 'media_url', type: 'string', isOptional: true },
             { name: 'location', type: 'string', isOptional: true },
-            { name: 'voice_duration', type: 'number', isOptional: true },
             { name: 'reply_to', type: 'string', isOptional: true },
             { name: 'status', type: 'string' },
             { name: 'read_by', type: 'string', isOptional: true },
@@ -149,5 +151,30 @@ export default schemaMigrations({
     { toVersion: 10, steps: [] },
     { toVersion: 11, steps: [] },
     { toVersion: 12, steps: [] },
+    // v12 -> v13: Remove ephemeral typing column from chats (via unsafeExecuteSql — SQLite 3.35+);
+    //             Add muted_by + pinned_by to both chat tables.
+    {
+      toVersion: 13,
+      steps: [
+        // Drop deprecated columns (SQLite 3.35+; safely no-ops on older versions due to IF EXISTS)
+        unsafeExecuteSql('ALTER TABLE direct_chats DROP COLUMN IF EXISTS typing;'),
+        unsafeExecuteSql('ALTER TABLE group_chats DROP COLUMN IF EXISTS typing;'),
+        // Add new columns
+        addColumns({
+          table: 'direct_chats',
+          columns: [
+            { name: 'muted_by', type: 'string', isOptional: true },
+            { name: 'pinned_by', type: 'string', isOptional: true },
+          ],
+        }),
+        addColumns({
+          table: 'group_chats',
+          columns: [
+            { name: 'muted_by', type: 'string', isOptional: true },
+            { name: 'pinned_by', type: 'string', isOptional: true },
+          ],
+        }),
+      ],
+    },
   ],
 });

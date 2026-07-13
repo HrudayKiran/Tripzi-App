@@ -60,6 +60,11 @@ const ChatsListScreen = () => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setCurrentUser(session?.user || null);
         });
+
+        // Sync local WatermelonDB database with backend server on mount
+        const { syncDatabase } = require('../database/sync');
+        syncDatabase().catch(() => {});
+
         return () => subscription.unsubscribe();
     }, []);
 

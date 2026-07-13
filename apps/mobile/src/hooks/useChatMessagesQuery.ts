@@ -68,7 +68,6 @@ function mapLocalMessage(m: Message, parentMap?: Map<string, any>): ChatMessage 
         mediaUrl: m.mediaUrl || undefined,
         mediaThumbnail: undefined,
         location: m.locationData || undefined,
-        voiceDuration: m.voiceDuration || undefined,
         replyTo,
         status: m.status as MessageStatus,
         readBy: m.readByData || {},
@@ -141,7 +140,6 @@ const writeRemoteMessageToLocal = async (newRow: any) => {
                     rec.text = newRow.text !== undefined ? newRow.text : rec.text;
                     rec.mediaUrl = newRow.media_url !== undefined ? newRow.media_url : rec.mediaUrl;
                     rec.locationRaw = newRow.location !== undefined ? stringifyIfNeeded(newRow.location) : rec.locationRaw;
-                    rec.voiceDuration = newRow.voice_duration !== undefined ? newRow.voice_duration : rec.voiceDuration;
                     rec.replyToRaw = newRow.reply_to !== undefined ? stringifyIfNeeded(newRow.reply_to) : rec.replyToRaw;
                     rec.status = newRow.status || rec.status;
                     rec.readByRaw = newRow.read_by !== undefined ? stringifyIfNeeded(newRow.read_by) : rec.readByRaw;
@@ -167,7 +165,6 @@ const writeRemoteMessageToLocal = async (newRow: any) => {
                     rec.text = newRow.text;
                     rec.mediaUrl = newRow.media_url;
                     rec.locationRaw = stringifyIfNeeded(newRow.location);
-                    rec.voiceDuration = newRow.voice_duration;
                     rec.replyToRaw = stringifyIfNeeded(newRow.reply_to);
                     rec.status = newRow.status;
                     rec.readByRaw = stringifyIfNeeded(newRow.read_by);
@@ -199,6 +196,10 @@ export function useChatMessagesQuery(
     // Dedup guard: tracks message IDs we have already handled locally (sent or received)
     const seenMessageIdsRef = useRef<Set<string>>(new Set());
 
+    // Reactive presence and typing states
+    const [onlineMembers, setOnlineMembers] = useState<Record<string, boolean>>({});
+    const [typingUsers, setTypingUsers] = useState<Record<string, boolean>>({});
+
     // Cache sender profile at init so we don't fetch on every send
     useEffect(() => {
         if (!userId) return;
@@ -223,7 +224,7 @@ export function useChatMessagesQuery(
 
     // Fetch messages from WatermelonDB locally
     const { data: messages = [], isLoading: loading, error } = useQuery({
-        queryKey: ['messages', chatId, clearedAtTime],
+        queryKey: ['messages', chatId],
         queryFn: async () => {
             if (!chatId || !userId) return [];
 
@@ -487,7 +488,27 @@ export function useChatMessagesQuery(
                     seenMessageIdsRef.current.add(payload.id);
                     await writeRemoteMessageToLocal(payload);
                     queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
-                    // Also update parent chat last_message in local DB
+
+                    // Also update parent chat last_message in local DB immediately
+                    const parentTable = chatType === 'group' ? 'group_chats' : 'direct_chats';
+                    try {
+                        const chatRecord = await database.get(parentTable).find(chatId);
+                        await database.write(async () => {
+                            await (chatRecord as any).update((rec: any) => {
+                                rec.lastMessage = JSON.stringify({
+                                    text: payload.text,
+                                    sender_id: payload.sender_id,
+                                    sender_name: payload.sender_name,
+                                    created_at: payload.created_at,
+                                    type: payload.type,
+                                });
+                                rec._raw.updated_at = parsePostgresDateToMs(payload.created_at);
+                            });
+                        });
+                    } catch (err) {
+                        if (__DEV__) console.warn('[new_message] Failed to update parent lastMessage:', err);
+                    }
+
                     queryClient.invalidateQueries({ queryKey: ['chats', userId] });
                     queryClient.invalidateQueries({ queryKey: ['groupChats', userId] });
                     break;
@@ -561,11 +582,55 @@ export function useChatMessagesQuery(
                     break;
                 }
 
-                case 'presence_state':
-                case 'presence_diff':
-                case 'user_typing':
-                    // Typing and presence handled by usePresence hook
+                case 'presence_state': {
+                    const nextOnline: Record<string, boolean> = {};
+                    for (const [uid, presence] of Object.entries(payload || {})) {
+                        const metas = (presence as any)?.metas;
+                        if (metas && metas.length > 0) {
+                            nextOnline[uid] = true;
+                        }
+                    }
+                    setOnlineMembers(nextOnline);
                     break;
+                }
+
+                case 'presence_diff': {
+                    const { joins = {}, leaves = {} } = payload as { joins: Record<string, any>; leaves: Record<string, any> } || {};
+                    setOnlineMembers(prev => {
+                        const updated = { ...prev };
+                        for (const [uid, presence] of Object.entries(joins)) {
+                            const metas = (presence as any)?.metas;
+                            if (metas && metas.length > 0) {
+                                updated[uid] = true;
+                            }
+                        }
+                        for (const uid of Object.keys(leaves)) {
+                            delete updated[uid];
+                            // Also clear typing state if user leaves
+                            setTypingUsers(tPrev => {
+                                if (tPrev[uid]) {
+                                    const tUpdated = { ...tPrev };
+                                    delete tUpdated[uid];
+                                    return tUpdated;
+                                }
+                                return tPrev;
+                            });
+                        }
+                        return updated;
+                    });
+                    break;
+                }
+
+                case 'user_typing': {
+                    const { user_id, is_typing } = payload || {};
+                    if (user_id && user_id !== userId) {
+                        setTypingUsers(prev => ({
+                            ...prev,
+                            [user_id]: is_typing === true
+                        }));
+                    }
+                    break;
+                }
 
                 default:
                     break;
@@ -591,6 +656,9 @@ export function useChatMessagesQuery(
         markAsRead,
         loadMoreMessages,
         hasMore,
+        onlineMembers,
+        typingUsers,
+        otherUserTyping: Object.keys(typingUsers).some(uid => uid !== userId && typingUsers[uid] === true),
     };
 }
 

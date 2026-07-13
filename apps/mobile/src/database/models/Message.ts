@@ -16,8 +16,7 @@ export default class Message extends Model {
   @field('type') type!: string;
   @field('media_url') mediaUrl?: string;
   @field('location') locationRaw?: string; // JSON string
-  @field('voice_duration') voiceDuration?: number;
-  @field('reply_to') replyToRaw?: string; // JSON string
+  @field('reply_to') replyToRaw?: string; // JSON string (ReplyTo object)
   @field('status') status!: string;
   @field('read_by') readByRaw?: string; // JSON string
   @field('delivered_to') deliveredToRaw?: string; // JSON string

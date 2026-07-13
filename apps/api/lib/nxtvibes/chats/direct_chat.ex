@@ -13,7 +13,6 @@ defmodule NxtVibes.Chats.DirectChat do
     field :unread_count, :map, default: %{}
     field :deleted_for, {:array, :string}, default: []   # column renamed: deleted_by → deleted_for
     field :cleared_at, :map, default: %{}
-    field :typing, :map, default: %{}
     field :muted_by, {:array, :string}, default: []
     field :pinned_by, {:array, :string}, default: []
 
@@ -31,7 +30,6 @@ defmodule NxtVibes.Chats.DirectChat do
       :unread_count,
       :deleted_for,
       :cleared_at,
-      :typing,
       :muted_by,
       :pinned_by
     ])

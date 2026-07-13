@@ -224,11 +224,9 @@ export function setupForegroundHandler(
   const unsubscribe = messaging.onMessage(async (remoteMessage) => {
     if (__DEV__) console.log('[Notifications] Foreground message received:', remoteMessage.messageId);
 
-    const title = remoteMessage.notification?.title || 'New Notification';
-    const body = remoteMessage.notification?.body || '';
-
-    // Parse deep link data from push for tap-to-navigate
     const data = remoteMessage.data as Record<string, string> | undefined;
+    const title = remoteMessage.notification?.title || data?.title || 'New Notification';
+    const body = remoteMessage.notification?.body || data?.body || '';
     let route: string | undefined;
     let params: Record<string, any> | undefined;
     if (data?.deepLinkRoute) {
@@ -257,23 +255,8 @@ export function setupForegroundHandler(
     // Show in-app toast via Zustand store (with deep link for tap navigation)
     showToast(title, body, route, params);
 
-    // Also show system notification via Notifee (appears in notification shade)
-    try {
-      const notifee = require('@notifee/react-native').default;
-      await notifee.displayNotification({
-        title,
-        body,
-        data: data || {},
-        android: {
-          channelId: data?.channelId || 'chat_messages',
-          smallIcon: 'ic_notification',
-          color: '#9d74f7',            // Brand purple — matches notification_icon_color in colors.xml
-          pressAction: { id: 'default' },
-        },
-      });
-    } catch (e: any) {
-      if (__DEV__) console.error('[Notifications] Notifee display error:', e?.message);
-    }
+    // In-app toast is enough when the app is in the foreground.
+    // Avoid displaying a duplicate OS system notification.
   });
 
   return unsubscribe;
@@ -339,13 +322,34 @@ export async function handleInitialNotification(
     const remoteMessage = await messaging.getInitialNotification();
 
     if (remoteMessage) {
-      if (__DEV__) console.log('[Notifications] App opened from killed state via notification:', remoteMessage.messageId);
+      if (__DEV__) console.log('[Notifications] App opened from killed state via FCM notification:', remoteMessage.messageId);
 
       const nav = parseNotificationNavigation(remoteMessage.data as Record<string, string>);
       if (nav) {
         // Small delay to let the navigation tree mount
         setTimeout(() => navigate(nav.route, nav.params), 1000);
       }
+      return; // Handled by FCM
+    }
+
+    // Check Notifee initial notification (for manually displayed data-only notifications)
+    try {
+      const notifee = require('@notifee/react-native').default;
+      const initialNotification = await notifee.getInitialNotification();
+      if (initialNotification?.notification?.data) {
+        const data = initialNotification.notification.data as Record<string, string>;
+        if (__DEV__) console.log('[Notifications] App opened from killed state via Notifee notification:', initialNotification.notification.id);
+
+        if (data.deepLinkRoute) {
+          let params: Record<string, any> | undefined;
+          if (data.deepLinkParams) {
+            try { params = JSON.parse(data.deepLinkParams); } catch {}
+          }
+          setTimeout(() => navigate(data.deepLinkRoute, params), 1000);
+        }
+      }
+    } catch (e) {
+      if (__DEV__) console.warn('[Notifications] Error fetching Notifee initial notification:', e);
     }
   } catch (error: any) {
     console.error('[Notifications] Error handling initial notification:', error?.message || error);

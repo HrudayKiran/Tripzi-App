@@ -159,32 +159,11 @@ const GroupInfoScreen = () => {
     const updateGroupName = async () => {
         if (!editName.trim() || !isAdmin || !currentUser) return;
         try {
-            const table = 'group_chats';
-            const userProfile = publicProfiles?.get(currentUser.id);
-            const userDisplayName = userProfile?.displayName || currentUser.user_metadata?.full_name || 'Admin';
-            const systemText = `${userDisplayName} changed the group name to "${editName.trim()}"`;
-
-            await Promise.all([
-                supabase.from(table).update({
-                    group_name: editName.trim(),
-                    last_message: {
-                        text: systemText,
-                        sender_id: null,
-                        created_at: new Date().toISOString()
-                    },
-                    updated_at: new Date().toISOString()
-                }).eq('id', chatId),
-                supabase.from('messages').insert({
-                    chat_id: chatId,
-                    chat_type: 'group',
-                    sender_id: 'system',
-                    sender_name: 'System',
-                    type: 'system',
-                    text: systemText,
-                    status: 'sent'
-                })
-            ]);
-
+            // Route through Phoenix — controller validates admin, updates DB,
+            // inserts system message, and broadcasts group_updated to all participants.
+            await phoenixApi('/group_chats/update-name', {
+                body: { chatId, group_name: editName.trim() },
+            });
             queryClient.invalidateQueries({ queryKey: ['groupChat', chatId] });
             setEditing(false);
         } catch (error) {
@@ -211,32 +190,11 @@ const GroupInfoScreen = () => {
             if (!result.canceled && result.assets[0]) {
                 const uploadResult = await uploadGroupChatImageToR2(result.assets[0].uri, currentUser.id, chatId);
                 if (uploadResult.success && uploadResult.url) {
-                    const table = 'group_chats';
-                    const userProfile = publicProfiles?.get(currentUser.id);
-                    const userDisplayName = userProfile?.displayName || currentUser.user_metadata?.full_name || 'Admin';
-                    const systemText = `${userDisplayName} changed this group's icon`;
-
-                    await Promise.all([
-                        supabase.from(table).update({
-                            group_icon: uploadResult.url,
-                            last_message: {
-                                text: systemText,
-                                sender_id: null,
-                                created_at: new Date().toISOString()
-                            },
-                            updated_at: new Date().toISOString()
-                        }).eq('id', chatId),
-                        supabase.from('messages').insert({
-                            chat_id: chatId,
-                            chat_type: 'group',
-                            sender_id: 'system',
-                            sender_name: 'System',
-                            type: 'system',
-                            text: systemText,
-                            status: 'sent'
-                        })
-                    ]);
-
+                    // Route through Phoenix — controller validates admin, updates DB,
+                    // inserts system message, and broadcasts group_updated to all participants.
+                    await phoenixApi('/group_chats/update-icon', {
+                        body: { chatId, group_icon: uploadResult.url },
+                    });
                     queryClient.invalidateQueries({ queryKey: ['groupChat', chatId] });
                 }
             }

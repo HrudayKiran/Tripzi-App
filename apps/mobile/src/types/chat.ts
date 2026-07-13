@@ -5,7 +5,7 @@
 
 // ─── Message Types ───────────────────────────────────────────────
 
-export type MessageType = 'text' | 'image' | 'video' | 'location' | 'voice' | 'system' | 'trip_share';
+export type MessageType = 'text' | 'image' | 'location' | 'system' | 'trip_share';
 export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read';
 
 export interface ReplyTo {
@@ -32,7 +32,6 @@ export interface ChatMessage {
     mediaUrl?: string;
     mediaThumbnail?: string;
     location?: LocationData;
-    voiceDuration?: number;
     replyTo?: ReplyTo;
     status: MessageStatus;
     readBy: { [uid: string]: string | null };
@@ -57,7 +56,7 @@ export interface LastMessage {
     senderId: string;
     senderName: string;
     timestamp: Date | null;
-    type: 'text' | 'image' | 'location' | 'voice' | 'system';
+    type: 'text' | 'image' | 'location' | 'system' | 'trip_share';
 }
 
 export interface Chat {

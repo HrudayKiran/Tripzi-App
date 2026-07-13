@@ -29,12 +29,35 @@ try {
             const notifee = require('@notifee/react-native').default;
             const currentBadge = await notifee.getBadgeCount();
             await notifee.setBadgeCount(currentBadge + 1);
+
+            // If this is a data-only notification, show it manually using Notifee
+            const data = remoteMessage.data;
+            if (data && data.title && data.body) {
+                await notifee.displayNotification({
+                    id: data.messageId || remoteMessage.messageId,
+                    title: data.title,
+                    body: data.body,
+                    data: data,
+                    android: {
+                        channelId: data.channelId || 'chat_messages',
+                        smallIcon: 'ic_notification',
+                        color: '#9d74f7', // Brand purple
+                        pressAction: { id: 'default' },
+                    },
+                });
+            }
         } catch (e) {
-            // Notifee not available
+            if (__DEV__) console.error('[BGHandler] Error processing background message:', e);
         }
     });
+
+    // Register Notifee background event handler
+    const notifee = require('@notifee/react-native').default;
+    notifee.onBackgroundEvent(async ({ type, detail }) => {
+        if (__DEV__) console.log('[Notifications] Notifee background event:', type, detail);
+    });
 } catch (e) {
-    // FCM not available (e.g., iOS simulator)
+    // FCM or Notifee not available (e.g., iOS simulator)
 }
 
 registerRootComponent(App);

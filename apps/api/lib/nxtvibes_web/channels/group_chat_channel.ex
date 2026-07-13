@@ -10,7 +10,13 @@ defmodule NxtVibesWeb.GroupChatChannel do
 
     case Chats.get_group_chat(chat_id) do
       %GroupChat{participants: participants} = _chat ->
-        if user_id in (participants || []) do
+        # Postgres returns UUID[] as raw 16-byte binaries; cast each to string before membership check
+        participant_ids = Enum.map(participants || [], fn
+          bin when is_binary(bin) and byte_size(bin) == 16 -> Ecto.UUID.cast!(bin)
+          str -> str
+        end)
+
+        if user_id in participant_ids do
           send(self(), :after_join)
           {:ok, assign(socket, :chat_id, chat_id)}
         else
@@ -32,7 +38,6 @@ defmodule NxtVibesWeb.GroupChatChannel do
     {:noreply, socket}
   end
 
-  # JSON payload helper for messages
   defp map_message_payload(m) do
     %{
       "id" => m.id,
@@ -44,7 +49,6 @@ defmodule NxtVibesWeb.GroupChatChannel do
       "text" => m.text,
       "media_url" => m.media_url,
       "location" => m.location,
-      "voice_duration" => if(m.voice_duration, do: Decimal.to_float(m.voice_duration), else: nil),
       "reply_to" => m.reply_to,
       "status" => m.status,
       "read_by" => m.read_by,
@@ -78,7 +82,13 @@ defmodule NxtVibesWeb.GroupChatChannel do
         # Enqueue Push Notification job via Oban for each other participant
         case Chats.get_group_chat(chat_id) do
           %GroupChat{participants: participants, group_name: group_name} = chat ->
-            recipients = Enum.filter(participants || [], &(&1 != user_id))
+            # Cast binary UUIDs to strings (Postgres returns UUID[] as raw 16-byte binaries)
+            participant_ids = Enum.map(participants || [], fn
+              bin when is_binary(bin) and byte_size(bin) == 16 -> Ecto.UUID.cast!(bin)
+              str -> str
+            end)
+
+            recipients = Enum.filter(participant_ids, &(&1 != user_id))
 
             # Push notification via Oban for each recipient
             if Code.ensure_loaded?(Oban) do
@@ -90,7 +100,9 @@ defmodule NxtVibesWeb.GroupChatChannel do
                   recipient_id: recipient_id,
                   sender_name: message.sender_name || "Someone",
                   group_name: group_name || "Group",
-                  message_preview: message.text || "Sent a message"
+                  message_type: message.type || "text",
+                  message_preview: message.text || "Sent a message",
+                  message_id: to_string(message.id)
                 }
                 |> NxtVibes.Workers.PushNotificationWorker.new()
                 |> Oban.insert()
@@ -106,7 +118,7 @@ defmodule NxtVibesWeb.GroupChatChannel do
                 "group_name" => chat.group_name,
                 "group_description" => chat.group_description,
                 "group_icon" => chat.group_icon,
-                "participants" => chat.participants,
+                "participants" => participant_ids,
                 "participant_details" => chat.participant_details,
                 "created_by" => chat.created_by,
                 "member_count" => chat.member_count,
@@ -122,13 +134,13 @@ defmodule NxtVibesWeb.GroupChatChannel do
                 "unread_count" => chat.unread_count,
                 "cleared_at" => chat.cleared_at,
                 "deleted_for" => chat.deleted_for,
-                "typing" => chat.typing,
+                # typing is ephemeral — not stored in DB, not broadcast in chat_payload
                 "created_at" => DateTime.to_unix(chat.created_at, :millisecond),
                 "updated_at" => DateTime.to_unix(chat.updated_at, :millisecond)
               }
             }
 
-            Enum.each(participants || [], fn participant_id ->
+            Enum.each(participant_ids, fn participant_id ->
               NxtVibesWeb.Endpoint.broadcast("user:#{participant_id}", "chat_updated", chat_payload)
             end)
 
@@ -143,10 +155,20 @@ defmodule NxtVibesWeb.GroupChatChannel do
   end
 
   @impl true
+  def handle_in("user_typing", %{"is_typing" => is_typing}, socket) do
+    broadcast_from!(socket, "user_typing", %{
+      "user_id" => socket.assigns.current_user_id,
+      "is_typing" => is_typing
+    })
+    {:noreply, socket}
+  end
+
+  # Legacy support: typing_start / typing_stop (deprecated, use user_typing)
+  @impl true
   def handle_in("typing_start", _params, socket) do
     broadcast_from!(socket, "user_typing", %{
       "user_id" => socket.assigns.current_user_id,
-      "typing" => true
+      "is_typing" => true
     })
     {:noreply, socket}
   end
@@ -155,7 +177,7 @@ defmodule NxtVibesWeb.GroupChatChannel do
   def handle_in("typing_stop", _params, socket) do
     broadcast_from!(socket, "user_typing", %{
       "user_id" => socket.assigns.current_user_id,
-      "typing" => false
+      "is_typing" => false
     })
     {:noreply, socket}
   end

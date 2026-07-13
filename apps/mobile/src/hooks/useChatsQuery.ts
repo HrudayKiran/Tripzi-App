@@ -171,7 +171,9 @@ async function writeChatToLocal(
             // deleted_for is now consistent: Supabase DB, Ecto schema, and WatermelonDB all use deleted_for
             rec.deletedForRaw = JSON.stringify(newRow.deleted_for || []);
             rec.clearedAtRaw = JSON.stringify(newRow.cleared_at || {});
-            rec.typingRaw = JSON.stringify(newRow.typing || {});
+            // typing is ephemeral — tracked via Phoenix Presence, not written to WatermelonDB
+            rec.mutedByRaw = JSON.stringify(newRow.muted_by || []);
+            rec.pinnedByRaw = JSON.stringify(newRow.pinned_by || []);
             rec._raw.updated_at = parsePostgresDateToMs(newRow.updated_at);
 
             if (isGroup) {

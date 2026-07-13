@@ -56,6 +56,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useActiveChatStore } from '../store/activeChatStore';
 import { workersApi } from '../lib/workersApi';
 import { getOnlineUsersPresenceState } from '../hooks/usePresence';
+import { pushToChannel, joinChannel } from '../lib/phoenixSocket';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GOOGLE_MAPS_SEARCH_URL = 'https://www.google.com/maps/search/?api=1&query=';
@@ -189,7 +190,16 @@ const ChatScreen = () => {
 
 
     const chatType = chatCollection === 'group_chats' ? 'group' : 'direct';
-    const { messages, loading, sendMessage, markAsRead, loadMoreMessages, hasMore } = useChatMessagesQuery(chatId, chatType, clearedAt);
+    const {
+        messages,
+        loading,
+        sendMessage,
+        markAsRead,
+        loadMoreMessages,
+        hasMore,
+        otherUserTyping: serverOtherUserTyping,
+        onlineMembers
+    } = useChatMessagesQuery(chatId, chatType, clearedAt);
     const [inputText, setInputText] = useState('');
     const [sending, setSending] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -495,6 +505,12 @@ const ChatScreen = () => {
 
 
 
+    // Synchronize database with server on mount to retrieve any offline/missed messages
+    useEffect(() => {
+        const { syncDatabase } = require('../database/sync');
+        syncDatabase().catch(() => {});
+    }, []);
+
     // Auto-save incoming media to gallery if preference enabled
     useEffect(() => {
         if (!messages.length || !currentUserId) return;
@@ -554,48 +570,21 @@ const ChatScreen = () => {
         void saveIncomingMedia();
     }, [messages, currentUserId]);
 
-    // Typing indicator listener (throttled — only reads typing field)
+    // Sync typing status from Phoenix channel hook
     useEffect(() => {
-        if (!chatId || !currentUserId) return;
+        setOtherUserTyping(serverOtherUserTyping === true);
+    }, [serverOtherUserTyping]);
 
-        const table = chatCollection;
-        const channel = supabase
-            .channel(`typing-${chatId}-${Date.now()}`)
-            .on('postgres_changes', {
-                event: 'UPDATE',
-                schema: 'public',
-                table: table,
-                filter: `id=eq.${chatId}`,
-            }, (payload) => {
-                const data = payload.new as any;
-                if (data?.typing) {
-                    const typingUsers = Object.entries(data.typing)
-                        .filter(([uid, timestamp]: [string, any]) => {
-                            if (uid === currentUserId) return false;
-                            const ts = new Date(timestamp);
-                            return Date.now() - ts.getTime() < 10000;
-                        });
-                    setOtherUserTyping(typingUsers.length > 0);
-                } else {
-                    setOtherUserTyping(false);
-                }
-            })
-            .subscribe();
-
-        supabase.from(table).select('typing').eq('id', chatId).maybeSingle().then(({ data }) => {
-            if (data?.typing) {
-                const typingUsers = Object.entries(data.typing)
-                    .filter(([uid, timestamp]: [string, any]) => {
-                        if (uid === currentUserId) return false;
-                        const ts = new Date(timestamp as string);
-                        return Date.now() - ts.getTime() < 10000;
-                    });
-                setOtherUserTyping(typingUsers.length > 0);
+    // Sync online presence status from Phoenix channel hook
+    useEffect(() => {
+        if (otherParticipantUid) {
+            const isOnline = !!onlineMembers[otherParticipantUid];
+            setRawPresence(isOnline ? 'online' : 'offline');
+            if (isOnline) {
+                setRawLastSeen(new Date().toISOString());
             }
-        });
-
-        return () => { supabase.removeChannel(channel); };
-    }, [chatId, currentUserId]);
+        }
+    }, [onlineMembers, otherParticipantUid]);
 
     // Check for active live sharers
     useEffect(() => {
@@ -665,27 +654,22 @@ const ChatScreen = () => {
         } catch (e) { }
     };
 
-    // Update typing status
+    // Update typing status via Phoenix channel 'user_typing' push
+    // (replaces Supabase DB typing column writes)
     const updateTypingStatus = useCallback((isTypingParam: boolean) => {
-        if (!chatId || !currentUserId) return;
+        if (!chatId || !currentUserId || !chatType) return;
 
         if (typingTimeoutRef.current) {
             clearTimeout(typingTimeoutRef.current);
         }
 
-        const table = chatCollection;
-
         if (isTypingParam) {
             const now = Date.now();
-            // Throttle DB updates to once every 2 seconds
             if (!isTyping || (now - lastTypingUpdate.current > 2000)) {
                 setIsTyping(true);
                 lastTypingUpdate.current = now;
-                supabase.from(table).select('typing').eq('id', chatId).maybeSingle().then(({ data }) => {
-                    const typing = data?.typing || {};
-                    typing[currentUserId] = new Date().toISOString();
-                    supabase.from(table).update({ typing }).eq('id', chatId);
-                });
+                const topic = chatType === 'group' ? `group:${chatId}` : `dm:${chatId}`;
+                pushToChannel(topic, 'user_typing', { is_typing: true }).catch(() => {});
             }
 
             typingTimeoutRef.current = setTimeout(() => {
@@ -694,15 +678,10 @@ const ChatScreen = () => {
         } else {
             setIsTyping(false);
             lastTypingUpdate.current = 0;
-            supabase.from(table).select('typing').eq('id', chatId).maybeSingle().then(({ data }) => {
-                const typing = data?.typing || {};
-                if (typing[currentUserId]) {
-                    delete typing[currentUserId];
-                    supabase.from(table).update({ typing }).eq('id', chatId);
-                }
-            });
+            const topic = chatType === 'group' ? `group:${chatId}` : `dm:${chatId}`;
+            pushToChannel(topic, 'user_typing', { is_typing: false }).catch(() => {});
         }
-    }, [chatId, currentUserId, isTyping, chatCollection]);
+    }, [chatId, currentUserId, chatType, isTyping]);
 
     // Handle text input — H5: removed haptics from keystrokes for performance
     const handleTextChange = (text: string) => {
@@ -865,64 +844,16 @@ const ChatScreen = () => {
             if (!success || !url) throw new Error(uploadError || 'Upload failed');
             const downloadUrl = url;
 
-            await supabase.from('messages').insert({
-                chat_id: chatId,
-                chat_type: isGroup ? 'group' : 'direct',
-                sender_id: currentUser.id,
+            // Route through Phoenix channel — server handles DB write, unread increment,
+            // last_message update, broadcast to all participants, and push notifications.
+            const topic = `${isGroup ? 'group' : 'dm'}:${chatId}`;
+            await pushToChannel(topic, 'send_message', {
                 sender_name: senderName,
                 type: 'image',
                 media_url: downloadUrl,
-                status: 'sent',
                 read_by: {},
                 delivered_to: [],
             });
-
-            const parentTable = isGroup ? 'group_chats' : 'direct_chats';
-
-            // M5: Use RPC for atomic unread count increment
-            const { data: chatData } = await supabase
-                .from(parentTable)
-                .select('participants')
-                .eq('id', chatId)
-                .maybeSingle();
-
-            if (chatData) {
-                const participants = chatData.participants || [];
-                for (const pId of participants) {
-                    if (pId !== currentUser.id) {
-                        await supabase.rpc('increment_unread_count', {
-                            p_chat_id: chatId,
-                            p_chat_type: isGroup ? 'group' : 'direct',
-                            p_user_id: pId,
-                        });
-                    }
-                }
-            }
-
-            await supabase
-                .from(parentTable)
-                .update({
-                    last_message: {
-                        text: '📷 Photo',
-                        sender_id: currentUser.id,
-                        sender_name: senderName,
-                        created_at: new Date().toISOString(),
-                        type: 'image',
-                    },
-                    updated_at: new Date().toISOString(),
-                })
-                .eq('id', chatId);
-
-            // Send push notification to other participants (fire-and-forget)
-            workersApi('/chat/send-notification', {
-                method: 'POST',
-                body: {
-                    chatId,
-                    chatType: isGroup ? 'group' : 'direct',
-                    senderName,
-                    messagePreview: '📷 Photo',
-                },
-            }).catch(() => {});
 
         } catch (error) {
             Alert.alert('Error', 'Failed to send image.');
@@ -1075,10 +1006,10 @@ const ChatScreen = () => {
                 }];
             });
 
-            await supabase.from('messages').insert({
-                chat_id: chatId,
-                chat_type: isGroup ? 'group' : 'direct',
-                sender_id: currentUser.id,
+            // Route through Phoenix channel — server handles DB write, unread increment,
+            // last_message update, broadcast to all participants, and push notifications.
+            const topic = `${isGroup ? 'group' : 'dm'}:${chatId}`;
+            await pushToChannel(topic, 'send_message', {
                 sender_name: senderName,
                 type: 'location',
                 location: {
@@ -1086,58 +1017,9 @@ const ChatScreen = () => {
                     longitude: locationData.coords.longitude,
                     address: address,
                 },
-                status: 'sent',
                 read_by: {},
                 delivered_to: [],
-                deleted_for: [],
             });
-
-            const parentTable = isGroup ? 'group_chats' : 'direct_chats';
-
-            // M5: Use RPC for atomic unread count increment
-            const { data: chatData } = await supabase
-                .from(parentTable)
-                .select('participants')
-                .eq('id', chatId)
-                .maybeSingle();
-
-            if (chatData) {
-                const participants = chatData.participants || [];
-                for (const pId of participants) {
-                    if (pId !== currentUser.id) {
-                        await supabase.rpc('increment_unread_count', {
-                            p_chat_id: chatId,
-                            p_chat_type: isGroup ? 'group' : 'direct',
-                            p_user_id: pId,
-                        });
-                    }
-                }
-            }
-
-            await supabase
-                .from(parentTable)
-                .update({
-                    last_message: {
-                        text: '📍 Location',
-                        sender_id: currentUser.id,
-                        sender_name: senderName,
-                        created_at: new Date().toISOString(),
-                        type: 'location',
-                    },
-                    updated_at: new Date().toISOString(),
-                })
-                .eq('id', chatId);
-
-            // Send push notification to other participants (fire-and-forget)
-            workersApi('/chat/send-notification', {
-                method: 'POST',
-                body: {
-                    chatId,
-                    chatType: isGroup ? 'group' : 'direct',
-                    senderName,
-                    messagePreview: '📍 Location',
-                },
-            }).catch(() => {});
 
         } catch (error) {
             Alert.alert('Error', 'Failed to get location.');
@@ -1206,10 +1088,10 @@ const ChatScreen = () => {
                                 }];
                             });
 
-                            await supabase.from('messages').insert({
-                                chat_id: chatId,
-                                chat_type: isGroup ? 'group' : 'direct',
-                                sender_id: currentUser.id,
+                            // Route through Phoenix channel — server handles DB write, unread increment,
+                            // last_message update, broadcast to all participants, and push notifications.
+                            const topic = `${isGroup ? 'group' : 'dm'}:${chatId}`;
+                            await pushToChannel(topic, 'send_message', {
                                 sender_name: senderName,
                                 type: 'location',
                                 location: {
@@ -1219,58 +1101,9 @@ const ChatScreen = () => {
                                     expires_at: expiresAt,
                                     duration: durationMinutes,
                                 },
-                                status: 'sent',
                                 read_by: {},
                                 delivered_to: [],
-                                deleted_for: [],
                             });
-
-                            const parentTable = isGroup ? 'group_chats' : 'direct_chats';
-
-                            // M5: Use RPC for atomic unread count increment
-                            const { data: chatData } = await supabase
-                                .from(parentTable)
-                                .select('participants')
-                                .eq('id', chatId)
-                                .maybeSingle();
-
-                            if (chatData) {
-                                const participants = chatData.participants || [];
-                                for (const pId of participants) {
-                                    if (pId !== currentUser.id) {
-                                        await supabase.rpc('increment_unread_count', {
-                                            p_chat_id: chatId,
-                                            p_chat_type: isGroup ? 'group' : 'direct',
-                                            p_user_id: pId,
-                                        });
-                                    }
-                                }
-                            }
-
-                            await supabase
-                                .from(parentTable)
-                                .update({
-                                    last_message: {
-                                        text: '📍 Live Location',
-                                        sender_id: currentUser.id,
-                                        sender_name: senderName,
-                                        created_at: new Date().toISOString(),
-                                        type: 'location',
-                                    },
-                                    updated_at: new Date().toISOString(),
-                                })
-                                .eq('id', chatId);
-
-                            // Send push notification (fire-and-forget)
-                            workersApi('/chat/send-notification', {
-                                method: 'POST',
-                                body: {
-                                    chatId,
-                                    chatType: isGroup ? 'group' : 'direct',
-                                    senderName,
-                                    messagePreview: '📍 Live Location',
-                                },
-                            }).catch(() => {});
 
                         } catch (error) {
                             setIsSharingLive(false);
@@ -1427,7 +1260,7 @@ const ChatScreen = () => {
                         ? '📍 Location'
                         : selectedMessage.type === 'trip_share'
                             ? '🧳 Trip'
-                            : '🎤 Voice'),
+                            : '💬 Message'),
             senderId: selectedMessage.senderId,
         });
         setShowContextMenu(false);
@@ -3061,13 +2894,6 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
 
-    // Voice
-    voiceContainer: { flexDirection: 'row', alignItems: 'center', minWidth: 180 },
-    voicePlayButton: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginRight: 8 },
-    voiceWaveform: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 2 },
-    voiceBar: { width: 3, borderRadius: 2 },
-    voiceDuration: { fontSize: 11, marginLeft: 8 },
-
     // Typing indicator
     typingIndicator: {
         marginLeft: 16,
@@ -3420,10 +3246,6 @@ const styles = StyleSheet.create({
         fontSize: 12,
         marginTop: 2,
     },
-
-    // Video
-    videoContainer: { overflow: 'hidden', borderRadius: 14 },
-    messageVideo: { width: SCREEN_WIDTH * 0.6, height: SCREEN_WIDTH * 0.6, borderRadius: 14 },
 
     // Live location bars
     liveBanner: {

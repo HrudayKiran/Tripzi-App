@@ -11,7 +11,18 @@ defmodule NxtVibes.Workers.PushNotificationWorker do
     recipient_id = args["recipient_id"]
     sender_name = args["sender_name"] || "Someone"
     group_name = args["group_name"]
-    message_preview = args["message_preview"] || "Sent a message"
+    message_type = args["message_type"] || "text"
+    raw_preview = args["message_preview"] || "Sent a message"
+    message_id = args["message_id"] || Ecto.UUID.generate()
+
+    message_preview =
+      case message_type do
+        "image" -> "📷 Photo"
+        "location" -> "📍 Location"
+        "trip_share" -> "🧳 Shared a trip"
+        "system" -> raw_preview
+        _ -> raw_preview
+      end
 
     # Fetch push tokens for recipient
     tokens = Accounts.list_push_tokens_for_user(recipient_id)
@@ -32,7 +43,7 @@ defmodule NxtVibes.Workers.PushNotificationWorker do
         json_str ->
           case Jason.decode(json_str) do
             {:ok, service_account} ->
-              send_push_notifications(service_account, tokens, chat_id, chat_type, sender_name, group_name, message_preview)
+              send_push_notifications(service_account, tokens, chat_id, chat_type, sender_name, group_name, message_preview, message_id)
 
             {:error, err} ->
               Logger.error("Failed to decode FIREBASE_SERVICE_ACCOUNT_JSON: #{inspect(err)}")
@@ -42,7 +53,7 @@ defmodule NxtVibes.Workers.PushNotificationWorker do
     end
   end
 
-  defp send_push_notifications(service_account, tokens, chat_id, chat_type, sender_name, group_name, message_preview) do
+  defp send_push_notifications(service_account, tokens, chat_id, chat_type, sender_name, group_name, message_preview, message_id) do
     preview =
       if String.length(message_preview) > 100 do
         String.slice(message_preview, 0, 100) <> "…"
@@ -85,22 +96,16 @@ defmodule NxtVibes.Workers.PushNotificationWorker do
           body = %{
             "message" => %{
               "token" => token_row.token,
-              "notification" => %{
-                "title" => title,
-                "body" => preview
-              },
               "android" => %{
-                "priority" => "high",
-                "notification" => %{
-                  "channel_id" => "chat_messages",
-                  "sound" => "default",
-                  "icon" => "ic_launcher"
-                }
+                "priority" => "high"
               },
               "data" => %{
+                "title" => title,
+                "body" => preview,
                 "deepLinkRoute" => "/chat/[id]",
                 "deepLinkParams" => deep_link_params,
-                "channelId" => "chat_messages"
+                "channelId" => "chat_messages",
+                "messageId" => message_id
               }
             }
           }
