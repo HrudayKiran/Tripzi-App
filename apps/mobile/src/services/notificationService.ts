@@ -213,12 +213,12 @@ export function setupTokenRefreshListener(): () => void {
 
 /**
  * Sets up the foreground message listener.
- * When a push arrives while the app is open, show an in-app toast.
+ * When a push arrives while the app is open, we show a REAL OS system notification
+ * (notification drawer) — exactly like WhatsApp. No in-app toast.
+ *
  * Returns an unsubscribe function.
  */
-export function setupForegroundHandler(
-  showToast: (title: string, message: string, route?: string, params?: Record<string, any>) => void
-): () => void {
+export function setupForegroundHandler(): () => void {
   const messaging = getMessaging();
 
   const unsubscribe = messaging.onMessage(async (remoteMessage) => {
@@ -227,21 +227,17 @@ export function setupForegroundHandler(
     const data = remoteMessage.data as Record<string, string> | undefined;
     const title = remoteMessage.notification?.title || data?.title || 'New Notification';
     const body = remoteMessage.notification?.body || data?.body || '';
-    let route: string | undefined;
-    let params: Record<string, any> | undefined;
-    if (data?.deepLinkRoute) {
-      route = data.deepLinkRoute;
-      if (data.deepLinkParams) {
-        try { params = JSON.parse(data.deepLinkParams); } catch {}
-      }
-    }
 
-    // Skip notification banner if user is already viewing the same chat
+    // Skip notification if user is already viewing the exact same chat
     const { useActiveChatStore } = require('../store/activeChatStore');
     const activeChatId = useActiveChatStore.getState().activeChatId;
+    let params: Record<string, any> | undefined;
+    if (data?.deepLinkParams) {
+      try { params = JSON.parse(data.deepLinkParams); } catch {}
+    }
     if (activeChatId && params?.chatId && activeChatId === params.chatId) {
-      if (__DEV__) console.log('[Notifications] Skipping banner — user is in the same chat:', activeChatId);
-      return; // Don't show toast or system notification
+      if (__DEV__) console.log('[Notifications] Skipping notification — user is in the same chat:', activeChatId);
+      return;
     }
 
     // Haptic feedback when notification arrives
@@ -252,15 +248,30 @@ export function setupForegroundHandler(
       // expo-haptics not available or failed
     }
 
-    // Show in-app toast via Zustand store (with deep link for tap navigation)
-    showToast(title, body, route, params);
-
-    // In-app toast is enough when the app is in the foreground.
-    // Avoid displaying a duplicate OS system notification.
+    // Display a real OS system notification (shows in notification bar like WhatsApp)
+    try {
+      const notifee = require('@notifee/react-native').default;
+      await notifee.displayNotification({
+        id: remoteMessage.messageId || `fcm-fg-${Date.now()}`,
+        title,
+        body,
+        data: data as Record<string, string>,
+        android: {
+          channelId: 'messages',
+          smallIcon: 'ic_notification',
+          pressAction: { id: 'default' },
+          // Show with full heads-up notification (pops down from top like WhatsApp)
+          importance: 4, // IMPORTANCE_HIGH
+        },
+      });
+    } catch (e) {
+      if (__DEV__) console.warn('[Notifications] Failed to display foreground notification via Notifee:', e);
+    }
   });
 
   return unsubscribe;
 }
+
 
 // ─── Notification Tap Handlers ───────────────────────────────────────
 

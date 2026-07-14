@@ -1,6 +1,8 @@
 defmodule NxtVibesWeb.UserChannel do
   use NxtVibesWeb, :channel
   alias NxtVibesWeb.Presence
+  alias NxtVibes.Repo
+  alias NxtVibes.Accounts.Profile
 
   @impl true
   def join("user:" <> user_id, _params, socket) do
@@ -47,5 +49,35 @@ defmodule NxtVibesWeb.UserChannel do
   @impl true
   def handle_in("update_presence", _params, socket) do
     {:reply, :ok, socket}
+  end
+
+  @impl true
+  def terminate(_reason, socket) do
+    # When the socket disconnects (app killed, network drop, crash), persist last_seen_at
+    # to the DB so other users see an accurate "last seen" timestamp.
+    # This fires for ALL disconnect reasons — Phoenix guarantees this callback.
+    user_id = socket.assigns[:current_user_id]
+
+    if user_id do
+      now = DateTime.utc_now() |> DateTime.to_iso8601()
+
+      # Fire-and-forget: we don't need to wait for this to complete
+      spawn(fn ->
+        try do
+          Repo.get(Profile, user_id)
+          |> case do
+            nil -> :ok
+            profile ->
+              profile
+              |> Profile.changeset(%{"last_seen_at" => now})
+              |> Repo.update()
+          end
+        rescue
+          _ -> :ok
+        end
+      end)
+    end
+
+    :ok
   end
 end

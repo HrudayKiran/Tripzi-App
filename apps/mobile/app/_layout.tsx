@@ -147,10 +147,8 @@ export default function RootLayout() {
 
   // Foreground push notification handler + tap handlers
   React.useEffect(() => {
-    const { showToast } = useNotificationStore.getState();
-
-    // Show in-app toast when push arrives while app is open
-    const unsubForeground = setupForegroundHandler(showToast);
+    // Show OS system notification (in notification bar) when push arrives while app is open
+    const unsubForeground = setupForegroundHandler();
 
     // Watch for OS notification permission changes (e.g. user revokes from Android Settings)
     const unsubPermissionWatcher = setupPermissionWatcher();

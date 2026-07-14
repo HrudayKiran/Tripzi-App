@@ -75,12 +75,10 @@ export async function syncDatabase() {
           actualLastPulledAt = null;
         }
 
-        // Clock drift mitigation: Subtract 10 seconds from lastPulledAt
-        const lookbackMs = 10000;
-        const adjustedLastPulledAt = actualLastPulledAt ? Math.max(0, actualLastPulledAt - lookbackMs) : null;
-
-        // Call the Phoenix pull endpoint
-        const response = await phoenixApi(`/sync/pull?last_pulled_at=${adjustedLastPulledAt || ''}`, {
+        // Send lastPulledAt directly — no lookback adjustment.
+        // The server split function correctly classifies created vs updated using created_at.
+        // The old 10s lookback caused records to permanently re-appear in "created" (diagnostic error loop).
+        const response = await phoenixApi(`/sync/pull?last_pulled_at=${actualLastPulledAt ?? ''}`, {
           method: 'GET'
         });
 
@@ -101,11 +99,13 @@ export async function syncDatabase() {
     if (user) {
       storage.set(LAST_SYNC_USER_KEY, user.id);
 
-      // Invalidate TanStack Query caches to force UI re-render with fresh database values
-      queryClient.invalidateQueries({ queryKey: ['chats', user.id] });
-      queryClient.invalidateQueries({ queryKey: ['groupChats', user.id] });
-      queryClient.invalidateQueries({ queryKey: ['messages'] });
-      queryClient.invalidateQueries({ queryKey: ['profile', user.id] });
+      // Batch all cache invalidations into one tick to prevent multiple re-renders
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['chats', user.id] }),
+        queryClient.invalidateQueries({ queryKey: ['groupChats', user.id] }),
+        queryClient.invalidateQueries({ queryKey: ['messages'] }),
+        queryClient.invalidateQueries({ queryKey: ['profile', user.id] }),
+      ]);
     }
 
     if (__DEV__) console.log('[Sync] Synchronization completed successfully.');

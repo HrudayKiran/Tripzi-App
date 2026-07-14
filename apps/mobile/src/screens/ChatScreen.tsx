@@ -55,7 +55,6 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useActiveChatStore } from '../store/activeChatStore';
 import { workersApi } from '../lib/workersApi';
-import { getOnlineUsersPresenceState } from '../hooks/usePresence';
 import { pushToChannel, joinChannel } from '../lib/phoenixSocket';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -409,12 +408,12 @@ const ChatScreen = () => {
         }
     }, [messages.length]);
 
-    // Fetch initial presence + live profile photo for direct chats (DB only, one-time)
-    // Live updates come from the updateStatusText interval below via getOnlineUsersPresenceState().
+    // Load initial profile photo + last_seen_at from DB (one-time on mount)
+    // Online/offline status is driven reactively by onlineMembers from the chat channel below.
     useEffect(() => {
         if (!otherParticipantUid || chat?.type === 'group') return;
 
-        const loadPresence = async () => {
+        const loadInitialData = async () => {
             const { data, error } = await supabase
                 .from('profiles')
                 .select('photo_url, last_seen_at')
@@ -422,46 +421,24 @@ const ChatScreen = () => {
                 .maybeSingle();
             if (error || !data) return;
             if (data.photo_url) setLivePhoto(data.photo_url);
-            
-            // Check in-memory Phoenix presence first
-            const livePresence = otherParticipantUid ? getOnlineUsersPresenceState(otherParticipantUid) : null;
-            setRawPresence(livePresence?.status || 'offline');
+            // Set last_seen_at from DB as the initial fallback
             setRawLastSeen(data.last_seen_at);
+            // Initial presence is set to offline; the onlineMembers effect below
+            // will immediately update it to 'online' if the user is connected.
+            setRawPresence('offline');
         };
 
-        loadPresence();
-        // No channel subscription — ChatScreen reads presence via getOnlineUsersPresenceState()
-        // called inside the 10-second updateStatusText interval below.
+        loadInitialData();
     }, [otherParticipantUid, chat?.type]);
 
-    // Periodic effect to recalculate presence status text based on raw presence and last seen time
+    // Recalculate the displayed status text whenever raw presence or last_seen changes.
+    // This is purely a display calculation — no external data fetching.
     useEffect(() => {
         if (!otherParticipantUid || chat?.type === 'group') return;
 
         const updateStatusText = () => {
-            // First check live Presence channel (real-time, no subscription needed)
-            const livePresence = otherParticipantUid ? getOnlineUsersPresenceState(otherParticipantUid) : null;
-            if (livePresence) {
-                // Update rawPresence/rawLastSeen from live channel state
-                setRawPresence(livePresence.status || 'online');
-                if (livePresence.online_at) setRawLastSeen(livePresence.online_at);
-            }
-
-            // Determine final presence (using latest rawPresence which may have just been updated)
-            let finalPresence = livePresence?.status ?? rawPresence;
-            if (finalPresence === 'away') {
-                finalPresence = 'offline';
-            }
-            if (rawLastSeen) {
-                try {
-                    const ts = new Date(rawLastSeen);
-                    const diffMs = Date.now() - ts.getTime();
-                    // Enforce offline timeout override if last_seen_at is older than 40 seconds (40000ms)
-                    if (diffMs > 40000) {
-                        finalPresence = 'offline';
-                    }
-                } catch { }
-            }
+            let finalPresence = rawPresence;
+            if (finalPresence === 'away') finalPresence = 'offline';
 
             if (finalPresence === 'online') {
                 setLastSeenText('online');
@@ -482,34 +459,25 @@ const ChatScreen = () => {
                         setLastSeenText(`last seen ${format(ts, 'MMM d, h:mm a')}`);
                     }
                 } catch {
-                    setLastSeenText(finalPresence === 'offline' ? 'offline' : '');
+                    setLastSeenText('offline');
                 }
             } else {
                 setLastSeenText(finalPresence === 'offline' ? 'offline' : (finalPresence || ''));
             }
         };
 
-        updateStatusText(); // Run immediately
-
-        // Recalculate status text every 10 seconds
-        const timer = setInterval(updateStatusText, 10000);
+        updateStatusText();
+        // Refresh the "X min ago" text every 30 seconds so it stays current
+        const timer = setInterval(updateStatusText, 30000);
         return () => clearInterval(timer);
     }, [rawPresence, rawLastSeen, otherParticipantUid, chat?.type]);
-
-
-
-
-
-
-
-
-
 
     // Synchronize database with server on mount to retrieve any offline/missed messages
     useEffect(() => {
         const { syncDatabase } = require('../database/sync');
         syncDatabase().catch(() => {});
     }, []);
+
 
     // Auto-save incoming media to gallery if preference enabled
     useEffect(() => {
@@ -575,14 +543,28 @@ const ChatScreen = () => {
         setOtherUserTyping(serverOtherUserTyping === true);
     }, [serverOtherUserTyping]);
 
-    // Sync online presence status from Phoenix channel hook
+    // Sync online presence status from Phoenix chat channel — single source of truth.
+    // When the other user joins/leaves the chat channel, onlineMembers updates reactively.
+    // When they go offline, fetch fresh last_seen_at from DB for accurate display.
     useEffect(() => {
-        if (otherParticipantUid) {
-            const isOnline = !!onlineMembers[otherParticipantUid];
-            setRawPresence(isOnline ? 'online' : 'offline');
-            if (isOnline) {
-                setRawLastSeen(new Date().toISOString());
-            }
+        if (!otherParticipantUid) return;
+
+        const isOnline = !!onlineMembers[otherParticipantUid];
+        setRawPresence(isOnline ? 'online' : 'offline');
+
+        if (isOnline) {
+            // User just came online — last seen is now
+            setRawLastSeen(new Date().toISOString());
+        } else {
+            // User went offline — fetch accurate last_seen_at from DB
+            supabase
+                .from('profiles')
+                .select('last_seen_at')
+                .eq('id', otherParticipantUid)
+                .maybeSingle()
+                .then(({ data }) => {
+                    if (data?.last_seen_at) setRawLastSeen(data.last_seen_at);
+                });
         }
     }, [onlineMembers, otherParticipantUid]);
 

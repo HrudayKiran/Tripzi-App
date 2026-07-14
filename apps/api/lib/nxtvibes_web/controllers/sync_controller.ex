@@ -221,6 +221,9 @@ defmodule NxtVibesWeb.SyncController do
       ([own_profile] ++ collaborator_profiles)
       |> Enum.filter(& &1)
       |> Enum.uniq_by(& &1.id)
+      |> Enum.filter(fn p ->
+        is_nil(updated_since) || to_ms(p.updated_at) >= to_ms(updated_since)
+      end)
 
     # 3. Fetch chats
     direct_chats = Chats.list_direct_chats_for_user(user_id, updated_since)
@@ -235,36 +238,66 @@ defmodule NxtVibesWeb.SyncController do
         Chats.list_messages_for_chats(chat_ids, updated_since)
       end
 
+    # Helper: split records into created/updated for WatermelonDB protocol.
+    # WatermelonDB requires:
+    #   "created"  = records that did NOT exist on the client at last_pulled_at
+    #                (i.e. created_at >= updated_since, so brand new since last pull)
+    #   "updated"  = records that already existed on the client but were modified
+    #                (i.e. created_at < updated_since, but updated_at >= updated_since)
+    # Sending an already-existing record in "created" causes the diagnostic error:
+    #   "Server wants client to create record X, but it already exists locally."
+    split = fn records, mapper ->
+      if is_nil(updated_since) do
+        # First full sync: everything is new
+        {Enum.map(records, mapper), []}
+      else
+        updated_since_ms = to_ms(updated_since)
+        Enum.split_with(records, fn r ->
+          to_ms(r.created_at) >= updated_since_ms
+        end)
+        |> then(fn {new_records, existing_records} ->
+          {Enum.map(new_records, mapper), Enum.map(existing_records, mapper)}
+        end)
+      end
+    end
+
+    {itineraries_created, itineraries_updated} = split.(itineraries, &map_itinerary/1)
+    {profiles_created, profiles_updated} = split.(profiles, &map_profile/1)
+    {direct_chats_created, direct_chats_updated} = split.(direct_chats, &map_direct_chat/1)
+    {group_chats_created, group_chats_updated} = split.(group_chats, &map_group_chat/1)
+    {messages_created, messages_updated} = split.(messages, &map_message/1)
+
     # Return response payload
     json(conn, %{
       "changes" => %{
         "itineraries" => %{
-          "created" => Enum.map(itineraries, &map_itinerary/1),
-          "updated" => [],
+          "created" => itineraries_created,
+          "updated" => itineraries_updated,
           "deleted" => []
         },
         "profiles" => %{
-          "created" => Enum.map(profiles, &map_profile/1),
-          "updated" => [],
+          "created" => profiles_created,
+          "updated" => profiles_updated,
           "deleted" => []
         },
         "direct_chats" => %{
-          "created" => Enum.map(direct_chats, &map_direct_chat/1),
-          "updated" => [],
+          "created" => direct_chats_created,
+          "updated" => direct_chats_updated,
           "deleted" => []
         },
         "group_chats" => %{
-          "created" => Enum.map(group_chats, &map_group_chat/1),
-          "updated" => [],
+          "created" => group_chats_created,
+          "updated" => group_chats_updated,
           "deleted" => []
         },
         "messages" => %{
-          "created" => Enum.map(messages, &map_message/1),
-          "updated" => [],
+          "created" => messages_created,
+          "updated" => messages_updated,
           "deleted" => []
         }
       },
       "timestamp" => System.system_time(:millisecond)
+
     })
   end
 
@@ -338,6 +371,31 @@ defmodule NxtVibesWeb.SyncController do
   # deleted_for column name is now consistent between Supabase DB, Ecto, and WatermelonDB
   # No rename shim needed.
 
+  # Converts a list of string UUIDs to 16-byte raw binaries that Postgrex needs
+  # when the actual PostgreSQL column type is uuid[] (as in Supabase).
+  # The Ecto schema says {:array, :string} but Postgrex resolves the type from
+  # the real column OID at runtime — so we must pass raw binaries.
+  defp cast_uuid_arrays(record, fields) do
+    Enum.reduce(fields, record, fn field, acc ->
+      case Map.get(acc, field) do
+        list when is_list(list) ->
+          binaries =
+            Enum.map(list, fn
+              str when is_binary(str) ->
+                case Ecto.UUID.dump(str) do
+                  {:ok, bin} -> bin
+                  :error     -> str  # leave invalid UUIDs as-is
+                end
+              other ->
+                other
+            end)
+          Map.put(acc, field, binaries)
+        _ ->
+          acc
+      end
+    end)
+  end
+
   # Upsert helpers using ON CONFLICT in Ecto
   defp upsert_itinerary(record) do
     # Ecto schema types:
@@ -369,11 +427,18 @@ defmodule NxtVibesWeb.SyncController do
   end
 
   defp upsert_direct_chat(record) do
-    prepared = prepare_record(record,
-      ["participants", "deleted_for", "muted_by", "pinned_by"],
-      ["participant_details", "last_message", "unread_count", "cleared_at"],
-      ["created_at", "updated_at"]
-    )
+    uuid_array_fields = ["participants", "deleted_for", "muted_by", "pinned_by"]
+
+    prepared =
+      prepare_record(record,
+        uuid_array_fields,
+        ["participant_details", "last_message", "unread_count", "cleared_at"],
+        ["created_at", "updated_at"]
+      )
+      # Drop WatermelonDB-only virtual fields not in the DB schema
+      |> Map.drop(["last_message_at"])
+      # Convert string UUIDs → 16-byte binaries for Postgrex uuid[] columns
+      |> cast_uuid_arrays(uuid_array_fields)
 
     %DirectChat{id: prepared["id"]}
     |> DirectChat.changeset(prepared)
@@ -381,11 +446,16 @@ defmodule NxtVibesWeb.SyncController do
   end
 
   defp upsert_group_chat(record) do
-    prepared = prepare_record(record,
-      ["participants", "admins", "deleted_for", "muted_by", "pinned_by"],
-      ["participant_details", "last_message", "unread_count", "cleared_at"],
-      ["created_at", "updated_at"]
-    )
+    uuid_array_fields = ["participants", "admins", "deleted_for", "muted_by", "pinned_by"]
+
+    prepared =
+      prepare_record(record,
+        uuid_array_fields,
+        ["participant_details", "last_message", "unread_count", "cleared_at"],
+        ["created_at", "updated_at"]
+      )
+      # Convert string UUIDs → 16-byte binaries for Postgrex uuid[] columns
+      |> cast_uuid_arrays(uuid_array_fields)
 
     %GroupChat{id: prepared["id"]}
     |> GroupChat.changeset(prepared)
