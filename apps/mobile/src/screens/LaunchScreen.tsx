@@ -14,43 +14,57 @@ const LaunchScreen = () => {
   const router = useRouter();
   const progress = useRef(new Animated.Value(0)).current;
   const isMountedRef = useRef(true);
+  const [sessionCheckDone, setSessionCheckDone] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
+  const [animationDone, setAnimationDone] = useState(false);
 
   useEffect(() => {
     isMountedRef.current = true;
-    let anim: Animated.CompositeAnimation | null = null;
 
-    // Check session immediately
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session && isMountedRef.current) {
-        // If logged in, go directly to home
-        router.replace('/(tabs)');
-      } else if (isMountedRef.current) {
-        // If not logged in, show splash animation then go to welcome
-        anim = Animated.timing(progress, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: false,
-          easing: Easing.out(Easing.cubic),
-        });
+    // Start progress bar animation immediately
+    const anim = Animated.timing(progress, {
+      toValue: 1,
+      duration: 1500, // Smooth 1.5s splash animation
+      useNativeDriver: false,
+      easing: Easing.out(Easing.cubic),
+    });
 
-        anim.start(({ finished }) => {
-          if (finished && isMountedRef.current) {
-            router.replace('/(auth)/welcome');
-          }
-        });
-      }
-    }).catch(() => {
-      // Network error or Supabase unreachable — send user to welcome screen
-      if (isMountedRef.current) {
-        router.replace('/(auth)/welcome');
+    anim.start(({ finished }) => {
+      if (finished && isMountedRef.current) {
+        setAnimationDone(true);
       }
     });
 
+    // Check session in parallel
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        if (isMountedRef.current) {
+          setHasSession(!!session);
+          setSessionCheckDone(true);
+        }
+      })
+      .catch(() => {
+        if (isMountedRef.current) {
+          setHasSession(false);
+          setSessionCheckDone(true);
+        }
+      });
+
     return () => {
       isMountedRef.current = false;
-      anim?.stop();
+      anim.stop();
     };
   }, []);
+
+  useEffect(() => {
+    if (animationDone && sessionCheckDone) {
+      if (hasSession) {
+        router.replace('/(tabs)');
+      } else {
+        router.replace('/(auth)/welcome');
+      }
+    }
+  }, [animationDone, sessionCheckDone, hasSession]);
 
   const widthInterpolation = progress.interpolate({
     inputRange: [0, 1],

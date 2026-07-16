@@ -96,7 +96,7 @@ module.exports = {
     android: {
       versionCode: 1,
       adaptiveIcon: {
-        foregroundImage: './assets/applogo.png',
+        foregroundImage: './assets/applogo_clean.png',
         backgroundColor: '#9d74f7',
       },
       package: 'com.nxtvibes.mobile',

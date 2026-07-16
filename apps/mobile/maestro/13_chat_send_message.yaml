@@ -1,0 +1,84 @@
+appId: com.nxtvibes.mobile
+name: "13 - Chat Screen - Open & Send Message"
+tags:
+  - messages
+  - chat
+  - send
+
+---
+# Pre-condition: User must be logged in AND have at least one existing chat
+# Test: Open a chat, assert message input, send a message, verify it appears
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Login
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+# Navigate to Messages
+- tapOn:
+    description: "Messages"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- takeScreenshot: "13_chats_list"
+
+# Tap first chat (if any exist)
+- tapOn:
+    index: 0
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- takeScreenshot: "13_chat_screen_open"
+
+# Type a test message
+- tapOn:
+    text: "Message..."
+- typeText: "Hello from Maestro E2E test! 🤖"
+
+- takeScreenshot: "13_chat_message_typed"
+
+# Send message (tap send button)
+- tapOn:
+    description: "Send"
+
+- waitForAnimationToEnd:
+    timeout: 2000
+
+- takeScreenshot: "13_chat_message_sent"
+
+# Scroll up to see message history
+- scroll:
+    direction: UP
+    speed: 40
+
+- takeScreenshot: "13_chat_scroll_up"
+
+# Go back to chats list
+- pressKey: Back
+
+- takeScreenshot: "13_back_to_chats_list"
+

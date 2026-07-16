@@ -1,0 +1,55 @@
+appId: com.nxtvibes.mobile
+name: "10 - Trip Creation - Manual Planner"
+tags:
+  - trip
+  - itinerary
+  - create
+
+---
+# Pre-condition: User must be logged in
+# Test: Open Manual Trip Planner from Home, verify all fields & steps, back navigation
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Quick login
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+# Tap Manual Trip Planner card
+- tapOn:
+    text: "Manual Trip Planner"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- takeScreenshot: "10_trip_create_screen"
+
+# Go back to Home
+- pressKey: Back
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+- takeScreenshot: "10_trip_back_to_home"
+

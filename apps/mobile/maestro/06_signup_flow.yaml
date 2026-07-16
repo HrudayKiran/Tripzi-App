@@ -1,0 +1,101 @@
+appId: com.nxtvibes.mobile
+name: "06 - Sign Up Flow - New Account"
+tags:
+  - auth
+  - signup
+  - email
+
+---
+# Test: Full sign-up flow with email + form validation
+# NOTE: This uses a timestamp-based unique email to avoid duplicate account errors.
+# For repeated runs, you may need to delete the test account in Supabase.
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+- tapOn:
+    text: "Join the Journey"
+
+# From Start landing, tap Create an Account
+- tapOn:
+    text: "Create an Account"
+
+# Sign up form should appear
+- assertVisible:
+    text: "Create Account"
+
+- assertVisible:
+    text: "Join NxtVibes and start traveling"
+
+# Verify all form fields are present
+- assertVisible:
+    text: "Full Name"
+
+- assertVisible:
+    text: "Username"
+
+- assertVisible:
+    text: "Gender"
+
+- assertVisible:
+    text: "Email Address"
+
+- assertVisible:
+    text: "Password"
+
+- assertVisible:
+    text: "Male"
+
+- assertVisible:
+    text: "Female"
+
+- takeScreenshot: "06_signup_form_empty"
+
+# Fill Full Name
+- tapOn:
+    text: "John Doe"
+- typeText: "Test User E2E"
+
+# Fill Username (use unique one)
+- tapOn:
+    text: "username"
+- typeText: "test_e2e_01"
+
+# Wait for username availability check (debounced 350ms)
+- waitForAnimationToEnd:
+    timeout: 2000
+
+# Select gender Male
+- tapOn:
+    text: "Male"
+
+# Fill email
+- tapOn:
+    text: "email@example.com"
+- typeText: "test.e2e.nxtvibes+001@gmail.com"
+
+# Fill password (must satisfy: uppercase, lowercase, number, symbol, min 6 chars)
+- tapOn:
+    text: "Min 6 chars, upper, lower, number, symbol"
+- typeText: "NxtVibes@Test123"
+
+- takeScreenshot: "06_signup_form_filled"
+
+# Also check switching to login and back
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Welcome Back"
+
+- tapOn:
+    text: "Create an account"
+
+- assertVisible:
+    text: "Create Account"
+
+- takeScreenshot: "06_signup_toggle_to_login"
+

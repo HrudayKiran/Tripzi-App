@@ -1,0 +1,54 @@
+appId: com.nxtvibes.mobile
+name: "27 - Start Screen - Terms & Privacy Links"
+tags:
+  - auth
+  - legal
+
+---
+# Test: From Start landing screen, tapping Terms and Privacy Policy links opens correct screens
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+- tapOn:
+    text: "Join the Journey"
+
+# Should be on Start landing
+- assertVisible:
+    text: "Terms"
+
+- takeScreenshot: "27_start_landing_with_links"
+
+# Tap Terms link
+- tapOn:
+    text: "Terms"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- assertVisible:
+    text: "Terms"
+
+- takeScreenshot: "27_terms_from_start"
+
+- pressKey: Back
+
+# Tap Privacy Policy link
+- tapOn:
+    text: "Privacy Policy"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- assertVisible:
+    text: "Privacy"
+
+- takeScreenshot: "27_privacy_from_start"
+
+- pressKey: Back
+
+- takeScreenshot: "27_back_to_start"
+

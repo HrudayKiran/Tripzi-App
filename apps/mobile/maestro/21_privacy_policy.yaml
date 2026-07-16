@@ -1,0 +1,55 @@
+appId: com.nxtvibes.mobile
+name: "21 - Privacy Policy Screen"
+tags:
+  - profile
+  - legal
+
+---
+# Test: Privacy Policy screen opens from profile and shows content
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Login
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+# Profile → Privacy Policy
+- tapOn:
+    description: "Profile"
+
+- tapOn:
+    text: "Privacy Policy"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- assertVisible:
+    text: "Privacy"
+
+- takeScreenshot: "21_privacy_policy"
+
+- pressKey: Back
+
+- takeScreenshot: "21_privacy_back"
+

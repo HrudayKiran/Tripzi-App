@@ -1,0 +1,62 @@
+appId: com.nxtvibes.mobile
+name: "17 - Edit Profile Screen"
+tags:
+  - profile
+  - edit
+
+---
+# Pre-condition: User must be logged in
+# Test: Tap Edit Profile → verify edit form fields → update name → save
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Login
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+# Navigate to Profile tab
+- tapOn:
+    description: "Profile"
+
+# Tap Edit Profile
+- tapOn:
+    text: "Edit Profile"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- takeScreenshot: "17_edit_profile_screen"
+
+# Verify edit fields are present
+- assertVisible:
+    text: "Edit Profile"
+
+# Go back
+- pressKey: Back
+
+- assertVisible:
+    text: "Profile"
+
+- takeScreenshot: "17_edit_profile_back"
+

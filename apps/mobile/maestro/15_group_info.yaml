@@ -1,0 +1,71 @@
+appId: com.nxtvibes.mobile
+name: "15 - Group Chat - Info Screen"
+tags:
+  - messages
+  - group
+  - info
+
+---
+# Pre-condition: User must be logged in AND have at least one group chat
+# Test: Open group chat, tap group name/info button to see GroupInfoScreen
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Login
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+# Navigate to Messages
+- tapOn:
+    description: "Messages"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- takeScreenshot: "15_chats_list_for_group"
+
+# Tap first chat (assumed to be a group chat for this test)
+- tapOn:
+    index: 0
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- takeScreenshot: "15_chat_screen_opened"
+
+# Tap on the header (group name) to open Group Info
+- tapOn:
+    description: "Group info"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- takeScreenshot: "15_group_info_screen"
+
+# Go back
+- pressKey: Back
+- pressKey: Back
+
+- takeScreenshot: "15_back_to_chats"
+

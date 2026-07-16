@@ -1,0 +1,25 @@
+appId: com.nxtvibes.mobile
+name: "26 - Already Logged In - Skip to Home"
+tags:
+  - auth
+  - session
+
+---
+# Test: When user is already logged in, app skips splash animation and goes straight to Home
+
+- launchApp:
+    clearState: false  # Keep existing state/session
+
+# Should go straight to home (or re-validate session and redirect)
+# This test verifies the session persistence works
+- assertVisible:
+    text: "Plan Your Journey"
+
+- takeScreenshot: "26_already_logged_in_home"
+
+# Verify tab bar is present
+- assertVisible:
+    text: "NxtVibes"
+
+- takeScreenshot: "26_session_persisted"
+

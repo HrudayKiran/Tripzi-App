@@ -1,0 +1,31 @@
+appId: com.nxtvibes.mobile
+name: "01 - Launch & Splash Screen"
+tags:
+  - auth
+  - launch
+
+---
+# Test: App launches, shows NxtVibes splash screen with logo and progress bar,
+#       then navigates to Welcome screen (when not logged in)
+
+- launchApp:
+    clearState: true  # Ensure fresh start / logged-out state
+
+# Splash screen: Wait for the gradient background and NxtVibes logo text
+- assertVisible:
+    text: "NxtVibes"
+
+# Splash screen has a tagline
+- assertVisible:
+    text: "CONNECT. PLAN. TRAVEL."
+
+# Wait for automatic navigation to Welcome screen after animation (~1-2 sec)
+- waitForAnimationToEnd:
+    timeout: 4000
+
+# Welcome screen should appear after splash
+- assertVisible:
+    text: "THE TRAVEL SOCIAL APP"
+
+- takeScreenshot: "01_splash_to_welcome"
+

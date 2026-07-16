@@ -1,0 +1,73 @@
+appId: com.nxtvibes.mobile
+name: "28 - Chat Delete - Swipe to Delete"
+tags:
+  - messages
+  - chat
+  - delete
+
+---
+# Pre-condition: User must be logged in AND have at least one existing chat
+# Test: Long press on chat item in the list and delete it
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Login
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+# Navigate to Messages tab
+- tapOn:
+    description: "Messages"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- takeScreenshot: "28_chats_list_before_delete"
+
+# Long press on the first chat to enter selection mode
+- longPressOn:
+    index: 0
+    timeout: 5000
+
+- waitForAnimationToEnd:
+    timeout: 2000
+
+- takeScreenshot: "28_chats_selection_mode"
+
+# Look for a delete/trash button
+- tapOn:
+    description: "delete"
+
+# Confirm delete alert
+- assertVisible:
+    text: "Delete Chat?"
+
+- takeScreenshot: "28_delete_confirm_dialog"
+
+# Cancel delete
+- tapOn:
+    text: "Cancel"
+
+- takeScreenshot: "28_delete_cancelled"
+

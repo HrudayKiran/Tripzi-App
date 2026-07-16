@@ -1,0 +1,54 @@
+appId: com.nxtvibes.mobile
+name: "29 - Notifications Modal"
+tags:
+  - home
+  - notifications
+
+---
+# Pre-condition: User must be logged in
+# Test: Notifications bell icon opens modal, modal can be closed
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Login
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+# Tap bell / notifications icon
+- tapOn:
+    description: "Bell"
+
+- waitForAnimationToEnd:
+    timeout: 2000
+
+- takeScreenshot: "29_notifications_modal_open"
+
+# Close notifications modal
+- pressKey: Back
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+- takeScreenshot: "29_notifications_modal_closed"
+

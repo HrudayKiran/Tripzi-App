@@ -1,0 +1,70 @@
+appId: com.nxtvibes.mobile
+name: "12 - Create Group Chat"
+tags:
+  - messages
+  - group
+  - create
+
+---
+# Pre-condition: User must be logged in with other users available
+# Test: Open "Create Group" screen from chats list, search users, fill group details
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Login
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+# Navigate to Messages tab
+- tapOn:
+    description: "Messages"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- takeScreenshot: "12_chats_list_before_group"
+
+# Tap the "+" / "new group" button (NeumorphicIconButton)
+# This button opens the Create Group screen from the chat list header
+- tapOn:
+    description: "create group"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- takeScreenshot: "12_create_group_step1_select_members"
+
+# Search for users to add
+- typeText: "test"
+
+- waitForAnimationToEnd:
+    timeout: 2000
+
+- takeScreenshot: "12_create_group_search_results"
+
+# Go back
+- pressKey: Back
+
+- takeScreenshot: "12_create_group_back"
+

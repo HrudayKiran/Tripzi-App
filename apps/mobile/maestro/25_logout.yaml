@@ -1,0 +1,84 @@
+appId: com.nxtvibes.mobile
+name: "25 - Logout Flow"
+tags:
+  - auth
+  - logout
+
+---
+# Test: Full logout flow - confirm dialog appears, tapping Logout returns to Start screen
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Login
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+# Navigate to Profile tab
+- tapOn:
+    description: "Profile"
+
+# Scroll to find Log Out button
+- scroll:
+    direction: DOWN
+    speed: 40
+
+# Tap Log Out
+- tapOn:
+    text: "Log Out"
+
+# Alert dialog appears: "Are you sure you want to logout?"
+- assertVisible:
+    text: "Are you sure you want to logout?"
+
+- assertVisible:
+    text: "Cancel"
+
+- assertVisible:
+    text: "Logout"
+
+- takeScreenshot: "25_logout_confirm_dialog"
+
+# Tap Cancel first to verify it dismisses
+- tapOn:
+    text: "Cancel"
+
+# Should still be on profile
+- assertVisible:
+    text: "Profile"
+
+- takeScreenshot: "25_logout_cancel"
+
+# Tap Log Out again and confirm
+- tapOn:
+    text: "Log Out"
+
+- tapOn:
+    text: "Logout"
+
+# Should navigate back to Start screen
+- assertVisible:
+    text: "NxtVibes"
+
+- takeScreenshot: "25_logout_success_start_screen"
+

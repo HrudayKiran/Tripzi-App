@@ -1,0 +1,55 @@
+appId: com.nxtvibes.mobile
+name: "20 - Terms of Service Screen"
+tags:
+  - profile
+  - legal
+
+---
+# Test: Terms of Service screen opens from profile and shows content
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Login
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+# Profile → Terms of Service
+- tapOn:
+    description: "Profile"
+
+- tapOn:
+    text: "Terms of Service"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- assertVisible:
+    text: "Terms"
+
+- takeScreenshot: "20_terms_of_service"
+
+- pressKey: Back
+
+- takeScreenshot: "20_terms_back"
+

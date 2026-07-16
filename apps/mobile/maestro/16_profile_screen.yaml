@@ -1,0 +1,86 @@
+appId: com.nxtvibes.mobile
+name: "16 - Profile Screen"
+tags:
+  - profile
+
+---
+# Pre-condition: User must be logged in
+# Test: Profile tab shows user card, menu sections (GENERAL, SUPPORT, ACCOUNT), all items
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Login
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+# Navigate to Profile tab
+- tapOn:
+    description: "Profile"
+
+- assertVisible:
+    text: "Profile"
+
+# "View profile" link
+- assertVisible:
+    text: "View profile"
+
+# GENERAL section
+- assertVisible:
+    text: "GENERAL"
+
+- assertVisible:
+    text: "Edit Profile"
+
+- assertVisible:
+    text: "Settings"
+
+- assertVisible:
+    text: "Terms of Service"
+
+- assertVisible:
+    text: "Privacy Policy"
+
+# SUPPORT section
+- assertVisible:
+    text: "SUPPORT"
+
+- assertVisible:
+    text: "Suggest a Feature"
+
+- assertVisible:
+    text: "Help & Support"
+
+# Scroll down to see ACCOUNT section
+- scroll:
+    direction: DOWN
+    speed: 40
+
+- assertVisible:
+    text: "ACCOUNT"
+
+- assertVisible:
+    text: "Log Out"
+
+- takeScreenshot: "16_profile_screen"
+

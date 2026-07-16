@@ -1,0 +1,15 @@
+# Maestro Global Config for NxtVibes
+# App Package: com.nxtvibes.mobile
+# Test Credentials for automated tests (ensure this user exists in Supabase with verified email)
+# DO NOT commit real passwords to git - use a test-only account
+
+appId: com.nxtvibes.mobile
+---
+# This file is the global config for all Maestro flows.
+# It defines shared variables used by all test flows.
+# To override, pass --env flags to the maestro test command.
+env:
+  TEST_EMAIL: "webbusinesswithkiran@gmail.com"
+  TEST_PASSWORD: "Chinnureddy@6"
+  TEST_FULL_NAME: "Kiran Reddy"
+  TEST_USERNAME: "kiran_reddy"

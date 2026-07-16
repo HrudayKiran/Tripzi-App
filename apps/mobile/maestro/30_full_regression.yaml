@@ -1,0 +1,145 @@
+appId: com.nxtvibes.mobile
+name: "30 - Full E2E Regression Suite"
+tags:
+  - e2e
+  - regression
+  - full
+
+---
+# MASTER REGRESSION TEST
+# Runs a combined full E2E flow: Launch → Welcome → Start → Login → Home → Messages → Profile → Logout
+# This is the single most important test to run before each release.
+
+- launchApp:
+    clearState: true
+
+# === PHASE 1: SPLASH + WELCOME ===
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Splash -> Welcome
+- assertVisible:
+    text: "NxtVibes"
+
+- assertVisible:
+    text: "THE TRAVEL SOCIAL APP"
+
+- takeScreenshot: "30_01_welcome_screen"
+
+- tapOn:
+    text: "Join the Journey"
+
+# === PHASE 2: START SCREEN ===
+- assertVisible:
+    text: "CONNECT. PLAN. TRAVEL."
+
+- assertVisible:
+    text: "Continue with Google"
+
+- assertVisible:
+    text: "Sign In with Email"
+
+- assertVisible:
+    text: "Create an Account"
+
+- takeScreenshot: "30_02_start_landing"
+
+# === PHASE 3: EMAIL LOGIN ===
+- tapOn:
+    text: "Sign In with Email"
+
+- assertVisible:
+    text: "Welcome Back"
+
+- takeScreenshot: "30_03_login_form"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+# === PHASE 4: HOME SCREEN ===
+- assertVisible:
+    text: "Plan Your Journey"
+
+- assertVisible:
+    text: "Manual Trip Planner"
+
+- takeScreenshot: "30_04_home_screen"
+
+# === PHASE 5: TRIP PLANNER ===
+- tapOn:
+    text: "Manual Trip Planner"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- takeScreenshot: "30_05_trip_create_screen"
+
+- pressKey: Back
+
+# === PHASE 6: MESSAGES ===
+- tapOn:
+    description: "Messages"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- takeScreenshot: "30_06_messages_screen"
+
+# === PHASE 7: PROFILE ===
+- tapOn:
+    description: "Profile"
+
+- assertVisible:
+    text: "Profile"
+
+- assertVisible:
+    text: "Edit Profile"
+
+- assertVisible:
+    text: "Settings"
+
+- takeScreenshot: "30_07_profile_screen"
+
+# === PHASE 8: SETTINGS ===
+- tapOn:
+    text: "Settings"
+
+- assertVisible:
+    text: "Appearance"
+
+- takeScreenshot: "30_08_settings_screen"
+
+- pressKey: Back
+
+# === PHASE 9: LOGOUT ===
+- scroll:
+    direction: DOWN
+    speed: 40
+
+- tapOn:
+    text: "Log Out"
+
+- assertVisible:
+    text: "Are you sure you want to logout?"
+
+- takeScreenshot: "30_09_logout_dialog"
+
+- tapOn:
+    text: "Logout"
+
+# Back to Start screen
+- assertVisible:
+    text: "NxtVibes"
+
+- takeScreenshot: "30_10_logout_complete"
+
+# === REGRESSION TEST COMPLETE ===
+

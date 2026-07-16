@@ -1,0 +1,48 @@
+appId: com.nxtvibes.mobile
+name: "03 - Start Screen - Landing"
+tags:
+  - auth
+  - start
+
+---
+# Test: Start screen landing mode shows logo, tagline, and all three auth buttons
+
+- launchApp:
+    clearState: true
+
+# Wait past splash
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Tap "Join the Journey" on Welcome screen
+- tapOn:
+    text: "Join the Journey"
+
+# Start screen Landing mode: Assert app branding
+- assertVisible:
+    text: "NxtVibes"
+
+- assertVisible:
+    text: "CONNECT. PLAN. TRAVEL."
+
+# Assert Google button is visible
+- assertVisible:
+    text: "Continue with Google"
+
+# Assert email sign in button
+- assertVisible:
+    text: "Sign In with Email"
+
+# Assert create account button
+- assertVisible:
+    text: "Create an Account"
+
+# Assert Terms and Privacy links
+- assertVisible:
+    text: "Terms"
+
+- assertVisible:
+    text: "Privacy Policy"
+
+- takeScreenshot: "03_start_landing"
+

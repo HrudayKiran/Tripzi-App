@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
 import LottieView from 'lottie-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MotiView, MotiText } from 'moti';
@@ -11,14 +11,21 @@ import { StatusBar } from 'expo-status-bar';
 
 import { useRouter } from 'expo-router';
 
-const { width, height } = Dimensions.get('window');
-
 // A beautiful animated travel illustration representing friends traveling.
 const LOTTIE_HERO = 'https://lottie.host/2eea2965-86b8-44b7-883e-9a3146b3d919/dQobJzWoOR.lottie';
 
 const WelcomeScreen = () => {
     const { colors } = useTheme();
     const router = useRouter();
+    // Use useWindowDimensions for responsive live updates (handles foldables, rotation, etc.)
+    const { width, height } = useWindowDimensions();
+
+    // Scale logo and font sizes relative to screen height
+    const isSmallScreen = height < 700;
+    const isLargeScreen = height > 900;
+    const logoSize = isSmallScreen ? 72 : isLargeScreen ? 104 : 96;
+    const headlineFontSize = isSmallScreen ? 36 : isLargeScreen ? 52 : 46;
+    const appNameFontSize = isSmallScreen ? 30 : isLargeScreen ? 44 : 38;
 
     const handleNext = () => {
         router.replace('/(auth)/start');
@@ -30,7 +37,7 @@ const WelcomeScreen = () => {
             {/* Background Lottie Animation */}
             <LottieView
                 source={{ uri: LOTTIE_HERO }}
-                style={styles.lottieBackground}
+                style={[styles.lottieBackground, { top: height * 0.28 }]}
                 autoPlay
                 loop
                 resizeMode="cover"
@@ -50,10 +57,10 @@ const WelcomeScreen = () => {
                         from={{ opacity: 0, translateY: -20 }}
                         animate={{ opacity: 1, translateY: 0 }}
                         transition={{ type: 'timing', duration: 1000 }}
-                        style={styles.topSection}
+                        style={[styles.topSection, { marginTop: height * 0.04 }]}
                     >
-                        <AppLogo size={96} showDot={false} />
-                        <Text style={styles.appName}>NxtVibes</Text>
+                        <AppLogo size={logoSize} showDot={false} />
+                        <Text style={[styles.appName, { fontSize: appNameFontSize }]}>NxtVibes</Text>
                     </MotiView>
 
                     {/* Middle Section - Value Proposition */}
@@ -71,7 +78,7 @@ const WelcomeScreen = () => {
                             from={{ opacity: 0, translateY: 20 }}
                             animate={{ opacity: 1, translateY: 0 }}
                             transition={{ type: 'timing', duration: 800, delay: 600 }}
-                            style={styles.headline}
+                            style={[styles.headline, { fontSize: headlineFontSize, lineHeight: headlineFontSize * 1.1 }]}
                         >
                             Connect.{'\n'}Plan.{'\n'}Travel.
                         </MotiText>
@@ -80,7 +87,7 @@ const WelcomeScreen = () => {
                             from={{ opacity: 0, translateY: 20 }}
                             animate={{ opacity: 1, translateY: 0 }}
                             transition={{ type: 'timing', duration: 800, delay: 800 }}
-                            style={styles.description}
+                            style={[styles.description, { fontSize: isSmallScreen ? FONT_SIZE.sm : FONT_SIZE.md }]}
                         >
                             Chat with travel buddies, plan group itineraries, and explore the world together. Your next adventure starts here.
                         </MotiText>
@@ -113,7 +120,7 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
     lottieBackground: {
         position: 'absolute',
-        top: height * 0.30, // Start below the NxtVibes header
+        // top is set dynamically based on height
         bottom: 0,
         left: 0,
         right: 0,
@@ -123,15 +130,13 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'space-between',
         paddingHorizontal: SPACING.xl,
-        paddingTop: SPACING.xl,
-        paddingBottom: SPACING.xxl,
+        paddingTop: SPACING.md,
+        paddingBottom: SPACING.xl,
     },
     topSection: {
         alignItems: 'center',
-        marginTop: height * 0.05,
     },
     appName: {
-        fontSize: 40,
         fontWeight: '800',
         color: NEUTRAL.white,
         marginTop: SPACING.md,
@@ -140,7 +145,7 @@ const styles = StyleSheet.create({
     middleSection: {
         flex: 1,
         justifyContent: 'flex-end',
-        paddingBottom: SPACING.xl,
+        paddingBottom: SPACING.lg,
     },
     tagline: {
         fontSize: FONT_SIZE.xs,
@@ -151,14 +156,11 @@ const styles = StyleSheet.create({
         marginBottom: SPACING.md,
     },
     headline: {
-        fontSize: 48,
         fontWeight: '900',
         color: NEUTRAL.white,
-        lineHeight: 52,
         marginBottom: SPACING.lg,
     },
     description: {
-        fontSize: FONT_SIZE.md,
         color: 'rgba(255, 255, 255, 0.85)',
         lineHeight: 24,
         fontWeight: '500',

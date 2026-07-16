@@ -1,0 +1,55 @@
+appId: com.nxtvibes.mobile
+name: "23 - Help & Support Screen"
+tags:
+  - profile
+  - support
+
+---
+# Test: Help & Support screen opens and shows content
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Login
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+# Profile → Help & Support
+- tapOn:
+    description: "Profile"
+
+- tapOn:
+    text: "Help & Support"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- takeScreenshot: "23_help_support_screen"
+
+- assertVisible:
+    text: "Help"
+
+- pressKey: Back
+
+- takeScreenshot: "23_help_back"
+

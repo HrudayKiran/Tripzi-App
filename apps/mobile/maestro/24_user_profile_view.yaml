@@ -1,0 +1,58 @@
+appId: com.nxtvibes.mobile
+name: "24 - User Profile View Screen"
+tags:
+  - profile
+  - user
+
+---
+# Pre-condition: User must be logged in
+# Test: Tap "View profile" on profile tab to open UserProfileScreen (own profile)
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Login
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+# Profile tab
+- tapOn:
+    description: "Profile"
+
+# Tap on the profile card / avatar to view full profile
+- tapOn:
+    text: "View profile"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- takeScreenshot: "24_user_profile_view"
+
+# Go back
+- pressKey: Back
+
+- assertVisible:
+    text: "Profile"
+
+- takeScreenshot: "24_profile_back"
+

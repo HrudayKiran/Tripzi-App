@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle, Platform } from 'react-native';
-import { Image } from 'expo-image';
+import { View, StyleSheet, ViewStyle, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface AppLogoProps {
@@ -11,9 +10,10 @@ interface AppLogoProps {
 }
 
 const AppLogo = ({ size = 80, style, showDot = true, showGlow = false }: AppLogoProps) => {
-    // HTML uses rounded-3xl for 112px (h-28). 1.5rem = 24px. 24/112 ~= 0.21
+    // Use consistent rounded-xl style border radius (22% of size)
     const borderRadius = size * 0.22;
-    const iconSize = size * 1.3; // slightly larger for the visual image logo
+    // Image should fit WITHIN the box — never overflow. Use 80% of box size.
+    const iconSize = size * 0.8;
 
     return (
         <View style={[styles.container, { width: size, height: size }, style]}>
@@ -50,8 +50,11 @@ const AppLogo = ({ size = 80, style, showDot = true, showGlow = false }: AppLogo
             >
                 <Image
                     source={require('../../assets/applogo.png')}
-                    style={{ width: iconSize, height: iconSize, borderRadius: borderRadius * 0.8 }}
-                    contentFit="contain"
+                    style={{
+                        width: iconSize,
+                        height: iconSize,
+                    }}
+                    resizeMode="contain"
                 />
             </LinearGradient>
 

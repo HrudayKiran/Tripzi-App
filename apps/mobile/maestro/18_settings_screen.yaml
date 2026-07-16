@@ -1,0 +1,120 @@
+appId: com.nxtvibes.mobile
+name: "18 - Settings Screen"
+tags:
+  - profile
+  - settings
+
+---
+# Pre-condition: User must be logged in
+# Test: Settings screen - theme switcher (Light/Dark/System), Haptics option, Change Password, Delete Account
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Login
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+# Navigate to Profile → Settings
+- tapOn:
+    description: "Profile"
+
+- tapOn:
+    text: "Settings"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- assertVisible:
+    text: "Settings"
+
+# Appearance section
+- assertVisible:
+    text: "Appearance"
+
+- assertVisible:
+    text: "Light"
+
+- assertVisible:
+    text: "Dark"
+
+- assertVisible:
+    text: "System"
+
+- takeScreenshot: "18_settings_screen"
+
+# Switch to Dark mode
+- tapOn:
+    text: "Dark"
+
+- waitForAnimationToEnd:
+    timeout: 1000
+
+- takeScreenshot: "18_settings_dark_mode"
+
+# Switch to Light mode
+- tapOn:
+    text: "Light"
+
+- waitForAnimationToEnd:
+    timeout: 1000
+
+- takeScreenshot: "18_settings_light_mode"
+
+# Switch to System mode
+- tapOn:
+    text: "System"
+
+- waitForAnimationToEnd:
+    timeout: 1000
+
+- takeScreenshot: "18_settings_system_mode"
+
+# Scroll to see more
+- scroll:
+    direction: DOWN
+    speed: 40
+
+# Check Haptics section
+- assertVisible:
+    text: "Haptics & Feedback"
+
+# Check Delete Account (danger zone)
+- assertVisible:
+    text: "Delete Account"
+
+- takeScreenshot: "18_settings_scrolled"
+
+# Tap Haptics & Feedback
+- tapOn:
+    text: "Haptics & Feedback"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- takeScreenshot: "18_haptics_screen"
+
+- pressKey: Back
+
+- takeScreenshot: "18_settings_back"
+

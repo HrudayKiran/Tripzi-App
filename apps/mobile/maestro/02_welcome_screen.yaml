@@ -1,0 +1,58 @@
+appId: com.nxtvibes.mobile
+name: "02 - Welcome Screen"
+tags:
+  - auth
+  - welcome
+
+---
+# Test: Welcome screen shows app logo, tagline, headline text, description, and CTA button
+
+- launchApp:
+    clearState: true
+    permissions:
+      notifications: allow
+
+# Wait past splash screen
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Dismiss debugger toast if present (dev mode only)
+- runFlow:
+    when:
+      visible: "Open debugger to view warnings."
+    commands:
+      - tapOn:
+          point: "90%, 97%"
+
+- waitForAnimationToEnd:
+    timeout: 1000
+
+# Welcome Screen: Assert app name visible
+- extendedWaitUntil:
+    visible: "NxtVibes"
+    timeout: 10000
+
+# Assert tagline (THE TRAVEL SOCIAL APP)
+- assertVisible: "THE TRAVEL SOCIAL APP"
+
+# Assert headline text (rendered as single text block with newlines)
+- assertVisible: "Join the Journey"
+
+- takeScreenshot: "02_welcome_screen"
+
+# Tap "Join the Journey" button
+- tapOn: "Join the Journey"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# Should navigate to Start screen (landing mode)
+- extendedWaitUntil:
+    visible: "CONNECT. PLAN. TRAVEL."
+    timeout: 8000
+
+- assertVisible: "Sign In with Email"
+- assertVisible: "Create an Account"
+- assertVisible: "Continue with Google"
+
+- takeScreenshot: "02_welcome_to_start"

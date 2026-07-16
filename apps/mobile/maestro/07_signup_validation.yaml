@@ -1,0 +1,78 @@
+appId: com.nxtvibes.mobile
+name: "07 - Sign Up Validation"
+tags:
+  - auth
+  - signup
+  - validation
+
+---
+# Test: Sign up form validation errors for all fields
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Create an Account"
+
+- assertVisible:
+    text: "Create Account"
+
+# Submit empty form
+- tapOn:
+    text: "Register"
+
+# Validation errors should appear
+- assertVisible:
+    text: "Full name must be at least 2 characters."
+
+- takeScreenshot: "07_signup_validation_all_empty"
+
+# Fill only full name and submit
+- tapOn:
+    text: "John Doe"
+- typeText: "A"
+
+- tapOn:
+    text: "Register"
+
+- assertVisible:
+    text: "Full name must be at least 2 characters."
+
+- takeScreenshot: "07_signup_validation_name_short"
+
+# Test invalid password (no uppercase)
+- eraseText
+- typeText: "Test User"
+
+- tapOn:
+    text: "username"
+- typeText: "validuser123"
+
+- waitForAnimationToEnd:
+    timeout: 2000
+
+- tapOn:
+    text: "Male"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "test@example.com"
+
+- tapOn:
+    text: "Min 6 chars, upper, lower, number, symbol"
+- typeText: "weakpassword"
+
+- tapOn:
+    text: "Register"
+
+- assertVisible:
+    text: "Password must have uppercase, lowercase, number, and symbol."
+
+- takeScreenshot: "07_signup_validation_weak_password"
+

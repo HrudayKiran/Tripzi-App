@@ -1,0 +1,77 @@
+appId: com.nxtvibes.mobile
+name: "14 - Chat Screen - Long Press & Message Options"
+tags:
+  - messages
+  - chat
+  - context-menu
+
+---
+# Test: Long press on a message to show context menu (copy, delete, react, etc.)
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Login
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+# Navigate to Messages
+- tapOn:
+    description: "Messages"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# Open first chat
+- tapOn:
+    index: 0
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# First send a message so we can long press it
+- tapOn:
+    text: "Message..."
+- typeText: "Long press test message 🤖"
+
+- tapOn:
+    description: "Send"
+
+- waitForAnimationToEnd:
+    timeout: 2000
+
+# Long press on the message we just sent
+- longPressOn:
+    text: "Long press test message 🤖"
+    timeout: 8000
+
+- waitForAnimationToEnd:
+    timeout: 2000
+
+- takeScreenshot: "14_chat_context_menu"
+
+# Dismiss the context menu
+- pressKey: Back
+
+- takeScreenshot: "14_chat_context_dismissed"
+

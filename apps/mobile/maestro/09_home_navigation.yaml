@@ -1,0 +1,94 @@
+appId: com.nxtvibes.mobile
+name: "09 - Home Screen & Navigation"
+tags:
+  - home
+  - navigation
+  - tabs
+
+---
+# Pre-condition: User must be logged in (test account)
+# Test: Home tab structure, notifications button, trip planner card, tab navigation
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Login flow
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- assertVisible:
+    text: "Welcome Back"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+# Home screen
+- assertVisible:
+    text: "Plan Your Journey"
+
+- assertVisible:
+    text: "NxtVibes"
+
+# "Manual Trip Planner" card
+- assertVisible:
+    text: "Manual Trip Planner"
+
+- assertVisible:
+    text: "Build your custom itinerary day-by-day with travel style, budget, and buddies"
+
+- takeScreenshot: "09_home_screen"
+
+# Tap Notifications Bell icon
+- tapOn:
+    description: "Bell"
+
+# Notifications modal should appear
+- waitForAnimationToEnd:
+    timeout: 2000
+
+- takeScreenshot: "09_home_notifications_modal"
+
+# Dismiss notifications modal (tap outside or swipe)
+- pressKey: Back
+
+# Navigate to Messages tab
+- tapOn:
+    description: "Messages"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- takeScreenshot: "09_messages_tab"
+
+# Navigate to Profile tab
+- tapOn:
+    description: "Profile"
+
+- assertVisible:
+    text: "Profile"
+
+- takeScreenshot: "09_profile_tab"
+
+# Navigate back to Home
+- tapOn:
+    description: "Home"
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+- takeScreenshot: "09_home_tab_return"
+

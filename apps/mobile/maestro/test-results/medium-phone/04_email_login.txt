@@ -1,0 +1,9 @@
+﻿
+maestro.bat : Invalid Command: clearText at 
+C:\Users\bhumi\Downloads\Tripzi-App\apps\mobile\maestro\04_email_login.yaml:70:3
+At line:3 char:15
++     $result = & $maestro --device emulator-5554 test `
++               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Invalid Command...login.yaml:70:3:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

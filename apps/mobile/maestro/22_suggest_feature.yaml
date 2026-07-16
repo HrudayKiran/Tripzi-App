@@ -1,0 +1,55 @@
+appId: com.nxtvibes.mobile
+name: "22 - Suggest Feature Screen"
+tags:
+  - profile
+  - support
+
+---
+# Test: Suggest Feature screen opens and has the feedback form
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Login
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+# Profile → Suggest a Feature
+- tapOn:
+    description: "Profile"
+
+- tapOn:
+    text: "Suggest a Feature"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- takeScreenshot: "22_suggest_feature_screen"
+
+- assertVisible:
+    text: "Suggest"
+
+- pressKey: Back
+
+- takeScreenshot: "22_suggest_back"
+

@@ -1,0 +1,90 @@
+appId: com.nxtvibes.mobile
+name: "04 - Email Sign In Flow"
+tags:
+  - auth
+  - login
+  - email
+
+---
+# Test: Full email sign-in flow from Welcome → Start Landing → Login Form → Home
+
+- launchApp:
+    clearState: true
+    permissions:
+      notifications: allow
+
+# Wait for the app to load past splash to Welcome screen
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Dismiss debugger toast if present
+- runFlow:
+    when:
+      visible: "Open debugger to view warnings."
+    commands:
+      - tapOn:
+          point: "90%, 97%"
+
+- waitForAnimationToEnd:
+    timeout: 1000
+
+# Welcome screen -> tap CTA
+- extendedWaitUntil:
+    visible: "Join the Journey"
+    timeout: 10000
+
+- takeScreenshot: "04_welcome_screen"
+
+- tapOn: "Join the Journey"
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# Start screen
+- extendedWaitUntil:
+    visible: "Sign In with Email"
+    timeout: 8000
+
+- assertVisible: "CONNECT. PLAN. TRAVEL."
+- assertVisible: "Continue with Google"
+- assertVisible: "Create an Account"
+
+- takeScreenshot: "04_start_landing"
+
+# Navigate to Login
+- tapOn: "Sign In with Email"
+
+- extendedWaitUntil:
+    visible: "Welcome Back"
+    timeout: 5000
+
+- assertVisible: "Email Address"
+- assertVisible: "Password"
+- assertVisible: "Forgot Password?"
+- assertVisible: "Log In"
+- assertVisible: "Create an account"
+
+- takeScreenshot: "04_login_form_empty"
+
+# Enter email - use typeText which is more reliable than inputText for full emails
+- tapOn: "email@example.com"
+- eraseText
+- typeText: "${TEST_EMAIL}"
+
+# Enter password
+- tapOn: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- hideKeyboard
+- takeScreenshot: "04_login_form_filled"
+
+# Submit login
+- tapOn: "Log In"
+
+# Wait for home screen (allow extra time for Supabase auth + WatermelonDB sync)
+- extendedWaitUntil:
+    visible: "Plan Your Journey"
+    timeout: 30000
+
+- assertVisible: "Manual Trip Planner"
+
+- takeScreenshot: "04_login_success_home"

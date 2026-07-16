@@ -1,0 +1,80 @@
+appId: com.nxtvibes.mobile
+name: "11 - Chats List Screen"
+tags:
+  - messages
+  - chat
+  - list
+
+---
+# Pre-condition: User must be logged in
+# Test: Messages tab - chats list screen, search toggle, create group button
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Login
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- tapOn:
+    text: "email@example.com"
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "${TEST_PASSWORD}"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Plan Your Journey"
+
+# Navigate to Messages tab
+- tapOn:
+    description: "Messages"
+
+- waitForAnimationToEnd:
+    timeout: 3000
+
+- takeScreenshot: "11_chats_list_screen"
+
+# Test pull to refresh
+- scroll:
+    direction: DOWN
+    speed: 40
+
+- scroll:
+    direction: UP
+    speed: 40
+
+- takeScreenshot: "11_chats_list_after_refresh"
+
+# Tap search button (NeumorphicSearchButton)
+- tapOn:
+    description: "Search"
+
+- waitForAnimationToEnd:
+    timeout: 2000
+
+- takeScreenshot: "11_chats_search_open"
+
+# Type a search query
+- typeText: "test"
+
+- waitForAnimationToEnd:
+    timeout: 2000
+
+- takeScreenshot: "11_chats_search_results"
+
+# Close search (back button)
+- pressKey: Back
+
+- takeScreenshot: "11_chats_search_closed"
+

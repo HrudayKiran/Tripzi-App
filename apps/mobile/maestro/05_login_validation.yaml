@@ -1,0 +1,64 @@
+appId: com.nxtvibes.mobile
+name: "05 - Login Validation - Empty Fields"
+tags:
+  - auth
+  - login
+  - validation
+
+---
+# Test: Login form shows proper validation errors when submitted empty or with invalid input
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+- tapOn:
+    text: "Join the Journey"
+
+- tapOn:
+    text: "Sign In with Email"
+
+- assertVisible:
+    text: "Welcome Back"
+
+# Submit empty form
+- tapOn:
+    text: "Log In"
+
+# Should show validation errors
+- assertVisible:
+    text: "Invalid email address."
+
+- takeScreenshot: "05_login_validation_empty"
+
+# Enter invalid email
+- tapOn:
+    text: "email@example.com"
+- typeText: "invalidemail"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Invalid email address."
+
+- takeScreenshot: "05_login_validation_invalid_email"
+
+# Enter valid email but short password
+- eraseText
+- typeText: "webbusinesswithkiran@gmail.com"
+
+- tapOn:
+    text: "Enter password"
+- typeText: "abc"
+
+- tapOn:
+    text: "Log In"
+
+- assertVisible:
+    text: "Password must be at least 6 characters."
+
+- takeScreenshot: "05_login_validation_short_password"
+
